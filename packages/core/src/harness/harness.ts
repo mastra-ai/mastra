@@ -3017,9 +3017,13 @@ export class Harness<TState = {}> {
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }
           : undefined,
-        // Forks inherit the parent's toolsets minus `subagent`. Without this
-        // they'd silently lose `ask_user`, `submit_plan`, and any user-configured
-        // harness tools, since the parent Agent's base config doesn't carry them.
+        // Forks inherit the parent's toolsets verbatim so harness-injected
+        // tools (`ask_user`, `submit_plan`, user-configured harness tools, etc.)
+        // remain available inside the fork. The `subagent` entry itself is
+        // deliberately kept — its schema/description are part of the parent's
+        // prompt-cache prefix, and stripping it would invalidate the cache.
+        // Recursive forking is blocked at runtime instead: see the patched
+        // `subagent` execute that the forked tool path installs in `tools.ts`.
         getParentToolsets: () => this.buildToolsets(requestContext),
       });
     }

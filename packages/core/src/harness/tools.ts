@@ -532,21 +532,34 @@ Use this tool when:
         streamStopWhen = undefined;
         streamPrepareStep = undefined;
 
-        // Inherit the parent's toolsets (ask_user / submit_plan / user-configured
-        // harness tools / etc.) but strip `subagent` to prevent recursive forks.
-        // The parent Agent's base `tools` config does not include the harness
-        // toolsets, so without this the fork would run with a noticeably smaller
-        // tool set than the parent it cloned from.
+        // Inherit the parent's toolsets verbatim so harness-injected tools
+        // (`ask_user`, `submit_plan`, user-configured harness tools, etc.)
+        // remain available inside the fork. The parent Agent's base `tools`
+        // config does not include the harness toolsets, so without this the
+        // fork would run with a noticeably smaller tool set than the parent
+        // it cloned from.
+        //
+        // Recursive forking is blocked at runtime by replacing `subagent`'s
+        // `execute` with a stub that returns a "tool unavailable" message.
+        // The tool's id, description, schemas, and any other prompt-shaping
+        // fields are preserved unchanged so the LLM request prefix (system
+        // prompt + tool schemas) stays byte-identical to the parent's, which
+        // is the whole point of forked mode — anything that perturbs that
+        // prefix invalidates the prompt cache. Stripping the `subagent`
+        // entry entirely would do exactly that.
         const inheritedToolsets = await opts.getParentToolsets?.();
         if (inheritedToolsets) {
           forkedToolsets = {};
           for (const [setName, setTools] of Object.entries(inheritedToolsets)) {
-            const filtered: ToolsInput = {};
+            const patched: ToolsInput = {};
             for (const [toolId, tool] of Object.entries(setTools as ToolsInput)) {
-              if (toolId === 'subagent') continue;
-              filtered[toolId] = tool;
+              if (toolId === 'subagent') {
+                patched[toolId] = patchSubagentToolForFork(tool);
+              } else {
+                patched[toolId] = tool;
+              }
             }
-            forkedToolsets[setName] = filtered;
+            forkedToolsets[setName] = patched;
           }
         }
 
@@ -746,6 +759,41 @@ Use this tool when:
       }
     },
   });
+}
+
+/**
+ * Returns a copy of the parent's `subagent` tool with `execute` replaced by a
+ * stub that refuses to dispatch a nested fork.
+ *
+ * Why patch instead of remove or replace wholesale:
+ *  - Forked subagents reuse the parent Agent's `stream()` so the LLM request
+ *    prefix (system prompt + tool list + tool schemas + tool descriptions)
+ *    matches the parent byte-for-byte. This is what makes prompt-cache hits
+ *    possible inside a fork, which is the whole reason forked mode exists.
+ *  - Removing the `subagent` entry from the inherited toolset, or replacing
+ *    its description / parameters with anything else, perturbs that prefix
+ *    and invalidates the cache.
+ *  - Replacing only `execute` is invisible to the LLM (execute lives in the
+ *    runtime, not in the request payload) but lets us reject recursive
+ *    invocations cleanly at runtime.
+ *
+ * The stub returns a `not isError` result with a clear human-readable message
+ * so the parent model can recover gracefully and keep going on its own.
+ */
+function patchSubagentToolForFork(tool: unknown): any {
+  const stubExecute = async () => ({
+    content:
+      'The `subagent` tool is unavailable inside a forked subagent. ' +
+      'Forked subagents do not dispatch nested forks — answer this task directly using the conversation history and the other tools available to you.',
+    isError: false,
+  });
+  // Spread preserves id / description / inputSchema / parameters / outputSchema
+  // / providerOptions / strict / requireApproval / etc. on whatever shape the
+  // tool came in as (Mastra `Tool` instance, AI SDK v4/v5 `tool({ ... })`
+  // object, provider-defined tool). `Object.assign` on a fresh object keeps
+  // own enumerable props; that is enough for the toolset-merge layer to
+  // serialize the same schema/description into the model request.
+  return Object.assign({}, tool as Record<string, unknown>, { execute: stubExecute });
 }
 
 /**

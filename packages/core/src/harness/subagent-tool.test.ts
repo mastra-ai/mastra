@@ -867,18 +867,32 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(parentStream).not.toHaveBeenCalled();
   });
 
-  it('forks: inherits parent toolsets via getParentToolsets but strips the `subagent` tool', async () => {
-    // Without inheriting toolsets, forks lose harness-injected tools like
-    // `ask_user` / `submit_plan` (the parent Agent's base config doesn't carry
-    // them — they're injected per-stream by the harness).
-    // Stripping `subagent` is intentional: forks must not recursively fork.
+  it('forks: inherits parent toolsets via getParentToolsets and patches `subagent` to a runtime no-op (preserving prompt-cache prefix)', async () => {
+    // Forks must inherit harness-injected tools (`ask_user` / `submit_plan` /
+    // user-configured harness tools) — the parent Agent's base config doesn't
+    // carry them; they're injected per-stream by the harness.
+    //
+    // Stripping or rewriting `subagent` would change the tool list / schemas
+    // the LLM sees vs. the parent and invalidate the prompt cache (which is
+    // the entire reason forked mode exists). Instead we keep `subagent`
+    // present with its id / description / inputSchema / providerOptions
+    // unchanged, and only swap `execute` for a stub that refuses recursive
+    // forks at runtime.
     const { parentAgent, parentStream } = makeParentAgent('with toolsets');
     const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'fork-with-toolsets', resourceId: 'rid' });
 
-    const askUser = { id: 'ask_user' } as any;
-    const submitPlan = { id: 'submit_plan' } as any;
-    const subagentTool = { id: 'subagent' } as any;
-    const userTool = { id: 'view' } as any;
+    const askUser = { id: 'ask_user', description: 'Ask user', execute: vi.fn() } as any;
+    const submitPlan = { id: 'submit_plan', description: 'Submit plan', execute: vi.fn() } as any;
+    const originalSubagentExecute = vi.fn();
+    const inputSchemaSentinel = { type: 'object', properties: { agentType: { type: 'string' } } };
+    const subagentTool = {
+      id: 'subagent',
+      description: 'Dispatch a subagent',
+      inputSchema: inputSchemaSentinel,
+      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      execute: originalSubagentExecute,
+    } as any;
+    const userTool = { id: 'view', description: 'View', execute: vi.fn() } as any;
 
     const getParentToolsets = vi.fn().mockResolvedValue({
       harnessBuiltIn: { ask_user: askUser, submit_plan: submitPlan, subagent: subagentTool },
@@ -907,11 +921,33 @@ describe('createSubagentTool forked subagent behavior', () => {
 
     const [, streamOpts] = parentStream.mock.calls[0]!;
     expect(streamOpts.toolsets).toBeDefined();
-    expect(streamOpts.toolsets.harnessBuiltIn).toEqual({ ask_user: askUser, submit_plan: submitPlan });
-    // subagent must be stripped to prevent the fork from spawning further forks.
-    expect(streamOpts.toolsets.harnessBuiltIn.subagent).toBeUndefined();
-    // User-configured harness tools come through untouched.
-    expect(streamOpts.toolsets.harness).toEqual({ view: userTool });
+    // ask_user / submit_plan / user tool come through untouched (same object identity).
+    expect(streamOpts.toolsets.harnessBuiltIn.ask_user).toBe(askUser);
+    expect(streamOpts.toolsets.harnessBuiltIn.submit_plan).toBe(submitPlan);
+    expect(streamOpts.toolsets.harness.view).toBe(userTool);
+
+    // `subagent` must STILL be present in the inherited toolset — removing it
+    // would change the tool list the LLM sees and invalidate the cache prefix.
+    const patchedSubagent = streamOpts.toolsets.harnessBuiltIn.subagent;
+    expect(patchedSubagent).toBeDefined();
+
+    // All prompt-shaping fields are preserved exactly so the request prefix
+    // is byte-identical to the parent's.
+    expect(patchedSubagent.id).toBe(subagentTool.id);
+    expect(patchedSubagent.description).toBe(subagentTool.description);
+    expect(patchedSubagent.inputSchema).toBe(inputSchemaSentinel);
+    expect(patchedSubagent.providerOptions).toBe(subagentTool.providerOptions);
+
+    // Only `execute` is swapped, and the original is NOT invoked.
+    expect(patchedSubagent.execute).not.toBe(originalSubagentExecute);
+    const stubResult = await patchedSubagent.execute({}, {});
+    expect(stubResult.isError).toBe(false);
+    expect(stubResult.content).toMatch(/unavailable inside a forked subagent/i);
+    expect(originalSubagentExecute).not.toHaveBeenCalled();
+
+    // The patched copy must not mutate the parent's toolset object — the same
+    // toolset is reused across requests, so any mutation would persist.
+    expect(subagentTool.execute).toBe(originalSubagentExecute);
   });
 
   it('forks: omitting getParentToolsets keeps `toolsets` unset on the stream call (back-compat)', async () => {
