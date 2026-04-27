@@ -62,7 +62,12 @@ export class MessageMerger {
       return false;
     }
 
-    if (messageSource === 'response' && isLatestFromMemory && !agentNetworkAppend) {
+    if (
+      messageSource === 'response' &&
+      isLatestFromMemory &&
+      !agentNetworkAppend &&
+      latestMessage.id !== incomingMessage.id
+    ) {
       return false;
     }
 
