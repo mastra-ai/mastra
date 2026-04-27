@@ -28,6 +28,7 @@ import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { createWorkflow, createStep } from '../workflows';
+import type { AnyWorkflow } from '../workflows';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -791,7 +792,9 @@ class MastraScorer<
       chainedWorkflow = chainedWorkflow.then(step);
     }
 
-    return chainedWorkflow.commit();
+    // Cast via AnyWorkflow to bypass commit()'s compile-time output-schema check.
+    // Steps are chained dynamically in a loop, so TS cannot statically verify the final output type.
+    return (chainedWorkflow as AnyWorkflow).commit() as typeof chainedWorkflow;
   }
 
   private createScorerContext(

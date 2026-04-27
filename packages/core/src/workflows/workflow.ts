@@ -93,6 +93,33 @@ import type {
 } from './types';
 import { cleanStepResult, createTimeTravelExecutionParams } from './utils';
 
+type WorkflowMapFunction<TState, TPrevSchema, TEngineType, TRequestContext extends Record<string, any> | unknown> = (
+  params: Parameters<ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>>[0],
+) => any;
+
+type WorkflowMapOutput<TMapFunction extends (...args: any[]) => any> = Exclude<
+  Awaited<ReturnType<TMapFunction>>,
+  InnerOutput
+>;
+
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+type IsUnknown<T> =
+  IsAny<T> extends true ? false : unknown extends T ? ([keyof T] extends [never] ? true : false) : false;
+
+type IsWorkflowOutputCompatible<TPrevSchema, TOutput> =
+  IsAny<TPrevSchema> extends true
+    ? true
+    : IsAny<TOutput> extends true
+      ? true
+      : IsUnknown<TPrevSchema> extends true
+        ? true
+        : IsUnknown<TOutput> extends true
+          ? true
+          : [TPrevSchema] extends [TOutput]
+            ? true
+            : false;
+
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
 export type AgentStepOptions<TOUTPUT> = Omit<
@@ -1520,7 +1547,9 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  // Cast via AnyWorkflow to bypass commit()'s compile-time output-schema check.
+  // cloneWorkflow copies the step graph from an already-committed workflow, so the types are correct.
+  (wf as AnyWorkflow).commit();
   return wf;
 }
 
@@ -1800,6 +1829,41 @@ export class Workflow<
     });
   }
 
+  map<TMapFunction extends WorkflowMapFunction<TState, TPrevSchema, TEngineType, TRequestContext>>(
+    mappingConfig: TMapFunction,
+    stepOptions?: { id?: string | null },
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    WorkflowMapOutput<TMapFunction>,
+    TRequestContext
+  >;
+  map(
+    mappingConfig: {
+      [k: string]:
+        | {
+            step:
+              | Step<string, any, any, any, any, any, TEngineType, any>
+              | Step<string, any, any, any, any, any, TEngineType, any>[];
+            path: string;
+          }
+        | { value: any; schema: PublicSchema<any> }
+        | {
+            initData: Workflow<TEngineType, any, any, any, any, any, any>;
+            path: string;
+          }
+        | {
+            requestContextPath: string;
+            schema: PublicSchema<any>;
+          }
+        | DynamicMapping<TPrevSchema, any>;
+    },
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext>;
   map(
     mappingConfig:
       | {
@@ -1821,7 +1885,7 @@ export class Workflow<
               }
             | DynamicMapping<TPrevSchema, any>;
         }
-      | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+      | WorkflowMapFunction<TState, TPrevSchema, TEngineType, TRequestContext>,
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Create an implicit step that handles the mapping
@@ -2207,7 +2271,11 @@ export class Workflow<
    * This method should be called after all steps have been added to the workflow
    * @returns A built workflow instance ready for execution
    */
-  commit() {
+  commit(
+    this: IsWorkflowOutputCompatible<TPrevSchema, TOutput> extends true
+      ? Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContext>
+      : never,
+  ) {
     this.executionGraph = this.buildExecutionGraph();
     this.committed = true;
     return this as unknown as Workflow<

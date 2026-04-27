@@ -36,7 +36,7 @@ import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
-import type { AgentStepOptions } from '../../workflows';
+import type { AgentStepOptions, AnyWorkflow } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -91,7 +91,9 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  // Cast via AnyWorkflow to bypass commit()'s compile-time output-schema check.
+  // cloneWorkflow copies the step graph from an already-committed workflow, so the types are correct.
+  (wf as AnyWorkflow).commit();
   return wf;
 }
 
