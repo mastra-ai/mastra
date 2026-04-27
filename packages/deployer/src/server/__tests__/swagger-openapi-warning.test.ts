@@ -78,6 +78,7 @@ describe('Swagger UI and OpenAPI documentation warning', () => {
       startEventEngine: vi.fn(),
       listAgents: vi.fn(() => []),
       setMastraServer: vi.fn(),
+      getEditor: vi.fn(() => undefined),
     } as unknown as Mastra;
   });
 

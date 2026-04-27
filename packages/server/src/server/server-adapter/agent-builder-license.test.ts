@@ -15,7 +15,7 @@ class TestMastraServer extends MastraServer<any, any, any> {
 
 // Mock editor that implements IMastraEditor.hasEnabledBuilderConfig()
 // Avoids importing @mastra/editor which would create circular dependency
-function createMockEditor(hasEnabledBuilder: boolean) {
+function createMockEditor(hasEnabledBuilder: boolean, overrides: Record<string, any> = {}) {
   return {
     hasEnabledBuilderConfig: () => hasEnabledBuilder,
     resolveBuilder: vi.fn(),
@@ -28,6 +28,7 @@ function createMockEditor(hasEnabledBuilder: boolean) {
     workspace: {},
     skill: {},
     registerWithMastra: vi.fn(),
+    ...overrides,
   } as any;
 }
 
@@ -122,5 +123,46 @@ describe('MastraServer.validateAgentBuilderLicense', () => {
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toMatch(/^\[mastra\/auth-ee\]/);
     }
+  });
+});
+
+describe('MastraServer.preloadBuilder', () => {
+  it('calls editor.resolveBuilder() when builder is enabled', async () => {
+    const resolveBuilder = vi.fn().mockResolvedValue({ enabled: true });
+    const editor = createMockEditor(true, { resolveBuilder });
+    const mastra = new Mastra({ editor });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.preloadBuilder();
+
+    expect(resolveBuilder).toHaveBeenCalledOnce();
+  });
+
+  it('is a no-op when hasEnabledBuilderConfig() returns false', async () => {
+    const resolveBuilder = vi.fn();
+    const editor = createMockEditor(false, { resolveBuilder });
+    const mastra = new Mastra({ editor });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.preloadBuilder();
+
+    expect(resolveBuilder).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when no editor is configured', async () => {
+    const mastra = new Mastra({});
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.preloadBuilder()).resolves.not.toThrow();
+  });
+
+  it('logs and swallows errors from resolveBuilder', async () => {
+    const resolveBuilder = vi.fn().mockRejectedValue(new Error('boom'));
+    const editor = createMockEditor(true, { resolveBuilder });
+    const mastra = new Mastra({ editor });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.preloadBuilder()).resolves.not.toThrow();
+    expect(resolveBuilder).toHaveBeenCalledOnce();
   });
 });

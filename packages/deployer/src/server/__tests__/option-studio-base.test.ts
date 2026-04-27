@@ -102,6 +102,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       startEventEngine: vi.fn(),
       listAgents: vi.fn(() => []),
       setMastraServer: vi.fn(),
+      getEditor: vi.fn(() => undefined),
     } as unknown as Mastra;
   });
 

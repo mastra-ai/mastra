@@ -248,6 +248,14 @@ export async function createHonoServer(
   // Validate EE license before starting (checks RBAC config vs license)
   await honoServerAdapter.validateEELicense();
 
+  // Validate Agent Builder license (throws in prod without MASTRA_EE_LICENSE)
+  await honoServerAdapter.validateAgentBuilderLicense();
+
+  // Eagerly resolve the agent builder so it's registered on the Mastra
+  // instance before the first request to GET /agents. No-op when builder
+  // isn't enabled or license check failed.
+  await honoServerAdapter.preloadBuilder();
+
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
   honoServerAdapter.registerAuthMiddleware();

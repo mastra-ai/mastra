@@ -475,8 +475,36 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
     await this.validateAgentBuilderLicense();
+    await this.preloadBuilder();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
+  }
+
+  /**
+   * If the agent builder is enabled AND the EE license check has already
+   * passed, eagerly trigger the lazy dynamic-import of @mastra/editor/ee
+   * so the builder agent is registered on the Mastra instance before the
+   * first HTTP request hits GET /agents.
+   *
+   * Gating contract:
+   *   - hasEnabledBuilderConfig() must be true (user opt-in).
+   *   - validateAgentBuilderLicense() must have already passed
+   *     (called immediately before this in init()).
+   * If either gate fails, this is a no-op and the EE module is never loaded.
+   */
+  async preloadBuilder(): Promise<void> {
+    const editor = this.mastra.getEditor();
+    if (!editor?.hasEnabledBuilderConfig?.()) return;
+    if (typeof editor.resolveBuilder !== 'function') return;
+    try {
+      await editor.resolveBuilder();
+    } catch (err) {
+      this.mastra
+        .getLogger?.()
+        ?.warn?.('[mastra/editor] Failed to preload agent builder during server init', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+    }
   }
 
   /**
