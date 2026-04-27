@@ -41,7 +41,7 @@ export function registerApiCommand(program: Command): void {
 
   const mcp = api.command('mcp').description('List and inspect MCP servers');
   addAction(mcp, 'list [input]', API_COMMANDS.mcpList);
-  addAction(mcp, 'get [serverId]', API_COMMANDS.mcpGet);
+  addAction(mcp, 'get [id]', API_COMMANDS.mcpGet);
   const mcpTool = mcp.command('tool').description('List, inspect, and execute MCP tools');
   addAction(mcpTool, 'list [serverId] [input]', API_COMMANDS.mcpToolList);
   addAction(mcpTool, 'get [serverId] [toolId]', API_COMMANDS.mcpToolGet);

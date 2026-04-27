@@ -28,6 +28,13 @@ describe('API_COMMANDS', () => {
     });
   });
 
+  it('uses route path params directly for MCP server details', () => {
+    expect(API_COMMANDS.mcpGet).toMatchObject({
+      path: '/mcp/v0/servers/:id',
+      positionals: ['id'],
+    });
+  });
+
   it('supports JSON-identity commands by omitting selected path params from positionals', () => {
     expect(API_COMMANDS.memoryCurrentGet).toMatchObject({
       path: '/memory/threads/:threadId/working-memory',

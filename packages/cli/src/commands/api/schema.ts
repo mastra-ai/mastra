@@ -163,11 +163,17 @@ function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string)
     ];
   }
 
-  if (!descriptor.acceptsInput) return [{ description: descriptor.description, command }];
+  if (!descriptor.acceptsInput) {
+    return [{ description: descriptor.description, command: [command, ...samplePositionals(descriptor)].join(' ') }];
+  }
 
   const sampleInput =
     descriptor.method === 'GET' && descriptor.inputRequired ? sampleInputWithPathParams(descriptor) : '{}';
   return [{ description: descriptor.description, command: `${command} '${sampleInput}'` }];
+}
+
+function samplePositionals(descriptor: ApiCommandDescriptor): string[] {
+  return descriptor.positionals.map(name => `${name}_123`);
 }
 
 function sampleInputWithPathParams(descriptor: ApiCommandDescriptor): string {
