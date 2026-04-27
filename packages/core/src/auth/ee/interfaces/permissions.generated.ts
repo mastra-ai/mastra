@@ -55,7 +55,7 @@ export type Resource = (typeof RESOURCES)[number];
  * - DELETE → delete
  * - Additional actions from explicit requiresPermission overrides
  */
-export const ACTIONS = ['create', 'delete', 'execute', 'publish', 'read', 'write'] as const;
+export const ACTIONS = ['create', 'delete', 'execute', 'publish', 'read', 'share', 'write'] as const;
 
 /**
  * Action type union.
@@ -79,6 +79,8 @@ export const PERMISSION_PATTERNS = {
   '*:publish': '*:publish',
   /** View all resources */
   '*:read': '*:read',
+  /** Change visibility/audience (e.g. private↔public) all resources */
+  '*:share': '*:share',
   /** Create and modify all resources */
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
@@ -205,6 +207,8 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
   'stored-agents:read': 'stored-agents:read',
+  /** Change visibility/audience (e.g. private↔public) stored agents */
+  'stored-agents:share': 'stored-agents:share',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
   /** Delete stored MCP clients */
@@ -237,6 +241,8 @@ export const PERMISSION_PATTERNS = {
   'stored-skills:publish': 'stored-skills:publish',
   /** View stored skills */
   'stored-skills:read': 'stored-skills:read',
+  /** Change visibility/audience (e.g. private↔public) stored skills */
+  'stored-skills:share': 'stored-skills:share',
   /** Create and modify stored skills */
   'stored-skills:write': 'stored-skills:write',
   /** Delete stored workspaces */
@@ -348,6 +354,7 @@ export const PERMISSIONS = [
   'stored-agents:delete',
   'stored-agents:publish',
   'stored-agents:read',
+  'stored-agents:share',
   'stored-agents:write',
   'stored-mcp-clients:delete',
   'stored-mcp-clients:publish',
@@ -364,6 +371,7 @@ export const PERMISSIONS = [
   'stored-skills:delete',
   'stored-skills:publish',
   'stored-skills:read',
+  'stored-skills:share',
   'stored-skills:write',
   'stored-workspaces:delete',
   'stored-workspaces:read',

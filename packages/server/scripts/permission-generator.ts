@@ -25,8 +25,17 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   execute: 'Execute',
   publish: 'Publish, activate, or restore',
   read: 'View',
+  share: 'Change visibility/audience (e.g. private↔public)',
   write: 'Create and modify',
 };
+
+/**
+ * Permissions that are not derived from any HTTP route (no `requiresPermission`,
+ * no method/path mapping) but are asserted in handler code via helpers like
+ * `assertShareAccess`. Seeded here so they appear in `PERMISSION_PATTERNS`
+ * and `PermissionPattern`, making them grantable in role configs.
+ */
+export const ASSERTION_ONLY_PERMISSIONS: readonly string[] = ['stored-agents:share', 'stored-skills:share'];
 
 /** Descriptions for resources (used for TSDoc comments in autocomplete) */
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
@@ -119,6 +128,16 @@ export function derivePermissionData(): PermissionData {
         actionSet.add(action);
         permissionSet.add(permission);
       }
+    }
+  }
+
+  // Seed assertion-only permissions (not derivable from any route).
+  for (const permission of ASSERTION_ONLY_PERMISSIONS) {
+    const [resource, action] = permission.split(':');
+    if (resource && action) {
+      resourceSet.add(resource);
+      actionSet.add(action);
+      permissionSet.add(permission);
     }
   }
 

@@ -37,6 +37,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       '*:write',
       '*:execute',
       '*:publish',
+      '*:share',
       // Note: admins cannot delete resources
     ],
   },
