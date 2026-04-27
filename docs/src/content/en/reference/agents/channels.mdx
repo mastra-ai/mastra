@@ -103,6 +103,20 @@ export const supportAgent = new Agent({
     description:
       'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
   },
+  {
+    name: 'consumeStream',
+    type: 'ConsumeStreamFn',
+    isOptional: true,
+    description:
+      'Replace the built-in chunk-rendering loop. The override owns consumption of `stream.fullStream` and posting to the platform. When set, `formatOutboundText` is ignored.',
+  },
+  {
+    name: 'formatOutboundText',
+    type: '(text: string) => string',
+    isOptional: true,
+    description:
+      'Post-process flushed text chunks before posting. Called by the default consumer at every flush boundary. Return an empty string to suppress the post. Ignored when `consumeStream` is overridden.',
+  },
 ]}
 />
 
@@ -266,6 +280,120 @@ type InlineLinkEntry =
   | string // Domain pattern (HEAD determines mime type)
   | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
 ```
+
+## Customizing response delivery
+
+Two optional hooks let you customize how agent responses are rendered without re-implementing the rest of the channel pipeline.
+
+- `formatOutboundText` is the simple case: a per-flush text transform applied by the default consumer.
+- `consumeStream` is the advanced case: a full replacement for the chunk-rendering loop.
+
+Setting `consumeStream` short-circuits `formatOutboundText` — the override owns all formatting.
+
+```typescript
+type ConsumeStreamFn = (args: ConsumeStreamArgs) => Promise<void>
+
+interface ConsumeStreamArgs {
+  stream: MastraModelOutput
+  sdkThread: Thread
+  adapter: Adapter
+  platform: string
+  useCards: boolean
+  approvalContext?: { toolCallId: string; messageId: string }
+  adapterConfig: ChannelAdapterConfig
+  helpers: ConsumeStreamHelpers
+  logger?: IMastraLogger
+  formatOutboundText?: (text: string) => string
+}
+
+interface ConsumeStreamHelpers {
+  channelToolNames: Set<string>
+  formatToolRunning: (name: string, argsSummary: string, useCards: boolean) => PostableMessage
+  formatToolResult: (
+    name: string,
+    argsSummary: string,
+    resultText: string,
+    isError: boolean,
+    durationMs: number | undefined,
+    useCards: boolean,
+  ) => PostableMessage
+  formatToolApproval: (
+    name: string,
+    argsSummary: string,
+    toolCallId: string,
+    useCards: boolean,
+  ) => PostableMessage
+  formatArgsSummary: (args: unknown) => string
+  formatResult: (result: unknown, isError?: boolean) => string
+  stripToolPrefix: (name: string) => string
+  editOrPost: (
+    messageId: string | undefined,
+    content: PostableMessage,
+  ) => Promise<string | undefined>
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'stream',
+    type: 'MastraModelOutput',
+    description: 'The agent stream to consume. Iterate `stream.fullStream` for chunks.',
+  },
+  {
+    name: 'sdkThread',
+    type: 'Thread',
+    description: 'The Chat SDK thread for posting, editing, and typing indicators.',
+  },
+  {
+    name: 'adapter',
+    type: 'Adapter',
+    description: 'The resolved adapter for the current platform.',
+  },
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'Platform key (e.g. `slack`, `discord`).',
+  },
+  {
+    name: 'useCards',
+    type: 'boolean',
+    description: 'Whether the adapter renders tool messages as rich cards. Pass to the provided formatters.',
+  },
+  {
+    name: 'approvalContext',
+    type: '{ toolCallId: string; messageId: string }',
+    isOptional: true,
+    description:
+      'Present when rendering a stream resumed from tool approval. Pre-seed tool tracking so the result edits the approval card.',
+  },
+  {
+    name: 'adapterConfig',
+    type: 'ChannelAdapterConfig',
+    description: 'The per-adapter configuration (including `formatToolCall` and `formatError`).',
+  },
+  {
+    name: 'helpers',
+    type: 'ConsumeStreamHelpers',
+    description: 'Built-in formatters and an `editOrPost` helper. See the interface above.',
+  },
+  {
+    name: 'logger',
+    type: 'IMastraLogger',
+    isOptional: true,
+    description: 'Logger scoped to the CHANNEL namespace.',
+  },
+  {
+    name: 'formatOutboundText',
+    type: '(text: string) => string',
+    isOptional: true,
+    description:
+      'Passed through from `ChannelConfig` for reference. The default consumer applies it; custom overrides may ignore it.',
+  },
+]}
+/>
+
+The built-in renderer is exported as `defaultConsumeStream` from `@mastra/core/channels` for overrides that want to wrap rather than replace it.
 
 ## Related
 

@@ -173,6 +173,97 @@ See [Channels reference](/reference/agents/channels#inline-media) for all `inlin
 
 :::
 
+## Customizing response delivery
+
+By default, Mastra posts text to the platform on every `step-finish` / `finish` boundary and uses rich cards for tool calls. Two hooks let you change this without re-implementing the rest of the pipeline.
+
+### Light post-processing with `formatOutboundText`
+
+Use `formatOutboundText` to transform each flushed text chunk before it is posted. The default consumer applies it after the built-in whitespace trim.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    formatOutboundText: text => text.replaceAll('—', '–'),
+  },
+})
+```
+
+Return an empty string from `formatOutboundText` to suppress the post entirely.
+
+### Full control with `consumeStream`
+
+Use `consumeStream` to replace the chunk-rendering loop. The override owns consumption of `stream.fullStream` and posting to the platform, but the rest of `AgentChannels` (handler routing, thread mapping, history fetch, attachments, tool approval plumbing, webhook routes) remains intact.
+
+The following example streams text into a single edited message and renders tool calls with the built-in card formatters:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      discord: createDiscordAdapter(),
+    },
+    consumeStream: async ({ stream, sdkThread, useCards, helpers }) => {
+      let messageId: string | undefined
+      let buffer = ''
+
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          buffer += chunk.payload.text
+          // `editOrPost` returns the effective message id — posts the first
+          // time, edits the same message on every subsequent delta.
+          messageId = await helpers.editOrPost(messageId, buffer)
+        }
+        if (chunk.type === 'tool-call' && !helpers.channelToolNames.has(chunk.payload.toolName)) {
+          const displayName = helpers.stripToolPrefix(chunk.payload.toolName)
+          const argsSummary = helpers.formatArgsSummary(chunk.payload.args)
+          await sdkThread.post(helpers.formatToolRunning(displayName, argsSummary, useCards))
+        }
+        if (chunk.type === 'finish') {
+          messageId = undefined
+          buffer = ''
+        }
+        // ... handle `tool-result`, `tool-call-approval`, `file`, `step-finish`
+      }
+    },
+  },
+})
+```
+
+When `consumeStream` is set, `formatOutboundText` is ignored — the override owns all formatting.
+
+The helpers passed to the override expose:
+
+- `channelToolNames`: Tool names whose effects are already visible on the platform and can be skipped.
+- `formatToolRunning`, `formatToolResult`, `formatToolApproval`: Built-in card formatters.
+- `formatArgsSummary`, `formatResult`, `stripToolPrefix`: Text helpers matching the defaults.
+- `editOrPost`: Edit a message by ID, falling back to a new post on failure, and return the effective message id.
+
+The default renderer is exported as `defaultConsumeStream` for overrides that prefer to wrap rather than replace it.
+
+:::note
+
+Visit [Channels reference](/reference/agents/channels#customizing-response-delivery) for the full `ConsumeStreamArgs` shape.
+
+:::
+
 ## Related
 
 - [Agent overview](/docs/agents/overview)

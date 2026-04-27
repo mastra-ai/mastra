@@ -204,6 +204,176 @@ describe('AgentChannels', () => {
   });
 });
 
+// Build a minimal sdkThread mock for the chunk-rendering loop
+function createMockSdkThread(overrides: Record<string, any> = {}) {
+  const postedMessages: any[] = [];
+  const postedContent: any[] = [];
+  const thread: any = {
+    id: 'thread-1',
+    channelId: 'channel-1',
+    isDM: true,
+    adapter: { name: 'slack' },
+    post: vi.fn(async (content: any) => {
+      postedContent.push(content);
+      const msg = { id: `m-${postedMessages.length + 1}`, text: typeof content === 'string' ? content : '' };
+      postedMessages.push(msg);
+      return msg;
+    }),
+    startTyping: vi.fn().mockResolvedValue(undefined),
+    subscribe: vi.fn().mockResolvedValue(undefined),
+    isSubscribed: vi.fn().mockResolvedValue(false),
+    mentionUser: vi.fn((id: string) => `<@${id}>`),
+    postedContent,
+    ...overrides,
+  };
+  return thread;
+}
+
+// Minimal MastraModelOutput mock exposing just `fullStream` and `error`
+function createMockStream(chunks: any[], error?: Error) {
+  return {
+    fullStream: (async function* () {
+      for (const c of chunks) yield c;
+    })(),
+    error,
+  } as any;
+}
+
+describe('consumeStream override', () => {
+  it('invokes the custom consumer on the message-handler path', async () => {
+    const customConsumer = vi.fn().mockResolvedValue(undefined);
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      consumeStream: customConsumer,
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(customConsumer).toHaveBeenCalledTimes(1);
+    const args = customConsumer.mock.calls[0]![0];
+    expect(args.stream).toBe(stream);
+    expect(args.sdkThread).toBe(sdkThread);
+    expect(args.platform).toBe('slack');
+    expect(args.adapter).toBe(channels.adapters['slack']);
+    expect(args.helpers).toBeDefined();
+    expect(args.helpers.channelToolNames).toBeInstanceOf(Set);
+    expect(typeof args.helpers.formatToolRunning).toBe('function');
+    expect(typeof args.helpers.formatToolResult).toBe('function');
+    expect(typeof args.helpers.formatToolApproval).toBe('function');
+    expect(typeof args.helpers.editOrPost).toBe('function');
+    expect(args.approvalContext).toBeUndefined();
+    // Default consumer did not post
+    expect(sdkThread.post).not.toHaveBeenCalled();
+  });
+
+  it('invokes the custom consumer on the approval-resume path with approvalContext', async () => {
+    const customConsumer = vi.fn().mockResolvedValue(undefined);
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      consumeStream: customConsumer,
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack', {
+      toolCallId: 'tc-42',
+      messageId: 'approval-msg-7',
+    });
+
+    expect(customConsumer).toHaveBeenCalledTimes(1);
+    const args = customConsumer.mock.calls[0]![0];
+    expect(args.approvalContext).toEqual({ toolCallId: 'tc-42', messageId: 'approval-msg-7' });
+  });
+
+  it('does not run the default consumer when an override is supplied', async () => {
+    // The default consumer would call sdkThread.post on a text-delta + finish flow.
+    const customConsumer = vi.fn().mockResolvedValue(undefined);
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      consumeStream: customConsumer,
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([{ type: 'text-delta', payload: { text: 'Hello' } }, { type: 'finish' }]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(customConsumer).toHaveBeenCalledTimes(1);
+    // The default would have posted 'Hello'; the override did nothing.
+    expect(sdkThread.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('formatOutboundText', () => {
+  it('is applied to each flushed chunk by the default consumer', async () => {
+    const formatOutboundText = vi.fn((text: string) => text.replaceAll('—', ' – '));
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      formatOutboundText,
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([
+      { type: 'text-delta', payload: { text: 'before—after' } },
+      { type: 'step-finish' },
+      { type: 'text-delta', payload: { text: 'another—line' } },
+      { type: 'finish' },
+    ]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(formatOutboundText).toHaveBeenCalledTimes(2);
+    expect(formatOutboundText).toHaveBeenNthCalledWith(1, 'before—after');
+    expect(formatOutboundText).toHaveBeenNthCalledWith(2, 'another—line');
+    expect(sdkThread.postedContent).toEqual(['before – after', 'another – line']);
+  });
+
+  it('returning an empty string suppresses the post', async () => {
+    const formatOutboundText = vi.fn(() => '');
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      formatOutboundText,
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([{ type: 'text-delta', payload: { text: 'Hello' } }, { type: 'finish' }]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(formatOutboundText).toHaveBeenCalledTimes(1);
+    expect(sdkThread.post).not.toHaveBeenCalled();
+  });
+
+  it('is ignored when consumeStream is overridden', async () => {
+    const formatOutboundText = vi.fn((text: string) => text.toUpperCase());
+    const customConsumer = vi.fn().mockResolvedValue(undefined);
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      consumeStream: customConsumer,
+      formatOutboundText,
+    });
+    channels.__setAgent(createMockAgent());
+
+    const sdkThread = createMockSdkThread();
+    const stream = createMockStream([{ type: 'text-delta', payload: { text: 'Hello' } }, { type: 'finish' }]);
+
+    await (channels as any).runConsumer(stream, sdkThread, 'slack');
+
+    expect(customConsumer).toHaveBeenCalledTimes(1);
+    // The override owns formatting; Mastra does not call the hook itself.
+    expect(formatOutboundText).not.toHaveBeenCalled();
+  });
+});
+
 describe('matchesDomain', () => {
   it('matches exact hostname', () => {
     expect(matchesDomain('https://youtube.com/watch?v=123', 'youtube.com')).toBe(true);

@@ -5,8 +5,12 @@ export type {
   ChannelHandler,
   ChannelHandlerConfig,
   ChannelHandlers,
+  ConsumeStreamArgs,
+  ConsumeStreamFn,
+  ConsumeStreamHelpers,
   PostableMessage,
 } from './agent-channels';
+export { defaultConsumeStream } from './agent-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export type { ChannelContext, ThreadHistoryMessage } from './types';

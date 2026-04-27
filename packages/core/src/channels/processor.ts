@@ -11,7 +11,8 @@ import type { ChannelContext } from './types';
  * context is stable and prompt-cacheable.
  *
  * All output rendering (tool cards, text messages, approval prompts) is handled by
- * `AgentChannels.consumeAgentStream` which iterates the outer `fullStream`.
+ * the channel's `consumeStream` (default: `defaultConsumeStream`) which iterates the
+ * outer `fullStream`.
  */
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';
