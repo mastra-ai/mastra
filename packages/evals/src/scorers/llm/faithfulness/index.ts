@@ -17,12 +17,11 @@ export interface FaithfulnessMetricOptions {
 const getToolInvocationContext = (output: unknown): string[] => {
   if (!Array.isArray(output)) return [];
 
-  const assistantMessage = output.find(({ role }) => role === 'assistant');
-  return (
-    assistantMessage?.content?.toolInvocations
-      ?.filter((toolCall: any) => toolCall.state === 'result')
-      .map((toolCall: any) => JSON.stringify(toolCall.result)) ?? []
-  );
+  return output
+    .filter(message => message?.role === 'assistant')
+    .flatMap(message => message?.content?.toolInvocations ?? [])
+    .filter((toolCall: any) => toolCall.state === 'result')
+    .map((toolCall: any) => JSON.stringify(toolCall.result));
 };
 
 export function createFaithfulnessScorer({
@@ -83,7 +82,7 @@ export function createFaithfulnessScorer({
         const prompt = createFaithfulnessReasonPrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context: getToolInvocationContext(run.output),
+          context: options?.context ?? getToolInvocationContext(run.output),
           score,
           scale: options?.scale || 1,
           verdicts: results.analyzeStepResult?.verdicts || [],
