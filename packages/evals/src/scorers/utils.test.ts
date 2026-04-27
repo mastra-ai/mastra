@@ -11,6 +11,7 @@ import type {
 import { describe, it, expect } from 'vitest';
 import {
   getTextContentFromMastraDBMessage,
+  getUserMessageFromRunInput,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
   createTestMessage,
@@ -57,6 +58,54 @@ describe('Scorer Utils', () => {
       ];
       const result = getAssistantMessageFromRunOutput(output);
       expect(result).toBe('Assistant response');
+    });
+
+    it('should extract assistant text from workflow-style output', () => {
+      expect(getAssistantMessageFromRunOutput({ text: 'Workflow response' })).toBe('Workflow response');
+      expect(getAssistantMessageFromRunOutput({ content: 'Task response' })).toBe('Task response');
+      expect(getAssistantMessageFromRunOutput('String response')).toBe('String response');
+    });
+
+    it('should extract assistant text from model messages', () => {
+      const output = [
+        { role: 'user', content: 'Question' },
+        { role: 'assistant', content: [{ type: 'text', text: 'Model response' }] },
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Model response');
+    });
+  });
+
+  describe('getUserMessageFromRunInput', () => {
+    it('should extract user text content from agent input', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          createTestMessage({ content: 'User question', role: 'user' }),
+          createTestMessage({ content: 'Assistant response', role: 'assistant' }),
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('User question');
+    });
+
+    it('should extract user text from workflow-style input', () => {
+      expect(getUserMessageFromRunInput({ prompt: 'Workflow question' })).toBe('Workflow question');
+      expect(getUserMessageFromRunInput('String question')).toBe('String question');
+    });
+
+    it('should extract user text from model messages', () => {
+      const input = {
+        messages: [
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: [{ type: 'text', text: 'Model question' }] },
+        ],
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('Model question');
     });
   });
 

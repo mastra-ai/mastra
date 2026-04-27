@@ -11,13 +11,9 @@ import type {
 import { RequestContext } from '@mastra/core/request-context';
 
 /**
- * Extracts text content from a MastraDBMessage.
+ * Extracts text content from a MastraDBMessage or ModelMessage-like object.
  *
- * This function matches the logic used in `MessageList.mastraDBMessageToAIV4UIMessage`.
- * It first checks for a string `content.content` field, then falls back to extracting
- * text from the `parts` array (returning only the last text part, like AI SDK does).
- *
- * @param message - The MastraDBMessage to extract text from
+ * @param message - The message to extract text from
  * @returns The extracted text content, or an empty string if no text is found
  *
  * @example
@@ -32,16 +28,39 @@ import { RequestContext } from '@mastra/core/request-context';
  * ```
  */
 export function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
-  if (typeof message.content.content === 'string' && message.content.content !== '') {
-    return message.content.content;
+  const content = message.content as any;
+
+  if (typeof content === 'string') {
+    return content;
   }
-  if (message.content.parts && Array.isArray(message.content.parts)) {
+  if (Array.isArray(content)) {
+    const textParts = content.filter(p => p.type === 'text');
+    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+  }
+  if (typeof content?.content === 'string' && content.content !== '') {
+    return content.content;
+  }
+  if (typeof content?.text === 'string' && content.text !== '') {
+    return content.text;
+  }
+  if (content?.parts && Array.isArray(content.parts)) {
     // Return only the last text part like AI SDK does
-    const textParts = message.content.parts.filter(p => p.type === 'text');
+    const textParts = content.parts.filter((p: any) => p.type === 'text');
     return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
   }
   return '';
 }
+
+const isRecord = (value: unknown): value is Record<string, any> => {
+  return typeof value === 'object' && value !== null;
+};
+
+const getTextFromMessages = (messages: unknown, role: string): string | undefined => {
+  if (!Array.isArray(messages)) return undefined;
+
+  const message = messages.find(message => isRecord(message) && message.role === role);
+  return message ? getTextContentFromMastraDBMessage(message as MastraDBMessage) || undefined : undefined;
+};
 
 /**
  * Rounds a number to two decimal places.
@@ -139,10 +158,11 @@ export const createTestRun = (
 /**
  * Extracts the user message text from a scorer run input.
  *
- * Finds the first message with role 'user' and extracts its text content.
+ * Accepts the agent shape (`{ inputMessages }`), `ModelMessage[]`
+ * (`{ messages }`), workflow input (`{ prompt }`), and a bare string.
  *
- * @param input - The scorer run input containing input messages
- * @returns The user message text, or `undefined` if no user message is found
+ * @param input - The scorer run input
+ * @returns The user message text, or `undefined` if none can be extracted
  *
  * @example
  * ```ts
@@ -153,9 +173,15 @@ export const createTestRun = (
  *   });
  * ```
  */
-export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): string | undefined => {
-  const message = input?.inputMessages.find(({ role }) => role === 'user');
-  return message ? getTextContentFromMastraDBMessage(message) : undefined;
+export const getUserMessageFromRunInput = (input?: unknown): string | undefined => {
+  if (typeof input === 'string') return input;
+  if (!isRecord(input)) return undefined;
+
+  return (
+    getTextFromMessages(input.inputMessages, 'user') ??
+    getTextFromMessages(input.messages, 'user') ??
+    (typeof input.prompt === 'string' ? input.prompt : undefined)
+  );
 };
 
 /**
@@ -239,10 +265,12 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
 /**
  * Extracts the assistant message text from a scorer run output.
  *
- * Finds the first message with role 'assistant' and extracts its text content.
+ * Accepts the agent shape (`MastraDBMessage[]` / `ModelMessage[]`), workflow
+ * output (`{ text }`), task output (`{ content }`), a single assistant message
+ * object, and a bare string.
  *
- * @param output - The scorer run output (array of MastraDBMessage)
- * @returns The assistant message text, or `undefined` if no assistant message is found
+ * @param output - The scorer run output
+ * @returns The assistant message text, or `undefined` if none can be extracted
  *
  * @example
  * ```ts
@@ -253,9 +281,16 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
  *   });
  * ```
  */
-export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
-  const message = output?.find(({ role }) => role === 'assistant');
-  return message ? getTextContentFromMastraDBMessage(message) : undefined;
+export const getAssistantMessageFromRunOutput = (output?: unknown) => {
+  if (typeof output === 'string') return output;
+  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (!isRecord(output)) return undefined;
+
+  if (typeof output.text === 'string') return output.text;
+  if (typeof output.content === 'string') return output.content;
+  if (output.role === 'assistant') return getTextContentFromMastraDBMessage(output as MastraDBMessage) || undefined;
+
+  return undefined;
 };
 
 /**
