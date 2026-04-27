@@ -62,8 +62,11 @@ function isObservationalMemoryEnabled(config: unknown): boolean {
 }
 
 function getObservationalMemoryConfig(memory: Awaited<ReturnType<Agent['getMemory']>>, memoryConfig: unknown) {
-  const effectiveConfig = memory?.getMergedThreadConfig(memoryConfig || {});
-  return effectiveConfig?.observationalMemory;
+  if (!memory || typeof memory.getMergedThreadConfig !== 'function') {
+    return undefined;
+  }
+
+  return memory.getMergedThreadConfig(memoryConfig || {})?.observationalMemory;
 }
 
 function assertNetworkSupportsMemory(memory: Awaited<ReturnType<Agent['getMemory']>>, memoryConfig: unknown) {
