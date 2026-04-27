@@ -45,6 +45,8 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { WorkflowScheduler } from '../workflows/scheduler';
+import type { WorkflowSchedulerConfig } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -295,6 +297,15 @@ export interface Config<
    * while the conversation continues.
    */
   backgroundTasks?: BackgroundTaskManagerConfig;
+
+  /**
+   * Scheduler configuration for cron-driven workflow triggers.
+   *
+   * The scheduler is auto-enabled when any registered workflow declares a
+   * `schedule` config or when `scheduler.enabled` is true. It requires a
+   * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
+   */
+  scheduler?: WorkflowSchedulerConfig;
 }
 
 /**
@@ -374,6 +385,9 @@ export class Mastra<
   #pubsub: PubSub;
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
+  #schedulerConfig?: WorkflowSchedulerConfig;
+  #scheduler?: WorkflowScheduler;
+  #schedulerInitPromise?: Promise<void>;
   #gateways?: Record<string, MastraModelGateway>;
 
   #events: {
@@ -400,6 +414,18 @@ export class Mastra<
 
   get backgroundTaskManager() {
     return this.#backgroundTaskManager;
+  }
+
+  /**
+   * Returns the workflow scheduler if it has been auto-instantiated.
+   *
+   * The scheduler is created lazily once a workflow with a `schedule`
+   * config is registered (or when `scheduler.enabled` is true on the
+   * Mastra config). Use it to create, pause, resume, or delete
+   * schedules imperatively.
+   */
+  get scheduler() {
+    return this.#scheduler;
   }
 
   get datasets(): DatasetsManager {
@@ -709,6 +735,8 @@ export class Mastra<
     this.#backgroundTaskConfig = config?.backgroundTasks;
     this.#ensureBackgroundTaskManager();
 
+    this.#schedulerConfig = config?.scheduler;
+
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
     this.#mcpServers = {} as TMCPServers;
@@ -837,6 +865,8 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+
+    this.#ensureScheduler();
   }
 
   #ensureBackgroundTaskManager(): void {
@@ -850,6 +880,106 @@ export class Mastra<
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
     });
+  }
+
+  /**
+   * Returns the list of declarative schedules sourced from currently
+   * registered workflows. Each entry is keyed by a stable schedule id
+   * derived from the workflow id so re-registration is idempotent.
+   */
+  #collectDeclarativeSchedules(): Array<{ scheduleId: string; workflowId: string; workflow: AnyWorkflow }> {
+    const out: Array<{ scheduleId: string; workflowId: string; workflow: AnyWorkflow }> = [];
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    for (const workflow of Object.values(workflows ?? {})) {
+      const getter = (workflow as { getScheduleConfig?: () => unknown }).getScheduleConfig;
+      if (typeof getter !== 'function') continue;
+      const cfg = getter.call(workflow);
+      if (!cfg) continue;
+      out.push({ scheduleId: `wf_${workflow.id}`, workflowId: workflow.id, workflow });
+    }
+    return out;
+  }
+
+  #shouldEnableScheduler(): boolean {
+    if (this.#schedulerConfig?.enabled === false) return false;
+    if (this.#schedulerConfig?.enabled === true) return true;
+    return this.#collectDeclarativeSchedules().length > 0;
+  }
+
+  #ensureScheduler(): void {
+    if (this.#scheduler || this.#schedulerInitPromise) return;
+    if (!this.#shouldEnableScheduler()) return;
+    if (!this.#storage) return;
+
+    if (!this.#pubsub) {
+      throw new MastraError({
+        id: 'MASTRA_SCHEDULER_REQUIRES_PUBSUB',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Workflow scheduler requires a pubsub instance. Mastra creates an EventEmitterPubSub by default — this error indicates a misconfiguration.',
+      });
+    }
+
+    this.#schedulerInitPromise = this.#initScheduler().catch(error => {
+      this.#schedulerInitPromise = undefined;
+      this.#logger?.error('Failed to initialize workflow scheduler', error);
+    });
+  }
+
+  async #initScheduler(): Promise<void> {
+    if (this.#scheduler) return;
+    const storage = this.#storage;
+    if (!storage) return;
+
+    const schedulesStore = await storage.getStore('schedules');
+    if (!schedulesStore) {
+      throw new MastraError({
+        id: 'MASTRA_SCHEDULER_STORAGE_NOT_AVAILABLE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Workflow scheduler requires a storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`). The configured storage does not provide one.',
+      });
+    }
+
+    const scheduler = new WorkflowScheduler({
+      schedulesStore,
+      pubsub: this.#pubsub,
+      config: this.#schedulerConfig,
+    });
+    if (this.#logger) {
+      scheduler.__setLogger(this.#logger as IMastraLogger);
+    }
+    this.#scheduler = scheduler;
+
+    await this.#registerDeclarativeSchedules(scheduler);
+
+    await scheduler.start();
+  }
+
+  async #registerDeclarativeSchedules(scheduler: WorkflowScheduler): Promise<void> {
+    for (const { scheduleId, workflowId, workflow } of this.#collectDeclarativeSchedules()) {
+      const cfg = (workflow as { getScheduleConfig?: () => undefined | Record<string, any> }).getScheduleConfig?.();
+      if (!cfg) continue;
+      const existing = await scheduler.get(scheduleId);
+      if (existing) continue;
+      try {
+        await scheduler.create({
+          id: scheduleId,
+          target: {
+            type: 'workflow',
+            workflowId,
+            inputData: cfg.inputData,
+            initialState: cfg.initialState,
+            requestContext: cfg.requestContext,
+          },
+          cron: cfg.cron,
+          timezone: cfg.timezone,
+          metadata: cfg.metadata,
+        });
+      } catch (error) {
+        this.#logger?.error('Failed to register declarative schedule', { scheduleId, workflowId, error });
+      }
+    }
   }
 
   /**
@@ -2579,6 +2709,19 @@ export class Mastra<
       return;
     }
 
+    // Reject declarative schedules on non-evented workflows. The scheduler
+    // publishes `workflow.start` events which only the evented engine consumes.
+    const scheduleConfig = (workflow as { getScheduleConfig?: () => unknown }).getScheduleConfig?.();
+    if (scheduleConfig && workflow.engineType !== 'evented') {
+      throw new MastraError({
+        id: 'MASTRA_WORKFLOW_SCHEDULE_REQUIRES_EVENTED_ENGINE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow "${workflow.id}" declares a schedule but is not using the evented engine. Schedule support requires importing createWorkflow from "@mastra/core/workflows/evented".`,
+        details: { workflowId: workflow.id, engineType: workflow.engineType },
+      });
+    }
+
     // Initialize the workflow with Mastra and primitives
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
@@ -2589,6 +2732,22 @@ export class Mastra<
       workflow.commit();
     }
     workflows[workflowKey] = workflow;
+
+    // If a schedule is declared and the scheduler is already running, register
+    // it now. If the scheduler has not yet been instantiated, ensure it.
+    if (scheduleConfig) {
+      if (this.#scheduler) {
+        const scheduler = this.#scheduler;
+        void this.#registerDeclarativeSchedules(scheduler).catch(error => {
+          this.#logger?.error('Failed to register declarative schedule for workflow', {
+            workflowId: workflow.id,
+            error,
+          });
+        });
+      } else {
+        this.#ensureScheduler();
+      }
+    }
   }
 
   /**
@@ -3464,6 +3623,20 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    if (this.#schedulerInitPromise) {
+      try {
+        await this.#schedulerInitPromise;
+      } catch {
+        // init errors are already logged
+      }
+    }
+    if (this.#scheduler) {
+      try {
+        await this.#scheduler.stop();
+      } catch (error) {
+        this.#logger?.error('Failed to stop workflow scheduler', error);
+      }
+    }
     await this.stopEventEngine();
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
