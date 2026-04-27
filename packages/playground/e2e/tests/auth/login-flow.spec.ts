@@ -117,30 +117,56 @@ test.describe('Login Flow', () => {
       await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
     });
 
-    test('redirect parameter is preserved in login URL', async ({ page }) => {
-      await setupUnauthenticated(page);
-
-      // Navigate to login with redirect parameter
-      await page.goto('/login?redirect=/workflows');
-
-      // The redirect parameter should be preserved (verify by checking the URL)
-      expect(page.url()).toContain('redirect=/workflows');
-    });
-
-    test('login page preserves redirect to original destination', async ({ page }) => {
+    test('unauthenticated agent-builder access redirects through login and returns to the requested route', async ({
+      page,
+    }) => {
+      // USER STORY: As a signed-out user, I should be sent to login before using agent-builder,
+      // so that signing in returns me to the exact builder route I requested.
+      // BEHAVIOR UNDER TEST: The agent-builder layout protects the route by redirecting to
+      // /login with the original path as redirect state, and a successful credentials login
+      // resumes navigation to that exact agent-builder destination.
       await setupMockAuth(page, {
         authenticated: false,
         loginType: 'credentials',
       });
 
-      // Go to login with a specific redirect
-      await page.goto('/login?redirect=/agents');
+      await page.route('**/api/auth/credentials/sign-in', async route => {
+        await clearMockAuth(page);
+        await setupAdminAuth(page);
 
-      // Verify the login page is displayed
-      await expect(page.getByRole('heading', { name: /Sign in to Mastra Studio/i })).toBeVisible();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
+      });
 
-      // The redirect should be preserved in the URL for later use
-      expect(page.url()).toContain('redirect=');
+      const requestedRoute = '/agent-builder/agents/create?draft=1#details';
+      await page.goto(requestedRoute);
+
+      await expect(page).toHaveURL(/\/login\?redirect=/);
+      const loginUrl = new URL(page.url());
+      expect(loginUrl.searchParams.get('redirect')).toBe(requestedRoute);
+
+      await page.getByLabel(/Email/i).fill('admin@example.com');
+      await page.getByLabel(/Password/i).fill('password123');
+      await page.getByRole('button', { name: /Sign in$/i }).click();
+
+      await expect(page).toHaveURL(requestedRoute);
+    });
+
+    test('agent-builder route still renders when auth is disabled', async ({ page }) => {
+      // USER STORY: As a user in an auth-disabled environment, I should still be able to use
+      // agent-builder directly because no login gate is configured.
+      // BEHAVIOR UNDER TEST: The agent-builder auth guard only redirects when auth is enabled.
+      await setupMockAuth(page, {
+        enabled: false,
+      });
+
+      await page.goto('/agent-builder/agents/create');
+
+      await expect(page).toHaveURL('/agent-builder/agents/create');
+      await expect(page.locator('body')).not.toContainText('Authentication is not configured');
     });
   });
 

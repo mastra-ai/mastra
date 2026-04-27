@@ -821,6 +821,249 @@ describe('toUIMessage', () => {
       });
       expect(result[0].id).toMatch(/^reasoning-run-123/);
     });
+
+    it('should create a new assistant message with an empty streaming reasoning part on reasoning-start when no assistant message exists', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-start',
+        payload: {
+          id: 'reasoning-1',
+          providerMetadata: { model: { name: 'o1' } },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: '',
+            state: 'streaming',
+            providerMetadata: { model: { name: 'o1' } },
+          },
+        ],
+        metadata: baseMetadata,
+      });
+      expect(result[0].id).toMatch(/^reasoning-run-123/);
+    });
+
+    it('should append a new empty streaming reasoning part to the current assistant message on reasoning-start', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-start',
+        payload: {
+          id: 'reasoning-2',
+          providerMetadata: { provider: { name: 'anthropic' } },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello',
+            },
+          ],
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].parts).toHaveLength(2);
+      expect(result[0].parts[1]).toEqual({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: { provider: { name: 'anthropic' } },
+      });
+    });
+
+    it('should flip the matching reasoning part state from streaming to done on reasoning-end', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-end',
+        payload: {
+          id: 'reasoning-1',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Analyzing...',
+              state: 'streaming',
+            },
+          ],
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Analyzing...',
+        state: 'done',
+      });
+    });
+
+    it('should be a no-op when reasoning-end arrives with no assistant message', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-end',
+        payload: {
+          id: 'reasoning-1',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toEqual([]);
+    });
+
+    it('should be a no-op when reasoning-end arrives with no streaming reasoning part to close', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-end',
+        payload: {
+          id: 'reasoning-1',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Already done',
+              state: 'done',
+            },
+          ],
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Already done',
+        state: 'done',
+      });
+    });
+
+    it('should merge providerMetadata from the end payload onto the completed reasoning part', () => {
+      const chunk: ChunkType = {
+        type: 'reasoning-end',
+        payload: {
+          id: 'reasoning-1',
+          providerMetadata: { finish: { reason: 'stop' } },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Done thinking',
+              state: 'streaming',
+              providerMetadata: { model: { name: 'o1' } },
+            } as any,
+          ],
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'reasoning',
+        text: 'Done thinking',
+        state: 'done',
+        providerMetadata: {
+          model: { name: 'o1' },
+          finish: { reason: 'stop' },
+        },
+      });
+    });
+
+    it('should handle the full reasoning-start -> reasoning-delta -> reasoning-end lifecycle', () => {
+      let conversation: MastraUIMessage[] = [];
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-start',
+          payload: { id: 'reasoning-1', providerMetadata: { model: { name: 'o1' } } },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-delta',
+          payload: { id: 'reasoning-1', text: 'Step one. ' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-delta',
+          payload: { id: 'reasoning-1', text: 'Step two.' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-end',
+          payload: { id: 'reasoning-1' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(conversation).toHaveLength(1);
+      expect(conversation[0].parts).toHaveLength(1);
+      expect(conversation[0].parts[0]).toMatchObject({
+        type: 'reasoning',
+        text: 'Step one. Step two.',
+        state: 'done',
+      });
+    });
   });
 
   describe('toUIMessage - tool-call chunk', () => {

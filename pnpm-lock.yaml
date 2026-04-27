@@ -4150,6 +4150,9 @@ importers:
       zod:
         specifier: ^3.25.0
         version: 3.25.76
+      zod-v4:
+        specifier: npm:zod@^4.3.6
+        version: zod@4.3.6
       zustand:
         specifier: ^5.0.12
         version: 5.0.12(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
@@ -4184,6 +4187,9 @@ importers:
       eslint-plugin-react-refresh:
         specifier: ^0.5.2
         version: 0.5.2(eslint@10.2.1(jiti@2.6.1))
+      msw:
+        specifier: ^2.6.0
+        version: 2.12.13(@types/node@22.19.15)(typescript@5.9.3)
       nanoid:
         specifier: ^5.1.7
         version: 5.1.7

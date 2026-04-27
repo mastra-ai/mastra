@@ -23,10 +23,16 @@ declare global {
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import { AgentBuilderRoot } from './pages/agent-builder';
+import AgentBuilderAgents from './pages/agent-builder/agents';
+import AgentBuilderCreate from './pages/agent-builder/agents/create';
+import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
+import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -87,8 +93,10 @@ import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
+import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 import { LinkComponentProvider } from '@/lib/framework';
@@ -192,6 +200,35 @@ const routes = [
   // Auth pages - no layout
   { path: '/login', element: <Login /> },
   { path: '/signup', element: <SignUp /> },
+  {
+    path: '/agent-builder',
+    element: <AgentBuilderRootLayout paths={paths} />,
+    children: [
+      {
+        index: true,
+        element: <AgentBuilderRoot />,
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderAgents />,
+          },
+        ],
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderCreate /> },
+          { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
+          { path: ':id/view', element: <AgentBuilderAgentView /> },
+        ],
+      },
+    ],
+  },
   {
     element: <MinimalRootLayout />,
     children: [

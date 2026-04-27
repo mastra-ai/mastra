@@ -14,18 +14,17 @@ import {
 import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
+import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const [search, setSearch] = useState('');
-  const { canCreateAgent } = useCanCreateAgent();
-  const { Link: FrameworkLink, paths } = useLinkComponent();
-  const createAgentPath = paths.cmsAgentCreateLink();
-  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
+  const { canCreateAgent, createRoute } = useCanCreateAgent();
+  const { Link: FrameworkLink } = useLinkComponent();
+  const showCreateCta = canCreateAgent && Boolean(createRoute);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -72,7 +71,7 @@ function Agents() {
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
             {showCreateCta && (
-              <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
+              <ButtonWithTooltip as={FrameworkLink} to={createRoute} tooltipContent="Create an agent">
                 <Plus />
               </ButtonWithTooltip>
             )}

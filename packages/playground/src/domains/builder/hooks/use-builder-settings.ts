@@ -1,16 +1,21 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
+interface UseBuilderSettingsOptions {
+  enabled?: boolean;
+}
+
 /**
  * Fetches agent builder settings from the server.
  * Returns feature flags and configuration set by admin.
  */
-export const useBuilderSettings = () => {
+export const useBuilderSettings = (options?: UseBuilderSettingsOptions) => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['builder-settings'],
     queryFn: () => client.getBuilderSettings(),
+    enabled: options?.enabled ?? true,
   });
 };
 

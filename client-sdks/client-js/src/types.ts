@@ -1113,6 +1113,7 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  status?: 'draft' | 'published' | 'archived';
   authorId?: string;
   metadata?: Record<string, unknown>;
 }

@@ -1,0 +1,399 @@
+// @vitest-environment jsdom
+import { TooltipProvider } from '@mastra/playground-ui';
+import { render, cleanup } from '@testing-library/react';
+import { FormProvider, useForm } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { AgentBuilderEditFormValues } from '../../../schemas';
+import type { AgentTool } from '../../../types/agent-tool';
+import { ConversationPanel } from '../conversation-panel';
+
+type Features = {
+  tools: boolean;
+  memory: boolean;
+  workflows: boolean;
+  agents: boolean;
+};
+
+const sentMessages: Array<{ message: string; clientTools: Record<string, any> }> = [];
+const chatState = { isRunning: false };
+
+vi.mock('@mastra/react', () => ({
+  useChat: () => ({
+    messages: [],
+    isRunning: chatState.isRunning,
+    setMessages: () => {},
+    sendMessage: (payload: { message: string; clientTools: Record<string, any> }) => {
+      sentMessages.push(payload);
+    },
+  }),
+  useMastraClient: () => ({}),
+}));
+
+vi.mock('@/hooks/use-agent-messages', () => ({
+  useAgentMessages: () => ({ data: { messages: [] }, isLoading: false }),
+}));
+
+let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
+
+const FormWrapper = ({ children }: { children: React.ReactNode }) => {
+  const methods = useForm<AgentBuilderEditFormValues>({
+    defaultValues: {
+      name: 'Initial',
+      instructions: '',
+      tools: {},
+    },
+  });
+  formMethodsRef = methods;
+  return (
+    <TooltipProvider>
+      <MemoryRouter>
+        <FormProvider {...methods}>{children}</FormProvider>
+      </MemoryRouter>
+    </TooltipProvider>
+  );
+};
+
+const toAgentTools = (tools: Array<{ id: string; description?: string; type?: AgentTool['type'] }>): AgentTool[] =>
+  tools.map(t => ({
+    id: t.id,
+    name: t.id,
+    description: t.description,
+    isChecked: false,
+    type: t.type ?? 'tool',
+  }));
+
+const renderPanel = (
+  features: Features,
+  availableTools: Array<{ id: string; description?: string; type?: AgentTool['type'] }> = [],
+  availableWorkspaces: Array<{ id: string; name: string }> = [],
+) =>
+  render(
+    <FormWrapper>
+      <ConversationPanel
+        initialUserMessage="hello"
+        features={features}
+        availableAgentTools={toAgentTools(availableTools)}
+        availableWorkspaces={availableWorkspaces}
+        agentId="agent-test"
+      />
+    </FormWrapper>,
+  );
+
+const getAgentBuilderTool = () => {
+  expect(sentMessages.length).toBeGreaterThan(0);
+  const tool = sentMessages[0].clientTools.agentBuilderTool;
+  expect(tool).toBeDefined();
+  return tool;
+};
+
+const allOff: Features = { tools: false, memory: false, workflows: false, agents: false };
+const allOn: Features = { tools: true, memory: false, workflows: false, agents: false };
+
+describe('ConversationPanel agent-builder client tool', () => {
+  beforeEach(() => {
+    sentMessages.length = 0;
+    formMethodsRef = null;
+    chatState.isRunning = false;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('always exposes name and instructions as required fields when both feature flags are off', () => {
+    renderPanel(allOff);
+    const tool = getAgentBuilderTool();
+    const shape = tool.inputSchema.shape;
+
+    expect(shape.name).toBeDefined();
+    expect(shape.instructions).toBeDefined();
+    expect(shape.tools).toBeUndefined();
+
+    const valid = tool.inputSchema.safeParse({ name: 'Foo', instructions: 'Do X' });
+    expect(valid.success).toBe(true);
+    const missing = tool.inputSchema.safeParse({ name: 'Foo' });
+    expect(missing.success).toBe(false);
+  });
+
+  it('adds tools to the schema when the feature flag is on', () => {
+    renderPanel(allOn);
+    const tool = getAgentBuilderTool();
+    const shape = tool.inputSchema.shape;
+
+    expect(shape.name).toBeDefined();
+    expect(shape.instructions).toBeDefined();
+    expect(shape.tools).toBeDefined();
+  });
+
+  it('only includes tools when features.tools is true', () => {
+    renderPanel({ ...allOff, tools: true });
+    const tool = getAgentBuilderTool();
+    const shape = tool.inputSchema.shape;
+
+    expect(shape.tools).toBeDefined();
+  });
+
+  it('execute writes name and instructions to the form', async () => {
+    renderPanel(allOff);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'New name', instructions: 'New instructions' });
+
+    expect(formMethodsRef!.getValues('name')).toBe('New name');
+    expect(formMethodsRef!.getValues('instructions')).toBe('New instructions');
+  });
+
+  it('execute writes tools only when the feature flag enables it', async () => {
+    renderPanel(allOn, [{ id: 'web-search' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: 'Web Search' }],
+    });
+
+    expect(formMethodsRef!.getValues('tools')).toEqual({ 'web-search': true });
+  });
+
+  it('lists available tools in the tool description so the LLM can pick ids', () => {
+    renderPanel({ ...allOff, tools: true }, [
+      { id: 'web-search', description: 'Search the web' },
+      { id: 'http-fetch', description: 'Fetch a URL' },
+    ]);
+    const tool = getAgentBuilderTool();
+
+    expect(tool.description).toContain('web-search');
+    expect(tool.description).toContain('Search the web');
+    expect(tool.description).toContain('http-fetch');
+    expect(tool.description).toContain('Fetch a URL');
+  });
+
+  it('requires both id and name for each entry in the tools field', () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: 'Web Search' }],
+    });
+    expect(valid.success).toBe(true);
+
+    const missingName = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search' }],
+    });
+    expect(missingName.success).toBe(false);
+
+    const emptyName = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: '' }],
+    });
+    expect(emptyName.success).toBe(false);
+
+    const asString = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: ['web-search'],
+    });
+    expect(asString.success).toBe(false);
+  });
+
+  it('constrains the tools id field to the provided ids', () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: 'Web Search' }],
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'unknown-tool', name: 'Unknown' }],
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('execute ignores tools when the feature flag is off', async () => {
+    renderPanel(allOff);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: 'Web Search' }],
+    });
+
+    expect(formMethodsRef!.getValues('tools')).toEqual({});
+  });
+
+  it('drops agent and workflow ids when those features are gated off but tools is on', async () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', type: 'tool' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({
+      name: 'N',
+      instructions: 'I',
+      tools: [
+        { id: 'web-search', name: 'Web Search' },
+        { id: 'some-agent', name: 'Some Agent' },
+        { id: 'some-workflow', name: 'Some Workflow' },
+      ],
+    });
+
+    expect(formMethodsRef!.getValues('tools')).toEqual({ 'web-search': true });
+    expect(formMethodsRef!.getValues('agents')).toEqual({});
+    expect(formMethodsRef!.getValues('workflows')).toEqual({});
+  });
+
+  it('defers the initial send until toolsReady flips true', () => {
+    const { rerender } = render(
+      <FormWrapper>
+        <ConversationPanel
+          initialUserMessage="hello"
+          features={{ ...allOff, tools: true }}
+          availableAgentTools={[]}
+          toolsReady={false}
+          agentId="agent-test"
+        />
+      </FormWrapper>,
+    );
+
+    expect(sentMessages).toHaveLength(0);
+
+    rerender(
+      <FormWrapper>
+        <ConversationPanel
+          initialUserMessage="hello"
+          features={{ ...allOff, tools: true }}
+          availableAgentTools={toAgentTools([{ id: 'web-search', description: 'Search the web' }])}
+          toolsReady={true}
+          agentId="agent-test"
+        />
+      </FormWrapper>,
+    );
+
+    expect(sentMessages).toHaveLength(1);
+    const tool = sentMessages[0].clientTools.agentBuilderTool;
+    expect(tool.description).toContain('web-search');
+    expect(tool.description).toContain('Search the web');
+  });
+
+  it('sends the initial message once toolsReady is true on mount', () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
+
+    expect(sentMessages).toHaveLength(1);
+    const tool = sentMessages[0].clientTools.agentBuilderTool;
+    expect(tool.description).toContain('web-search');
+  });
+
+  it('exposes an optional workspaceId field in the tool input schema', () => {
+    renderPanel(allOff);
+    const tool = getAgentBuilderTool();
+    const shape = tool.inputSchema.shape;
+
+    expect(shape.workspaceId).toBeDefined();
+
+    const withoutWorkspace = tool.inputSchema.safeParse({ name: 'N', instructions: 'I' });
+    expect(withoutWorkspace.success).toBe(true);
+  });
+
+  it('lists available workspaces in the tool description', () => {
+    renderPanel(
+      allOff,
+      [],
+      [
+        { id: 'ws-1', name: 'Primary' },
+        { id: 'ws-2', name: 'Secondary' },
+      ],
+    );
+    const tool = getAgentBuilderTool();
+
+    expect(tool.description).toContain('ws-1');
+    expect(tool.description).toContain('Primary');
+    expect(tool.description).toContain('ws-2');
+    expect(tool.description).toContain('Secondary');
+  });
+
+  it('constrains workspaceId to the provided ids when workspaces are available', () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      workspaceId: 'ws-1',
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      workspaceId: 'unknown-workspace',
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('execute writes workspaceId to the form when provided', async () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'N', instructions: 'I', workspaceId: 'ws-1' });
+
+    expect(formMethodsRef!.getValues('workspaceId')).toBe('ws-1');
+  });
+
+  it('execute does not set workspaceId when omitted', async () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'N', instructions: 'I' });
+
+    expect(formMethodsRef!.getValues('workspaceId')).toBeUndefined();
+  });
+});
+
+describe('ConversationPanel chat busy/done state', () => {
+  beforeEach(() => {
+    sentMessages.length = 0;
+    formMethodsRef = null;
+    chatState.isRunning = false;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows the pending indicator and disables the composer while running', () => {
+    chatState.isRunning = true;
+    const { queryByTestId, getByTestId } = renderPanel(allOff);
+
+    expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
+    const submit = getByTestId('agent-builder-conversation-submit');
+    const input = getByTestId('agent-builder-conversation-input') as HTMLTextAreaElement;
+    expect(submit.hasAttribute('disabled')).toBe(true);
+    expect(submit.getAttribute('aria-label')).toBe('Generating…');
+    expect(input.disabled).toBe(true);
+  });
+
+  it('hides the pending indicator and re-enables the composer when not running', () => {
+    chatState.isRunning = false;
+    const { queryByTestId, getByTestId } = renderPanel(allOff);
+
+    expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
+    const submit = getByTestId('agent-builder-conversation-submit');
+    const input = getByTestId('agent-builder-conversation-input') as HTMLTextAreaElement;
+    expect(submit.getAttribute('aria-label')).toBe('Send');
+    expect(input.disabled).toBe(false);
+  });
+});

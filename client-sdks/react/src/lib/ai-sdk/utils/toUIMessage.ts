@@ -326,6 +326,42 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
+    case 'reasoning-start': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        const newMessage: MastraUIMessage = {
+          id: `reasoning-${chunk.runId + Date.now()}`,
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: '',
+              state: 'streaming',
+              providerMetadata: chunk.payload.providerMetadata,
+            },
+          ],
+          metadata,
+        };
+        return [...result, newMessage];
+      }
+
+      const parts = [...lastMessage.parts];
+      parts.push({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: chunk.payload.providerMetadata,
+      });
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          parts,
+        },
+      ];
+    }
+
     case 'reasoning-delta': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') {
@@ -367,6 +403,45 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           };
         }
       }
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          parts,
+        },
+      ];
+    }
+
+    case 'reasoning-end': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const parts = [...lastMessage.parts];
+      const reasoningPartIndex = parts.findLastIndex(
+        part => part.type === 'reasoning' && (part as { state?: string }).state === 'streaming',
+      );
+
+      if (reasoningPartIndex === -1) return result;
+
+      const reasoningPart = parts[reasoningPartIndex];
+      if (reasoningPart.type !== 'reasoning') return result;
+
+      const existingMetadata = (reasoningPart as { providerMetadata?: any }).providerMetadata;
+      const endMetadata = chunk.payload.providerMetadata;
+
+      parts[reasoningPartIndex] = {
+        ...reasoningPart,
+        state: 'done',
+        ...(existingMetadata || endMetadata
+          ? {
+              providerMetadata: {
+                ...(existingMetadata ?? {}),
+                ...(endMetadata ?? {}),
+              },
+            }
+          : {}),
+      };
 
       return [
         ...result.slice(0, -1),

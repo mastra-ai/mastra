@@ -1,6 +1,3 @@
-import { v4 as uuid } from '@lukeed/uuid';
-import { useMemo } from 'react';
-
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { BrowserSessionProvider } from '../../context/browser-session-context';
 import { AgentChat } from '../agent-chat';
@@ -22,29 +19,27 @@ export function AgentPlaygroundTestChat({
   agentVersionId,
   hasMemory,
 }: AgentPlaygroundTestChatProps) {
-  // Generate a stable ephemeral thread ID for test chat sessions
-  const testThreadId = useMemo(() => uuid(), [agentId]);
   const mergedRequestContext = useMergedRequestContext();
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
-      <BrowserSessionProvider agentId={agentId} threadId={testThreadId}>
+      <BrowserSessionProvider agentId={agentId} threadId={agentId}>
         <DatasetSaveProvider
           enabled
-          threadId={testThreadId}
+          threadId={agentId}
           agentId={agentId}
           requestContext={hasRequestContext ? mergedRequestContext : undefined}
         >
           <div className="flex flex-col h-full">
             <div className="flex-1 min-h-0">
               <AgentChat
-                key={testThreadId}
+                key={agentId}
                 agentId={agentId}
                 agentName={agentName}
                 modelVersion={modelVersion}
                 agentVersionId={agentVersionId}
-                threadId={testThreadId}
+                threadId={agentId}
                 memory={hasMemory}
                 refreshThreadList={async () => {}}
                 isNewThread
