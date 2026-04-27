@@ -572,6 +572,21 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Forwards a raw Request to the internal custom route handler.
+   * Returns the Response if a custom route matched, or null to fall through.
+   * Preferred over handleCustomRouteRequest() when a Request object is already available.
+   */
+  protected async forwardCustomRouteRequest(
+    request: Request,
+    requestContext?: RequestContext,
+  ): Promise<Response | null> {
+    if (!this.customRouteHandler) return null;
+    const response = await this.customRouteHandler(request, { requestContext });
+    if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
+    return response;
+  }
+
+  /**
    * Forwards a request to the internal custom route handler.
    * Returns the Response if a custom route matched, or null to fall through.
    * Used by non-Hono adapter bridges.
