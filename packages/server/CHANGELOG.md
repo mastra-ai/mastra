@@ -1,5 +1,18 @@
 # @mastra/server
 
+## 1.29.0-alpha.2
+
+### Patch Changes
+
+- Refactored Hono adapter's `registerCustomApiRoutes()` to use the shared `buildCustomRouteHandler()` from the base class instead of duplicating route/handler resolution logic. Added `forwardCustomRouteRequest()` to the base class for adapters that already have a raw `Request` object (avoiding unnecessary request reconstruction). ([#15793](https://github.com/mastra-ai/mastra/pull/15793))
+
+- Custom API routes now validate that their paths don't collide with the built-in route prefix. If a custom route path starts with the server's `apiPrefix` (default `/api`), a descriptive error is thrown at startup. This prevents custom routes from shadowing built-in Mastra routes (e.g. `/api/agents`, `/api/tools`). ([#15743](https://github.com/mastra-ai/mastra/pull/15743))
+
+- Add `POST /api/agents/:agentId/stream-until-idle` SSE route that mirrors `agent.streamUntilIdle()`. The route keeps the SSE stream open through background task completion and the agent's follow-up turn, so clients receive the final answer in a single request. ([#15686](https://github.com/mastra-ai/mastra/pull/15686))
+
+- Updated dependencies [[`9e973b0`](https://github.com/mastra-ai/mastra/commit/9e973b010dacfa15ac82b0072897319f5234b90a), [`dd934a0`](https://github.com/mastra-ai/mastra/commit/dd934a0982ce0f78712fbd559e4f2410bf594b39), [`73f2809`](https://github.com/mastra-ai/mastra/commit/73f2809721db24e98cdf122539652a455211b450), [`aedeea4`](https://github.com/mastra-ai/mastra/commit/aedeea48a94f728323f040478775076b9574be50), [`8126d86`](https://github.com/mastra-ai/mastra/commit/8126d8638411eacfafdc29036ac998e8757ea66f), [`ae97520`](https://github.com/mastra-ai/mastra/commit/ae975206fdb0f6ef03c4d5bf94f7dc7c3f706c02), [`441670a`](https://github.com/mastra-ai/mastra/commit/441670a02c9dc7731c52674f55481e7848a84523)]:
+  - @mastra/core@1.29.0-alpha.2
+
 ## 1.29.0-alpha.1
 
 ### Patch Changes
