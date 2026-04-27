@@ -65,7 +65,9 @@
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
     "mastra:studio": "mastra studio",
-    "dev:ui": "mastra dev & pnpm --dir ../.. dev:playground & wait"
+    "dev:ui": "trap 'kill 0' SIGINT SIGTERM EXIT; mastra dev & pnpm --dir ../.. dev:playground & wait",
+    "clean": "rm -rf .mastra mastra-observability.duckdb* vector.db src/mastra/public/*.duckdb* database.sqlite",
+    "dev:ui:fresh": "pnpm clean && pnpm dev:ui"
   },
   "keywords": [],
   "author": "",
