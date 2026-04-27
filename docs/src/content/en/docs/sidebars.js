@@ -101,6 +101,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/background-tasks',
+          label: 'Background Tasks',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/processors',
           label: 'Processors',
         },

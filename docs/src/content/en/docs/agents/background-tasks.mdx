@@ -1,0 +1,240 @@
+---
+title: "Background tasks | Agents"
+description: Learn how to dispatch long-running tool calls in the background, keep the stream open until they complete, and orchestrate sub-agents asynchronously.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# Background tasks
+
+Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and — if you use `streamUntilIdle()` — re-injected into the loop so the agent can react to it.
+
+## When to use background tasks
+
+Use background tasks when a tool call may take long enough that the user shouldn't wait for it before seeing a response. Common cases:
+
+- Sub-agent delegations that themselves run multi-step research or writing.
+- Tool calls that hit slow external services, queues, or large data jobs.
+- Workflows triggered from a tool call that may take minutes to complete.
+
+For tool calls that return quickly, foreground execution is simpler — keep using `agent.stream()` and `agent.generate()` directly.
+
+:::note
+
+Background tasks require a configured [storage](/docs/memory/storage) backend on the Mastra instance. Tasks are persisted so they survive process restarts.
+
+:::
+
+## Enable on the Mastra instance
+
+Background tasks are off by default. Enable them by setting `backgroundTasks.enabled` on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  agents: {
+    /* ... */
+  },
+  storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 10,
+    perAgentConcurrency: 5,
+    backpressure: 'queue',
+    defaultTimeoutMs: 300_000,
+  },
+})
+```
+
+The full set of options is listed in the [`backgroundTasks` configuration reference](/reference/configuration#backgroundtasks).
+
+## Opt a tool into running in the background
+
+Enabling the manager doesn't run anything in the background by itself — every tool defaults to foreground execution. You opt a tool in at one of three layers, in priority order:
+
+1. **LLM per-call override**: the model includes a `_background` field in the tool arguments.
+1. **Agent-level config**: the agent declares which of its tools are background-eligible.
+1. **Tool-level config**: the tool itself declares it as background-eligible.
+
+### Tool-level
+
+Set `backgroundTasks.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
+
+```typescript title="src/mastra/tools/research.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const researchTool = createTool({
+  id: 'research',
+  description: 'Run a long research job',
+  inputSchema: z.object({ topic: z.string() }),
+  // highlight-start
+  backgroundTasks: {
+    enabled: true,
+    timeoutMs: 600_000,
+    maxRetries: 1,
+  },
+  // highlight-end
+  execute: async ({ context }) => {
+    // ...
+  },
+})
+```
+
+### Agent-level
+
+Use `backgroundTasks.tools` on the agent to opt in specific tools, override timeouts for individual tools, or run all background-eligible tools in the background. Use `disabled: true` to short-circuit background dispatch for the agent entirely.
+
+```typescript title="src/mastra/agents/researcher.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const researcher = new Agent({
+  id: 'researcher',
+  instructions: 'You research topics and answer questions.',
+  model: 'openai/gpt-5.4',
+  tools: { researchTool, summarizeTool },
+  // highlight-start
+  backgroundTasks: {
+    tools: {
+      researchTool: { enabled: true, timeoutMs: 600_000 },
+      summarizeTool: false,
+    },
+  },
+  // highlight-end
+})
+```
+
+Set `tools: 'all'` to opt in every tool the agent has.
+
+### LLM per-call override
+
+When a tool is registered on an agent that has background tasks enabled, the model can include a `_background` field in the tool arguments to override the resolved configuration for that specific call:
+
+```json
+{
+  "topic": "solana",
+  "_background": { "enabled": true, "timeoutMs": 900_000 }
+}
+```
+
+The override is stripped from the arguments before the tool runs. All fields in `_background` are optional — only include what you want to override.
+
+### Resolution order
+
+When a tool call is dispatched, the resolved background config is computed in this priority order:
+
+1. LLM `_background` override (if present in the call's arguments).
+1. Agent-level `backgroundTasks.tools` entry for the tool.
+1. Tool-level `backgroundTasks` config.
+1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
+
+If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
+
+## What appears in the stream
+
+When a tool call dispatches as a background task, the stream emits a sequence of background task chunks alongside the usual tool-call chunks:
+
+| Chunk type | When it fires |
+| - | - |
+| `background-task-started` | The task has been enqueued and assigned a `taskId`. |
+| `background-task-running` | The task picked up a worker and started executing. |
+| `background-task-progress` | Progress update from the running task. |
+| `background-task-output` | A streamed output chunk from the task's `execute`. |
+| `background-task-completed` | The task finished successfully. The `payload.result` matches the eventual tool result. |
+| `background-task-failed` | The task threw or timed out. |
+| `background-task-cancelled` | The task was cancelled before completing. |
+
+Each chunk's payload includes `taskId`, `toolName`, and `toolCallId` so you can correlate it with the originating tool call. The full payload shapes are documented in the [stream chunk reference](/reference/streaming/ChunkType).
+
+## Keep the stream open with `streamUntilIdle()`
+
+`agent.stream()` returns once the LLM emits a final response — even if a background task is still running. Use `agent.streamUntilIdle()` when you want the stream to stay open until every dispatched background task has completed and the LLM has had a chance to respond to the result:
+
+```typescript title="src/mastra/run.ts"
+const stream = await agent.streamUntilIdle('Research solana for me', {
+  memory: { thread: 't1', resource: 'u1' },
+  maxIdleMs: 5 * 60_000,
+})
+
+for await (const chunk of stream.fullStream) {
+  // chunks from the initial turn AND any continuation turns triggered by
+  // background task completions flow through here
+}
+```
+
+When a background task completes, `streamUntilIdle()` injects the result into memory and re-enters the agentic loop so the LLM can react to it. The stream closes when no tasks are running and no completions are queued.
+
+`maxIdleMs` caps how long the stream waits between turns. The timer only runs while the wrapper is between turns, so a slow first token won't close the stream. The default is 5 minutes.
+
+:::note
+
+Visit [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) for the full API.
+
+:::
+
+### Aggregate properties
+
+`streamUntilIdle()` returns a `MastraModelOutput` that looks like the one from `stream()`, but only `fullStream` spans the initial turn **and** any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
+
+## Sub-agents in the background
+
+Sub-agent invocations are dispatched as tool calls under the hood, so the same background configuration applies. To run a sub-agent in the background, opt its tool name in on the supervisor:
+
+```typescript title="src/mastra/agents/supervisor.ts"
+import { Agent } from '@mastra/core/agent'
+
+const supervisor = new Agent({
+  id: 'supervisor',
+  instructions: 'Coordinate research and writing using the available agents.',
+  model: 'openai/gpt-5.4',
+  agents: { researchAgent, writingAgent },
+  // highlight-start
+  backgroundTasks: {
+    tools: {
+      researchAgent: { enabled: true, timeoutMs: 900_000 },
+      writingAgent: { enabled: true, timeoutMs: 900_000 },
+    },
+  },
+  // highlight-end
+})
+
+const stream = await supervisor.streamUntilIdle('Research AI in education and write an article', {
+  memory: { thread: 't1', resource: 'u1' },
+})
+```
+
+When delegating to a sub-agent that itself has tools, set `backgroundTasks.disabled: true` on the sub-agent. The supervisor has already wrapped the entire sub-agent invocation as the background task, and you usually don't want the sub-agent's own tools to dispatch separate ones.
+
+## Lifecycle callbacks
+
+Each layer can register completion callbacks. They all fire on completion and don't replace one another:
+
+- Tool-level `backgroundTasks.onComplete` / `onFailed`: scoped to one tool.
+- Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
+- Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally.
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  storage,
+  backgroundTasks: {
+    enabled: true,
+    onTaskComplete: task => {
+      logger.info('Background task complete', { taskId: task.id, toolName: task.toolName })
+    },
+    onTaskFailed: task => {
+      logger.error('Background task failed', { taskId: task.id, error: task.error })
+    },
+  },
+})
+```
+
+## Related
+
+- [`Agent.streamUntilIdle()` reference](/reference/streaming/agents/streamUntilIdle)
+- [`backgroundTasks` configuration reference](/reference/configuration#backgroundtasks)
+- [Supervisor agents](./supervisor-agents)
+- [Stream chunk types](/reference/streaming/ChunkType)
+- [Storage](/docs/memory/storage)

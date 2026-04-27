@@ -320,6 +320,35 @@ Success criteria:
 })
 ```
 
+## Running sub-agents in the background
+
+Sub-agent invocations are dispatched as tool calls, so they can run as [background tasks](./background-tasks). This is useful when one or more delegations are long-running and you don't want them to block the supervisor's response.
+
+Enable the [`backgroundTasks` manager](/reference/configuration#backgroundtasks) on the Mastra instance, then opt sub-agents in on the supervisor:
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const supervisor = new Agent({
+  id: 'supervisor',
+  instructions: 'Coordinate research and writing using the available agents.',
+  model: 'openai/gpt-5.4',
+  agents: { researchAgent, writingAgent },
+  // highlight-start
+  backgroundTasks: {
+    tools: {
+      researchAgent: { enabled: true, timeoutMs: 900_000 },
+      writingAgent: { enabled: true, timeoutMs: 900_000 },
+    },
+  },
+  // highlight-end
+})
+
+const stream = await supervisor.streamUntilIdle('Research AI in education and write an article', {
+  memory: { thread: 't1', resource: 'u1' },
+})
+```
+
+Use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) instead of `stream()` so the stream stays open until the sub-agents complete and the supervisor has had a chance to respond to their results.
+
 ## Sub-agent versioning
 
 When using the [editor](/docs/editor/overview), you can control which stored version of each sub-agent the supervisor uses at runtime. Set version overrides on the Mastra instance or per invocation:
@@ -339,9 +368,11 @@ Version overrides propagate automatically through delegation. See [Sub-agent ver
 
 ## Related
 
+- [Background tasks](./background-tasks)
 - [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning)
 - [Guide: Research coordinator](/guides/guide/research-coordinator)
 - [Agent.stream() reference](/reference/streaming/agents/stream)
+- [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)
 - [Agent.generate() reference](/reference/agents/generate)
 - [Agent approval](./agent-approval)
 - [Memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems)

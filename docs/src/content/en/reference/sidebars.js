@@ -467,6 +467,7 @@ const sidebars = {
           items: [
             { type: 'doc', id: 'streaming/agents/MastraModelOutput', label: 'MastraModelOutput' },
             { type: 'doc', id: 'streaming/agents/stream', label: '.stream()' },
+            { type: 'doc', id: 'streaming/agents/streamUntilIdle', label: '.streamUntilIdle()' },
             { type: 'doc', id: 'streaming/agents/streamLegacy', label: '.streamLegacy()' },
           ],
         },
