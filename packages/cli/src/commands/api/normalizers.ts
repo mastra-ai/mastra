@@ -32,14 +32,6 @@ export function normalizeData(descriptor: ApiCommandDescriptor, data: unknown): 
     });
   }
 
-  if (descriptor.key === 'toolGet' && data && typeof data === 'object') {
-    const record = data as Record<string, unknown>;
-    return {
-      inputSchema: record.inputSchema ?? record.parameters ?? record.input,
-      ...record,
-    };
-  }
-
   if (descriptor.key.startsWith('workflowRun')) {
     return normalizeWorkflowStatus(data);
   }
