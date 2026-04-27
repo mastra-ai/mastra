@@ -75,7 +75,7 @@ export const ConversationPanel = ({
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 
   return (
-    <div className="flex h-full min-h-0 flex-col px-6 pt-6">
+    <div className="flex h-full min-h-0 flex-col px-6">
       <MessageList
         messages={chatMessages}
         isLoading={isConversationLoading}

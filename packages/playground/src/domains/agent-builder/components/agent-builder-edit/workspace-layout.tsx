@@ -50,6 +50,7 @@ export const WorkspaceLayout = ({
         <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} mode={mode} creating={creating} />
         <div className="justify-self-end flex items-center gap-2">
           {modeAction}
+          {primaryAction}
           <IconButton
             tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
             className="rounded-full"
@@ -66,7 +67,6 @@ export const WorkspaceLayout = ({
               <div className="bg-neutral1 h-full w-full" />
             </div>
           </IconButton>
-          {primaryAction}
         </div>
       </div>
       <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
