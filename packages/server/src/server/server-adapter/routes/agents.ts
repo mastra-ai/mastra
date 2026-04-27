@@ -25,6 +25,7 @@ import {
   APPROVE_NETWORK_TOOL_CALL_ROUTE,
   DECLINE_NETWORK_TOOL_CALL_ROUTE,
   GET_AGENT_SKILL_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
 } from '../../handlers/agents';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
@@ -59,6 +60,7 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   GENERATE_AGENT_ROUTE,
   GENERATE_AGENT_VNEXT_ROUTE,
   STREAM_GENERATE_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
 
   // ============================================================================
@@ -132,6 +134,7 @@ export type AgentRoutes = readonly [
   typeof GENERATE_AGENT_ROUTE,
   typeof GENERATE_AGENT_VNEXT_ROUTE,
   typeof STREAM_GENERATE_ROUTE,
+  typeof STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   typeof STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
   typeof EXECUTE_AGENT_TOOL_ROUTE,
   typeof APPROVE_TOOL_CALL_ROUTE,
