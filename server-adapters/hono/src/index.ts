@@ -563,6 +563,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
 
+    this.validateCustomRoutePaths(routes);
+
     for (const route of routes) {
       const serverRoute: ServerRoute = {
         method: route.method as any,

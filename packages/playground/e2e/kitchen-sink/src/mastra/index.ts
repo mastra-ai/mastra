@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { registerApiRoute } from '@mastra/core/server';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
@@ -30,12 +31,10 @@ export const mastra = new Mastra({
     contentFilterProcessor,
   },
   server: {
-    middleware: [
-      {
-        path: '/e2e/reset-storage',
-        handler: async (c: any, next: any) => {
-          if (c.req.method !== 'POST') return next();
-
+    apiRoutes: [
+      registerApiRoute('/e2e/reset-storage', {
+        method: 'POST',
+        handler: async c => {
           const clearTasks: Promise<void>[] = [];
 
           const workflowStore = await storage.getStore('workflows');
@@ -77,7 +76,7 @@ export const mastra = new Mastra({
 
           return c.json({ message: 'Custom route' }, 201);
         },
-      },
+      }),
     ],
   },
 });

@@ -740,29 +740,21 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async registerCustomApiRoutes(): Promise<void> {
     if (!(await this.buildCustomRouteHandler())) return;
 
-    const customPrefix = this.getCustomRoutePrefix();
-
     this.app.use(async (ctx: Context, next: Next) => {
-      // Strip the custom route prefix from the path so route matching and
-      // forwarding use the bare path that the internal Hono sub-app expects.
-      let routePath = String(ctx.path || '/');
-      if (customPrefix && routePath.startsWith(customPrefix)) {
-        routePath = routePath.slice(customPrefix.length) || '/';
-      }
-
       // Check if this request matches a protected custom route and run auth
+      const path = String(ctx.path || '/');
       const method = String(ctx.method || 'GET');
 
-      if (isProtectedCustomRoute(routePath, method, this.customRouteAuthConfig)) {
+      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
         const serverRoute: ServerRoute = {
           method: method as any,
-          path: routePath,
+          path,
           responseType: 'json',
           handler: async () => {},
         };
 
         const authError = await this.checkRouteAuth(serverRoute, {
-          path: routePath,
+          path,
           method,
           getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => (ctx.query as Record<string, string>)[name],
@@ -803,14 +795,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
       }
 
-      // Strip the custom route prefix from the URL before forwarding to the
-      // internal Hono sub-app, which has routes registered at bare paths.
-      let routeUrl = ctx.originalUrl || ctx.url;
-      if (customPrefix && routeUrl.startsWith(customPrefix)) {
-        routeUrl = routeUrl.slice(customPrefix.length) || '/';
-      }
       const response = await this.handleCustomRouteRequest(
-        `${ctx.protocol}://${ctx.host}${routeUrl}`,
+        `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
         ctx.method,
         ctx.headers as Record<string, string | string[] | undefined>,
         ctx.request.body,

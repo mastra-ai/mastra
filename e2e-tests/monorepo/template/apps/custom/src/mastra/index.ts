@@ -10,7 +10,6 @@ export const mastra = new Mastra({
   agents: { innerAgent, myAgent },
   server: {
     port: process.env.MASTRA_PORT ? parseInt(process.env.MASTRA_PORT) : 3000,
-    apiPrefix: '/mastra',
     apiRoutes: [testRoute, allRoute, streamingRoute],
   },
   bundler: {

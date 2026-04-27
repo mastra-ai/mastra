@@ -116,7 +116,7 @@ export async function createHonoServer(
     for (const route of processedRoutes) {
       // By default, routes require authentication unless explicitly set to false
       const requiresAuth = route.requiresAuth !== false;
-      const routeKey = `${route.method}:${apiPrefix}${route.path}`;
+      const routeKey = `${route.method}:${route.path}`;
       customRouteAuthConfig.set(routeKey, requiresAuth);
     }
   }

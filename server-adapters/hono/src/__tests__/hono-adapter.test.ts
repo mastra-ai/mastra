@@ -531,7 +531,6 @@ describe('Hono Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
-        prefix: '/v1',
         openapiPath: '/openapi.json',
         customApiRoutes: customRoutes,
       });
@@ -544,10 +543,17 @@ describe('Hono Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/v1/openapi.json`);
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
       const spec = await response.json();
 
+      // Built-in routes should NOT have per-path servers (they use top-level servers)
+      const builtinPaths = Object.keys(spec.paths).filter(p => p !== '/health');
+      for (const p of builtinPaths) {
+        expect(spec.paths[p].servers).toBeUndefined();
+      }
+
       expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toEqual([{ url: '/' }]);
     });
 
     it('should not add servers override to custom routes when no prefix is used', async () => {
@@ -614,7 +620,6 @@ describe('Hono Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
-        prefix: '/v1',
         openapiPath: '/openapi.json',
         customApiRoutes: customRoutes,
       });
@@ -627,10 +632,11 @@ describe('Hono Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/v1/openapi.json`);
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
       const spec = await response.json();
 
       expect(spec.paths['/external']).toBeDefined();
+      expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
     });
   });
 
@@ -665,7 +671,6 @@ describe('Hono Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
-        prefix: '/v1',
         customApiRoutes: customRoutes,
       });
 
@@ -677,7 +682,7 @@ describe('Hono Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/v1/hello`);
+      const response = await fetch(`http://localhost:${port}/hello`);
 
       expect(response.status).toBe(200);
       const data = await response.json();
@@ -701,7 +706,6 @@ describe('Hono Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
-        prefix: '/v1',
         customApiRoutes: customRoutes,
       });
 
@@ -713,7 +717,7 @@ describe('Hono Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/v1/echo`, {
+      const response = await fetch(`http://localhost:${port}/echo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ test: 'data' }),
@@ -722,6 +726,60 @@ describe('Hono Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
     });
   });
 
@@ -844,62 +902,6 @@ describe('Hono Server Adapter', () => {
       expect(data.resourceId).toBeNull();
       expect(data.threadId).toBeNull();
       expect(data.customKey).toBe('safe-value');
-    });
-  });
-
-  describe('Custom Route Prefix', () => {
-    let context: AdapterTestContext;
-
-    beforeEach(async () => {
-      context = await createDefaultTestContext();
-    });
-
-    it('should throw when /api prefix is used with custom routes', async () => {
-      const app = new Hono();
-
-      const adapter = new MastraServer({
-        app,
-        mastra: context.mastra,
-        prefix: '/api',
-        customApiRoutes: [
-          {
-            method: 'GET' as const,
-            path: '/chat',
-            handler: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-          },
-        ],
-      });
-
-      // /api is reserved for built-in Mastra routes — custom routes must
-      // use a different prefix.
-      await expect(adapter.init()).rejects.toThrow(/\/api.*reserved/);
-    });
-
-    it('should apply non-/api prefix to custom routes', async () => {
-      const app = new Hono();
-
-      const adapter = new MastraServer({
-        app,
-        mastra: context.mastra,
-        prefix: '/v1',
-        customApiRoutes: [
-          {
-            method: 'GET' as const,
-            path: '/chat',
-            handler: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-          },
-        ],
-      });
-
-      await adapter.init();
-
-      // Non-/api prefix should be applied to custom routes
-      const prefixed = await app.request(new Request('http://localhost/v1/chat', { method: 'GET' }));
-      expect(prefixed.status).toBe(200);
-
-      // Custom route should NOT be reachable at the bare path
-      const bare = await app.request(new Request('http://localhost/chat', { method: 'GET' }));
-      expect(bare.status).toBe(404);
     });
   });
 });

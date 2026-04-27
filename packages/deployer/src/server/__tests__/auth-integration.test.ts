@@ -6,8 +6,8 @@ import { createHonoServer } from '../index';
 
 describe('auth middleware integration tests', () => {
   const authConfig: MastraAuthConfig = {
-    protected: ['/v1/*'],
-    public: ['/v1/health', '/v1/webhooks/*'],
+    protected: ['/api/*'],
+    public: ['/api/health', '/webhooks/*'],
     authenticateToken: async (token: string) => {
       if (token === 'valid-token') {
         return { id: '123', name: 'Test User', role: 'user' };
@@ -19,13 +19,13 @@ describe('auth middleware integration tests', () => {
     },
     rules: [
       {
-        path: '/v1/admin/*',
+        path: '/admin/*',
         condition: (user: any) => user?.role === 'admin',
         allow: true,
       },
       {
         // Allow all authenticated users to access all other routes
-        path: /^\/(?!v1\/admin)/,
+        path: /^\/(?!admin)/,
         condition: (user: any) => !!user,
         allow: true,
       },
@@ -36,7 +36,6 @@ describe('auth middleware integration tests', () => {
     return new Mastra({
       server: {
         auth: authConfig,
-        apiPrefix: '/v1',
         apiRoutes: routes,
       },
     });
@@ -61,7 +60,7 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Test webhook route
-      const webhookReq = new Request('http://localhost/v1/webhooks/github', {
+      const webhookReq = new Request('http://localhost/webhooks/github', {
         method: 'POST',
         body: JSON.stringify({ event: 'push' }),
         headers: { 'Content-Type': 'application/json' },
@@ -72,7 +71,7 @@ describe('auth middleware integration tests', () => {
       expect(webhookData.received).toBe(true);
 
       // Test public status route
-      const statusReq = new Request('http://localhost/v1/public/status');
+      const statusReq = new Request('http://localhost/public/status');
       const statusRes = await app.request(statusReq);
       expect(statusRes.status).toBe(200);
       const statusData = await statusRes.json();
@@ -85,16 +84,16 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Manually add routes that match public patterns
-      app.get('/v1/health', (c: any) => c.json({ status: 'healthy' }));
-      app.post('/v1/webhooks/github', (c: any) => c.json({ processed: true }));
+      app.get('/api/health', (c: any) => c.json({ status: 'healthy' }));
+      app.post('/webhooks/github', (c: any) => c.json({ processed: true }));
 
       // Health endpoint should be public due to pattern
-      const healthReq = new Request('http://localhost/v1/health');
+      const healthReq = new Request('http://localhost/api/health');
       const healthRes = await app.request(healthReq);
       expect(healthRes.status).toBe(200);
 
       // Webhook should be public due to pattern
-      const githubReq = new Request('http://localhost/v1/webhooks/github', {
+      const githubReq = new Request('http://localhost/webhooks/github', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -120,12 +119,12 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Test sensitive data endpoint
-      const dataReq = new Request('http://localhost/v1/data/sensitive');
+      const dataReq = new Request('http://localhost/data/sensitive');
       const dataRes = await app.request(dataReq);
       expect(dataRes.status).toBe(401);
 
       // Test user profile endpoint
-      const profileReq = new Request('http://localhost/v1/user/profile');
+      const profileReq = new Request('http://localhost/user/profile');
       const profileRes = await app.request(profileReq);
       expect(profileRes.status).toBe(401);
     });
@@ -146,7 +145,7 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Test with valid token
-      const dataReq = new Request('http://localhost/v1/data/sensitive', {
+      const dataReq = new Request('http://localhost/data/sensitive', {
         headers: { Authorization: 'Bearer valid-token' },
       });
       const dataRes = await app.request(dataReq);
@@ -155,7 +154,7 @@ describe('auth middleware integration tests', () => {
       expect(dataJson.data).toBe('sensitive information');
 
       // Test POST with valid token
-      const profileReq = new Request('http://localhost/v1/user/profile', {
+      const profileReq = new Request('http://localhost/user/profile', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer valid-token',
@@ -181,14 +180,14 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Test with invalid token
-      const invalidReq = new Request('http://localhost/v1/data/sensitive', {
+      const invalidReq = new Request('http://localhost/data/sensitive', {
         headers: { Authorization: 'Bearer invalid-token' },
       });
       const invalidRes = await app.request(invalidReq);
       expect(invalidRes.status).toBe(401);
 
       // Test with malformed header
-      const malformedReq = new Request('http://localhost/v1/data/sensitive', {
+      const malformedReq = new Request('http://localhost/data/sensitive', {
         headers: { Authorization: 'NotBearer token' },
       });
       const malformedRes = await app.request(malformedReq);
@@ -213,19 +212,19 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Should require auth by default
-      const defaultReq = new Request('http://localhost/v1/default/behavior');
+      const defaultReq = new Request('http://localhost/default/behavior');
       const defaultRes = await app.request(defaultReq);
       expect(defaultRes.status).toBe(401);
 
       // Should work with auth
-      const authReq = new Request('http://localhost/v1/default/behavior', {
+      const authReq = new Request('http://localhost/default/behavior', {
         headers: { Authorization: 'Bearer valid-token' },
       });
       const authRes = await app.request(authReq);
       expect(authRes.status).toBe(200);
 
       // Test POST default behavior
-      const postReq = new Request('http://localhost/v1/another/default', {
+      const postReq = new Request('http://localhost/another/default', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -233,7 +232,7 @@ describe('auth middleware integration tests', () => {
       expect(postRes.status).toBe(401);
 
       // POST with auth should work
-      const postAuthReq = new Request('http://localhost/v1/another/default', {
+      const postAuthReq = new Request('http://localhost/another/default', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer valid-token',
@@ -263,11 +262,11 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Both should be protected (requiresAuth defaults to true for registered routes)
-      const usersReq = new Request('http://localhost/v1/secure/users');
+      const usersReq = new Request('http://localhost/secure/users');
       const usersRes = await app.request(usersReq);
       expect(usersRes.status).toBe(401);
 
-      const postsReq = new Request('http://localhost/v1/secure/posts', {
+      const postsReq = new Request('http://localhost/secure/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -275,7 +274,7 @@ describe('auth middleware integration tests', () => {
       expect(postsRes.status).toBe(401);
 
       // Should work with auth
-      const usersAuthReq = new Request('http://localhost/v1/secure/users', {
+      const usersAuthReq = new Request('http://localhost/secure/users', {
         headers: { Authorization: 'Bearer valid-token' },
       });
       const usersAuthRes = await app.request(usersAuthReq);
@@ -295,7 +294,7 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Should be public despite any other configuration
-      const req = new Request('http://localhost/v1/custom/public-override');
+      const req = new Request('http://localhost/custom/public-override');
       const res = await app.request(req);
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -316,14 +315,14 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // Should deny regular user access to admin route
-      const userReq = new Request('http://localhost/v1/admin/users', {
+      const userReq = new Request('http://localhost/admin/users', {
         headers: { Authorization: 'Bearer valid-token' }, // regular user
       });
       const userRes = await app.request(userReq);
       expect(userRes.status).toBe(403);
 
       // Should allow admin access
-      const adminReq = new Request('http://localhost/v1/admin/users', {
+      const adminReq = new Request('http://localhost/admin/users', {
         headers: { Authorization: 'Bearer admin-token' }, // admin user
       });
       const adminRes = await app.request(adminReq);
@@ -353,14 +352,14 @@ describe('auth middleware integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       // GET should be public
-      const getReq = new Request('http://localhost/v1/multi/endpoint');
+      const getReq = new Request('http://localhost/multi/endpoint');
       const getRes = await app.request(getReq);
       expect(getRes.status).toBe(200);
       const getData = await getRes.json();
       expect(getData.method).toBe('GET');
 
       // POST should require auth
-      const postReq = new Request('http://localhost/v1/multi/endpoint', {
+      const postReq = new Request('http://localhost/multi/endpoint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -368,7 +367,7 @@ describe('auth middleware integration tests', () => {
       expect(postRes.status).toBe(401);
 
       // POST with auth should work
-      const postAuthReq = new Request('http://localhost/v1/multi/endpoint', {
+      const postAuthReq = new Request('http://localhost/multi/endpoint', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -379,7 +378,7 @@ describe('auth middleware integration tests', () => {
       expect(postAuthRes.status).toBe(200);
 
       // PUT should require auth (default behavior)
-      const putReq = new Request('http://localhost/v1/multi/endpoint', {
+      const putReq = new Request('http://localhost/multi/endpoint', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -387,7 +386,7 @@ describe('auth middleware integration tests', () => {
       expect(putRes.status).toBe(401);
 
       // PUT with auth should work
-      const putAuthReq = new Request('http://localhost/v1/multi/endpoint', {
+      const putAuthReq = new Request('http://localhost/multi/endpoint', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -414,7 +413,7 @@ describe('auth middleware integration tests', () => {
       const mastra = createMastraWithRoutes(routes);
       const app = await createHonoServer(mastra, { tools: {} });
 
-      const req = new Request('http://localhost/v1/legacy/public');
+      const req = new Request('http://localhost/legacy/public');
       const res = await app.request(req);
       expect(res.status).toBe(200);
       const data = await res.json();

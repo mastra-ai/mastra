@@ -727,7 +727,6 @@ describe('Express Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
-        prefix: '/v1',
         customApiRoutes: customRoutes,
       });
 
@@ -739,7 +738,7 @@ describe('Express Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/v1/hello`);
+      const response = await fetch(`http://localhost:${port}/hello`);
 
       expect(response.status).toBe(200);
       const data = await response.json();
@@ -764,7 +763,6 @@ describe('Express Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
-        prefix: '/v1',
         customApiRoutes: customRoutes,
       });
 
@@ -776,7 +774,7 @@ describe('Express Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/v1/echo`, {
+      const response = await fetch(`http://localhost:${port}/echo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ test: 'data' }),
@@ -785,69 +783,6 @@ describe('Express Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
-    });
-
-    it('should throw when /api prefix is used with custom routes', async () => {
-      const customRoutes = [
-        registerApiRoute('/chat', {
-          method: 'GET',
-          handler: async c => {
-            return c.json({ ok: true });
-          },
-        }),
-      ];
-
-      const mastra = new Mastra({});
-      const app = express();
-      app.use(express.json());
-
-      const adapter = new MastraServer({
-        app,
-        mastra,
-        prefix: '/api',
-        customApiRoutes: customRoutes,
-      });
-
-      // /api is reserved for built-in Mastra routes — custom routes must
-      // use a different prefix.
-      await expect(adapter.init()).rejects.toThrow(/\/api.*reserved/);
-    });
-
-    it('should apply non-/api prefix to custom routes', async () => {
-      const customRoutes = [
-        registerApiRoute('/chat', {
-          method: 'GET',
-          handler: async c => {
-            return c.json({ ok: true });
-          },
-        }),
-      ];
-
-      const mastra = new Mastra({});
-      const app = express();
-      app.use(express.json());
-
-      const adapter = new MastraServer({
-        app,
-        mastra,
-        prefix: '/v1',
-        customApiRoutes: customRoutes,
-      });
-
-      await adapter.init();
-
-      if (server) server.close();
-      server = await new Promise(resolve => {
-        const s = app.listen(0, () => resolve(s));
-      });
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-
-      // Non-/api prefix should be applied to custom routes
-      const prefixed = await fetch(`http://localhost:${port}/v1/chat`);
-      expect(prefixed.status).toBe(200);
-      const data = await prefixed.json();
-      expect(data).toEqual({ ok: true });
     });
   });
 });
