@@ -26,6 +26,7 @@ openapi-ts-error*
 .mastra
 *.db*
 *.duckdb*
+*.sqlite*
 memory.db
 memory.db-*
 
