@@ -55,7 +55,12 @@ export function useAgentBuilderTool({
             formMethods.setValue('workflows', workflows);
           }
           if (skillsEnabled && Array.isArray(inputData?.skills)) {
-            formMethods.setValue('skills', inputData.skills);
+            const existing = formMethods.getValues('skills') ?? {};
+            const next: Record<string, (typeof existing)[string]> = {};
+            for (const skillId of inputData.skills as string[]) {
+              next[skillId] = existing[skillId] ?? {};
+            }
+            formMethods.setValue('skills', next);
           }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
             formMethods.setValue('workspaceId', inputData.workspaceId);

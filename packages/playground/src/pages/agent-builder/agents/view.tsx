@@ -3,6 +3,7 @@ import { PencilIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentChatPanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
@@ -23,11 +24,17 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
+  const features = useBuilderAgentFeatures();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
   const { data: toolsData, isPending: isToolsPending } = useTools();
-  const { data: agentsData, isPending: isAgentsPending } = useAgents();
-  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows();
-  const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending && !isAgentsPending && !isWorkflowsPending;
+  const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
+  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
+  const isReady =
+    Boolean(id) &&
+    !isStoredAgentLoading &&
+    !isToolsPending &&
+    (!features.agents || !isAgentsPending) &&
+    (!features.workflows || !isWorkflowsPending);
 
   if (!isReady) return <AgentBuilderAgentViewSkeleton />;
 

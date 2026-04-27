@@ -28,15 +28,20 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
+  const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
   const { data: toolsData, isPending: isToolsPending } = useTools();
-  const { data: agentsData, isPending: isAgentsPending } = useAgents();
-  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows();
+  const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
+  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
   const { data: workspacesData } = useWorkspaces();
   const isReady =
-    Boolean(id) && (fromStarter || !isStoredAgentLoading) && !isToolsPending && !isAgentsPending && !isWorkflowsPending;
+    Boolean(id) &&
+    (fromStarter || !isStoredAgentLoading) &&
+    !isToolsPending &&
+    (!features.agents || !isAgentsPending) &&
+    (!features.workflows || !isWorkflowsPending);
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),

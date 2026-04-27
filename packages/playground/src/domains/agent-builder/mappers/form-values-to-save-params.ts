@@ -1,4 +1,4 @@
-import type { StoredAgentToolConfig, StoredWorkspaceRef } from '@mastra/client-js';
+import type { StoredAgentSkillConfig, StoredAgentToolConfig, StoredWorkspaceRef } from '@mastra/client-js';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 
@@ -9,7 +9,7 @@ export interface SaveParams {
   tools: Record<string, StoredAgentToolConfig> | undefined;
   agents: Record<string, StoredAgentToolConfig> | undefined;
   workflows: Record<string, StoredAgentToolConfig> | undefined;
-  skills: Record<string, {}> | undefined;
+  skills: Record<string, StoredAgentSkillConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
 }
 
@@ -51,7 +51,7 @@ export function formValuesToSaveParams(
   const tools = buildEnabledRecord(values.tools, toolDescriptionById);
   const agents = buildEnabledRecord(values.agents, agentDescriptionById);
   const workflows = buildEnabledRecord(values.workflows, workflowDescriptionById);
-  const skills = Object.fromEntries((values.skills ?? []).map(skillId => [skillId, {}]));
+  const skills: Record<string, StoredAgentSkillConfig> = values.skills ?? {};
 
   const workspace: StoredWorkspaceRef | undefined =
     typeof values.workspaceId === 'string' && values.workspaceId.length > 0

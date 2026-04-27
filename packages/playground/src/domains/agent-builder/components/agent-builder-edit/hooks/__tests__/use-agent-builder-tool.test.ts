@@ -20,7 +20,7 @@ const renderBuilderTool = (availableAgentTools: AgentTool[]) => {
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: [] },
+      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: {} },
     });
     formRef.current = methods;
     return React.createElement(FormProvider, methods, children);

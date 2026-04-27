@@ -26,7 +26,7 @@ export function routeToolInputToFormKeys(
       agents[entry.id] = true;
     } else if (type === 'workflow') {
       workflows[entry.id] = true;
-    } else {
+    } else if (type === 'tool') {
       tools[entry.id] = true;
     }
   }

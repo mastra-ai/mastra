@@ -83,7 +83,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         instructions: 'do things',
         tools: { 'tool-a': true },
         agents: { 'agent-x': true },
-        skills: [],
+        skills: {},
       },
     });
 
@@ -94,7 +94,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         instructions: 'do things',
         tools: { 'tool-a': true },
         agents: { 'agent-x': true },
-        skills: [],
+        skills: {},
       });
     });
 
@@ -127,7 +127,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         tools: {},
         agents: {},
         workflows: { 'wf-1': true },
-        skills: [],
+        skills: {},
       },
     });
 
@@ -139,7 +139,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         tools: {},
         agents: {},
         workflows: { 'wf-1': true },
-        skills: [],
+        skills: {},
       });
     });
 
@@ -171,7 +171,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         instructions: 'inst',
         tools: { 'tool-a': true },
         agents: { 'agent-x': true },
-        skills: [],
+        skills: {},
       },
     });
 
@@ -182,7 +182,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         instructions: 'inst',
         tools: { 'tool-a': true },
         agents: { 'agent-x': true },
-        skills: [],
+        skills: {},
       });
     });
 
@@ -213,7 +213,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         tools: {},
         agents: {},
         workflows: { 'wf-1': true },
-        skills: [],
+        skills: {},
       },
     });
 
@@ -225,7 +225,7 @@ describe('useSaveAgent persists tools and agents on save', () => {
         tools: {},
         agents: {},
         workflows: { 'wf-1': true },
-        skills: [],
+        skills: {},
       });
     });
 

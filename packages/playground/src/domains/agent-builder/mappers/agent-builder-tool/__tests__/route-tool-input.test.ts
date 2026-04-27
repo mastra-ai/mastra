@@ -54,9 +54,23 @@ describe('routeToolInputToFormKeys', () => {
     expect(result.workflows).toEqual({});
   });
 
-  it('treats unknown ids as tools (default routing)', () => {
+  it('drops ids that are not present in the available list (e.g. when a feature is gated off)', () => {
     const result = routeToolInputToFormKeys([], [{ id: 'unknown', name: 'Unknown' }]);
-    expect(result.tools).toEqual({ unknown: true });
+    expect(result.tools).toEqual({});
+    expect(result.agents).toEqual({});
+    expect(result.workflows).toEqual({});
+  });
+
+  it('drops agent/workflow ids when the available list only exposes tools (gated features)', () => {
+    const available: AgentTool[] = [{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }];
+
+    const result = routeToolInputToFormKeys(available, [
+      { id: 'tool-a', name: 'Tool A' },
+      { id: 'agent-x', name: 'Agent X' },
+      { id: 'wf-1', name: 'Workflow' },
+    ]);
+
+    expect(result.tools).toEqual({ 'tool-a': true });
     expect(result.agents).toEqual({});
     expect(result.workflows).toEqual({});
   });

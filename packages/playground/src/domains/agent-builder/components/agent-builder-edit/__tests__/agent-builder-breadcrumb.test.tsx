@@ -19,7 +19,7 @@ const FormWrapper = ({
       name: 'Support agent',
       instructions: '',
       tools: {},
-      skills: [],
+      skills: {},
       ...defaults,
     },
   });

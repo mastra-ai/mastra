@@ -9,7 +9,7 @@ const baseValues = {
   tools: {},
   agents: {},
   workflows: {},
-  skills: [],
+  skills: {},
 };
 
 describe('formValuesToSaveParams', () => {
@@ -96,10 +96,22 @@ describe('formValuesToSaveParams', () => {
     expect(result.workflows).toEqual({ 'wf-1': {} });
   });
 
-  it('builds the skills record as `Record<string, {}>` when entries are present', () => {
-    const result = formValuesToSaveParams({ ...baseValues, skills: ['summarize', 'plan'] }, []);
+  it('passes through the skills record preserving per-skill config', () => {
+    const result = formValuesToSaveParams(
+      {
+        ...baseValues,
+        skills: {
+          summarize: { description: 'Summarize text', strategy: 'latest' },
+          plan: {},
+        },
+      },
+      [],
+    );
 
-    expect(result.skills).toEqual({ summarize: {}, plan: {} });
+    expect(result.skills).toEqual({
+      summarize: { description: 'Summarize text', strategy: 'latest' },
+      plan: {},
+    });
   });
 
   it('returns undefined workspace when workspaceId is missing or empty', () => {

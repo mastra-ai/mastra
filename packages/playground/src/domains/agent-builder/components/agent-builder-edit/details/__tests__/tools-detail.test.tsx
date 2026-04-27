@@ -18,7 +18,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
       tools: {},
       agents: {},
       workflows: {},
-      skills: [],
+      skills: {},
     },
   });
   formMethodsRef = methods;

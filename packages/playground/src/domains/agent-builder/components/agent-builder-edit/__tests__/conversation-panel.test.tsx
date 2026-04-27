@@ -44,7 +44,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
       name: 'Initial',
       instructions: '',
       tools: {},
-      skills: [],
+      skills: {},
     },
   });
   formMethodsRef = methods;
@@ -150,7 +150,7 @@ describe('ConversationPanel agent-builder client tool', () => {
   });
 
   it('execute writes tools and skills only when feature flags enable them', async () => {
-    renderPanel(allOn);
+    renderPanel(allOn, [{ id: 'web-search' }]);
     const tool = getAgentBuilderTool();
 
     await tool.execute({
@@ -161,7 +161,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     });
 
     expect(formMethodsRef!.getValues('tools')).toEqual({ 'web-search': true });
-    expect(formMethodsRef!.getValues('skills')).toEqual(['summarize']);
+    expect(formMethodsRef!.getValues('skills')).toEqual({ summarize: {} });
   });
 
   it('lists available tools in the tool description so the LLM can pick ids', () => {
@@ -241,7 +241,26 @@ describe('ConversationPanel agent-builder client tool', () => {
     });
 
     expect(formMethodsRef!.getValues('tools')).toEqual({});
-    expect(formMethodsRef!.getValues('skills')).toEqual([]);
+    expect(formMethodsRef!.getValues('skills')).toEqual({});
+  });
+
+  it('drops agent and workflow ids when those features are gated off but tools is on', async () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', type: 'tool' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({
+      name: 'N',
+      instructions: 'I',
+      tools: [
+        { id: 'web-search', name: 'Web Search' },
+        { id: 'some-agent', name: 'Some Agent' },
+        { id: 'some-workflow', name: 'Some Workflow' },
+      ],
+    });
+
+    expect(formMethodsRef!.getValues('tools')).toEqual({ 'web-search': true });
+    expect(formMethodsRef!.getValues('agents')).toEqual({});
+    expect(formMethodsRef!.getValues('workflows')).toEqual({});
   });
 
   it('defers the initial send until toolsReady flips true', () => {

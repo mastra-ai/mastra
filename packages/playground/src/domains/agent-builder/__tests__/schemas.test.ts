@@ -10,12 +10,12 @@ describe('AgentBuilderEditFormSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts tools as a record and skills as a string array', () => {
+  it('accepts tools as a record and skills as a record of skill configs', () => {
     const result = AgentBuilderEditFormSchema.safeParse({
       name: 'My agent',
       instructions: 'Do things',
       tools: { 'web-search': true },
-      skills: ['summarize'],
+      skills: { summarize: { description: 'Summarize text', strategy: 'latest' } },
     });
     expect(result.success).toBe(true);
   });

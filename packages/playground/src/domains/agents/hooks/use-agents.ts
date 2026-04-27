@@ -4,13 +4,14 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useAgents = () => {
+export const useAgents = (options?: { enabled?: boolean }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['agents', requestContext],
     queryFn: () => client.listAgents(requestContext),
+    enabled: options?.enabled ?? true,
   });
 };
 
