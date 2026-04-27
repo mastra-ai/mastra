@@ -53,6 +53,8 @@ import type {
   StepMetadata,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { validateCron } from '../scheduler/cron';
+import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
 import { EventedExecutionEngine } from './execution-engine';
@@ -1460,6 +1462,9 @@ export function createWorkflow<
     EventedEngineType
   >[],
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  if (params.schedule) {
+    validateCron(params.schedule.cron, params.schedule.timezone);
+  }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1487,9 +1492,20 @@ export class EventedWorkflow<
   TOutput = unknown,
   TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  #schedule?: WorkflowScheduleConfig;
+
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
     this.engineType = 'evented';
+    this.#schedule = params.schedule;
+  }
+
+  /**
+   * Returns the cron schedule configuration declared on this workflow, if any.
+   * Used by the Mastra scheduler to register declarative schedules at boot.
+   */
+  getScheduleConfig(): WorkflowScheduleConfig | undefined {
+    return this.#schedule;
   }
 
   __registerMastra(mastra: Mastra) {
