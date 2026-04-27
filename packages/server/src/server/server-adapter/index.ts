@@ -572,24 +572,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
-   * Forwards a raw Request to the internal custom route handler.
-   * Returns the Response if a custom route matched, or null to fall through.
-   * Preferred over handleCustomRouteRequest() when a Request object is already available.
-   */
-  protected async forwardCustomRouteRequest(
-    request: Request,
-    requestContext?: RequestContext,
-  ): Promise<Response | null> {
-    if (!this.customRouteHandler) return null;
-    const response = await this.customRouteHandler(request, { requestContext });
-    if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
-    return response;
-  }
-
-  /**
    * Forwards a request to the internal custom route handler.
    * Returns the Response if a custom route matched, or null to fall through.
-   * Used by non-Hono adapter bridges.
    */
   protected async handleCustomRouteRequest(
     url: string,
@@ -611,13 +595,15 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const init: RequestInit = { method, headers: fetchHeaders };
     if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
-      const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
-      if (contentType.includes('application/json')) {
-        init.body = JSON.stringify(body);
-      } else if (typeof body === 'string') {
-        init.body = body;
-      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+      if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
+      } else {
+        const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
+        if (contentType.includes('application/json')) {
+          init.body = JSON.stringify(body);
+        } else if (typeof body === 'string') {
+          init.body = body;
+        }
       }
     }
 

@@ -603,7 +603,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        const response = await this.forwardCustomRouteRequest(c.req.raw, c.get('requestContext'));
+        const reqHeaders: Record<string, string | string[] | undefined> = {};
+        c.req.raw.headers.forEach((v, k) => {
+          reqHeaders[k] = v;
+        });
+        const response = await this.handleCustomRouteRequest(
+          c.req.url,
+          c.req.method,
+          reqHeaders,
+          c.req.raw.body,
+          c.get('requestContext'),
+        );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);
         }
