@@ -58,6 +58,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
     projectName: ctx.projectName || 'unknown',
     gitBranch: ctx.gitBranch,
     platform: process.platform,
+    commonBinaries: ctx.commonBinaries,
     date: ctx.currentDate,
     mode: ctx.modeId,
     modelId: ctx.modelId,
