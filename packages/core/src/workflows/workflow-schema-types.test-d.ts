@@ -463,6 +463,9 @@ describe('Workflow schema type inference', () => {
 
       // Object-style map({ key: { step, path } }) cannot statically infer its output shape
       // because `path` is a runtime string. commit() must always be allowed after it.
+      // `as any` is required here: the map overload's mappingConfig is a wide union of several
+      // variant shapes, and TS cannot narrow a plain object literal to the correct variant
+      // without an explicit cast.
       const workflow = createWorkflow({
         id: 'object-map-workflow',
         inputSchema: z.object({ query: z.string() }),
