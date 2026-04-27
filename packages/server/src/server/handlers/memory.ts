@@ -1,4 +1,5 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
@@ -109,7 +110,7 @@ async function filterAccessibleThreads({
     requestContext.get('user') as { id: string; [key: string]: unknown },
     threads,
     'thread',
-    'memory:read',
+    MastraFGAPermissions.MEMORY_READ,
   );
 }
 
@@ -1263,7 +1264,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
             threadId,
             thread,
             effectiveResourceId,
-            permission: 'memory:write',
+            permission: MastraFGAPermissions.MEMORY_WRITE,
           });
         }
       } else {
@@ -1276,7 +1277,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
             threadId,
             thread,
             effectiveResourceId: resourceIdByThread.get(threadId),
-            permission: 'memory:write',
+            permission: MastraFGAPermissions.MEMORY_WRITE,
           });
         }
       }
@@ -1317,7 +1318,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
         requestContext,
         threadId: effectiveThreadId,
         effectiveResourceId,
-        permission: 'memory:write',
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
       // Gateway proxy: create thread via gateway API
@@ -1386,7 +1387,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
               threadId: effectiveThreadId!,
               thread: toLocalThread(existing.thread),
               effectiveResourceId,
-              permission: 'memory:write',
+              permission: MastraFGAPermissions.MEMORY_WRITE,
             });
           }
           const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
@@ -1415,7 +1416,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
         threadId: effectiveThreadId!,
         thread,
         effectiveResourceId,
-        permission: 'memory:write',
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
       const updatedThread = {
@@ -1470,7 +1471,7 @@ export const DELETE_THREAD_ROUTE = createRoute({
               threadId: effectiveThreadId!,
               thread: toLocalThread(existing.thread),
               effectiveResourceId,
-              permission: 'memory:delete',
+              permission: MastraFGAPermissions.MEMORY_DELETE,
             });
           }
           const deleteResult = await gwClient.deleteThread(effectiveThreadId!);
@@ -1496,7 +1497,7 @@ export const DELETE_THREAD_ROUTE = createRoute({
         threadId: effectiveThreadId!,
         thread,
         effectiveResourceId,
-        permission: 'memory:delete',
+        permission: MastraFGAPermissions.MEMORY_DELETE,
       });
 
       await memory.deleteThread(effectiveThreadId!);
@@ -1548,7 +1549,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
         requestContext,
         threadId: effectiveNewThreadId,
         effectiveResourceId,
-        permission: 'memory:write',
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
       const result = await memory.cloneThread({
@@ -1606,7 +1607,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
         threadId: effectiveThreadId!,
         thread,
         effectiveResourceId,
-        permission: 'memory:write',
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
       await memory.updateWorkingMemory({
@@ -1689,7 +1690,7 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
               threadId,
               thread,
               effectiveResourceId,
-              permission: 'memory:delete',
+              permission: MastraFGAPermissions.MEMORY_DELETE,
             });
           }
         }
@@ -1712,7 +1713,7 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
               requestContext,
               threadId,
               thread,
-              permission: 'memory:delete',
+              permission: MastraFGAPermissions.MEMORY_DELETE,
             });
           }
         }

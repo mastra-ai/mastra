@@ -21,6 +21,7 @@ export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/ee/interfac
 
 /** Descriptions for actions (used for TSDoc comments in autocomplete) */
 const ACTION_DESCRIPTIONS: Record<string, string> = {
+  create: 'Create',
   delete: 'Delete',
   execute: 'Execute',
   read: 'View',
@@ -32,6 +33,7 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   a2a: 'agent-to-agent communication',
   'agent-builder': 'agent builder',
   agents: 'agents',
+  'background-tasks': 'background tasks',
   logs: 'logs',
   mcp: 'MCP servers',
   memory: 'memory and threads',
@@ -70,6 +72,10 @@ function getPermissionDescription(pattern: string): string {
   const resourceDesc = RESOURCE_DESCRIPTIONS[resource] || resource;
   const actionDesc = ACTION_DESCRIPTIONS[action] || action;
   return `${actionDesc} ${resourceDesc}`;
+}
+
+function getPermissionConstantName(permission: string): string {
+  return permission.replace(/[:-]/g, '_').toUpperCase();
 }
 
 export interface PermissionData {
@@ -125,6 +131,14 @@ export function generatePermissionFileContent(data: PermissionData): string {
     .map(pattern => {
       const desc = getPermissionDescription(pattern);
       return `  /** ${desc} */\n  '${pattern}': '${pattern}'`;
+    })
+    .join(',\n');
+
+  const fgaPermissionEntries = permissions
+    .map(permission => {
+      const name = getPermissionConstantName(permission);
+      const desc = getPermissionDescription(permission);
+      return `  /** ${desc} */\n  ${name}: '${permission}'`;
     })
     .join(',\n');
 
@@ -195,6 +209,27 @@ ${permissions.map(p => `  '${p}',`).join('\n')}
  * Specific permission type (e.g., 'agents:read', 'workflows:execute').
  */
 export type Permission = (typeof PERMISSIONS)[number];
+
+/**
+ * Type-safe constants for Mastra-owned FGA permissions.
+ *
+ * These values are generated from server routes and can be used wherever
+ * Mastra checks or maps FGA permissions.
+ */
+export const MastraFGAPermissions = {
+${fgaPermissionEntries},
+} as const satisfies Record<string, Permission>;
+
+/**
+ * Mastra-owned FGA permission values.
+ */
+export type MastraFGAPermission = (typeof MastraFGAPermissions)[keyof typeof MastraFGAPermissions];
+
+/**
+ * FGA permission input accepted by public config and provider APIs.
+ * Keeps autocomplete for Mastra-owned permissions while allowing custom provider strings.
+ */
+export type MastraFGAPermissionInput = MastraFGAPermission | (string & {});
 
 /**
  * Type-safe role mapping configuration.

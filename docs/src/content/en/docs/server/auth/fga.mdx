@@ -25,6 +25,7 @@ Configure FGA in your Mastra server config alongside authentication and RBAC:
 
 ```typescript prettier: false
 import { Mastra } from '@mastra/core/mastra';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos';
 
 const mastra = new Mastra({
@@ -40,10 +41,10 @@ const mastra = new Mastra({
         thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
       },
       permissionMapping: {
-        'agents:execute': 'manage-workflows',
-        'workflows:execute': 'manage-workflows',
-        'memory:read': 'read',
-        'memory:write': 'update',
+        [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
+        [MastraFGAPermissions.WORKFLOWS_EXECUTE]: 'manage-workflows',
+        [MastraFGAPermissions.MEMORY_READ]: 'read',
+        [MastraFGAPermissions.MEMORY_WRITE]: 'update',
       },
     }),
   },
@@ -84,9 +85,11 @@ For thread and memory checks, Mastra still passes the raw `threadId` as the reso
 The `permissionMapping` translates Mastra's internal permission strings to your FGA provider's permission slugs:
 
 ```typescript prettier: false
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+
 permissionMapping: {
-  'agents:execute': 'manage-workflows', // Mastra permission → WorkOS permission slug
-  'memory:read': 'read',
+  [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows', // Mastra permission -> WorkOS permission slug
+  [MastraFGAPermissions.MEMORY_READ]: 'read',
 }
 ```
 
@@ -112,7 +115,8 @@ All checks are **no-ops when FGA is not configured**, maintaining backward compa
 Implement `IFGAProvider` to use any FGA backend:
 
 ```typescript
-import type { IFGAProvider, FGACheckParams } from '@mastra/core/auth/ee'
+import { FGADeniedError } from '@mastra/core/auth/ee'
+import type { FGACheckParams, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee'
 
 class MyFGAProvider implements IFGAProvider {
   async check(user: any, params: FGACheckParams): Promise<boolean> {
@@ -131,7 +135,7 @@ class MyFGAProvider implements IFGAProvider {
     user: any,
     resources: T[],
     resourceType: string,
-    permission: string,
+    permission: MastraFGAPermissionInput,
   ): Promise<T[]> {
     // Filter resources the user can access
     return resources

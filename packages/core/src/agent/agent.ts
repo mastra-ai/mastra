@@ -6,6 +6,7 @@ import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -5513,7 +5514,7 @@ export class Agent<
           fgaProvider,
           user,
           resource: { type: 'agent', id: this.id },
-          permission: 'agents:execute',
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
         });
       }
     }
@@ -5645,7 +5646,7 @@ export class Agent<
           fgaProvider: streamFgaProvider,
           user,
           resource: { type: 'agent', id: this.id },
-          permission: 'agents:execute',
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
         });
       }
     }

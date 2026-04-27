@@ -1,6 +1,7 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -151,7 +152,7 @@ describe('MCP Server FGA checks', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(mockFGAProvider.require).toHaveBeenCalledWith(
       { id: 'user-1' },
-      { resource: { type: 'tool', id: 'test-tool' }, permission: 'tools:execute' },
+      { resource: { type: 'tool', id: 'test-tool' }, permission: MastraFGAPermissions.TOOLS_EXECUTE },
     );
   });
 

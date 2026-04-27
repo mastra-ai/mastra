@@ -1,3 +1,4 @@
+import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
 import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
@@ -171,7 +172,7 @@ interface RouteConfig<
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
    */
-  requiresPermission?: string;
+  requiresPermission?: MastraFGAPermissionInput;
   /**
    * FGA authorization config for this route (EE feature).
    * If set, the user must have the specified permission on the resource.
@@ -180,7 +181,7 @@ interface RouteConfig<
     resourceType: string;
     resourceIdParam?: string;
     resourceId?: string | ((params: Record<string, unknown>) => string | undefined);
-    permission?: string;
+    permission?: MastraFGAPermissionInput;
   };
   onValidationError?: ValidationErrorHook;
 }

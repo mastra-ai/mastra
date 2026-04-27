@@ -1,3 +1,4 @@
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
 import { HTTPException } from '../http-exception';
 import {
@@ -176,7 +177,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   fga: {
     resourceType: 'tool',
     resourceId: ({ serverId, toolId }) => `${String(serverId)}:${String(toolId)}`,
-    permission: 'tools:read',
+    permission: MastraFGAPermissions.TOOLS_READ,
   },
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
@@ -216,7 +217,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   fga: {
     resourceType: 'tool',
     resourceId: ({ serverId, toolId }) => `${String(serverId)}:${String(toolId)}`,
-    permission: 'tools:execute',
+    permission: MastraFGAPermissions.TOOLS_EXECUTE,
   },
   handler: async ({
     mastra,

@@ -1992,12 +1992,12 @@ export class MCPServer extends MCPServerBase {
       return;
     }
 
-    const { checkFGA } = await import('@mastra/core/auth/ee');
+    const { checkFGA, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
     await checkFGA({
       fgaProvider,
       user,
       resource: { type: 'tool', id: toolId },
-      permission: 'tools:execute',
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
     });
   }
 

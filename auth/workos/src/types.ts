@@ -3,7 +3,7 @@
  */
 
 import type { JwtPayload } from '@mastra/auth';
-import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
+import type { EEUser, MastraFGAPermission, RoleMapping } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
@@ -225,17 +225,21 @@ export interface FGAResourceMappingEntry {
   deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
 }
 
+export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, string>> & Record<string, string>;
+
 /**
  * Options for MastraFGAWorkos provider.
  *
  * @example
  * ```typescript
+ * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ *
  * new MastraFGAWorkos({
  *   resourceMapping: {
  *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
  *   },
  *   permissionMapping: {
- *     'agents:execute': 'manage-workflows',
+ *     [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
  *   },
  * });
  * ```
@@ -260,9 +264,10 @@ export interface MastraFGAWorkosOptions {
   resourceMapping?: Record<string, FGAResourceMappingEntry>;
   /**
    * Map Mastra permission strings to WorkOS permission slugs.
-   * Keys are Mastra permissions (e.g., 'agents:execute'), values are WorkOS permission slugs.
+   * Keys are Mastra permissions such as MastraFGAPermissions.AGENTS_EXECUTE,
+   * values are WorkOS permission slugs.
    */
-  permissionMapping?: Record<string, string>;
+  permissionMapping?: MastraFGAPermissionMapping;
 }
 
 // ============================================================================

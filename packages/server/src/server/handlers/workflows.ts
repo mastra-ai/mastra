@@ -1,4 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
@@ -113,7 +114,12 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       const user = requestContext?.get('user');
       if (fgaProvider && user) {
         const workflowList = Object.entries(_workflows).map(([id, w]) => ({ id, ...w }));
-        const accessible = await fgaProvider.filterAccessible(user, workflowList, 'workflow', 'workflows:read');
+        const accessible = await fgaProvider.filterAccessible(
+          user,
+          workflowList,
+          'workflow',
+          MastraFGAPermissions.WORKFLOWS_READ,
+        );
         const accessibleSet = new Set(accessible.map((w: any) => w.id));
         for (const id of Object.keys(_workflows)) {
           if (!accessibleSet.has(id)) {
@@ -139,7 +145,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
   requiresAuth: true,
-  fga: { resourceType: 'workflow', resourceIdParam: 'workflowId', permission: 'workflows:read' },
+  fga: { resourceType: 'workflow', resourceIdParam: 'workflowId', permission: MastraFGAPermissions.WORKFLOWS_READ },
   handler: (async ({ mastra, workflowId }: any) => {
     try {
       if (!workflowId) {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -566,7 +567,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               fgaProvider: toolFgaProvider,
               user: fgaUser,
               resource: { type: 'tool', id: inputData.toolName },
-              permission: 'tools:execute',
+              permission: MastraFGAPermissions.TOOLS_EXECUTE,
             });
           }
         }

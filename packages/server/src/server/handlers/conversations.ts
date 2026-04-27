@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { HTTPException } from '../http-exception';
 import {
   conversationDeletedSchema,
@@ -51,7 +52,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   description: 'Creates a new thread-backed conversation for agent-backed Responses API requests',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:create',
+  requiresPermission: MastraFGAPermissions.AGENTS_CREATE,
   handler: async ({ mastra, requestContext, agent_id, conversation_id, resource_id, title, metadata }) => {
     try {
       if (!mastra) {
@@ -93,7 +94,7 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   description: 'Returns a conversation object backed by a Mastra memory thread',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
@@ -118,7 +119,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   description: 'Returns OpenAI-style conversation items derived from the stored thread messages',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
@@ -149,7 +150,7 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
   description: 'Deletes a thread-backed conversation and its stored items',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:delete',
+  requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });

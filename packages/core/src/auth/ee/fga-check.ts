@@ -5,12 +5,13 @@
  */
 
 import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
+import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
 
 export interface CheckFGAOptions {
   fgaProvider: IFGAProvider | undefined;
   user: any;
   resource: { type: string; id: string };
-  permission: string;
+  permission: MastraFGAPermissionInput;
   context?: FGACheckContext;
 }
 
@@ -36,10 +37,10 @@ export async function checkFGA(options: CheckFGAOptions): Promise<void> {
 export class FGADeniedError extends Error {
   public readonly user: any;
   public readonly resource: { type: string; id: string };
-  public readonly permission: string;
+  public readonly permission: MastraFGAPermissionInput;
   public readonly status: number;
 
-  constructor(user: any, resource: { type: string; id: string }, permission: string) {
+  constructor(user: any, resource: { type: string; id: string }, permission: MastraFGAPermissionInput) {
     const userId = user?.id || user?.workosId || 'unknown';
     super(`FGA authorization denied: user ${userId} cannot ${permission} on ${resource.type}:${resource.id}`);
     this.name = 'FGADeniedError';

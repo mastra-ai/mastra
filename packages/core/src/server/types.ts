@@ -3,6 +3,7 @@ import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
 import type { IFGAProvider } from '../auth/ee/interfaces/fga';
+import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions.generated';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -12,7 +13,7 @@ type RouteFGAConfig = {
   resourceType: string;
   resourceIdParam?: string;
   resourceId?: string | ((params: Record<string, unknown>) => string | undefined);
-  permission?: string;
+  permission?: MastraFGAPermissionInput;
 };
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
@@ -25,7 +26,7 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
-      requiresPermission?: string;
+      requiresPermission?: MastraFGAPermissionInput;
       fga?: RouteFGAConfig;
     }
   | {
@@ -35,7 +36,7 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
-      requiresPermission?: string;
+      requiresPermission?: MastraFGAPermissionInput;
       fga?: RouteFGAConfig;
     };
 

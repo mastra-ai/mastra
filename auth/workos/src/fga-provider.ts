@@ -18,6 +18,7 @@ import type {
   FGARoleAssignment,
   FGARoleParams,
   FGAListRoleAssignmentsOptions,
+  MastraFGAPermissionInput,
 } from '@mastra/core/auth/ee';
 import { FGADeniedError } from '@mastra/core/auth/ee';
 import { WorkOS } from '@workos-inc/node';
@@ -47,6 +48,7 @@ export class WorkOSFGAMembershipResolutionError extends Error {
  * @example Basic usage
  * ```typescript
  * import { MastraFGAWorkos } from '@mastra/auth-workos';
+ * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
@@ -55,10 +57,10 @@ export class WorkOSFGAMembershipResolutionError extends Error {
  *     thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
  *   },
  *   permissionMapping: {
- *     'agents:execute': 'manage-workflows',
- *     'workflows:execute': 'manage-workflows',
- *     'memory:read': 'read',
- *     'memory:write': 'update',
+ *     [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
+ *     [MastraFGAPermissions.WORKFLOWS_EXECUTE]: 'manage-workflows',
+ *     [MastraFGAPermissions.MEMORY_READ]: 'read',
+ *     [MastraFGAPermissions.MEMORY_WRITE]: 'update',
  *   },
  * });
  * ```
@@ -145,7 +147,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     user: WorkOSUser,
     resources: T[],
     resourceType: string,
-    permission: string,
+    permission: MastraFGAPermissionInput,
   ): Promise<T[]> {
     if (resources.length === 0) return [];
 
@@ -373,7 +375,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
    * Map a Mastra permission string to a WorkOS permission slug via permissionMapping.
    * Falls back to the original permission if no mapping is found.
    */
-  private resolvePermission(permission: string): string {
+  private resolvePermission(permission: MastraFGAPermissionInput): string {
     return this.permissionMapping[permission] ?? permission;
   }
 

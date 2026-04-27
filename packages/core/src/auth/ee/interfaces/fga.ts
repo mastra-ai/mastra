@@ -13,6 +13,7 @@
 // ──────────────────────────────────────────────────────────────
 
 import type { RequestContext } from '../../../di';
+import type { MastraFGAPermissionInput } from './permissions.generated';
 
 /**
  * Optional context for an authorization check.
@@ -37,8 +38,8 @@ export interface FGACheckContext {
 export interface FGACheckParams {
   /** The resource being accessed */
   resource: { type: string; id: string };
-  /** The permission being checked (e.g., 'agents:execute', 'memory:read') */
-  permission: string;
+  /** The permission being checked */
+  permission: MastraFGAPermissionInput;
   /** Optional provider-specific context for resource resolution */
   context?: FGACheckContext;
 }
@@ -186,6 +187,8 @@ export interface FGAListResourcesOptions {
  *
  * @example
  * ```typescript
+ * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
  *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
@@ -193,18 +196,18 @@ export interface FGAListResourcesOptions {
  *     memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
  *   },
  *   permissionMapping: {
- *     'agents:read': 'read',
- *     'agents:execute': 'manage-workflows',
- *     'workflows:execute': 'manage-workflows',
- *     'memory:read': 'read',
- *     'memory:write': 'update',
+ *     [MastraFGAPermissions.AGENTS_READ]: 'read',
+ *     [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
+ *     [MastraFGAPermissions.WORKFLOWS_EXECUTE]: 'manage-workflows',
+ *     [MastraFGAPermissions.MEMORY_READ]: 'read',
+ *     [MastraFGAPermissions.MEMORY_WRITE]: 'update',
  *   },
  * });
  *
  * // Check if a user can execute an agent
  * const allowed = await fga.check(user, {
  *   resource: { type: 'agent', id: 'chef-agent' },
- *   permission: 'agents:execute',
+ *   permission: MastraFGAPermissions.AGENTS_EXECUTE,
  * });
  * ```
  */
@@ -241,7 +244,7 @@ export interface IFGAProvider<TUser = unknown> {
     user: TUser,
     resources: T[],
     resourceType: string,
-    permission: string,
+    permission: MastraFGAPermissionInput,
   ): Promise<T[]>;
 }
 

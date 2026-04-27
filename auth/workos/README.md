@@ -24,6 +24,7 @@ pnpm add @mastra/auth-workos
 
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos';
 
 // Initialize with environment variables
@@ -67,8 +68,8 @@ const fga = new MastraFGAWorkos({
     },
   },
   permissionMapping: {
-    'memory:read': 'read',
-    'memory:write': 'update',
+    [MastraFGAPermissions.MEMORY_READ]: 'read',
+    [MastraFGAPermissions.MEMORY_WRITE]: 'update',
   },
 });
 ```

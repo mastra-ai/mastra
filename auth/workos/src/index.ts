@@ -69,6 +69,7 @@ export type {
 
   // FGA options
   MastraFGAWorkosOptions,
+  MastraFGAPermissionMapping,
 
   // Directory Sync types
   DirectorySyncHandlers,

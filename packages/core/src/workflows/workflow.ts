@@ -8,6 +8,7 @@ import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from 
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MessageInput } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -2432,7 +2433,7 @@ export class Workflow<
           fgaProvider,
           user,
           resource: { type: 'workflow', id: this.id },
-          permission: 'workflows:execute',
+          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
         });
       }
     }

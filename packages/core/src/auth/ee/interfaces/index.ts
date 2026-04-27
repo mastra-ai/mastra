@@ -14,12 +14,21 @@ export type { EEUser } from './user';
 export type { RoleDefinition, RoleMapping, IRBACProvider, IRBACManager } from './rbac';
 
 // Permissions (generated from SERVER_ROUTES)
-export type { Resource, Action, Permission, PermissionPattern, TypedRoleMapping } from './permissions.generated';
+export type {
+  Resource,
+  Action,
+  Permission,
+  PermissionPattern,
+  MastraFGAPermission,
+  MastraFGAPermissionInput,
+  TypedRoleMapping,
+} from './permissions.generated';
 export {
   RESOURCES,
   ACTIONS,
   PERMISSIONS,
   PERMISSION_PATTERNS,
+  MastraFGAPermissions,
   isValidPermissionPattern,
   validatePermissions,
 } from './permissions.generated';
