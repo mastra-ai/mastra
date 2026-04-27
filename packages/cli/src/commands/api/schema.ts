@@ -1,0 +1,179 @@
+import { fetchSchemaManifest } from './client.js';
+import type { ApiCommandDescriptor } from './commands.js';
+import { ApiCliError } from './errors.js';
+import type { ResolvedTarget } from './target.js';
+
+interface CliSchemaExample {
+  description: string;
+  command: string;
+}
+
+export async function getCommandSchema(descriptor: ApiCommandDescriptor, target: ResolvedTarget): Promise<unknown> {
+  if (!descriptor.acceptsInput) {
+    throw new ApiCliError('SCHEMA_UNAVAILABLE', 'This command does not accept JSON input');
+  }
+
+  const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs);
+  const route = manifest?.routes?.find(
+    (candidate: any) => candidate.method === descriptor.method && candidate.path === descriptor.path,
+  );
+
+  if (!route) {
+    throw new ApiCliError('SCHEMA_UNAVAILABLE', 'Target server did not expose a schema for this command', {
+      method: descriptor.method,
+      path: descriptor.path,
+    });
+  }
+
+  const inputSchema = descriptor.method === 'GET' ? route.queryParamSchema : route.bodySchema;
+
+  return {
+    command: buildCommandUsage(descriptor),
+    description: descriptor.description,
+    method: descriptor.method,
+    path: descriptor.path,
+    positionals: buildPositionals(descriptor, route.pathParamSchema),
+    examples: buildCommandExamples(descriptor),
+    input: {
+      required: descriptor.inputRequired,
+      source: descriptor.method === 'GET' ? 'query' : 'body',
+      schema: inputSchema,
+    },
+    schemas: {
+      pathParams: route.pathParamSchema,
+      query: route.queryParamSchema,
+      body: route.bodySchema,
+    },
+    response: {
+      list: descriptor.list,
+      shape: descriptor.responseShape,
+      schema: route.responseSchema,
+    },
+  };
+}
+
+export function buildCommandUsage(descriptor: ApiCommandDescriptor): string {
+  const positionals = descriptor.positionals.map(name => `<${name}>`).join(' ');
+  const input = descriptor.acceptsInput ? (descriptor.inputRequired ? '<input>' : '[input]') : '';
+  return ['mastra api', descriptor.name, positionals, input].filter(Boolean).join(' ');
+}
+
+function buildPositionals(descriptor: ApiCommandDescriptor, pathParamSchema: any): Array<Record<string, unknown>> {
+  const properties = pathParamSchema?.properties ?? {};
+  const required = new Set<string>(Array.isArray(pathParamSchema?.required) ? pathParamSchema.required : []);
+
+  return descriptor.positionals.map(name => ({
+    name,
+    required: required.has(name) || descriptor.path.includes(`:${name}`),
+    description: properties[name]?.description,
+    schema: properties[name],
+  }));
+}
+
+export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchemaExample[] {
+  const command = `mastra api ${descriptor.name}`;
+
+  switch (descriptor.key) {
+    case 'agentList':
+      return [{ description: 'List available agents', command }];
+    case 'agentRun':
+      return [
+        {
+          description: 'Run an agent with a text prompt',
+          command: `${command} weather-agent '{"messages":"What is the weather in London?"}'`,
+        },
+        {
+          description: 'Run an agent with chat messages',
+          command: `${command} weather-agent '{"messages":[{"role":"user","content":"What is the weather in London?"}]}'`,
+        },
+      ];
+    case 'toolExecute':
+      return [
+        {
+          description: 'Execute a tool with parameters',
+          command: `${command} weather '{"params":{"city":"San Francisco"}}'`,
+        },
+      ];
+    case 'mcpToolExecute':
+      return [
+        {
+          description: 'Execute an MCP tool with arguments',
+          command: `${command} github search-repositories '{"args":{"query":"mastra"}}'`,
+        },
+      ];
+    case 'workflowRunStart':
+      return [
+        {
+          description: 'Start a workflow run',
+          command: `${command} data-pipeline '{"input":{"source":"s3://bucket/data.csv"}}'`,
+        },
+      ];
+    case 'workflowRunResume':
+      return [
+        {
+          description: 'Resume a suspended workflow run',
+          command: `${command} data-pipeline run_123 '{"resumeData":{"approved":true}}'`,
+        },
+      ];
+    case 'memorySearch':
+      return [{ description: 'Search long-term memory', command: `${command} '{"query":"caching strategy"}'` }];
+    case 'memoryCurrentGet':
+      return [
+        {
+          description: 'Read current working memory',
+          command: `${command} '{"threadId":"thread_abc123","agentId":"code-reviewer"}'`,
+        },
+      ];
+    case 'memoryCurrentUpdate':
+      return [
+        {
+          description: 'Update current working memory',
+          command: `${command} '{"threadId":"thread_abc123","agentId":"code-reviewer","workingMemory":"Remember the user prefers concise responses."}'`,
+        },
+      ];
+    case 'threadCreate':
+      return [{ description: 'Create a memory thread', command: `${command} '{"title":"Support conversation"}'` }];
+    case 'threadUpdate':
+      return [
+        { description: 'Update a memory thread', command: `${command} thread_abc123 '{"title":"Updated title"}'` },
+      ];
+    case 'scoreCreate':
+      return [
+        {
+          description: 'Create a score',
+          command: `${command} '{"runId":"run_123","scorerId":"quality","score":0.95}'`,
+        },
+      ];
+    case 'datasetCreate':
+      return [{ description: 'Create a dataset', command: `${command} '{"name":"weather-eval"}'` }];
+    case 'experimentRun':
+      return [{ description: 'Run a dataset experiment', command: `${command} dataset_123 '{"name":"baseline"}'` }];
+    default:
+      return buildGenericExamples(descriptor, command);
+  }
+}
+
+function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string): CliSchemaExample[] {
+  if (descriptor.list) {
+    return [
+      {
+        description: descriptor.description,
+        command: descriptor.acceptsInput ? `${command} '{"page":0,"perPage":50}'` : command,
+      },
+    ];
+  }
+
+  if (!descriptor.acceptsInput) return [{ description: descriptor.description, command }];
+
+  const sampleInput =
+    descriptor.method === 'GET' && descriptor.inputRequired ? sampleInputWithPathParams(descriptor) : '{}';
+  return [{ description: descriptor.description, command: `${command} '${sampleInput}'` }];
+}
+
+function sampleInputWithPathParams(descriptor: ApiCommandDescriptor): string {
+  const pathParams = [...descriptor.path.matchAll(/:([A-Za-z0-9_]+)/g)].flatMap(match => (match[1] ? [match[1]] : []));
+  const inputOnlyParams = pathParams.filter(param => !descriptor.positionals.includes(param));
+  if (inputOnlyParams.length === 0) return '{}';
+
+  return JSON.stringify(Object.fromEntries(inputOnlyParams.map(param => [param, `${param}_123`])));
+}

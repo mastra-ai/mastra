@@ -100,6 +100,7 @@
     "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "generate:permissions": "pnpx tsx scripts/generate-permissions.ts",
+    "generate:api-cli-route-metadata": "pnpx tsx scripts/generate-api-cli-route-metadata.ts",
     "check:permissions": "pnpx tsx scripts/check-permissions.ts",
     "test": "vitest run",
     "lint": "eslint ."

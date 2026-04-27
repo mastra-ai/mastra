@@ -23,6 +23,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
