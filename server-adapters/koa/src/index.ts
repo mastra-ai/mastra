@@ -740,14 +740,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async registerCustomApiRoutes(): Promise<void> {
     if (!(await this.buildCustomRouteHandler())) return;
 
-    const prefix = this.prefix ?? '';
+    const customPrefix = this.getCustomRoutePrefix();
 
     this.app.use(async (ctx: Context, next: Next) => {
-      // Strip the prefix from the path so custom route matching and forwarding
-      // use the bare path that the internal Hono sub-app expects.
+      // Strip the custom route prefix from the path so route matching and
+      // forwarding use the bare path that the internal Hono sub-app expects.
       let routePath = String(ctx.path || '/');
-      if (prefix && routePath.startsWith(prefix)) {
-        routePath = routePath.slice(prefix.length) || '/';
+      if (customPrefix && routePath.startsWith(customPrefix)) {
+        routePath = routePath.slice(customPrefix.length) || '/';
       }
 
       // Check if this request matches a protected custom route and run auth
@@ -803,11 +803,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
       }
 
-      // Strip the prefix from the URL before forwarding to the internal Hono
-      // sub-app, which has routes registered at their original (un-prefixed) paths.
+      // Strip the custom route prefix from the URL before forwarding to the
+      // internal Hono sub-app, which has routes registered at bare paths.
       let routeUrl = ctx.originalUrl || ctx.url;
-      if (prefix && routeUrl.startsWith(prefix)) {
-        routeUrl = routeUrl.slice(prefix.length) || '/';
+      if (customPrefix && routeUrl.startsWith(customPrefix)) {
+        routeUrl = routeUrl.slice(customPrefix.length) || '/';
       }
       const response = await this.handleCustomRouteRequest(
         `${ctx.protocol}://${ctx.host}${routeUrl}`,

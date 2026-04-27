@@ -603,7 +603,7 @@ describe('Fastify Server Adapter', () => {
       context = await createDefaultTestContext();
     });
 
-    it('should apply prefix to custom API routes', async () => {
+    it('should not apply /api prefix to custom routes (reserved for built-in routes)', async () => {
       const app = Fastify();
 
       const adapter = new MastraServer({
@@ -624,8 +624,38 @@ describe('Fastify Server Adapter', () => {
       const address = await app.listen({ port: 0 });
 
       try {
-        // Custom route should be reachable at the prefixed path
-        const prefixed = await fetch(`${address}/api/chat`);
+        // /api is reserved for built-in Mastra routes — custom routes must
+        // be served at their bare path to avoid collisions.
+        const bare = await fetch(`${address}/chat`);
+        expect(bare.status).toBe(200);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should apply non-/api prefix to custom routes', async () => {
+      const app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        prefix: '/v1',
+        customApiRoutes: [
+          {
+            method: 'GET' as const,
+            path: '/chat',
+            handler: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+          },
+        ],
+      });
+
+      await adapter.init();
+
+      const address = await app.listen({ port: 0 });
+
+      try {
+        // Non-/api prefix should be applied to custom routes
+        const prefixed = await fetch(`${address}/v1/chat`);
         expect(prefixed.status).toBe(200);
 
         // Custom route should NOT be reachable at the bare path

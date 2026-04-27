@@ -858,7 +858,7 @@ describe('Hono Server Adapter', () => {
       context = await createDefaultTestContext();
     });
 
-    it('should serve custom routes at root path regardless of prefix', async () => {
+    it('should not apply /api prefix to custom routes (reserved for built-in routes)', async () => {
       const app = new Hono();
 
       const adapter = new MastraServer({
@@ -876,9 +876,37 @@ describe('Hono Server Adapter', () => {
 
       await adapter.init();
 
-      // Custom routes are served at their bare path, not under the API prefix
+      // /api is reserved for built-in Mastra routes — custom routes must
+      // be served at their bare path to avoid collisions.
       const bare = await app.request(new Request('http://localhost/chat', { method: 'GET' }));
       expect(bare.status).toBe(200);
+    });
+
+    it('should apply non-/api prefix to custom routes', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        prefix: '/v1',
+        customApiRoutes: [
+          {
+            method: 'GET' as const,
+            path: '/chat',
+            handler: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+          },
+        ],
+      });
+
+      await adapter.init();
+
+      // Non-/api prefix should be applied to custom routes
+      const prefixed = await app.request(new Request('http://localhost/v1/chat', { method: 'GET' }));
+      expect(prefixed.status).toBe(200);
+
+      // Custom route should NOT be reachable at the bare path
+      const bare = await app.request(new Request('http://localhost/chat', { method: 'GET' }));
+      expect(bare.status).toBe(404);
     });
   });
 });

@@ -284,6 +284,17 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Returns the effective prefix for custom API routes.
+   * The `/api` prefix is reserved for built-in Mastra routes — custom routes
+   * must not be mounted there to avoid collisions with future built-in routes.
+   * Any other prefix is applied normally.
+   */
+  protected getCustomRoutePrefix(): string {
+    const prefix = this.prefix ?? '';
+    return prefix === '/api' ? '' : prefix;
+  }
+
+  /**
    * Parses the apiReqLogs configuration into a normalized HttpLoggingConfig.
    * @param config - The raw config value from server.build.apiReqLogs
    * @returns Normalized HttpLoggingConfig or undefined if disabled

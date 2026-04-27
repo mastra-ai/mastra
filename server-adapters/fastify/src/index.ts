@@ -678,11 +678,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
         }
 
-        // Strip the prefix from the URL before forwarding to the internal Hono
-        // sub-app, which has routes registered at their original (un-prefixed) paths.
+        // Strip the custom route prefix from the URL before forwarding to the
+        // internal Hono sub-app, which has routes registered at bare paths.
+        const customPrefix = this.getCustomRoutePrefix();
         let routeUrl = request.url;
-        if (prefix && routeUrl.startsWith(prefix)) {
-          routeUrl = routeUrl.slice(prefix.length) || '/';
+        if (customPrefix && routeUrl.startsWith(customPrefix)) {
+          routeUrl = routeUrl.slice(customPrefix.length) || '/';
         }
         const response = await this.handleCustomRouteRequest(
           `http://${request.headers.host}${routeUrl}`,
@@ -699,8 +700,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         await this.writeCustomRouteResponse(response, reply.raw);
       };
 
-      const prefix = this.prefix ?? '';
-      const fullPath = `${prefix}${route.path}`;
+      const customPrefix = this.getCustomRoutePrefix();
+      const fullPath = `${customPrefix}${route.path}`;
 
       if (route.method === 'ALL') {
         const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;

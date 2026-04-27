@@ -785,7 +785,7 @@ describe('Express Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
 
-    it('should apply prefix to custom API routes', async () => {
+    it('should not apply /api prefix to custom routes (reserved for built-in routes)', async () => {
       const customRoutes = [
         registerApiRoute('/chat', {
           method: 'GET',
@@ -814,8 +814,46 @@ describe('Express Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      // Custom route should be reachable at the prefixed path
-      const prefixed = await fetch(`http://localhost:${port}/api/chat`);
+      // /api is reserved for built-in Mastra routes — custom routes must
+      // be served at their bare path to avoid collisions.
+      const bare = await fetch(`http://localhost:${port}/chat`);
+      expect(bare.status).toBe(200);
+      const data = await bare.json();
+      expect(data).toEqual({ ok: true });
+    });
+
+    it('should apply non-/api prefix to custom routes', async () => {
+      const customRoutes = [
+        registerApiRoute('/chat', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ ok: true });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/v1',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      if (server) server.close();
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      // Non-/api prefix should be applied to custom routes
+      const prefixed = await fetch(`http://localhost:${port}/v1/chat`);
       expect(prefixed.status).toBe(200);
       const data = await prefixed.json();
       expect(data).toEqual({ ok: true });
