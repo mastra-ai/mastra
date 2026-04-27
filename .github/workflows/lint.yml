@@ -121,6 +121,8 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
+        env:
+          npm_config_trust_policy: no-check
         run: pnpm add -w --no-lockfile globby
 
       - name: Run examples validator
@@ -171,6 +173,8 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
+        env:
+          npm_config_trust_policy: no-check
         run: pnpm add -w --no-lockfile semver
 
       - name: bump versions

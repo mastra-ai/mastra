@@ -38,6 +38,8 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Install dependencies
+        env:
+          npm_config_trust_policy: no-check
         run: pnpm add -w --no-lockfile @octokit/rest fs-extra dotenv --no-lockfile
 
       - name: Run Template Sync Script
