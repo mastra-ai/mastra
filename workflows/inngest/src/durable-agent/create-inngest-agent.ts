@@ -598,19 +598,41 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onSuspended: resumeOptions?.onSuspended,
       });
 
-      // Send resume event to Inngest after subscription is ready
-      const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}.resume`;
+      // Load the workflow snapshot to build proper resume data
+      // This mirrors InngestRun._resume() which loads the snapshot, finds the suspended step,
+      // and sends an event to the same trigger name (not a .resume suffix)
+      const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
       ready
-        .then(() =>
-          inngest.send({
+        .then(async () => {
+          const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+          const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+            runId,
+          });
+
+          // Find the suspended step from the snapshot
+          const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
+          const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
+
+          await inngest.send({
             name: eventName,
             data: {
+              inputData: resumeData,
+              initialState: snapshot?.value ?? {},
               runId,
-              resumeData,
+              resourceId: resumeOptions?.resourceId,
+              requestContext: {},
+              stepResults: snapshot?.context,
+              resume: {
+                steps,
+                stepResults: snapshot?.context,
+                resumePayload: resumeData,
+                resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
+              },
             },
-          }),
-        )
+          });
+        })
         .catch(error => {
           void emitError(runId, error);
         });

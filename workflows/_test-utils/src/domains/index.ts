@@ -55,6 +55,7 @@ export { createSkillsWithCustomProcessorsTests } from './skills-with-custom-proc
 export { createTitleGenerationTests } from './title-generation';
 export { createSaveAndErrorsTests } from './save-and-errors';
 export { createMemoryMetadataTests } from './memory-metadata';
+export { createToolWorkflowExecutionTests } from './tool-workflow-execution';
 
 // === Workflow domain test creators ===
 

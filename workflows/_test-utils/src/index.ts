@@ -49,6 +49,7 @@ export {
   createMultiChunkStreamModel,
   createToolCallModel,
   createMultiToolCallModel,
+  createMultiToolCallThenTextModel,
   createToolCallThenTextModel,
   createErrorModel,
   createSimpleMockModel,

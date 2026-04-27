@@ -30,6 +30,17 @@ export interface DurableAgentLike<TOutput = undefined> {
     resourceId?: string;
     cleanup: () => void;
   }>;
+  resume?(
+    runId: string,
+    resumeData: unknown,
+    options?: any,
+  ): Promise<{
+    output: any;
+    runId: string;
+    threadId?: string;
+    resourceId?: string;
+    cleanup: () => void;
+  }>;
   prepare(messages: any, options?: any): Promise<any>;
   observe?(
     runId: string,
@@ -108,7 +119,9 @@ export type DurableAgentTestDomain =
   | 'skillsWithCustomProcessors'
   | 'titleGeneration'
   | 'saveAndErrors'
-  | 'memoryMetadata';
+  | 'memoryMetadata'
+  // End-to-end tool workflow execution (approval, suspension, resume, foreach)
+  | 'toolWorkflowExecution';
 
 /**
  * Configuration for creating a DurableAgent test suite

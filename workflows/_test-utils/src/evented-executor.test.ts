@@ -12,6 +12,8 @@ import type { CreateAgentConfig, DurableAgentLike } from './types';
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { EventEmitterPubSub } from '@mastra/core/events';
+import { Mastra } from '@mastra/core/mastra';
+import { MockStore } from '@mastra/core/storage';
 
 // Shared pubsub instance for all tests
 let sharedPubSub: EventEmitterPubSub;
@@ -49,6 +51,15 @@ createDurableAgentTestSuite({
       agent,
       pubsub: sharedPubSub,
     });
+
+    // Wire up Mastra with storage for snapshot persistence (needed for resume)
+    if (config.needsStorage) {
+      new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        agents: { [`${config.id}-${testId}`]: eventedAgent as any },
+      });
+    }
 
     return eventedAgent as unknown as DurableAgentLike;
   },

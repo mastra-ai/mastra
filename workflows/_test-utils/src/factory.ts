@@ -6,6 +6,8 @@ import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PubSub } from '@mastra/core/events';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
+import { Mastra } from '@mastra/core/mastra';
+import { MockStore } from '@mastra/core/storage';
 import type {
   DurableAgentTestConfig,
   DurableAgentTestContext,
@@ -58,6 +60,8 @@ import {
   createTitleGenerationTests,
   createSaveAndErrorsTests,
   createMemoryMetadataTests,
+  // Tool workflow execution (end-to-end approval, suspension, resume, foreach)
+  createToolWorkflowExecutionTests,
 } from './domains';
 
 // Workflow domain imports (imported directly to avoid circular deps with domains/index)
@@ -97,6 +101,7 @@ const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
 
 /**
  * Default agent factory - creates DurableAgent with pubsub from context
+ * If config.needsStorage is true, creates a Mastra with MockStore for snapshot persistence (needed for resume)
  */
 function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTestContext): DurableAgentLike {
   const pubsub = context.getPubSub();
@@ -107,7 +112,17 @@ function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTest
     model: config.model,
     tools: config.tools,
   });
-  return createDurableAgent({ agent, pubsub });
+  const durableAgent = createDurableAgent({ agent, pubsub });
+
+  if (config.needsStorage) {
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { [config.id]: durableAgent as any },
+    });
+  }
+
+  return durableAgent;
 }
 
 /**
@@ -326,6 +341,11 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
 
     if (!skip.memoryMetadata) {
       createMemoryMetadataTests(context);
+    }
+
+    // Tool workflow execution (end-to-end approval, suspension, resume, foreach)
+    if (!skip.toolWorkflowExecution) {
+      createToolWorkflowExecutionTests(context);
     }
   });
 }
