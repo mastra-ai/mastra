@@ -19,10 +19,12 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useWorkspaces } from '@/domains/workspace/hooks';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
+type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
@@ -31,8 +33,10 @@ export default function AgentBuilderAgentEdit() {
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const { data: agentsData, isPending: isAgentsPending } = useAgents();
+  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows();
   const { data: workspacesData } = useWorkspaces();
-  const isReady = Boolean(id) && (fromStarter || !isStoredAgentLoading) && !isToolsPending && !isAgentsPending;
+  const isReady =
+    Boolean(id) && (fromStarter || !isStoredAgentLoading) && !isToolsPending && !isAgentsPending && !isWorkflowsPending;
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
@@ -47,6 +51,7 @@ export default function AgentBuilderAgentEdit() {
       storedAgent={storedAgent}
       toolsData={toolsData}
       agentsData={agentsData}
+      workflowsData={workflowsData}
       availableWorkspaces={availableWorkspaces}
       initialUserMessage={initialUserMessage}
       fromStarter={fromStarter}
@@ -59,6 +64,7 @@ interface PageProps {
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData | undefined;
   agentsData: AgentsData | undefined;
+  workflowsData: WorkflowsData | undefined;
   availableWorkspaces: AvailableWorkspace[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
@@ -69,6 +75,7 @@ const AgentBuilderAgentEditPage = ({
   storedAgent,
   toolsData,
   agentsData,
+  workflowsData,
   availableWorkspaces,
   initialUserMessage,
   fromStarter,
@@ -86,6 +93,7 @@ const AgentBuilderAgentEditPage = ({
         mode={mode}
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
+        workflowsData={workflowsData ?? {}}
         availableWorkspaces={availableWorkspaces}
         initialUserMessage={initialUserMessage}
         fromStarter={fromStarter}
@@ -105,6 +113,7 @@ interface AgentBuilderAgentEditReadyProps {
   mode: 'create' | 'edit';
   toolsData: ToolsData;
   agentsData: AgentsData;
+  workflowsData: WorkflowsData;
   availableWorkspaces: AvailableWorkspace[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
@@ -115,6 +124,7 @@ const AgentBuilderAgentEditReady = ({
   mode,
   toolsData,
   agentsData,
+  workflowsData,
   availableWorkspaces,
   initialUserMessage,
   fromStarter,
@@ -124,12 +134,15 @@ const AgentBuilderAgentEditReady = ({
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
+  const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
     agentsData,
+    workflowsData,
     selectedTools,
     selectedAgents,
+    selectedWorkflows,
     excludeAgentId: id,
   });
 

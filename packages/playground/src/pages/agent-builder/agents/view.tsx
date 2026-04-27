@@ -15,20 +15,31 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
+type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const { data: agentsData, isPending: isAgentsPending } = useAgents();
-  const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending && !isAgentsPending;
+  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows();
+  const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending && !isAgentsPending && !isWorkflowsPending;
 
   if (!isReady) return <AgentBuilderAgentViewSkeleton />;
 
-  return <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} toolsData={toolsData} agentsData={agentsData} />;
+  return (
+    <AgentBuilderAgentViewPage
+      id={id}
+      storedAgent={storedAgent}
+      toolsData={toolsData}
+      agentsData={agentsData}
+      workflowsData={workflowsData}
+    />
+  );
 }
 
 interface PageProps {
@@ -36,9 +47,10 @@ interface PageProps {
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData | undefined;
   agentsData: AgentsData | undefined;
+  workflowsData: WorkflowsData | undefined;
 }
 
-const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData }: PageProps) => {
+const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData, workflowsData }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
   });
@@ -50,6 +62,7 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData }: P
         storedAgent={storedAgent}
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
+        workflowsData={workflowsData ?? {}}
       />
     </FormProvider>
   );
@@ -66,20 +79,30 @@ interface AgentBuilderAgentViewReadyProps {
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData;
   agentsData: AgentsData;
+  workflowsData: WorkflowsData;
 }
 
-const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData, agentsData }: AgentBuilderAgentViewReadyProps) => {
+const AgentBuilderAgentViewReady = ({
+  id,
+  storedAgent,
+  toolsData,
+  agentsData,
+  workflowsData,
+}: AgentBuilderAgentViewReadyProps) => {
   const navigate = useNavigate();
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
+  const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
     agentsData,
+    workflowsData,
     selectedTools,
     selectedAgents,
+    selectedWorkflows,
     excludeAgentId: id,
   });
 

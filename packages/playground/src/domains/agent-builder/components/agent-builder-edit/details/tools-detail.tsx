@@ -15,7 +15,7 @@ export const ToolsDetail = ({ onClose, editable = true, availableAgentTools = []
   const activeCount = availableAgentTools.filter(item => item.isChecked).length;
 
   const toggle = (item: AgentTool, next: boolean) => {
-    const fieldName = item.type === 'agent' ? 'agents' : 'tools';
+    const fieldName = item.type === 'agent' ? 'agents' : item.type === 'workflow' ? 'workflows' : 'tools';
     const current = getValues(fieldName) ?? {};
     setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
   };

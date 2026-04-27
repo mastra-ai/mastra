@@ -103,6 +103,50 @@ describe('useSaveAgent persists tools and agents on save', () => {
     expect(capturedBody.agents).toEqual({ 'agent-x': { description: 'Agent X desc' } });
   });
 
+  it('writes workflows record on create', async () => {
+    let capturedBody: any = null;
+    server.use(
+      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'created-id' });
+      }),
+    );
+
+    const availableAgentTools: AgentTool[] = [
+      { id: 'wf-1', name: 'Workflow One', description: 'Workflow desc', isChecked: true, type: 'workflow' },
+    ];
+
+    const { hook } = renderSave({
+      agentId: 'created-id',
+      mode: 'create',
+      availableAgentTools,
+      defaultValues: {
+        name: 'New agent',
+        description: '',
+        instructions: 'do things',
+        tools: {},
+        agents: {},
+        workflows: { 'wf-1': true },
+        skills: [],
+      },
+    });
+
+    await act(async () => {
+      await hook.current.save({
+        name: 'New agent',
+        description: '',
+        instructions: 'do things',
+        tools: {},
+        agents: {},
+        workflows: { 'wf-1': true },
+        skills: [],
+      });
+    });
+
+    expect(capturedBody).toBeTruthy();
+    expect(capturedBody.workflows).toEqual({ 'wf-1': { description: 'Workflow desc' } });
+  });
+
   it('writes tools record and agents record on update', async () => {
     let capturedBody: any = null;
     server.use(
@@ -145,5 +189,47 @@ describe('useSaveAgent persists tools and agents on save', () => {
     expect(capturedBody).toBeTruthy();
     expect(capturedBody.tools).toEqual({ 'tool-a': {} });
     expect(capturedBody.agents).toEqual({ 'agent-x': {} });
+  });
+
+  it('writes workflows record on update', async () => {
+    let capturedBody: any = null;
+    server.use(
+      http.patch(`${BASE_URL}/api/stored/agents/existing-id`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'existing-id' });
+      }),
+    );
+
+    const availableAgentTools: AgentTool[] = [{ id: 'wf-1', name: 'Workflow One', isChecked: true, type: 'workflow' }];
+
+    const { hook } = renderSave({
+      agentId: 'existing-id',
+      mode: 'edit',
+      availableAgentTools,
+      defaultValues: {
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: {},
+        agents: {},
+        workflows: { 'wf-1': true },
+        skills: [],
+      },
+    });
+
+    await act(async () => {
+      await hook.current.save({
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: {},
+        agents: {},
+        workflows: { 'wf-1': true },
+        skills: [],
+      });
+    });
+
+    expect(capturedBody).toBeTruthy();
+    expect(capturedBody.workflows).toEqual({ 'wf-1': {} });
   });
 });

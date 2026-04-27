@@ -8,6 +8,7 @@ const baseValues = {
   instructions: 'Do things',
   tools: {},
   agents: {},
+  workflows: {},
   skills: [],
 };
 
@@ -54,12 +55,45 @@ describe('formValuesToSaveParams', () => {
     expect(result.agents).toEqual({ 'agent-x': { description: 'Agent X desc' } });
   });
 
-  it('returns undefined for tools/agents/skills when their resolved record is empty', () => {
+  it('returns undefined for tools/agents/workflows/skills when their resolved record is empty', () => {
     const result = formValuesToSaveParams(baseValues, []);
 
     expect(result.tools).toBeUndefined();
     expect(result.agents).toBeUndefined();
+    expect(result.workflows).toBeUndefined();
     expect(result.skills).toBeUndefined();
+  });
+
+  it('builds a workflow entry with description when the available workflow has one', () => {
+    const availableAgentTools: AgentTool[] = [
+      { id: 'wf-1', name: 'Workflow One', description: 'Workflow desc', isChecked: true, type: 'workflow' },
+    ];
+
+    const result = formValuesToSaveParams({ ...baseValues, workflows: { 'wf-1': true } }, availableAgentTools);
+
+    expect(result.workflows).toEqual({ 'wf-1': { description: 'Workflow desc' } });
+  });
+
+  it('builds a workflow entry with an empty record when the available workflow has no description', () => {
+    const availableAgentTools: AgentTool[] = [{ id: 'wf-1', name: 'Workflow One', isChecked: true, type: 'workflow' }];
+
+    const result = formValuesToSaveParams({ ...baseValues, workflows: { 'wf-1': true } }, availableAgentTools);
+
+    expect(result.workflows).toEqual({ 'wf-1': {} });
+  });
+
+  it('omits disabled workflows from the resulting record', () => {
+    const availableAgentTools: AgentTool[] = [
+      { id: 'wf-1', name: 'Workflow One', isChecked: true, type: 'workflow' },
+      { id: 'wf-2', name: 'Workflow Two', isChecked: false, type: 'workflow' },
+    ];
+
+    const result = formValuesToSaveParams(
+      { ...baseValues, workflows: { 'wf-1': true, 'wf-2': false } },
+      availableAgentTools,
+    );
+
+    expect(result.workflows).toEqual({ 'wf-1': {} });
   });
 
   it('builds the skills record as `Record<string, {}>` when entries are present', () => {

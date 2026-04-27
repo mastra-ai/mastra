@@ -8,6 +8,7 @@ export interface SaveParams {
   instructions: string;
   tools: Record<string, StoredAgentToolConfig> | undefined;
   agents: Record<string, StoredAgentToolConfig> | undefined;
+  workflows: Record<string, StoredAgentToolConfig> | undefined;
   skills: Record<string, {}> | undefined;
   workspace: StoredWorkspaceRef | undefined;
 }
@@ -36,16 +37,20 @@ export function formValuesToSaveParams(
 ): SaveParams {
   const toolDescriptionById = new Map<string, string | undefined>();
   const agentDescriptionById = new Map<string, string | undefined>();
+  const workflowDescriptionById = new Map<string, string | undefined>();
   for (const item of availableAgentTools) {
     if (item.type === 'tool') {
       toolDescriptionById.set(item.id, item.description);
-    } else {
+    } else if (item.type === 'agent') {
       agentDescriptionById.set(item.id, item.description);
+    } else {
+      workflowDescriptionById.set(item.id, item.description);
     }
   }
 
   const tools = buildEnabledRecord(values.tools, toolDescriptionById);
   const agents = buildEnabledRecord(values.agents, agentDescriptionById);
+  const workflows = buildEnabledRecord(values.workflows, workflowDescriptionById);
   const skills = Object.fromEntries((values.skills ?? []).map(skillId => [skillId, {}]));
 
   const workspace: StoredWorkspaceRef | undefined =
@@ -61,6 +66,7 @@ export function formValuesToSaveParams(
     instructions: values.instructions,
     tools: emptyToUndefined(tools),
     agents: emptyToUndefined(agents),
+    workflows: emptyToUndefined(workflows),
     skills: emptyToUndefined(skills),
     workspace,
   };

@@ -8,6 +8,7 @@ export interface ToolInputEntry {
 export interface RoutedToolInput {
   tools: Record<string, true>;
   agents: Record<string, true>;
+  workflows: Record<string, true>;
 }
 
 export function routeToolInputToFormKeys(
@@ -17,15 +18,18 @@ export function routeToolInputToFormKeys(
   const typeById = new Map(availableAgentTools.map(item => [item.id, item.type] as const));
   const tools: Record<string, true> = {};
   const agents: Record<string, true> = {};
+  const workflows: Record<string, true> = {};
 
   for (const entry of inputTools) {
     const type = typeById.get(entry.id);
     if (type === 'agent') {
       agents[entry.id] = true;
+    } else if (type === 'workflow') {
+      workflows[entry.id] = true;
     } else {
       tools[entry.id] = true;
     }
   }
 
-  return { tools, agents };
+  return { tools, agents, workflows };
 }

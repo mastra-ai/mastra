@@ -6,6 +6,7 @@ export const AgentBuilderEditFormSchema = z.object({
   instructions: z.string(),
   tools: z.record(z.string(), z.boolean()).optional(),
   agents: z.record(z.string(), z.boolean()).optional(),
+  workflows: z.record(z.string(), z.boolean()).optional(),
   skills: z.array(z.string()).optional(),
   workspaceId: z.string().optional(),
 });

@@ -27,6 +27,28 @@ describe('useAvailableAgentTools', () => {
     });
   });
 
+  it('builds AgentTool[] including workflows with type "workflow"', () => {
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: {},
+        agentsData: {},
+        workflowsData: { 'wf-1': { name: 'Workflow One', description: 'wf desc' } },
+        selectedTools: {},
+        selectedAgents: {},
+        selectedWorkflows: { 'wf-1': true },
+      }),
+    );
+
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0]).toMatchObject({
+      id: 'wf-1',
+      name: 'Workflow One',
+      description: 'wf desc',
+      type: 'workflow',
+      isChecked: true,
+    });
+  });
+
   it('excludes the agent matching excludeAgentId', () => {
     const { result } = renderHook(() =>
       useAvailableAgentTools({

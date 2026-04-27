@@ -1,13 +1,15 @@
-import type { AvailableAgentsRecord, AvailableToolsRecord } from '../types/agent-tool';
+import type { AvailableAgentsRecord, AvailableToolsRecord, AvailableWorkflowsRecord } from '../types/agent-tool';
 
 interface BuildAvailableToolRecordsResult {
   tools: AvailableToolsRecord;
   agents: AvailableAgentsRecord;
+  workflows: AvailableWorkflowsRecord;
 }
 
 export function buildAvailableToolRecords(
   toolsData: Record<string, unknown>,
   agentsData: Record<string, unknown>,
+  workflowsData: Record<string, unknown> = {},
   excludeAgentId?: string,
 ): BuildAvailableToolRecordsResult {
   const tools: AvailableToolsRecord = Object.fromEntries(
@@ -30,5 +32,16 @@ export function buildAvailableToolRecords(
       ]),
   );
 
-  return { tools, agents };
+  const workflows: AvailableWorkflowsRecord = Object.fromEntries(
+    Object.entries(workflowsData).map(([workflowId, workflow]) => [
+      workflowId,
+      {
+        id: workflowId,
+        name: (workflow as { name?: string }).name ?? workflowId,
+        description: (workflow as { description?: string }).description,
+      },
+    ]),
+  );
+
+  return { tools, agents, workflows };
 }

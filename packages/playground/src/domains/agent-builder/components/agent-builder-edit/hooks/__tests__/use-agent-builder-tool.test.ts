@@ -71,4 +71,25 @@ describe('useAgentBuilderTool execute routing', () => {
     expect(form().getValues('tools')).toEqual({});
     expect(form().getValues('agents')).toEqual({});
   });
+
+  it('routes workflow ids to form.workflows', async () => {
+    const availableAgentTools: AgentTool[] = [
+      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
+      { id: 'wf-1', name: 'Workflow One', isChecked: false, type: 'workflow' },
+    ];
+
+    const { tool, form } = renderBuilderTool(availableAgentTools);
+
+    await tool.execute!({
+      name: 'With workflow',
+      instructions: 'do things',
+      tools: [
+        { id: 'tool-a', name: 'Tool A' },
+        { id: 'wf-1', name: 'Workflow One' },
+      ],
+    } as any);
+
+    expect(form().getValues('tools')).toEqual({ 'tool-a': true });
+    expect(form().getValues('workflows')).toEqual({ 'wf-1': true });
+  });
 });

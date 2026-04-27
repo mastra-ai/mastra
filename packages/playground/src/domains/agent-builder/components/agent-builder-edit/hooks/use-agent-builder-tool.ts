@@ -49,9 +49,10 @@ export function useAgentBuilderTool({
             formMethods.setValue('instructions', inputData.instructions);
           }
           if (toolsEnabled && Array.isArray(inputData?.tools)) {
-            const { tools, agents } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
+            const { tools, agents, workflows } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
             formMethods.setValue('tools', tools);
             formMethods.setValue('agents', agents);
+            formMethods.setValue('workflows', workflows);
           }
           if (skillsEnabled && Array.isArray(inputData?.skills)) {
             formMethods.setValue('skills', inputData.skills);

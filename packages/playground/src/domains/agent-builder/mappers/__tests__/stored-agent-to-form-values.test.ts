@@ -12,6 +12,7 @@ describe('storedAgentToFormValues', () => {
       instructions: '',
       tools: {},
       agents: {},
+      workflows: {},
       skills: [],
       workspaceId: undefined,
     };
@@ -28,6 +29,7 @@ describe('storedAgentToFormValues', () => {
       instructions: 'Be helpful',
       tools: { 'tool-a': {}, 'tool-b': {} },
       agents: { 'agent-x': {} },
+      workflows: { 'wf-1': {} },
       skills: { summarize: {} },
       workspace: { type: 'id', workspaceId: 'ws-1' },
     } as never);
@@ -38,6 +40,7 @@ describe('storedAgentToFormValues', () => {
       instructions: 'Be helpful',
       tools: { 'tool-a': true, 'tool-b': true },
       agents: { 'agent-x': true },
+      workflows: { 'wf-1': true },
       skills: ['summarize'],
       workspaceId: 'ws-1',
     });

@@ -28,6 +28,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
             instructions: params.instructions,
             tools: params.tools,
             agents: params.agents,
+            workflows: params.workflows,
             skills: params.skills,
             ...workspaceField,
           });
@@ -44,6 +45,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
           model: { provider: 'google', name: 'gemini-2.5-flash' },
           tools: params.tools,
           agents: params.agents,
+          workflows: params.workflows,
           skills: params.skills,
           ...workspaceField,
         });
