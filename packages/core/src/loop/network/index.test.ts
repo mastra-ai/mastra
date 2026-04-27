@@ -5,7 +5,7 @@ import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows';
-import { getLastMessage, getRoutingAgent } from './index';
+import { evaluateNetworkToolApproval, getLastMessage, getRoutingAgent } from './index';
 
 describe('getLastMessage', () => {
   it('returns string directly', () => {
@@ -356,5 +356,132 @@ describe('getRoutingAgent', () => {
     // listInputProcessors should NOT be called - only listConfiguredInputProcessors
     expect(mockAgent.listInputProcessors).not.toHaveBeenCalled();
     expect(mockAgent.listConfiguredInputProcessors).toHaveBeenCalled();
+  });
+});
+
+describe('evaluateNetworkToolApproval', () => {
+  const makeAgent = (workspace: any = { id: 'ws-1' }) =>
+    ({
+      getWorkspace: vi.fn().mockResolvedValue(workspace),
+    }) as any;
+
+  const makeRequestContext = (entries: Record<string, unknown> = {}) => {
+    const rc = new RequestContext();
+    for (const [k, v] of Object.entries(entries)) {
+      rc.set(k, v);
+    }
+    return rc;
+  };
+
+  const makeLogger = () => ({ error: vi.fn() });
+
+  it('returns the boolean requireApproval when no needsApprovalFn is set', async () => {
+    const result = await evaluateNetworkToolApproval({
+      tool: { requireApproval: true },
+      inputData: { x: 1 },
+      requestContext: makeRequestContext(),
+      agent: makeAgent(),
+      toolId: 'plain-tool',
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('returns undefined when neither requireApproval nor needsApprovalFn is set', async () => {
+    const result = await evaluateNetworkToolApproval({
+      tool: {},
+      inputData: { x: 1 },
+      requestContext: makeRequestContext(),
+      agent: makeAgent(),
+      toolId: 'no-approval-tool',
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('passes inputData and { requestContext, workspace } to needsApprovalFn', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(true);
+    const requestContext = makeRequestContext({ role: 'admin', tier: 'pro' });
+    const workspace = { id: 'ws-42' };
+    const agent = makeAgent(workspace);
+    const inputData = { action: 'delete' };
+
+    await evaluateNetworkToolApproval({
+      tool: { needsApprovalFn },
+      inputData,
+      requestContext,
+      agent,
+      toolId: 'ctx-tool',
+    });
+
+    expect(needsApprovalFn).toHaveBeenCalledTimes(1);
+    expect(needsApprovalFn).toHaveBeenCalledWith(inputData, {
+      requestContext: { role: 'admin', tier: 'pro' },
+      workspace,
+    });
+    expect(agent.getWorkspace).toHaveBeenCalledWith({ requestContext });
+  });
+
+  it('returns the predicate result when needsApprovalFn resolves to false', async () => {
+    const needsApprovalFn = vi.fn().mockResolvedValue(false);
+
+    const result = await evaluateNetworkToolApproval({
+      tool: { needsApprovalFn },
+      inputData: {},
+      requestContext: makeRequestContext(),
+      agent: makeAgent(),
+      toolId: 'skip-approval-tool',
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it('returns the predicate result when needsApprovalFn resolves to true', async () => {
+    const needsApprovalFn = vi.fn().mockResolvedValue(true);
+
+    const result = await evaluateNetworkToolApproval({
+      tool: { needsApprovalFn },
+      inputData: {},
+      requestContext: makeRequestContext(),
+      agent: makeAgent(),
+      toolId: 'require-approval-tool',
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('defaults to true and logs when needsApprovalFn throws', async () => {
+    const error = new Error('predicate failed');
+    const needsApprovalFn = vi.fn().mockRejectedValue(error);
+    const logger = makeLogger();
+
+    const result = await evaluateNetworkToolApproval({
+      tool: { needsApprovalFn },
+      inputData: {},
+      requestContext: makeRequestContext(),
+      agent: makeAgent(),
+      logger,
+      toolId: 'throwing-tool',
+    });
+
+    expect(result).toBe(true);
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('throwing-tool'), error);
+  });
+
+  it('passes workspace as undefined when getWorkspace rejects', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(true);
+    const agent = {
+      getWorkspace: vi.fn().mockRejectedValue(new Error('no workspace configured')),
+    } as any;
+
+    await evaluateNetworkToolApproval({
+      tool: { needsApprovalFn },
+      inputData: {},
+      requestContext: makeRequestContext(),
+      agent,
+      toolId: 'no-workspace-tool',
+    });
+
+    expect(needsApprovalFn).toHaveBeenCalledWith({}, expect.objectContaining({ workspace: undefined }));
   });
 });

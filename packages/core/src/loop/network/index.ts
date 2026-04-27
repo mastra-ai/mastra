@@ -472,6 +472,47 @@ async function saveFinalResultIfProvided({
   }
 }
 
+/**
+ * Evaluate a tool's `requireApproval` predicate inside the network loop.
+ * Mirrors the agentic-execution path in `loop/workflows/agentic-execution/tool-call-step.ts`
+ * by passing `{ requestContext, workspace }` as the second argument so predicates
+ * can gate approval on user role, workspace tier, or other request-scoped state.
+ *
+ * Exported for unit testing; not part of the public API.
+ */
+export async function evaluateNetworkToolApproval({
+  tool,
+  inputData,
+  requestContext,
+  agent,
+  logger,
+  toolId,
+}: {
+  tool: any;
+  inputData: unknown;
+  requestContext: RequestContext;
+  agent: Agent;
+  logger?: { error: (...args: any[]) => void };
+  toolId: string;
+}): Promise<boolean | undefined> {
+  let toolRequiresApproval = tool.requireApproval;
+  if (tool.needsApprovalFn) {
+    try {
+      const needsApprovalResult = await tool.needsApprovalFn(inputData, {
+        requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+        workspace: await agent.getWorkspace({ requestContext }).catch(() => undefined),
+      });
+      toolRequiresApproval = needsApprovalResult;
+    } catch (error) {
+      // Log error to help developers debug faulty needsApprovalFn implementations
+      logger?.error(`Error evaluating needsApprovalFn for tool ${toolId}:`, error);
+      // On error, default to requiring approval to be safe
+      toolRequiresApproval = true;
+    }
+  }
+  return toolRequiresApproval;
+}
+
 export async function createNetworkLoop({
   networkName,
   requestContext,
@@ -1524,24 +1565,18 @@ export async function createNetworkLoop({
         runId,
       });
 
-      // Check if approval is required
-      // requireApproval can be:
-      // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
-      // - undefined (no approval needed)
-      // If needsApprovalFn exists, evaluate it with the tool args
-      let toolRequiresApproval = (tool as any).requireApproval;
-      if ((tool as any).needsApprovalFn) {
-        // Evaluate the function with the parsed args
-        try {
-          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
-          toolRequiresApproval = needsApprovalResult;
-        } catch (error) {
-          // Log error to help developers debug faulty needsApprovalFn implementations
-          logger?.error(`Error evaluating needsApprovalFn for tool ${toolId}:`, error);
-          // On error, default to requiring approval to be safe
-          toolRequiresApproval = true;
-        }
-      }
+      // Check if approval is required.
+      // `requireApproval` can be a boolean or a function (stored as `needsApprovalFn`
+      // by the tool builder). Function predicates receive `{ requestContext, workspace }`
+      // as the second argument, matching the agentic-execution path.
+      const toolRequiresApproval = await evaluateNetworkToolApproval({
+        tool,
+        inputData: inputDataToUse,
+        requestContext,
+        agent,
+        logger,
+        toolId,
+      });
 
       if (toolRequiresApproval) {
         // Check if abort fired before writing approval metadata or suspending
