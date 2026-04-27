@@ -1,4 +1,5 @@
 import {
+  Button,
   ButtonWithTooltip,
   ErrorState,
   ListSearch,
@@ -7,51 +8,20 @@ import {
   PageLayout,
   PermissionDenied,
   SessionExpired,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
   WorkflowIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
-import { useCallback, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { SchedulesPage } from '@/domains/schedules/components/schedules-page';
+import { BookIcon, CalendarClockIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
-const VALID_TABS = ['workflows', 'schedules'] as const;
-type TabValue = (typeof VALID_TABS)[number];
-
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const activeTab: TabValue = (VALID_TABS as readonly string[]).includes(tabParam ?? '')
-    ? (tabParam as TabValue)
-    : 'workflows';
-
-  const handleTabChange = useCallback(
-    (value: string) => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (value === 'workflows') {
-            next.delete('tab');
-          } else {
-            next.set('tab', value);
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -97,6 +67,10 @@ function Workflows() {
             </PageHeader>
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
+            <Button as={Link} to="/workflows/schedules">
+              <CalendarClockIcon />
+              Schedules
+            </Button>
             <ButtonWithTooltip
               as="a"
               href="https://mastra.ai/en/docs/workflows/overview"
@@ -108,30 +82,12 @@ function Workflows() {
             </ButtonWithTooltip>
           </PageLayout.Column>
         </PageLayout.Row>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+        </div>
       </PageLayout.TopArea>
 
-      <Tabs
-        defaultTab="workflows"
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="grid grid-rows-[auto_1fr] h-full overflow-hidden"
-      >
-        <TabList>
-          <Tab value="workflows">All Workflows</Tab>
-          <Tab value="schedules">Schedules</Tab>
-        </TabList>
-
-        <TabContent value="workflows" className="overflow-y-auto mt-5">
-          <div className="max-w-120 mb-4">
-            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
-          </div>
-          <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
-        </TabContent>
-
-        <TabContent value="schedules" className="overflow-hidden mt-5">
-          <SchedulesPage />
-        </TabContent>
-      </Tabs>
+      <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
     </PageLayout>
   );
 }

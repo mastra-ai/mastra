@@ -7,24 +7,31 @@ import { resetStorage } from '../__utils__/reset-storage';
  *   in Studio so I can verify my declarative cron config is wired correctly and
  *   inspect the trigger audit history.
  * BEHAVIOR UNDER TEST:
- *   - Schedules declared on workflows show up in the Schedules tab on /workflows
+ *   - /workflows has a Schedules link that navigates to a dedicated /workflows/schedules route
+ *   - /workflows/schedules lists every declared schedule across workflows
  *   - Per-workflow Schedules sub-route filters to that workflow only
  *   - Workflow header link is shown only when the workflow has schedules
- *   - Tab state is reflected in ?tab=schedules query param and survives reload
+ *   - /workflows/schedules is directly addressable (deep-linkable, survives reload)
  */
 
 test.afterEach(async () => {
   await resetStorage();
 });
 
-test('schedules tab on /workflows lists every declared schedule across workflows', async ({ page }) => {
+test('schedules link on /workflows navigates to dedicated /workflows/schedules route', async ({ page }) => {
   await page.goto('/workflows');
 
-  // Switch to the Schedules tab.
-  await page.getByRole('tab', { name: 'Schedules' }).click();
+  // The Schedules entry point is rendered next to the docs button on the workflows index.
+  const schedulesLink = page.getByRole('link', { name: /Schedules/ });
+  await expect(schedulesLink.first()).toBeVisible();
 
-  // URL reflects the active tab so the view is shareable.
-  await expect(page).toHaveURL(/\/workflows\?tab=schedules$/);
+  await schedulesLink.first().click();
+
+  await expect(page).toHaveURL(/\/workflows\/schedules$/);
+});
+
+test('/workflows/schedules lists every declared schedule across workflows', async ({ page }) => {
+  await page.goto('/workflows/schedules');
 
   // Both single-form and array-form schedules from kitchen-sink should be listed.
   // scheduledWorkflow contributes 1 row, multiScheduledWorkflow contributes 2.
@@ -41,17 +48,13 @@ test('schedules tab on /workflows lists every declared schedule across workflows
   await expect(page.locator('text=0 20 * * *').first()).toBeVisible();
 });
 
-test('schedules tab survives page reload via ?tab query param', async ({ page }) => {
-  await page.goto('/workflows?tab=schedules');
-
-  // Tab is selected on initial load from the URL alone.
-  await expect(page.getByRole('tab', { name: 'Schedules' })).toHaveAttribute('data-state', 'active');
+test('/workflows/schedules is deep-linkable and survives reload', async ({ page }) => {
+  await page.goto('/workflows/schedules');
   await expect(page.locator('text=scheduledWorkflow').first()).toBeVisible();
 
   await page.reload();
 
-  await expect(page).toHaveURL(/\/workflows\?tab=schedules$/);
-  await expect(page.getByRole('tab', { name: 'Schedules' })).toHaveAttribute('data-state', 'active');
+  await expect(page).toHaveURL(/\/workflows\/schedules$/);
   await expect(page.locator('text=scheduledWorkflow').first()).toBeVisible();
 });
 
