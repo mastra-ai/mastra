@@ -35,7 +35,7 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
-import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
+import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -81,6 +81,28 @@ function createUndefinedPrimitiveError(
     text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
     details: { status: 400, ...(key && { key }) },
   });
+}
+
+/**
+ * Stable JSON-shape comparison for two `Schedule.target` values. Uses
+ * JSON.stringify because targets are plain JSON-serializable objects (the
+ * storage layer round-trips them through the same encoding). Covers the
+ * `inputData` / `initialState` / `requestContext` payload fields that we
+ * want to detect changes on across redeploys.
+ */
+function targetsEqual(a: Schedule['target'] | undefined, b: Schedule['target']): boolean {
+  if (a === b) return true;
+  if (!a) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** See {@link targetsEqual}. Same approach for free-form metadata. */
+function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
+  const aNorm = a ?? undefined;
+  const bNorm = b ?? undefined;
+  if (aNorm === bNorm) return true;
+  if (!aNorm || !bNorm) return false;
+  return JSON.stringify(aNorm) === JSON.stringify(bNorm);
 }
 
 /**
@@ -967,28 +989,53 @@ export class Mastra<
     for (const { scheduleId, workflowId, workflow } of this.#collectDeclarativeSchedules()) {
       const cfg = (workflow as { getScheduleConfig?: () => undefined | Record<string, any> }).getScheduleConfig?.();
       if (!cfg) continue;
-      const existing = await schedulesStore.getSchedule(scheduleId);
-      if (existing) continue;
       try {
+        const existing = await schedulesStore.getSchedule(scheduleId);
         const now = Date.now();
-        const schedule: Schedule = {
-          id: scheduleId,
-          target: {
-            type: 'workflow',
-            workflowId,
-            inputData: cfg.inputData,
-            initialState: cfg.initialState,
-            requestContext: cfg.requestContext,
-          },
-          cron: cfg.cron,
-          timezone: cfg.timezone,
-          status: 'active',
-          nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
-          createdAt: now,
-          updatedAt: now,
-          metadata: cfg.metadata,
+        const target: Schedule['target'] = {
+          type: 'workflow',
+          workflowId,
+          inputData: cfg.inputData,
+          initialState: cfg.initialState,
+          requestContext: cfg.requestContext,
         };
-        await schedulesStore.createSchedule(schedule);
+
+        if (!existing) {
+          await schedulesStore.createSchedule({
+            id: scheduleId,
+            target,
+            cron: cfg.cron,
+            timezone: cfg.timezone,
+            status: 'active',
+            nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
+            createdAt: now,
+            updatedAt: now,
+            metadata: cfg.metadata,
+          });
+          continue;
+        }
+
+        // Diff config fields and patch the existing row if anything changed.
+        // We deliberately leave `status` alone — a row may have been paused
+        // out-of-band via storage, and a redeploy shouldn't unpause it.
+        const patch: ScheduleUpdate = {};
+        const cronChanged = existing.cron !== cfg.cron;
+        const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+
+        if (cronChanged) patch.cron = cfg.cron;
+        if (timezoneChanged) patch.timezone = cfg.timezone;
+        if (!targetsEqual(existing.target, target)) patch.target = target;
+        if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
+
+        // Cron or timezone change invalidates the stored nextFireAt — recompute
+        // from now so we don't fire on the old schedule.
+        if (cronChanged || timezoneChanged) {
+          patch.nextFireAt = computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now });
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await schedulesStore.updateSchedule(scheduleId, patch);
+        }
       } catch (error) {
         this.#logger?.error('Failed to register declarative schedule', { scheduleId, workflowId, error });
       }

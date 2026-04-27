@@ -140,4 +140,102 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.shutdown();
     expect(mastra.scheduler!.isRunning).toBe(false);
   });
+
+  describe('upsert on redeploy', () => {
+    const buildScheduledWorkflow = (cfg: {
+      cron: string;
+      timezone?: string;
+      inputData?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    }) => {
+      const wf = createEventedWorkflow({
+        id: 'rolling-wf',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        schedule: cfg as any,
+      });
+      wf.then(
+        createStep({
+          id: 'noop',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        }) as any,
+      ).commit();
+      return wf;
+    };
+
+    const boot = async (storage: InstanceType<typeof MockStore>, wf: ReturnType<typeof buildScheduledWorkflow>) => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        workflows: { wf } as any,
+      });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return mastra;
+    };
+
+    it('rewrites cron and recomputes nextFireAt when the cron expression changes', async () => {
+      const storage = new MockStore();
+
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const initial = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(initial?.cron).toBe('*/5 * * * *');
+      const initialNextFireAt = initial!.nextFireAt;
+      await first.shutdown();
+
+      const second = await boot(storage, buildScheduledWorkflow({ cron: '0 * * * *' }));
+      const updated = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(updated?.cron).toBe('0 * * * *');
+      // nextFireAt was anchored to the old cron; cron change must invalidate it.
+      expect(updated!.nextFireAt).not.toBe(initialNextFireAt);
+      await second.shutdown();
+    });
+
+    it('updates the target payload when inputData changes', async () => {
+      const storage = new MockStore();
+
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *', inputData: { v: 1 } }));
+      await first.shutdown();
+
+      const second = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *', inputData: { v: 2 } }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const updated = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect((updated!.target as any).inputData).toEqual({ v: 2 });
+      await second.shutdown();
+    });
+
+    it('does not unpause a schedule that was paused out-of-band', async () => {
+      const storage = new MockStore();
+
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.updateSchedule('wf_rolling-wf', { status: 'paused' });
+      await first.shutdown();
+
+      // Redeploy with a config change — must not flip status back to 'active'.
+      const second = await boot(storage, buildScheduledWorkflow({ cron: '0 * * * *' }));
+      const after = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(after?.status).toBe('paused');
+      expect(after?.cron).toBe('0 * * * *');
+      await second.shutdown();
+    });
+
+    it('does not write when nothing has changed', async () => {
+      const storage = new MockStore();
+
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *', inputData: { v: 1 } }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const initial = await schedulesStore.getSchedule('wf_rolling-wf');
+      await first.shutdown();
+
+      const updateSpy = vi.spyOn(schedulesStore, 'updateSchedule');
+      const second = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *', inputData: { v: 1 } }));
+      expect(updateSpy).not.toHaveBeenCalled();
+      const after = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(after?.updatedAt).toBe(initial?.updatedAt);
+      await second.shutdown();
+    });
+  });
 });

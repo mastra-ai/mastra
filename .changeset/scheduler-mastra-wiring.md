@@ -8,7 +8,7 @@ Wired the `WorkflowScheduler` into the `Mastra` lifecycle. Evented workflows tha
 
 - `Mastra` accepts a new optional `scheduler: WorkflowSchedulerConfig` for tuning the tick loop (`tickIntervalMs`, `batchSize`), forcing the scheduler on (`enabled: true`), and supplying an `onError` callback.
 - The scheduler is auto-instantiated when any registered workflow declares a `schedule` config or when `scheduler.enabled` is `true`. It is **not** instantiated otherwise — projects without scheduled workflows pay zero cost.
-- Declarative schedules from workflow configs are registered at boot under stable ids of the form `wf_${workflowId}` so re-registration is idempotent across restarts.
+- Declarative schedules from workflow configs are registered at boot under stable ids of the form `wf_${workflowId}` so re-registration is idempotent across restarts. If the workflow's schedule config changes (cron, timezone, target payload, or metadata), the existing row is patched in place; cron or timezone changes also recompute `nextFireAt` so fires don't follow the stale schedule. The row's `status` is intentionally preserved across redeploys — a schedule paused out-of-band stays paused.
 - `mastra.shutdown()` now stops the scheduler before tearing down the event engine and observability.
 
 **Engine routing rule:**
