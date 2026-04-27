@@ -130,7 +130,7 @@ const AgentBuilderAgentViewReady = ({
           Edit configuration
         </Button>
       }
-      chat={<AgentChatPanel agentId={id} />}
+      chat={<AgentChatPanel agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description} />}
       configure={
         <AgentConfigurePanel
           agent={agent}
