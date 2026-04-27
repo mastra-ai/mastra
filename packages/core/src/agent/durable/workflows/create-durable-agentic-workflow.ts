@@ -9,6 +9,7 @@ import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
+import { globalRunRegistry } from '../run-registry';
 import { emitFinishEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -221,18 +222,73 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
         return shouldContinue && underMaxSteps;
       })
-      // Map final state to output format and emit finish event
+      // Map final state to output format, run output processors, persist memory, emit finish
       .map(
         async params => {
-          const { inputData } = params;
+          const { inputData, mastra, requestContext } = params;
           const state = inputData as IterationState;
+          const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
-          // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+          const logger = mastra?.getLogger?.();
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           const finalText = lastStep?.text;
+
+          // Run output processors (processOutputResult) if available
+          const registryEntry = globalRunRegistry.get(state.runId);
+          if (registryEntry?.outputProcessors?.length) {
+            try {
+              const { ProcessorRunner } = await import('../../../processors/runner');
+              const runner = new ProcessorRunner({
+                inputProcessors: registryEntry.inputProcessors ?? [],
+                outputProcessors: registryEntry.outputProcessors,
+                errorProcessors: registryEntry.errorProcessors ?? [],
+                logger: logger as any,
+                agentName: initData.agentName ?? initData.agentId,
+                processorStates: registryEntry.processorStates,
+              });
+              const outputMessageList = new MessageList();
+              outputMessageList.deserialize(state.messageListState);
+              await runner.runOutputProcessors(outputMessageList, {} as any, requestContext ?? new RequestContext(), 0);
+            } catch (error) {
+              logger?.debug?.(`[DurableAgent] Error running output processors: ${error}`);
+            }
+          }
+
+          // Memory persistence (executeOnFinish equivalent)
+          const durableState = initData.state;
+          if (
+            registryEntry?.saveQueueManager &&
+            registryEntry.memory &&
+            durableState?.threadId &&
+            durableState?.resourceId &&
+            !durableState.observationalMemory
+          ) {
+            try {
+              const memoryMessageList = registryEntry.messageList ?? new MessageList();
+              if (!registryEntry.messageList) {
+                memoryMessageList.deserialize(state.messageListState);
+              }
+
+              if (!durableState.threadExists) {
+                await registryEntry.memory.createThread?.({
+                  threadId: durableState.threadId,
+                  resourceId: durableState.resourceId,
+                  memoryConfig: durableState.memoryConfig,
+                });
+              }
+
+              await registryEntry.saveQueueManager.flushMessages(
+                memoryMessageList,
+                durableState.threadId,
+                durableState.memoryConfig,
+              );
+            } catch (error) {
+              logger?.debug?.(`[DurableAgent] Error persisting messages: ${error}`);
+            }
+          }
 
           const finalOutput = {
             messageListState: state.messageListState,
@@ -250,7 +306,6 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             state: state.state,
           };
 
-          // Emit finish event via pubsub
           if (pubsub) {
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,

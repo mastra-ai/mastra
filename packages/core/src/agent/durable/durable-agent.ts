@@ -59,6 +59,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   includeRawChunks?: boolean;
   /** Maximum processor retries */
   maxProcessorRetries?: number;
+  /** Structured output configuration */
+  structuredOutput?: AgentExecutionOptions<OUTPUT>['structuredOutput'];
+  /** Version overrides for sub-agent delegation */
+  versions?: AgentExecutionOptions<OUTPUT>['versions'];
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
@@ -438,6 +442,7 @@ export class DurableAgent<
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
       requestContext: options?.requestContext,
+      mastra: this.#mastra,
     });
 
     const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
@@ -766,6 +771,7 @@ export class DurableAgent<
       messages,
       options,
       requestContext: options?.requestContext,
+      mastra: this.#mastra,
     });
 
     this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {

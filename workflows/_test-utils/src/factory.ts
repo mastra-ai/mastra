@@ -62,6 +62,10 @@ import {
   createMemoryMetadataTests,
   // Tool workflow execution (end-to-end approval, suspension, resume, foreach)
   createToolWorkflowExecutionTests,
+  // Parity feature test creators
+  createProcessorPipelineTests,
+  createVersionOverridesTests,
+  createMemoryPersistenceTests,
 } from './domains';
 
 // Workflow domain imports (imported directly to avoid circular deps with domains/index)
@@ -346,6 +350,19 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     // Tool workflow execution (end-to-end approval, suspension, resume, foreach)
     if (!skip.toolWorkflowExecution) {
       createToolWorkflowExecutionTests(context);
+    }
+
+    // Parity feature tests
+    if (!skip.processorPipeline) {
+      createProcessorPipelineTests(context);
+    }
+
+    if (!skip.versionOverrides) {
+      createVersionOverridesTests(context);
+    }
+
+    if (!skip.memoryPersistence) {
+      createMemoryPersistenceTests(context);
     }
   });
 }

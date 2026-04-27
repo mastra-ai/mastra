@@ -12,6 +12,7 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { MastraDBMessage } from '../../../message-list';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
+import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
@@ -222,7 +223,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 8. Start MODEL_STEP span at the beginning of LLM execution
             modelSpanTracker?.startStep();
 
-            // 9. Execute LLM call
+            // 9. Build structured output for AI SDK if configured
+            const structuredOutputConfig = execOptions.structuredOutput;
+            const structuredOutput =
+              structuredOutputConfig?.schema && !structuredOutputConfig?.structuringModelConfig
+                ? {
+                    schema: structuredOutputConfig.schema,
+                    jsonPromptInjection: structuredOutputConfig.jsonPromptInjection,
+                  }
+                : undefined;
+
+            // 10. Execute LLM call
             const modelResult = execute({
               runId,
               model,
@@ -232,16 +243,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               options: {},
               modelSettings: {
                 temperature: execOptions.temperature,
-                maxRetries: 0, // Disable built-in p-retry since we handle retries at the durable level
+                maxRetries: 0,
               },
               includeRawChunks: execOptions.includeRawChunks,
               methodType: 'stream',
+              structuredOutput: structuredOutput as any,
               onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
                 warnings = w || [];
                 request = r || {};
                 rawResponse = rr || {};
 
-                // Emit step-start via pubsub
                 if (pubsub) {
                   void emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
@@ -475,7 +486,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Success - return the output
             return output;
           } catch (error) {
-            // Capture error for potential re-throw
             lastError = error instanceof Error ? error : new Error(String(error));
 
             const modelId = modelEntry.config.modelId;
@@ -486,13 +496,43 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               attempt,
             });
 
-            // If we've exhausted retries for this model, break to try next model
+            // Try processAPIError if error processors are available
+            const registryEntry = globalRunRegistry.get(runId);
+            if (registryEntry?.errorProcessors?.length) {
+              try {
+                const { ProcessorRunner } = await import('../../../../processors/runner');
+                const runner = new ProcessorRunner({
+                  inputProcessors: registryEntry.inputProcessors ?? [],
+                  outputProcessors: registryEntry.outputProcessors ?? [],
+                  errorProcessors: registryEntry.errorProcessors,
+                  logger: logger as any,
+                  agentName: typedInput.agentName ?? typedInput.agentId,
+                  processorStates: registryEntry.processorStates,
+                });
+                const currentMessageList = new (await import('../../../message-list')).MessageList();
+                currentMessageList.deserialize(typedInput.messageListState);
+                const { retry } = await runner.runProcessAPIError({
+                  error: lastError,
+                  messages: currentMessageList.get.all.db(),
+                  messageList: currentMessageList,
+                  stepNumber: (inputData as any).stepIndex ?? 0,
+                  steps: [],
+                  requestContext,
+                });
+                if (retry) {
+                  logger?.debug?.(`processAPIError requested retry for model ${modelId}`, { runId });
+                  continue;
+                }
+              } catch (processorError) {
+                logger?.debug?.(`processAPIError handler failed: ${processorError}`, { runId });
+              }
+            }
+
             if (attempt >= maxRetries) {
               logger?.debug?.(`Exhausted retries for model ${modelId}, trying next model`, { runId });
               break;
             }
 
-            // Exponential backoff before retrying: 1s, 2s, 4s, 8s, max 10s
             const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
             logger?.debug?.(`Retrying model ${modelId} after ${delayMs}ms`, { runId, attempt });
             await new Promise(resolve => setTimeout(resolve, delayMs));

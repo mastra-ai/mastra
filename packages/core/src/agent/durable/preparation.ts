@@ -1,8 +1,13 @@
+import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig } from '../../memory/types';
-import type { RequestContext } from '../../request-context';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
+import type { ProcessorState } from '../../processors/runner';
+import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
+import type { VersionOverrides } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
@@ -11,7 +16,7 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
-import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
+import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
 /**
@@ -39,6 +44,10 @@ interface DurablePreparationAgent {
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
   }): Promise<Record<string, CoreTool>>;
+  listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
+  listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
+  listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
+  getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
 }
 
 /**
@@ -77,6 +86,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   requestContext?: RequestContext;
   /** Logger */
   logger?: IMastraLogger;
+  /** Mastra instance (for version overrides, background tasks, etc.) */
+  mastra?: Mastra;
 }
 
 /**
@@ -104,10 +115,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
+    mastra,
   } = options;
 
-  // Cast agent to typed interface for proper method access
-  // All these methods are public on Agent, but TypeScript generics hide them
   const typedAgent = agent as unknown as DurablePreparationAgent;
 
   // 1. Generate IDs
@@ -115,15 +125,24 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const messageId = crypto.randomUUID();
 
   // 2. Get request context
-  const requestContext = providedRequestContext ?? new (await import('../../request-context')).RequestContext();
+  const requestContext = providedRequestContext ?? new RequestContext();
 
-  // 3. Resolve thread/memory context from the new memory option
-  // The memory option contains thread and resource information
+  // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
+  const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
+  if ((execOptions as any)?.versions) {
+    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
+  }
+  if (mergedVersions) {
+    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+  }
+
+  // 4. Resolve thread/memory context
   const threadId =
     typeof execOptions?.memory?.thread === 'string' ? execOptions.memory.thread : execOptions?.memory?.thread?.id;
   const resourceId = execOptions?.memory?.resource;
 
-  // 4. Create MessageList
+  // 5. Create MessageList
   const messageList = new MessageList({
     threadId,
     resourceId,
@@ -158,7 +177,46 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Add user messages
   messageList.add(messages, 'input');
 
-  // 5. Convert tools to CoreTool format for execution
+  // 6. Run input processors on the message list
+  const processorStates = new Map<string, ProcessorState>();
+  let inputProcessors: InputProcessorOrWorkflow[] = [];
+  let outputProcessors: OutputProcessorOrWorkflow[] = [];
+  let errorProcessors: ErrorProcessorOrWorkflow[] = [];
+
+  try {
+    inputProcessors = await typedAgent.listInputProcessors(requestContext);
+    outputProcessors = await typedAgent.listOutputProcessors(requestContext);
+    errorProcessors = await typedAgent.listErrorProcessors(requestContext);
+  } catch (error) {
+    logger?.debug?.(`[DurableAgent] Error resolving processors: ${error}`);
+  }
+
+  // Run processInput (once, before execution) if we have any processors
+  if (inputProcessors.length > 0) {
+    try {
+      // Set MastraMemory context so processors that need it (OM, message history) can access it
+      const memory = await typedAgent.getMemory({ requestContext });
+      const memoryConfig = execOptions?.memory?.options;
+      if (memory) {
+        requestContext.set('MastraMemory', { thread: threadId, resourceId, memoryConfig });
+      }
+
+      const { ProcessorRunner } = await import('../../processors/runner');
+      const runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors,
+        errorProcessors,
+        logger: logger as any,
+        agentName: agent.name,
+        processorStates,
+      });
+      await runner.runInputProcessors(messageList, {} as any, requestContext, 0);
+    } catch (error) {
+      logger?.debug?.(`[DurableAgent] Error running input processors: ${error}`);
+    }
+  }
+
+  // 7. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
@@ -175,24 +233,21 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger?.debug?.(`[DurableAgent] Error converting tools: ${error}`);
   }
 
-  // 6. Get model (and model list if configured)
+  // 8. Get model (and model list if configured)
   const model = await typedAgent.getModel({ requestContext });
   if (!model) {
     throw new Error('Agent model not available');
   }
 
-  // Check if agent has a model list (for fallback support)
   const modelList = await typedAgent.getModelList(requestContext);
 
-  // 6b. Get scorers configuration
-  // Scorers can come from agent config or be overridden via execOptions
+  // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;
   let scorers: Record<string, { scorer: any; sampling?: any }> | undefined;
 
   if (overrideScorers) {
     scorers = overrideScorers;
   } else {
-    // Try to get scorers from the agent using listScorers method
     try {
       const agentScorers = await typedAgent.listScorers({ requestContext });
       if (agentScorers && Object.keys(agentScorers).length > 0) {
@@ -203,7 +258,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
-  // 7. Get memory and create SaveQueueManager
+  // 9. Get memory and create SaveQueueManager
   const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
 
@@ -214,9 +269,33 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       })
     : undefined;
 
-  // 7b. Workspace was already fetched above for instructions injection
+  // 10. Serialize structured output if provided
+  let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  if (execOptions?.structuredOutput) {
+    const so = execOptions.structuredOutput as any;
+    if (so.schema) {
+      serializedStructuredOutput = {
+        jsonPromptInjection: so.jsonPromptInjection,
+        useAgent: so.useAgent,
+      };
+      // Convert Zod schema to JSON Schema if possible
+      if (typeof so.schema === 'object' && 'type' in so.schema) {
+        serializedStructuredOutput.schema = so.schema;
+      } else if (typeof so.schema === 'object' && 'jsonSchema' in so.schema) {
+        serializedStructuredOutput.schema = so.schema.jsonSchema;
+      }
+    }
+  }
 
-  // 8. Create serialized workflow input
+  // 11. Get background task config
+  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
+  const backgroundTaskManager = mastra?.backgroundTaskManager;
+
+  // 12. Resolve memory persistence flags
+  const savePerStep = execOptions?.savePerStep;
+  const observationalMemory = !!memoryConfig?.observationalMemory;
+
+  // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
     runId,
     agentId: agent.id,
@@ -224,8 +303,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messageList,
     tools,
     model,
-    modelList: modelList ?? undefined, // Include model list for fallback support
-    scorers, // Include scorers for evaluation (if configured)
+    modelList: modelList ?? undefined,
+    scorers,
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
@@ -236,23 +315,26 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: (execOptions as any)?.returnScorerData,
+      hasErrorProcessors: errorProcessors.length > 0,
+      structuredOutput: serializedStructuredOutput,
     },
     state: {
       memoryConfig,
       threadId,
       resourceId,
-      threadExists: false, // Will be updated during execution
+      threadExists: false,
+      savePerStep,
+      observationalMemory,
     },
     messageId,
   });
 
-  // 9. Create registry entry for non-serializable state
+  // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
     tools,
     saveQueueManager,
     memory,
     model,
-    // Store model list instances for fallback support (enables testing with mock models)
     modelList: modelList
       ? modelList.map((entry: AgentModelManagerConfig) => ({
           id: entry.id,
@@ -261,14 +343,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           enabled: entry.enabled ?? true,
         }))
       : undefined,
-    // Store workspace for tool execution context
     workspace,
-    // Store request context for forwarding to tools during execution
     requestContext,
-    cleanup: () => {
-      // Cleanup resources when run completes
-      // Note: SaveQueueManager handles cleanup internally via flushMessages
-    },
+    inputProcessors,
+    outputProcessors,
+    errorProcessors,
+    processorStates,
+    backgroundTaskManager,
+    backgroundTasksConfig,
+    cleanup: () => {},
   };
 
   return {

@@ -141,12 +141,16 @@ export function serializeDurableState(params: {
   threadId?: string;
   resourceId?: string;
   threadExists?: boolean;
+  savePerStep?: boolean;
+  observationalMemory?: boolean;
 }): SerializableDurableState {
   return {
     memoryConfig: params.memoryConfig,
     threadId: params.threadId,
     resourceId: params.resourceId,
     threadExists: params.threadExists,
+    savePerStep: params.savePerStep,
+    observationalMemory: params.observationalMemory,
   };
 }
 
@@ -163,6 +167,8 @@ export function serializeDurableOptions(options: {
   maxProcessorRetries?: number;
   includeRawChunks?: boolean;
   returnScorerData?: boolean;
+  hasErrorProcessors?: boolean;
+  structuredOutput?: SerializableDurableOptions['structuredOutput'];
 }): SerializableDurableOptions {
   // Normalize toolChoice to serializable form
   let serializedToolChoice: SerializableDurableOptions['toolChoice'];
@@ -189,6 +195,8 @@ export function serializeDurableOptions(options: {
     maxProcessorRetries: options.maxProcessorRetries,
     includeRawChunks: options.includeRawChunks,
     returnScorerData: options.returnScorerData,
+    hasErrorProcessors: options.hasErrorProcessors,
+    structuredOutput: options.structuredOutput,
   };
 }
 

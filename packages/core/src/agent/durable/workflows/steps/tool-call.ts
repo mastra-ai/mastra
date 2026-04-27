@@ -136,6 +136,7 @@ export function createDurableToolCallStep() {
       }>();
 
       const { runId, options: agentOptions, state } = initData;
+      const logger = (mastra as any)?.getLogger?.();
 
       // If the tool was already executed by the provider, return the output
       if (providerExecuted && output !== undefined) {
@@ -268,7 +269,19 @@ export function createDurableToolCallStep() {
       const isResumingFromSuspension =
         resumeData && typeof resumeData === 'object' && resumeData !== null && !('approved' in resumeData);
 
-      // 3. Execute the tool
+      // 3. Check for background task execution
+      const bgManager = registryEntry?.backgroundTaskManager;
+      const bgConfig = registryEntry?.backgroundTasksConfig;
+      const toolBgConfig = (tool as any).backgroundConfig;
+      const argsBackground = (args as any)?._background;
+
+      // Strip _background from args before execution (same as non-durable path)
+      const cleanedArgs = { ...args };
+      if ('_background' in cleanedArgs) {
+        delete (cleanedArgs as any)._background;
+      }
+
+      // Execute the tool
       if (!tool.execute) {
         return {
           ...typedInput,
@@ -276,8 +289,66 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Resolve whether to run in background
+      const bgToolsConfig = bgConfig?.tools;
+      const isToolEnabled =
+        bgToolsConfig === 'all' ||
+        (typeof bgToolsConfig === 'object' && bgToolsConfig !== null && (bgToolsConfig as any)[toolName]?.enabled);
+      const shouldRunBackground =
+        bgManager && bgConfig && !bgConfig.disabled && (argsBackground || toolBgConfig?.enabled || isToolEnabled);
+
+      if (shouldRunBackground) {
+        try {
+          const { createBackgroundTask } = await import('../../../../background-tasks/create');
+          const bgTask = createBackgroundTask(bgManager, {
+            toolName,
+            toolCallId,
+            args: cleanedArgs,
+            agentId: initData.agentId,
+            runId,
+            context: {
+              executor: {
+                execute: async (taskArgs: any, taskContext: any) => {
+                  return tool.execute!(taskArgs, {
+                    toolCallId,
+                    messages: [],
+                    workspace,
+                    requestContext,
+                    abortSignal: taskContext?.abortSignal,
+                  });
+                },
+              },
+            },
+          });
+          await bgTask.dispatch();
+          const taskResult = await bgManager.waitForNextTask([(bgTask as any).taskId ?? (bgTask as any).task?.id]);
+          if (taskResult?.status === 'completed') {
+            if (pubsub) {
+              await emitChunkEvent(pubsub, runId, {
+                type: 'tool-result',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args: cleanedArgs, result: taskResult.result },
+              });
+            }
+            return { ...typedInput, args: cleanedArgs, result: taskResult.result };
+          }
+          return {
+            ...typedInput,
+            args: cleanedArgs,
+            error: {
+              name: 'BackgroundTaskError',
+              message: String((taskResult as any)?.error ?? 'Background task failed'),
+            },
+          };
+        } catch (bgError) {
+          // Fall through to synchronous execution on background task failure
+          logger?.debug?.(`[DurableAgent] Background task failed for ${toolName}, falling back to sync: ${bgError}`);
+        }
+      }
+
       try {
-        const result = await tool.execute(args, {
+        const result = await tool.execute(cleanedArgs, {
           toolCallId,
           messages: [],
           workspace,

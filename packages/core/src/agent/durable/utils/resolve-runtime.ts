@@ -96,20 +96,24 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     try {
       const agent = mastra.getAgentById(agentId);
 
-      // Get tools from agent - this reconstructs them fresh
+      // Build a request context with version overrides if available
+      const resolveRequestContext = new RequestContext();
+      // Future: restore serialized version overrides from workflow input here
+
       tools = await agent.getToolsForExecution({
         runId,
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
+        requestContext: resolveRequestContext,
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
       });
 
-      // Get model from agent
-      model = (await (agent as any).getModel?.({})) ?? resolveModel(input.modelConfig, mastra);
+      model =
+        (await (agent as any).getModel?.({ requestContext: resolveRequestContext })) ??
+        resolveModel(input.modelConfig, mastra);
 
-      // Get model list from agent for fallback support
-      const rawModelList = await (agent as any).getModelList?.({});
+      const rawModelList = await (agent as any).getModelList?.(resolveRequestContext);
       if (rawModelList && Array.isArray(rawModelList)) {
         modelList = rawModelList.map((entry: any) => ({
           id: entry.id,
@@ -119,14 +123,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         }));
       }
 
-      // Get memory from agent
-      memory = await (agent as any).getMemory?.({});
-
-      // Get workspace from agent for tool execution context
-      workspace = await (agent as any).getWorkspace?.({});
+      memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
+      workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
     } catch (error) {
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
-      // Fallback to config-based model resolution
       model = resolveModel(input.modelConfig, mastra);
     }
   } else {

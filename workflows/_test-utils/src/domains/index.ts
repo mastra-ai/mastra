@@ -57,6 +57,11 @@ export { createSaveAndErrorsTests } from './save-and-errors';
 export { createMemoryMetadataTests } from './memory-metadata';
 export { createToolWorkflowExecutionTests } from './tool-workflow-execution';
 
+// Parity feature tests (processors, version overrides, memory persistence)
+export { createProcessorPipelineTests } from './processor-pipeline';
+export { createVersionOverridesTests } from './version-overrides';
+export { createMemoryPersistenceTests } from './memory-persistence';
+
 // === Workflow domain test creators ===
 
 export { createBasicExecutionTests, createBasicExecutionWorkflows } from './basic-execution';

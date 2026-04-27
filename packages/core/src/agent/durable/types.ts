@@ -8,9 +8,13 @@ import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
+import type { BackgroundTaskManager } from '../../background-tasks/manager';
+import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
+import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
@@ -106,6 +110,24 @@ export interface SerializableDurableState {
   resourceId?: string;
   /** Whether the thread already exists in storage */
   threadExists?: boolean;
+  /** Whether to save messages after each step (incremental persistence) */
+  savePerStep?: boolean;
+  /** Whether observational memory is enabled (suppresses savePerStep) */
+  observationalMemory?: boolean;
+}
+
+/**
+ * Serializable structured output configuration
+ */
+export interface SerializableStructuredOutput {
+  /** JSON Schema representation of the output schema */
+  schema?: JSONSchema7;
+  /** Whether to use JSON prompt injection instead of native response format */
+  jsonPromptInjection?: boolean;
+  /** Whether to use the parent agent's model for structuring */
+  useAgent?: boolean;
+  /** Model config for a dedicated structuring model (if different from the main model) */
+  structuringModelConfig?: SerializableModelConfig;
 }
 
 /**
@@ -130,6 +152,10 @@ export interface SerializableDurableOptions {
   includeRawChunks?: boolean;
   /** Whether to return scorer data in the result */
   returnScorerData?: boolean;
+  /** Whether error processors are configured (flag only, instances are non-serializable) */
+  hasErrorProcessors?: boolean;
+  /** Structured output configuration */
+  structuredOutput?: SerializableStructuredOutput;
 }
 
 /**
@@ -382,6 +408,18 @@ export interface RunRegistryEntry {
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Resolved input processors (non-serializable) */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  /** Resolved output processors (non-serializable) */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Resolved error processors (non-serializable) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
+  /** Processor state map (carried across steps) */
+  processorStates?: Map<string, ProcessorState>;
+  /** Background task manager instance (non-serializable) */
+  backgroundTaskManager?: BackgroundTaskManager;
+  /** Agent background tasks configuration */
+  backgroundTasksConfig?: AgentBackgroundConfig;
 }
 
 /**

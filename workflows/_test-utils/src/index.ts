@@ -93,6 +93,10 @@ export {
   createTitleGenerationTests,
   createSaveAndErrorsTests,
   createMemoryMetadataTests,
+  // Parity feature test creators
+  createProcessorPipelineTests,
+  createVersionOverridesTests,
+  createMemoryPersistenceTests,
 } from './domains';
 
 // === Workflow exports ===

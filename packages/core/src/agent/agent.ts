@@ -849,6 +849,16 @@ export class Agent<
   }
 
   /**
+   * Returns the error processors for this agent, resolving function-based processors if necessary.
+   */
+  public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
+    if (!this.#errorProcessors) return [];
+    return typeof this.#errorProcessors === 'function'
+      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+      : this.#errorProcessors;
+  }
+
+  /**
    * Resolves a processor by its ID from both input and output processors.
    * This method resolves dynamic processor functions and includes memory-derived processors.
    * Returns the processor if found, null otherwise.
