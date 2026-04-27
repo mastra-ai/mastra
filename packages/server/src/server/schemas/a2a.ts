@@ -25,7 +25,7 @@ const pushNotificationConfigSchema = z.object({
 });
 
 const messageSendConfigurationSchema = z.object({
-  acceptedOutputModes: z.array(z.string()).describe('Accepted output modalities by the client'),
+  acceptedOutputModes: z.array(z.string()).optional().describe('Accepted output modalities by the client'),
   blocking: z.boolean().optional().describe('If the server should treat the client as a blocking request'),
   historyLength: z.number().optional().describe('Number of recent messages to be retrieved'),
   pushNotificationConfig: pushNotificationConfigSchema.optional(),

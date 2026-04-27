@@ -24,6 +24,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
 import { getAgentFromSystem } from './agents';
+import { getPublicOrigin } from './auth';
 
 const messageSendParamsSchema = z.object({
   message: z.object({
@@ -120,6 +121,24 @@ export async function getAgentCardByIdHandler({
   return agentCard;
 }
 
+function getA2AExecutionUrl({
+  agentId,
+  request,
+  routePrefix,
+}: {
+  agentId: string;
+  request?: Request;
+  routePrefix?: string;
+}) {
+  const executionPath = `${routePrefix ?? ''}/a2a/${agentId}`;
+
+  if (!request) {
+    return executionPath;
+  }
+
+  return `${getPublicOrigin(request)}${executionPath}`;
+}
+
 function validateMessageSendParams(params: MessageSendParams) {
   try {
     messageSendParamsSchema.parse(params);
@@ -132,6 +151,20 @@ function validateMessageSendParams(params: MessageSendParams) {
   }
 }
 
+function createTextArtifactUpdate({ taskId, contextId, text }: { taskId: string; contextId: string; text: string }) {
+  return {
+    kind: 'artifact-update' as const,
+    taskId,
+    contextId,
+    lastChunk: true,
+    artifact: {
+      artifactId: `${taskId}:response`,
+      name: 'response.txt',
+      parts: [{ kind: 'text' as const, text }],
+    },
+  };
+}
+
 export async function handleMessageSend({
   requestId,
   params,
@@ -141,7 +174,7 @@ export async function handleMessageSend({
   logger,
   requestContext,
 }: {
-  requestId: string;
+  requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
@@ -183,19 +216,20 @@ export async function handleMessageSend({
       ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
+    if (result.text) {
+      currentData = applyUpdateToTask(
+        currentData,
+        createTextArtifactUpdate({
+          taskId: currentData.id,
+          contextId: currentData.contextId,
+          text: result.text,
+        }),
+      );
+    }
+
     currentData = applyUpdateToTask(currentData, {
       state: 'completed',
-      message: {
-        messageId: crypto.randomUUID(),
-        role: 'agent',
-        parts: [
-          {
-            kind: 'text',
-            text: result.text,
-          },
-        ],
-        kind: 'message',
-      },
+      message: undefined,
     });
 
     // Store execution details in task metadata
@@ -249,7 +283,7 @@ export async function handleTaskGet({
   agentId,
   taskId,
 }: {
-  requestId: string;
+  requestId: number | string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
@@ -272,7 +306,7 @@ export async function* handleMessageStream({
   logger,
   requestContext,
 }: {
-  requestId: string;
+  requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
@@ -317,19 +351,21 @@ export async function* handleMessageStream({
       ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
+    const artifactUpdate =
+      result.text &&
+      createTextArtifactUpdate({
+        taskId: currentData.id,
+        contextId: currentData.contextId,
+        text: result.text,
+      });
+
+    if (artifactUpdate) {
+      currentData = applyUpdateToTask(currentData, artifactUpdate);
+    }
+
     currentData = applyUpdateToTask(currentData, {
       state: 'completed',
-      message: {
-        messageId: crypto.randomUUID(),
-        role: 'agent',
-        parts: [
-          {
-            kind: 'text',
-            text: result.text,
-          },
-        ],
-        kind: 'message',
-      },
+      message: undefined,
     });
 
     currentData.metadata = {
@@ -343,6 +379,10 @@ export async function* handleMessageStream({
     };
 
     await taskStore.save({ agentId, data: currentData });
+
+    if (artifactUpdate) {
+      yield createSuccessResponse(requestId, artifactUpdate);
+    }
   } catch (handlerError) {
     currentData = applyUpdateToTask(currentData, {
       state: 'failed',
@@ -382,7 +422,7 @@ export async function* handleTaskResubscribe({
   agentId,
   taskId,
 }: {
-  requestId: string;
+  requestId: number | string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
@@ -444,6 +484,47 @@ function getTaskIdFromParams(
   return undefined;
 }
 
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return !!value && typeof value === 'object' && Symbol.asyncIterator in value;
+}
+
+function createA2AJsonResponse(payload: unknown): Response {
+  return Response.json(payload);
+}
+
+function createA2ASSEResponse(payload: AsyncIterable<unknown> | unknown): Response {
+  const encoder = new TextEncoder();
+  const iterable = isAsyncIterable(payload)
+    ? payload
+    : (async function* () {
+        yield payload;
+      })();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const chunk of iterable) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+      } catch (error) {
+        controller.error(error);
+        return;
+      }
+
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
+
 export async function handleTaskCancel({
   requestId,
   taskStore,
@@ -451,7 +532,7 @@ export async function handleTaskCancel({
   taskId,
   logger,
 }: {
-  requestId: string;
+  requestId: number | string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
@@ -511,7 +592,7 @@ export async function getAgentExecutionHandler({
   taskStore,
   logger,
 }: Context & {
-  requestId: string;
+  requestId: number | string;
   requestContext: RequestContext;
   agentId: string;
   method:
@@ -620,44 +701,26 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   description: 'Returns the agent card information for A2A protocol discovery',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext }) => {
-    const executionUrl = `/a2a/${agentId}`;
-    const provider = {
-      organization: 'Mastra',
-      url: 'https://mastra.ai',
-    };
-    const version = '1.0';
+  handler: async ctx => {
+    const executionUrl = getA2AExecutionUrl({
+      agentId: ctx.agentId as string,
+      request: (ctx as typeof ctx & { request?: Request }).request,
+      routePrefix: ctx.routePrefix,
+    });
 
-    const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
-
-    const [instructions, tools]: [
-      Awaited<ReturnType<typeof agent.getInstructions>>,
-      Awaited<ReturnType<typeof agent.listTools>>,
-    ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
-
-    const agentCard: AgentCard = {
-      name: agent.id || (agentId as string),
-      description: convertInstructionsToString(instructions),
-      url: executionUrl,
-      provider,
-      version,
-      ...createAgentCardDefaults(),
-      skills: Object.entries(tools).map(([toolId, tool]) => ({
-        id: toolId,
-        name: toolId,
-        description: tool.description || `Tool: ${toolId}`,
-        tags: ['tool'],
-      })),
-    };
-
-    return agentCard;
+    return getAgentCardByIdHandler({
+      mastra: ctx.mastra,
+      requestContext: ctx.requestContext,
+      agentId: ctx.agentId,
+      executionUrl,
+    });
   },
 });
 
 export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
   path: '/a2a/:agentId',
-  responseType: 'json',
+  responseType: 'datastream-response',
   pathParamSchema: a2aAgentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: agentExecutionResponseSchema,
@@ -668,9 +731,8 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
     const { id: requestId, method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
-
-    return await getAgentExecutionHandler({
-      requestId: String(requestId),
+    const result = await getAgentExecutionHandler({
+      requestId,
       mastra,
       agentId: agentId as string,
       requestContext,
@@ -678,5 +740,11 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       params,
       taskStore: taskStore!,
     });
+
+    if (method === 'message/stream' || method === 'tasks/resubscribe') {
+      return createA2ASSEResponse(result);
+    }
+
+    return createA2AJsonResponse(result);
   },
 });

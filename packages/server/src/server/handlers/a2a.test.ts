@@ -9,6 +9,8 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryTaskStore } from '../a2a/store';
 import {
+  AGENT_EXECUTION_ROUTE,
+  GET_AGENT_CARD_ROUTE,
   getAgentCardByIdHandler,
   getAgentExecutionHandler,
   handleTaskGet,
@@ -146,6 +148,23 @@ describe('A2A Handler', () => {
       });
       expect(agentCard.version).toBe(customVersion);
     });
+
+    it('should build an absolute execution url when request context is available', async () => {
+      const response = await GET_AGENT_CARD_ROUTE.handler({
+        mastra: mockMastra,
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+        abortSignal: AbortSignal.abort(),
+        routePrefix: '/api',
+        request: new Request('http://localhost:4111/api/.well-known/test-agent/agent-card.json', {
+          headers: {
+            host: 'localhost:4111',
+          },
+        }),
+      } as any);
+
+      expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
+    });
   });
 
   describe('handleMessageSend', () => {
@@ -202,7 +221,18 @@ describe('A2A Handler', () => {
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
-          artifacts: [],
+          artifacts: [
+            {
+              artifactId: expect.stringContaining(':response'),
+              name: 'response.txt',
+              parts: [
+                {
+                  text: 'Hello, user!',
+                  kind: 'text',
+                },
+              ],
+            },
+          ],
           id: expect.any(String),
           contextId: expect.any(String),
           metadata: {
@@ -214,17 +244,7 @@ describe('A2A Handler', () => {
             },
           },
           status: {
-            message: {
-              messageId: expect.any(String),
-              parts: [
-                {
-                  text: 'Hello, user!',
-                  kind: 'text',
-                },
-              ],
-              role: 'agent',
-              kind: 'message',
-            },
+            message: undefined,
             state: 'completed',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
@@ -679,7 +699,18 @@ describe('A2A Handler', () => {
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
-          artifacts: [],
+          artifacts: [
+            {
+              artifactId: expect.stringContaining(':response'),
+              name: 'response.txt',
+              parts: [
+                {
+                  text: 'Follow-up response!',
+                  kind: 'text',
+                },
+              ],
+            },
+          ],
           id: expect.any(String),
           contextId: expect.any(String),
           history: [
@@ -704,17 +735,7 @@ describe('A2A Handler', () => {
             },
           },
           status: {
-            message: {
-              messageId: expect.any(String),
-              parts: [
-                {
-                  text: 'Follow-up response!',
-                  kind: 'text',
-                },
-              ],
-              role: 'agent',
-              kind: 'message',
-            },
+            message: undefined,
             state: 'completed',
             timestamp: '2025-05-08T12:00:00.000Z',
           },
@@ -938,30 +959,42 @@ describe('A2A Handler', () => {
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
+          artifact: {
+            artifactId: expect.stringContaining(':response'),
+            name: 'response.txt',
+            parts: [
+              {
+                text: 'Hello, user!',
+                kind: 'text',
+              },
+            ],
+          },
+          contextId: first.value?.result.contextId,
+          kind: 'artifact-update',
+          lastChunk: true,
+          taskId: first.value?.result.id,
+        },
+      });
+      expect(second.done).toBe(false);
+
+      const third = await gen.next();
+      expect(third.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
           contextId: first.value?.result.contextId,
           final: true,
           kind: 'status-update',
           status: {
-            message: {
-              messageId: expect.any(String),
-              parts: [
-                {
-                  text: 'Hello, user!',
-                  kind: 'text',
-                },
-              ],
-              role: 'agent',
-              kind: 'message',
-            },
+            message: undefined,
             state: 'completed',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
           taskId: first.value?.result.id,
         },
       });
-      expect(second.done).toBe(false);
+      expect(third.done).toBe(false);
 
-      // The generator should be done after two yields
       const done = await gen.next();
       expect(done.done).toBe(true);
     });
@@ -1485,6 +1518,85 @@ describe('A2A Handler', () => {
 
       const done = await result.next();
       expect(done.done).toBe(true);
+    });
+  });
+
+  describe('AGENT_EXECUTION_ROUTE', () => {
+    let mockMastra: Mastra;
+    let mockTaskStore: InMemoryTaskStore;
+
+    beforeEach(() => {
+      const mockAgent = new MockAgent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test instructions',
+        model: openai('gpt-4o'),
+      });
+
+      mockMastra = createMockMastra({
+        'test-agent': mockAgent,
+      });
+      mockTaskStore = new InMemoryTaskStore();
+    });
+
+    it('returns JSON for non-streaming A2A methods', async () => {
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        id: 1,
+        method: 'tasks/get',
+        params: { id: 'missing-task' },
+      });
+
+      expect(response.headers.get('Content-Type')).toContain('application/json');
+
+      const payload = await response.json();
+      expect(payload).toMatchObject({
+        id: 1,
+        jsonrpc: '2.0',
+        error: {
+          code: -32001,
+          message: 'Task not found: missing-task',
+        },
+      });
+    });
+
+    it('returns SSE for streaming A2A methods', async () => {
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Hello from SSE' });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        id: 42,
+        method: 'message/stream',
+        params: {
+          message: {
+            messageId: 'user-message-id',
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Hello' }],
+          },
+          configuration: {
+            blocking: true,
+          },
+        },
+      });
+
+      expect(response.headers.get('Content-Type')).toContain('text/event-stream');
+
+      const body = await response.text();
+      expect(body).toContain('data: {"jsonrpc":"2.0","id":42,"result":{"id":');
+      expect(body).toContain('"kind":"task"');
+      expect(body).toContain('"kind":"status-update"');
+      expect(body).toContain('Hello from SSE');
     });
   });
 });
