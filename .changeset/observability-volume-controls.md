@@ -3,6 +3,6 @@
 "@mastra/observability": patch
 ---
 
-Reduced default cloud observability volume by filtering derived auto-metrics from CloudExporter uploads by default.
+Reduced default cloud observability volume by filtering model chunk spans from CloudExporter uploads by default.
 
-Added controls to disable auto-extracted metrics and to run processors without `PROCESSOR_RUN` spans when processor-level tracing is not needed.
+Added controls to disable auto-extracted metrics, run processors without `PROCESSOR_RUN` spans, and mark processor spans as errors-only so cloud keeps tripwire/error spans while dropping successful processor noise.

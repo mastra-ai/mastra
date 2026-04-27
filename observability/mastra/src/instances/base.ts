@@ -80,7 +80,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       metrics: {
         autoExtract: config.metrics?.autoExtract ?? true,
       },
-      logging: config.logging,
+      logging: {
+        enabled: config.logging?.enabled,
+        level: config.logging?.level ?? 'warn',
+      },
     };
 
     // Initialize cardinality filter for metrics (uses user config or defaults)

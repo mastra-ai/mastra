@@ -981,32 +981,13 @@ describe('CloudExporter', () => {
       await multiSignalExporter.shutdown();
     });
 
-    it('should drop auto-extracted metrics by default', async () => {
+    it('should export auto-extracted metrics by default', async () => {
       const cloudExporter = new CloudExporter({
         accessToken: testJWT,
         endpoint: 'http://localhost:3000',
       });
 
-      await cloudExporter.onMetricEvent(getMockMetricEvent({ source: 'auto' }));
-      await cloudExporter.flush();
-
-      const buffer = (cloudExporter as any).buffer;
-      expect(buffer.totalSize).toBe(0);
-      expect(mockFetchWithRetry).not.toHaveBeenCalled();
-
-      await cloudExporter.shutdown();
-    });
-
-    it('should allow auto-extracted metrics when the metric filter is overridden', async () => {
-      const cloudExporter = new CloudExporter({
-        accessToken: testJWT,
-        endpoint: 'http://localhost:3000',
-        signalFilters: {
-          metrics: () => true,
-        },
-      });
-
-      await cloudExporter.onMetricEvent(getMockMetricEvent({ source: 'auto' }));
+      await cloudExporter.onMetricEvent(getMockMetricEvent());
       await cloudExporter.flush();
 
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
@@ -1017,6 +998,99 @@ describe('CloudExporter', () => {
         }),
         3,
       );
+
+      await cloudExporter.shutdown();
+    });
+
+    it('should allow metrics to be filtered with an override', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+        signalFilters: {
+          metrics: metric => metric.name !== 'mastra.tokens',
+        },
+      });
+
+      await cloudExporter.onMetricEvent(getMockMetricEvent());
+      await cloudExporter.flush();
+
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+
+      await cloudExporter.shutdown();
+    });
+
+    it('should drop model chunk spans by default', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+      });
+
+      await cloudExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: getMockSpan({
+          id: 'chunk-span',
+          traceId: 'trace-chunk',
+          name: 'text chunk',
+          type: SpanType.MODEL_CHUNK,
+        }),
+      });
+      await cloudExporter.flush();
+
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+
+      await cloudExporter.shutdown();
+    });
+
+    it('should keep failed errors-only processor spans by default', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+      });
+
+      await cloudExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: getMockSpan({
+          id: 'processor-span',
+          traceId: 'trace-processor',
+          name: 'processor',
+          type: SpanType.PROCESSOR_RUN,
+          attributes: { processorObservability: 'errors-only' } as any,
+          errorInfo: { message: 'tripwire' },
+        }),
+      });
+      await cloudExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'http://localhost:3000/ai/spans/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await cloudExporter.shutdown();
+    });
+
+    it('should drop successful errors-only processor spans by default', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+      });
+
+      await cloudExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: getMockSpan({
+          id: 'processor-span',
+          traceId: 'trace-processor',
+          name: 'processor',
+          type: SpanType.PROCESSOR_RUN,
+          attributes: { processorObservability: 'errors-only' } as any,
+        }),
+      });
+      await cloudExporter.flush();
+
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
 
       await cloudExporter.shutdown();
     });

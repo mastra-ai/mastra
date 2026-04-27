@@ -291,6 +291,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
 export interface ProcessorRunAttributes extends AIBaseAttributes {
   /** Processor executor type (workflow or legacy) */
   processorExecutor?: 'workflow' | 'legacy';
+  /** Processor span export policy hint */
+  processorObservability?: 'normal' | 'errors-only';
   /** Processor index in the agent */
   processorIndex?: number;
   /** MessageList mutations performed by this processor */

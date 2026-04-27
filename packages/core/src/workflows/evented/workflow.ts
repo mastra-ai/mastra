@@ -731,6 +731,20 @@ function createStepFromProcessor<TProcessorId extends string>(
     }
   };
 
+  const shouldCreateProcessorSpan = processor.observability !== false;
+  const getProcessorSpanAttributes = () => ({
+    processorExecutor: 'workflow' as const,
+    processorIndex: processor.processorIndex,
+    ...(processor.observability === 'errors-only' ? { processorObservability: 'errors-only' as const } : {}),
+  });
+  const getTripWireSpanAttributes = (error: TripWire<unknown>) => ({
+    tripwireAbort: {
+      reason: error.message,
+      retry: error.options?.retry,
+      metadata: error.options?.metadata,
+    },
+  });
+
   // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
   // but TypeScript type inference has issues with the complex discriminated union types.
   // We use type assertions here since toStandardSchema returns the schema directly
@@ -962,7 +976,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
 
       const processorSpan =
-        phase !== 'outputStream' && processor.observability !== false
+        phase !== 'outputStream' && shouldCreateProcessorSpan
           ? parentSpan?.createChildSpan({
               type: SpanType.PROCESSOR_RUN,
               name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
@@ -970,11 +984,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
-              attributes: {
-                processorExecutor: 'workflow',
-                // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
-                processorIndex: processor.processorIndex,
-              },
+              attributes: getProcessorSpanAttributes(),
             })
           : undefined;
 
@@ -1060,7 +1070,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
-            processorSpan?.end({ output: { tripwire: error.message } });
+            processorSpan?.error({ error, endSpan: true, attributes: getTripWireSpanAttributes(error) });
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
           }
@@ -1217,7 +1227,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
 
-              if (!processorSpan && parentSpan && processor.observability !== false) {
+              if (!processorSpan && parentSpan && shouldCreateProcessorSpan) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
                   type: SpanType.PROCESSOR_RUN,
@@ -1225,10 +1235,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
-                  attributes: {
-                    processorExecutor: 'workflow',
-                    processorIndex: processor.processorIndex,
-                  },
+                  attributes: getProcessorSpanAttributes(),
                 });
                 mutableState[spanKey] = processorSpan;
               }
@@ -1259,7 +1266,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               } catch (error) {
                 // End span with error and clean up state
                 if (error instanceof TripWire) {
-                  processorSpan?.end({ output: { tripwire: error.message } });
+                  processorSpan?.error({ error, endSpan: true, attributes: getTripWireSpanAttributes(error) });
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
                 }

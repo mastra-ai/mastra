@@ -285,7 +285,6 @@ describe('Span Filtering', () => {
       agent.end();
 
       expect(testExporter.metricEvents.length > 0).toBe(true);
-      expect(testExporter.metricEvents[0]?.metric.source).toBe('auto');
     });
 
     it('should skip auto-extracted metrics when disabled', () => {

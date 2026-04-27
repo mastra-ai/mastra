@@ -36,8 +36,26 @@ import type {
   ToolCallInfo,
 } from './index';
 
-function shouldEmitProcessorObservability(processor: object): boolean {
-  return !('observability' in processor) || processor.observability !== false;
+function shouldCreateProcessorSpan(processor: Processor): boolean {
+  return processor.observability !== false;
+}
+
+function getProcessorSpanAttributes(processor: Processor, executor: 'workflow' | 'legacy', processorIndex?: number) {
+  return {
+    processorExecutor: executor,
+    processorIndex,
+    ...(processor.observability === 'errors-only' ? { processorObservability: 'errors-only' as const } : {}),
+  };
+}
+
+function getTripWireSpanAttributes(error: TripWire<unknown>) {
+  return {
+    tripwireAbort: {
+      reason: error.message,
+      retry: error.options?.retry,
+      metadata: error.options?.metadata,
+    },
+  };
 }
 
 /**
@@ -60,6 +78,7 @@ export class ProcessorState<OUTPUT = undefined> {
     options?: {
       processorName?: string;
       processorIndex?: number;
+      processor?: Processor;
       createSpan?: boolean;
       emitObservability?: boolean;
     } & Partial<ObservabilityContext>,
@@ -78,10 +97,11 @@ export class ProcessorState<OUTPUT = undefined> {
       name: `output stream processor: ${options.processorName}`,
       entityType: EntityType.OUTPUT_PROCESSOR,
       entityName: options.processorName,
-      attributes: {
-        processorExecutor: 'legacy',
-        processorIndex: options.processorIndex ?? 0,
-      },
+      attributes: getProcessorSpanAttributes(
+        options.processor ?? ({ id: options.processorName } as Processor),
+        'legacy',
+        options.processorIndex ?? 0,
+      ),
       input: {
         totalChunks: 0,
       },
@@ -434,17 +454,14 @@ export class ProcessorRunner {
       const summarizedResult = result ? summarizeProcessorResultForSpan(result) : undefined;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = shouldEmitProcessorObservability(processor)
+      const processorSpan = shouldCreateProcessorSpan(processor)
         ? parentSpan?.createChildSpan({
             type: SpanType.PROCESSOR_RUN,
             name: `output processor: ${processor.id}`,
             entityType: EntityType.OUTPUT_PROCESSOR,
             entityId: processor.id,
             entityName: processor.name,
-            attributes: {
-              processorExecutor: 'legacy',
-              processorIndex: index,
-            },
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
             input: {
               messages: processableMessages,
               ...(summarizedResult ? { result: summarizedResult } : {}),
@@ -523,13 +540,7 @@ export class ProcessorRunner {
           processorSpan?.error({
             error,
             endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
+            attributes: getTripWireSpanAttributes(error),
           });
           throw error;
         }
@@ -630,8 +641,9 @@ export class ProcessorRunner {
                 processorName: processor.name ?? processor.id,
                 ...observabilityContext,
                 processorIndex: index,
+                processor,
                 createSpan: true,
-                emitObservability: shouldEmitProcessorObservability(processor),
+                emitObservability: shouldCreateProcessorSpan(processor),
               });
               processorStates.set(processor.id, state);
             }
@@ -664,13 +676,7 @@ export class ProcessorRunner {
             state?.span?.error({
               error,
               endSpan: true,
-              attributes: {
-                tripwireAbort: {
-                  reason: error.message,
-                  retry: error.options?.retry,
-                  metadata: error.options?.metadata,
-                },
-              },
+              attributes: getTripWireSpanAttributes(error),
             });
             return {
               part: null,
@@ -831,17 +837,14 @@ export class ProcessorRunner {
       const inputSystemMessagesBefore = currentSystemMessages;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = shouldEmitProcessorObservability(processor)
+      const processorSpan = shouldCreateProcessorSpan(processor)
         ? parentSpan?.createChildSpan({
             type: SpanType.PROCESSOR_RUN,
             name: `input processor: ${processor.id}`,
             entityType: EntityType.INPUT_PROCESSOR,
             entityId: processor.id,
             entityName: processor.name,
-            attributes: {
-              processorExecutor: 'legacy',
-              processorIndex: index,
-            },
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
             input: {
               messages: processableMessages,
               systemMessages: currentSystemMessages,
@@ -988,13 +991,7 @@ export class ProcessorRunner {
           processorSpan?.error({
             error,
             endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
+            attributes: getTripWireSpanAttributes(error),
           });
           throw error;
         }
@@ -1116,17 +1113,14 @@ export class ProcessorRunner {
 
       // Use the current span (the step span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
-      const processorSpan = shouldEmitProcessorObservability(processor)
+      const processorSpan = shouldCreateProcessorSpan(processor)
         ? currentSpan?.createChildSpan({
             type: SpanType.PROCESSOR_RUN,
             name: `input step processor: ${processor.id}`,
             entityType: EntityType.INPUT_STEP_PROCESSOR,
             entityId: processor.id,
             entityName: processor.name,
-            attributes: {
-              processorExecutor: 'legacy',
-              processorIndex: index,
-            },
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
             input: buildProcessInputStepSpanInput({
               messages: inputData.messages,
               systemMessages: inputData.systemMessages,
@@ -1215,13 +1209,7 @@ export class ProcessorRunner {
           processorSpan?.error({
             error,
             endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
+            attributes: getTripWireSpanAttributes(error),
           });
           throw error;
         }
@@ -1349,17 +1337,14 @@ export class ProcessorRunner {
       };
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = shouldEmitProcessorObservability(processor)
+      const processorSpan = shouldCreateProcessorSpan(processor)
         ? parentSpan?.createChildSpan({
             type: SpanType.PROCESSOR_RUN,
             name: `output step processor: ${processor.id}`,
             entityType: EntityType.OUTPUT_STEP_PROCESSOR,
             entityId: processor.id,
             entityName: processor.name,
-            attributes: {
-              processorExecutor: 'legacy',
-              processorIndex: index,
-            },
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
             input: {
               messages: processableMessages,
               systemMessages: currentSystemMessages,
@@ -1453,13 +1438,7 @@ export class ProcessorRunner {
           processorSpan?.error({
             error,
             endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
+            attributes: getTripWireSpanAttributes(error),
           });
           throw error;
         }
@@ -1525,17 +1504,14 @@ export class ProcessorRunner {
       let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = shouldEmitProcessorObservability(processor)
+      const processorSpan = shouldCreateProcessorSpan(processor)
         ? parentSpan?.createChildSpan({
             type: SpanType.PROCESSOR_RUN,
             name: `request error processor: ${processor.id}`,
             entityType: EntityType.OUTPUT_STEP_PROCESSOR,
             entityId: processor.id,
             entityName: processor.name,
-            attributes: {
-              processorExecutor: 'legacy',
-              processorIndex: index,
-            },
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
             input: {
               messages: processableMessages,
               error: error instanceof Error ? error.message : String(error),
@@ -1614,13 +1590,7 @@ export class ProcessorRunner {
           processorSpan?.error({
             error: processorError,
             endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: processorError.message,
-                retry: processorError.options?.retry,
-                metadata: processorError.options?.metadata,
-              },
-            },
+            attributes: getTripWireSpanAttributes(processorError),
           });
           throw processorError;
         }

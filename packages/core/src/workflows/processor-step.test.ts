@@ -290,6 +290,77 @@ describe('createStep with Processor', () => {
       expect(end).toHaveBeenCalled();
     });
 
+    it('should not create processor spans for phases the processor does not implement', async () => {
+      const createChildSpan = vi.fn();
+      const processInput = vi.fn(async ({ messages }) => messages);
+      const processor: Processor = {
+        id: 'input-only-processor',
+        processInput,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      const result = await step.execute({
+        inputData: {
+          phase: 'outputStep',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          stepNumber: 1,
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          phase: 'outputStep',
+          messages: [{ id: '1', content: 'test' }],
+        }),
+      );
+      expect(processInput).not.toHaveBeenCalled();
+      expect(createChildSpan).not.toHaveBeenCalled();
+    });
+
+    it('should mark errors-only processor spans for cloud export filtering', async () => {
+      const end = vi.fn();
+      const createChildSpan = vi.fn(() => ({ end }));
+      const processor: Processor = {
+        id: 'errors-only-processor',
+        observability: 'errors-only',
+        processInput: async ({ messages }) => messages,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await step.execute({
+        inputData: {
+          phase: 'input',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          systemMessages: [],
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(createChildSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: SpanType.PROCESSOR_RUN,
+          attributes: expect.objectContaining({ processorObservability: 'errors-only' }),
+        }),
+      );
+    });
+
     it('should call processInputStep when phase is inputStep', async () => {
       const processInputStepMock = async ({ messages, stepNumber }) => {
         return messages.map(m => ({ ...m, step: stepNumber }));
@@ -735,6 +806,54 @@ describe('createStep with Processor', () => {
       };
 
       await expect(step.execute({ inputData } as any)).rejects.toThrow('Unexpected error');
+    });
+
+    it('should record TripWire details on processor spans', async () => {
+      const end = vi.fn();
+      const error = vi.fn();
+      const createChildSpan = vi.fn(() => ({ end, error }));
+      const processor: Processor = {
+        id: 'tripwire-observability-processor',
+        observability: 'errors-only',
+        processInput: async ({ abort }) => {
+          abort('PII detected', { retry: true, metadata: { field: 'email' } });
+          return [];
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await expect(
+        step.execute({
+          inputData: {
+            phase: 'input',
+            messages: [{ id: '1', content: 'test@example.com' }],
+            messageList,
+            systemMessages: [],
+          },
+          tracingContext: {
+            currentSpan: {
+              createChildSpan,
+              findParent: () => undefined,
+            },
+          },
+        } as any),
+      ).rejects.toThrow(TripWire);
+
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.any(TripWire),
+          endSpan: true,
+          attributes: {
+            tripwireAbort: {
+              reason: 'PII detected',
+              retry: true,
+              metadata: { field: 'email' },
+            },
+          },
+        }),
+      );
     });
   });
 });

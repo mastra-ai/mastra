@@ -322,8 +322,15 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   /** When true, this processor will also receive `data-*` chunks in processOutputStream. Default: false. */
   processDataParts?: boolean;
 
-  /** Set to `false` to run this processor without emitting PROCESSOR_RUN spans. */
-  observability?: boolean;
+  /**
+   * Controls PROCESSOR_RUN span emission.
+   *
+   * - `true`/`undefined`: emit normal processor spans.
+   * - `false`: do not create processor spans for this processor.
+   * - `'errors-only'`: create spans so processor-internal work can nest under them,
+   *   but cloud export drops successful processor spans by default while keeping errors/tripwires.
+   */
+  observability?: boolean | 'errors-only';
 
   /**
    * Process input messages before they are sent to the LLM
