@@ -304,6 +304,20 @@ export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
 });
 /**
+ * Body schema for resuming a suspended agent stream.
+ * Mirrors agent stream options but uses resumeData instead of requiring messages.
+ */
+export const resumeStreamBodySchema = agentExecutionBodySchema
+  .omit({
+    messages: true,
+  })
+  .extend({
+    resumeData: z.unknown().optional(),
+    runId: z.string(),
+    toolCallId: z.string().optional(),
+  });
+
+/**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
  * Note: Using z.unknown().refine() instead of z.any() to ensure data is required
