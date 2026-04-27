@@ -393,7 +393,18 @@ export interface ToolAction<
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
   mastra?: Mastra;
-  requireApproval?: boolean;
+  /**
+   * Whether the tool requires explicit user approval before execution.
+   * Pass `true` to always require approval, or a function evaluated per-call
+   * with the tool input (and optional request context/workspace) to require
+   * approval conditionally.
+   */
+  requireApproval?:
+    | boolean
+    | ((
+        input: TSchemaIn,
+        ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
+      ) => boolean | Promise<boolean>);
   /**
    * Enables strict tool input generation for providers that support it.
    * When enabled, supported providers will attempt to generate arguments

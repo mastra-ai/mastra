@@ -46,6 +46,12 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
+  /**
+   * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
+   * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
+   * drives continuation from outside the loop.
+   */
+  skipBgTaskWait?: boolean;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -71,6 +77,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
+  skipBgTaskWait,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -118,6 +125,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     workspace,
     backgroundTaskManager,
     agentBackgroundConfig,
+    skipBgTaskWait,
   });
 
   const mapResultsStep = createMapResultsStep({

@@ -330,6 +330,25 @@ describe('makeCoreTool', () => {
     expect(() => schema['~standard'].validate({})).not.toThrow();
     expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
+
+  it('should propagate requireApproval from options to the built CoreTool', () => {
+    const tool = createTool({
+      id: 'dangerous-tool',
+      description: 'Deletes something important',
+      inputSchema: z.object({ target: z.string() }),
+      requireApproval: true,
+      execute: async ({ target }) => ({ deleted: target }),
+    });
+
+    const coreToolWithFlag = makeCoreTool(tool, {
+      ...mockOptions,
+      requireApproval: (tool as any).requireApproval,
+    });
+    expect((coreToolWithFlag as any).requireApproval).toBe(true);
+
+    const coreToolWithoutFlag = makeCoreTool(tool, mockOptions);
+    expect((coreToolWithoutFlag as any).requireApproval).toBe(false);
+  });
 });
 
 it('should log correctly for Vercel tool execution', async () => {

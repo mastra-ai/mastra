@@ -19,7 +19,8 @@ export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
   summary: 'Stream background task events via SSE',
   description: 'Real-time Server-Sent Events stream of background task completion/failure events.',
   tags: ['Background Tasks'],
-  handler: async ({ mastra, agentId, runId, threadId, resourceId, abortSignal }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, runId, threadId, resourceId, taskId, abortSignal }) => {
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
       // Background tasks are not enabled — return an empty stream that stays
@@ -39,7 +40,7 @@ export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
       });
     }
 
-    return bgManager.stream({ agentId, runId, threadId, resourceId, abortSignal });
+    return bgManager.stream({ agentId, runId, threadId, resourceId, taskId, abortSignal });
   },
 });
 
@@ -52,6 +53,7 @@ export const LIST_BACKGROUND_TASKS_ROUTE = createRoute({
   summary: 'List background tasks',
   description: 'Returns background tasks filtered by status, agent, run, etc.',
   tags: ['Background Tasks'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
@@ -72,6 +74,7 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
   summary: 'Get a background task by ID',
   description: 'Returns a background task by ID.',
   tags: ['Background Tasks'],
+  requiresAuth: true,
   handler: async ({ mastra, backgroundTaskId }) => {
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
