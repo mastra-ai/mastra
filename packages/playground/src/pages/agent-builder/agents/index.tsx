@@ -21,7 +21,7 @@ import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useLinkComponent } from '@/lib/framework';
 
 export default function AgentBuilderAgentsPage() {
-  const { data, isLoading, error } = useStoredAgents();
+  const { data, isLoading, error } = useStoredAgents({ status: 'draft' });
   const [search, setSearch] = useState('');
   const { Link: FrameworkLink } = useLinkComponent();
 

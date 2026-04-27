@@ -89,7 +89,7 @@ export const AgentBuilderStarter = () => {
             <div className="flex items-center justify-end px-3 pb-2.5">
               <IconButton
                 type="submit"
-                variant="primary"
+                variant="default"
                 size="md"
                 tooltip="Start building"
                 disabled={trimmed.length === 0}
