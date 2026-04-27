@@ -3,6 +3,7 @@ import { Button, CodeEditor, WorkflowIcon } from '@mastra/playground-ui';
 
 import type { MastraUIMessage } from '@mastra/react';
 import { useContext, useEffect } from 'react';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
@@ -48,6 +49,11 @@ export const WorkflowBadge = ({
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
 
+  const bgEntry =
+    (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+      ? metadata.backgroundTasks[toolCallId]
+      : undefined;
+
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
@@ -64,12 +70,18 @@ export const WorkflowBadge = ({
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={
-        metadata?.mode === 'network' && (
+        metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
             selectionReason={selectionReason ?? ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        )
+        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+          <BackgroundTaskMetadataDialogTrigger
+            backgroundTaskTaskId={bgEntry.taskId}
+            backgroundTaskStartedAt={bgEntry.startedAt}
+            backgroundTaskCompletedAt={bgEntry.completedAt}
+          />
+        ) : null
       }
     >
       {!isStreaming && !isLoading && (
@@ -128,11 +140,12 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkflowStream = (workflowFullState?: WorkflowRunStreamResult) => {
   const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
     if (!workflowFullState) return;
     setResult(workflowFullState);
-  }, [workflowFullState]);
+  }, [workflowFullState, setResult]);
 };

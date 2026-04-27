@@ -1,9 +1,17 @@
-import { MetricsCard, MetricsDataTable, Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
+import {
+  MetricsCard,
+  MetricsDataTable,
+  Tab,
+  TabContent,
+  TabList,
+  Tabs,
+  formatCompact,
+  formatCost,
+  useDrilldown,
+  useTopActiveThreadsMetrics,
+  useTopResourcesByThreadsMetrics,
+} from '@mastra/playground-ui';
 import { useState } from 'react';
-import { useDrilldown } from '../hooks/use-drilldown';
-import { useTopActiveThreadsMetrics } from '../hooks/use-top-active-threads-metrics';
-import { useTopResourcesByThreadsMetrics } from '../hooks/use-top-resources-by-threads-metrics';
-import { formatCompact, formatCost } from './metrics-utils';
 
 type ThreadRow = {
   key: string;

@@ -541,6 +541,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       await next();
     });
 
+    // Propagate the server's onError handler so errors from custom route handlers
+    // are caught here (not swallowed by Hono's default plain-text 500).
+    const serverOnError = this.mastra.getServer()?.onError;
+    app.onError((err, c) => {
+      if (serverOnError) {
+        return serverOnError(err, c);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
+
     // Register each custom route
     for (const route of routes) {
       const handler =
@@ -574,7 +584,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   /**
    * Forwards a request to the internal custom route handler.
    * Returns the Response if a custom route matched, or null to fall through.
-   * Used by non-Hono adapter bridges.
    */
   protected async handleCustomRouteRequest(
     url: string,
@@ -596,13 +605,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const init: RequestInit = { method, headers: fetchHeaders };
     if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
-      const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
-      if (contentType.includes('application/json')) {
-        init.body = JSON.stringify(body);
-      } else if (typeof body === 'string') {
-        init.body = body;
-      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+      if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
+        if (body instanceof ReadableStream) {
+          (init as any).duplex = 'half';
+        }
+      } else {
+        const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
+        if (contentType.includes('application/json')) {
+          init.body = JSON.stringify(body);
+        } else if (typeof body === 'string') {
+          init.body = body;
+        }
       }
     }
 

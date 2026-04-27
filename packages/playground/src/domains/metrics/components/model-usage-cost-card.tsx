@@ -1,59 +1,20 @@
 import { EntityType } from '@mastra/core/observability';
-import { MetricsCard, MetricsDataTable } from '@mastra/playground-ui';
-import { useDrilldown } from '../hooks/use-drilldown';
-import { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
+import { ModelUsageCostCardView, useDrilldown, useModelUsageCostMetrics } from '@mastra/playground-ui';
 import { OpenInTracesButton } from './card-action-buttons';
-import { formatCost } from './metrics-utils';
 
 export function ModelUsageCostCard() {
-  const { data: rows, isLoading, isError } = useModelUsageCostMetrics();
+  const { data, isLoading, isError } = useModelUsageCostMetrics();
   const { getTracesHref } = useDrilldown();
-  const hasData = !!rows && rows.length > 0;
 
   return (
-    <MetricsCard>
-      <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Model Usage & Cost" description="Token consumption by model." />
-        {hasData &&
-          (() => {
-            const totalCost = rows.reduce((sum, r) => sum + (r.cost ?? 0), 0);
-            const unit = rows.find(r => r.costUnit)?.costUnit;
-            return <MetricsCard.Summary value={totalCost > 0 ? formatCost(totalCost, unit) : '—'} label="Total cost" />;
-          })()}
-        <MetricsCard.Actions>
-          <OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} />
-        </MetricsCard.Actions>
-      </MetricsCard.TopBar>
-      {isLoading ? (
-        <MetricsCard.Loading />
-      ) : isError ? (
-        <MetricsCard.Error message="Failed to load model usage data" />
-      ) : (
-        <MetricsCard.Content>
-          {!hasData ? (
-            <MetricsCard.NoData message="No model usage data yet" />
-          ) : (
-            <MetricsDataTable
-              columns={[
-                { label: 'Model', value: row => row.model },
-                { label: 'Input', value: row => row.input },
-                { label: 'Output', value: row => row.output },
-                { label: 'Cache Read', value: row => row.cacheRead },
-                { label: 'Cache Write', value: row => row.cacheWrite },
-                {
-                  label: 'Cost',
-                  value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—'),
-                  highlight: true,
-                },
-              ]}
-              data={rows.map(row => ({ ...row, key: row.model }))}
-              // Model-specific filtering on traces is not yet available — row
-              // drilldowns land on the agent-scoped traces list for now.
-              getRowHref={() => getTracesHref({ rootEntityType: EntityType.AGENT })}
-            />
-          )}
-        </MetricsCard.Content>
-      )}
-    </MetricsCard>
+    <ModelUsageCostCardView
+      rows={data}
+      isLoading={isLoading}
+      isError={isError}
+      // Model-specific filtering on traces is not yet available — row
+      // drilldowns land on the agent-scoped traces list for now.
+      getRowHref={() => getTracesHref({ rootEntityType: EntityType.AGENT })}
+      actions={<OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} />}
+    />
   );
 }

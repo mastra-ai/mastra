@@ -300,6 +300,9 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   threadId: z.string().optional(),
 });
 
+export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
+  maxIdleMs: z.number().int().positive().optional(),
+});
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
@@ -375,6 +378,21 @@ export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
  */
 export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
+});
+
+// ============================================================================
+// Resume Stream Schema
+// ============================================================================
+
+/**
+ * Body schema for resuming a suspended agent stream with custom data.
+ * Extends the agent execution body without messages, since resume
+ * continues from a prior suspension point rather than starting fresh.
+ */
+export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
 });
 
 // ============================================================================

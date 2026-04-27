@@ -1,38 +1,59 @@
-import type { PropertyFilterToken } from '@mastra/playground-ui';
+import type { DatePreset, PropertyFilterToken } from '@mastra/playground-ui';
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
   ButtonWithTooltip,
+  DateRangeSelector,
+  EmptyState,
   ErrorState,
+  MetricsFlexGrid,
+  MetricsProvider,
   NoDataPageLayout,
   PageHeader,
   PageLayout,
   PermissionDenied,
   PropertyFilterCreator,
   SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  toast,
-} from '@mastra/playground-ui';
-import { BarChart3Icon, BookIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { MetricsProvider, useAgentRunsKpiMetrics, isValidPreset, useMetrics } from '@/domains/metrics/components';
-import { DateRangeSelector } from '@/domains/metrics/components/date-range-selector';
-import { MetricsDashboard } from '@/domains/metrics/components/metrics-dashboard';
-import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
-import type { DatePreset } from '@/domains/metrics/hooks/use-metrics';
-import {
   applyMetricsPropertyFilterTokens,
   clearSavedMetricsFilters,
   createMetricsPropertyFilterFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+  isValidPreset,
   loadMetricsFiltersFromStorage,
   saveMetricsFiltersToStorage,
-} from '@/domains/metrics/metrics-filters';
-import { useEntityNames } from '@/domains/observability/hooks/use-entity-names';
-import { useEnvironments } from '@/domains/observability/hooks/use-environments';
-import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
-import { useTags } from '@/domains/observability/hooks/use-tags';
+  toast,
+  useAgentRunsKpiMetrics,
+  useMetrics,
+} from '@mastra/playground-ui';
+import { BarChart3Icon, BookIcon, CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/playground-ui';
+import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
+import { LatencyCard } from '@/domains/metrics/components/latency-card';
+import { MemoryCard } from '@/domains/metrics/components/memory-card';
+import {
+  AgentRunsKpiCard,
+  AvgScoreKpiCard,
+  ModelCostKpiCard,
+  TotalTokensKpiCard,
+} from '@/domains/metrics/components/metrics-kpi-cards';
+import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
+import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
+import { ScoresCard } from '@/domains/metrics/components/scores-card';
+import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
+import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+
+const ANALYTICS_OBSERVABILITY_TYPES = new Set([
+  'ObservabilityStorageClickhouseVNext',
+  'ObservabilityStorageDuckDB',
+  'ObservabilityInMemory',
+]);
 
 const PERIOD_PARAM = 'period';
 
@@ -53,16 +74,16 @@ export default function Metrics() {
   );
 
   const handlePresetChange = useCallback(
-    (preset: DatePreset) => {
+    (next: DatePreset) => {
       setSearchParams(
         prev => {
-          const next = new URLSearchParams(prev);
-          if (preset === '24h') {
-            next.delete(PERIOD_PARAM);
+          const params = new URLSearchParams(prev);
+          if (next === '24h') {
+            params.delete(PERIOD_PARAM);
           } else {
-            next.set(PERIOD_PARAM, preset);
+            params.set(PERIOD_PARAM, next);
           }
-          return next;
+          return params;
         },
         { replace: true },
       );
@@ -74,9 +95,9 @@ export default function Metrics() {
     (nextTokens: PropertyFilterToken[]) => {
       setSearchParams(
         prev => {
-          const next = new URLSearchParams(prev);
-          applyMetricsPropertyFilterTokens(next, nextTokens);
-          return next;
+          const params = new URLSearchParams(prev);
+          applyMetricsPropertyFilterTokens(params, nextTokens);
+          return params;
         },
         { replace: true },
       );
@@ -118,10 +139,15 @@ export default function Metrics() {
 }
 
 function MetricsContent() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
   const { filterTokens, setFilterTokens } = useMetrics();
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
+
+  const { data: packagesData, isLoading: isPackagesLoading } = useMastraPackages();
+  const observabilityType = packagesData?.observabilityStorageType;
+  const supportsMetrics = observabilityType ? ANALYTICS_OBSERVABILITY_TYPES.has(observabilityType) : false;
+  const isInMemory = observabilityType === 'ObservabilityInMemory';
 
   const { data: tagsData, isLoading: isTagsLoading } = useTags();
   const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
@@ -184,14 +210,6 @@ function MetricsContent() {
     });
     setFilterTokens(neutralTokens);
   }, [filterFields, filterTokens, setFilterTokens]);
-
-  // Synthesize a `replace` for page-level params when toolbar actions fire.
-  // Use setSearchParams to also ensure replace semantics instead of push.
-  useEffect(() => {
-    // no-op — provider already pushes via onFilterTokensChange. Reference
-    // setSearchParams to satisfy the lint rule and keep intent explicit.
-    void setSearchParams;
-  }, [setSearchParams]);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -262,7 +280,54 @@ function MetricsContent() {
         />
       </PageLayout.TopArea>
 
-      <MetricsDashboard />
+      {isPackagesLoading ? null : !supportsMetrics ? (
+        <div className="flex h-full items-center justify-center">
+          <EmptyState
+            iconSlot={<CircleSlashIcon />}
+            titleSlot="Metrics are not available with your current storage"
+            descriptionSlot="Metrics require ClickHouse, DuckDB, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            actionSlot={
+              <Button
+                variant="ghost"
+                as="a"
+                href="https://mastra.ai/docs/observability/metrics/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Metrics Documentation <ExternalLinkIcon />
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="grid gap-8 content-start pb-10">
+          {isInMemory && (
+            <Alert variant="info">
+              <AlertTitle>Metrics are not persisted</AlertTitle>
+              <AlertDescription as="p">
+                This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
+                persistent metrics, switch the observability storage to ClickHouse or DuckDB.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <MetricsFlexGrid>
+            <AgentRunsKpiCard />
+            <ModelCostKpiCard />
+            <TotalTokensKpiCard />
+            <AvgScoreKpiCard />
+          </MetricsFlexGrid>
+
+          <MetricsFlexGrid>
+            <ModelUsageCostCard />
+            <TokenUsageByAgentCard />
+            <MemoryCard />
+            <ScoresCard />
+            <TracesVolumeCard />
+            <LatencyCard />
+          </MetricsFlexGrid>
+        </div>
+      )}
     </PageLayout>
   );
 }

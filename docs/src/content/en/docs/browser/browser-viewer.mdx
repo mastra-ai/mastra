@@ -1,0 +1,135 @@
+---
+title: "BrowserViewer | Browser"
+description: "Use BrowserViewer for CLI-based browser automation with automatic CDP injection and Studio screencast."
+packages:
+  - "@mastra/browser-viewer"
+---
+
+# BrowserViewer
+
+The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/@browserbasehq/browse-cli). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
+
+## When to use BrowserViewer
+
+Use BrowserViewer when your agent drives a browser through a CLI tool rather than an SDK. BrowserViewer handles:
+
+- Launching and managing Chrome for CLI tools to connect to
+- Automatic CDP URL injection into `workspace_execute_command` calls
+- Live screencast streaming to Studio
+- Thread-scoped browser isolation
+
+For SDK-based browser automation, use [AgentBrowser](/docs/browser/agent-browser) or [Stagehand](/docs/browser/stagehand) instead.
+
+## Quickstart
+
+Install `@mastra/browser-viewer` and the CLI tool your agent will use. BrowserViewer manages Chrome, but the CLI tool itself must be installed separately.
+
+```bash npm2yarn
+npm install @mastra/browser-viewer
+```
+
+Install the CLI tool in your workspace environment. This example uses `browser-use`:
+
+```bash
+pip install browser-use
+```
+
+Install the corresponding [skill](/docs/workspace/skills) so the agent knows how to use the CLI:
+
+```bash
+npx skills add browser-use/browser-use --skill browser-use
+```
+
+Create a workspace with BrowserViewer and assign it to an agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+import { BrowserViewer } from '@mastra/browser-viewer'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  browser: new BrowserViewer({
+    cli: 'browser-use',
+    headless: false,
+  }),
+})
+
+const browserAgent = new Agent({
+  id: 'browser-agent',
+  model: 'openai/gpt-5.4',
+  workspace,
+  instructions: `You are a web automation assistant.
+Use browser-use commands to navigate and interact with websites.`,
+})
+
+export const mastra = new Mastra({
+  agents: { browserAgent },
+})
+```
+
+When the agent runs a CLI command like `browser-use open https://example.com`, Mastra automatically launches Chrome, injects the CDP connection, and starts streaming the screencast to Studio.
+
+## How it works
+
+1. The agent calls `workspace_execute_command` with a browser CLI command.
+1. Mastra detects the CLI command and launches Chrome via Playwright (if not already running).
+1. The CDP URL is injected into the command so the CLI connects to the managed browser.
+1. Screencast frames stream from page-level CDP sessions to Studio.
+
+## Supported CLIs
+
+BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows.
+
+### agent-browser
+
+```bash
+npm install -g agent-browser
+npx skills add vercel-labs/agent-browser
+```
+
+CDP flag: `--cdp`
+
+### browser-use
+
+```bash
+pip install browser-use
+npx skills add browser-use/browser-use --skill browser-use
+```
+
+CDP flag: `--cdp-url`
+
+### browse-cli
+
+```bash
+npm install -g @browserbasehq/browse-cli
+npx skills add browserbase/skills
+```
+
+CDP flag: `--ws`
+
+Set the `cli` option to match the CLI your agent uses:
+
+```typescript
+const viewer = new BrowserViewer({
+  cli: 'browser-use',
+  headless: false,
+})
+```
+
+:::note
+
+See [BrowserViewer reference](/reference/browser/browser-viewer) for all configuration options, advanced connection modes, and method details.
+
+:::
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [AgentBrowser](/docs/browser/agent-browser)
+- [Stagehand](/docs/browser/stagehand)
+- [Workspace overview](/docs/workspace/overview)
+- [Workspace skills](/docs/workspace/skills)

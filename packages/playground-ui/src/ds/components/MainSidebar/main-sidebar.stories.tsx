@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MainSidebar, MainSidebarProvider } from './main-sidebar';
-import { TooltipProvider } from '../Tooltip';
 import { Home, Bot, Workflow, Settings, Database, FileText, Users, Bell } from 'lucide-react';
 import { forwardRef } from 'react';
+import { TooltipProvider } from '../Tooltip';
+import { MainSidebar, MainSidebarProvider } from './main-sidebar';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (

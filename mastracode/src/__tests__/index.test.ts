@@ -93,6 +93,7 @@ vi.mock('./onboarding/settings.js', () => ({
   loadSettings: vi.fn(() => ({ customProviders: [], modelUseCounts: {}, models: { modeDefaults: {} } })),
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
+  resolveOmRoleModel: vi.fn(() => ''),
   saveSettings: vi.fn(),
   toCustomProviderModelId: vi.fn(),
 }));

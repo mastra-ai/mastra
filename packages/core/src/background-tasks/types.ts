@@ -278,6 +278,19 @@ export type ResultInjector = (params: {
   result?: unknown;
   error?: { message: string };
   status: 'completed' | 'failed';
+  completedAt: Date;
+  startedAt: Date;
+}) => void | Promise<void>;
+
+export type ToolExecutionInjector = (params: {
+  runId: string;
+  taskId: string;
+  toolCallId: string;
+  toolName: string;
+  agentId: string;
+  threadId?: string;
+  resourceId?: string;
+  startedAt: Date;
 }) => void | Promise<void>;
 
 // --- Per-task context ---
@@ -295,6 +308,8 @@ export interface TaskContext {
   onChunk?: (chunk: BackgroundTaskResultChunk) => void;
   /** Injects tool results into the caller's message list */
   onResult?: ResultInjector;
+  /** Injects tool execution into the caller's message list */
+  onExecution?: ToolExecutionInjector;
   /** Per-task callback on completion */
   onComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Per-task callback on failure */

@@ -716,7 +716,10 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+  public updateToolInvocation(
+    inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
+    metadata?: Record<string, unknown>,
+  ): boolean {
     if (!inputPart.toolInvocation?.toolCallId) {
       return false;
     }
@@ -749,6 +752,22 @@ export class MessageList {
             // Preserve providerMetadata from original call if not in result
             ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
               ? { providerMetadata: originalPart.providerMetadata }
+              : {}),
+          };
+
+          // `backgroundTasks` is a per-toolCallId record — merge instead of
+          // overwrite so multiple concurrent background dispatches on the
+          // same assistant message don't clobber each other's metadata.
+          const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+          const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+          const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+          const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+
+          msg.content.metadata = {
+            ...existingMeta,
+            ...incomingMeta,
+            ...(existingBgTasks || incomingBgTasks
+              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
               : {}),
           };
 
@@ -1036,7 +1055,10 @@ export class MessageList {
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
+    const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
     const latestMessage = this.messages.at(-1);
+    const latestMessageIndex = this.messages.length - 1;
+    const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
 
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
@@ -1055,6 +1077,7 @@ export class MessageList {
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
+      latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
@@ -1074,6 +1097,8 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
+        const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
+
         // If the existing message is sealed (e.g., after observation), don't replace it.
         // Instead, generate a new ID for the incoming message and add it as a new message.
         if (MessageMerger.isSealed(existingMessage)) {
@@ -1129,6 +1154,12 @@ export class MessageList {
             this.messages.push(messageV2);
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
+        } else if (existingIsAtOrBeforeSealedBoundary) {
+          messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+          if (messageV2.createdAt <= existingMessage.createdAt) {
+            messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+          }
+          this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting = MessageMerger.shouldMerge(

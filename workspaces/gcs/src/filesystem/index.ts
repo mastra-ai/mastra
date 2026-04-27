@@ -347,8 +347,8 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   private toKey(path: string): string {
-    // Remove leading slash and add prefix
-    const cleanPath = path.replace(/^\/+/, '');
+    // Remove leading slashes, then resolve "." and "./" to empty string (root)
+    const cleanPath = path.replace(/^\/+/, '').replace(/^\.(?:\/|$)/, '');
     return this.prefix + cleanPath;
   }
 
