@@ -2056,11 +2056,16 @@ ${formattedMessages}
     // 2. When MessageList creates new messages for streaming content after the seal,
     //    those new messages have their own IDs and don't overwrite the sealed messages
     // 3. The sealed messages remain intact with their content at the time of buffering
-    await this.messageHistory.persistMessages({
-      messages: messagesToBuffer,
-      threadId,
-      resourceId: freshRecord.resourceId ?? undefined,
-    });
+    try {
+      await this.messageHistory.persistMessages({
+        messages: messagesToBuffer,
+        threadId,
+        resourceId: freshRecord.resourceId ?? undefined,
+      });
+    } catch (error) {
+      omError('[OM] Failed to persist messages for buffering', error);
+      return;
+    }
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
