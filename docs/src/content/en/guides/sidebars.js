@@ -238,13 +238,18 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
+          id: 'guide/github-actions-pr-description',
+          label: 'GitHub Actions: PR Description',
         },
         {
           type: 'doc',
-          id: 'guide/github-actions-pr-description',
-          label: 'GitHub Actions: PR Description',
+          id: 'guide/publishing-mcp-server',
+          label: 'Publishing an MCP Server',
+        },
+        {
+          type: 'doc',
+          id: 'guide/whatsapp-chat-bot',
+          label: 'WhatsApp Chat Bot',
         },
       ],
     },

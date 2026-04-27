@@ -719,6 +719,11 @@
       "source": "/docs/mastra-cloud/observability",
       "destination": "/docs/mastra-platform/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/mcp/publishing-mcp-server",
+      "destination": "/guides/guide/publishing-mcp-server",
+      "permanent": true
     }
   ]
 }
