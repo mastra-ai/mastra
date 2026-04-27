@@ -1,5 +1,4 @@
-import { IconButton, Spinner } from '@mastra/playground-ui';
-import { PencilIcon } from 'lucide-react';
+import { Button, Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
@@ -121,15 +120,15 @@ const AgentBuilderAgentViewReady = ({
       mode="test"
       defaultExpanded={false}
       detailOpen={activeDetail !== null}
-      modeAction={
-        <IconButton
-          tooltip="Edit configuration"
-          className="rounded-full"
+      primaryAction={
+        <Button
+          size="sm"
+          variant="default"
           onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
           data-testid="agent-builder-view-edit"
         >
-          <PencilIcon />
-        </IconButton>
+          Edit configuration
+        </Button>
       }
       chat={<AgentChatPanel agentId={id} />}
       configure={

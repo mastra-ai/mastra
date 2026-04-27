@@ -1,5 +1,5 @@
 import { cn, IconButton } from '@mastra/playground-ui';
-import { ArrowLeftIcon, Columns2 } from 'lucide-react';
+import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
@@ -54,8 +54,17 @@ export const WorkspaceLayout = ({
             tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
             className="rounded-full"
             onClick={() => setExpanded(prev => !prev)}
+            aria-pressed={expanded}
           >
-            <Columns2 />
+            <div
+              className={cn(
+                'size-4 border border-current rounded-lg grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
+                expanded ? 'grid-cols-[1fr_40%]' : 'grid-cols-[1fr_10%]',
+              )}
+            >
+              <div />
+              <div className="bg-neutral1 h-full w-full" />
+            </div>
           </IconButton>
           {primaryAction}
         </div>

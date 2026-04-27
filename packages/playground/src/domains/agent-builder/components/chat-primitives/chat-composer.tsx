@@ -1,5 +1,5 @@
 import { IconButton } from '@mastra/playground-ui';
-import { ArrowUpIcon } from 'lucide-react';
+import { ArrowUpIcon, Loader2 } from 'lucide-react';
 import { ChatTextarea } from './chat-textarea';
 
 interface ChatComposerProps {
@@ -9,6 +9,7 @@ interface ChatComposerProps {
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   disabled: boolean;
   canSubmit: boolean;
+  isRunning?: boolean;
   placeholder?: string;
   inputTestId?: string;
   submitTestId?: string;
@@ -22,6 +23,7 @@ export const ChatComposer = ({
   onKeyDown,
   disabled,
   canSubmit,
+  isRunning = false,
   placeholder = 'Ask a follow-up…',
   inputTestId,
   submitTestId,
@@ -46,12 +48,12 @@ export const ChatComposer = ({
             type="submit"
             variant="default"
             size="sm"
-            tooltip="Send"
+            tooltip={isRunning ? 'Generating…' : 'Send'}
             disabled={!canSubmit}
             data-testid={submitTestId}
             className="rounded-full"
           >
-            <ArrowUpIcon />
+            {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
           </IconButton>
         </div>
       </div>

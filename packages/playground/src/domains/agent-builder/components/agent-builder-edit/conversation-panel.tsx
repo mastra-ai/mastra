@@ -79,6 +79,7 @@ export const ConversationPanel = ({
       <MessageList
         messages={chatMessages}
         isLoading={isConversationLoading}
+        isRunning={isRunning}
         skeletonTestId="agent-builder-conversation-messages-skeleton"
       />
 
@@ -88,6 +89,7 @@ export const ConversationPanel = ({
         onSubmit={handleFormSubmit}
         onKeyDown={handleKeyDown}
         disabled={isRunning}
+        isRunning={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
         placeholder="Tell the builder what to change…"
         inputTestId="agent-builder-conversation-input"

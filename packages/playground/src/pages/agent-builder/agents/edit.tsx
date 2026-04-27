@@ -1,6 +1,6 @@
-import { Button, IconButton, Spinner } from '@mastra/playground-ui';
+import { Button, Spinner } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
-import { MessageSquareIcon, SaveIcon } from 'lucide-react';
+import { CheckIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
@@ -157,38 +157,47 @@ const AgentBuilderAgentEditReady = ({
 
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
-    void navigate(`/agent-builder/agents`, { viewTransition: true });
+    if (mode === 'create') {
+      void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
+    } else {
+      void navigate(`/agent-builder/agents`, { viewTransition: true });
+    }
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
+  const handleCancel = () => {
+    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
+  };
 
   return (
     <WorkspaceLayout
       isLoading={false}
       mode="build"
       creating={mode === 'create'}
+      defaultExpanded={mode === 'edit'}
       detailOpen={activeDetail !== null}
-      modeAction={
-        mode === 'edit' ? (
-          <IconButton
-            tooltip="Chat"
-            className="rounded-full"
-            onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
-            data-testid="agent-builder-edit-preview"
-          >
-            <MessageSquareIcon />
-          </IconButton>
-        ) : undefined
-      }
       primaryAction={
-        <Button
-          size="sm"
-          variant="primary"
-          onClick={handleSave}
-          disabled={isSaving}
-          data-testid="agent-builder-edit-save"
-        >
-          <SaveIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
-        </Button>
+        <>
+          {mode === 'edit' && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleCancel}
+              disabled={isSaving}
+              data-testid="agent-builder-edit-cancel"
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="cta"
+            onClick={handleSave}
+            disabled={isSaving}
+            data-testid="agent-builder-edit-save"
+          >
+            <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
+          </Button>
+        </>
       }
       chat={
         <MastraReactProvider baseUrl="http://localhost:4112">

@@ -23,6 +23,7 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
   // Stable empty array per agentId: stays the same reference across re-renders
   // (preventing useChat from wiping streamed messages), but changes when agentId
   // changes (allowing useChat to reset when switching agents).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const emptyMessages = useMemo(() => [] as never[], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
@@ -43,6 +44,7 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
       <MessageList
         messages={messages}
         isLoading={isConversationLoading}
+        isRunning={isRunning}
         skeletonTestId="agent-builder-agent-chat-messages-skeleton"
         emptyState={
           <div
@@ -65,6 +67,7 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
         onSubmit={handleFormSubmit}
         onKeyDown={handleKeyDown}
         disabled={isRunning}
+        isRunning={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
         placeholder="Message your agent…"
         inputTestId="agent-builder-agent-chat-input"

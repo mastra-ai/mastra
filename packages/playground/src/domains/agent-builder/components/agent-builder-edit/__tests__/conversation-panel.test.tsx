@@ -18,11 +18,12 @@ type Features = {
 };
 
 const sentMessages: Array<{ message: string; clientTools: Record<string, any> }> = [];
+const chatState = { isRunning: false };
 
 vi.mock('@mastra/react', () => ({
   useChat: () => ({
     messages: [],
-    isRunning: false,
+    isRunning: chatState.isRunning,
     setMessages: () => {},
     sendMessage: (payload: { message: string; clientTools: Record<string, any> }) => {
       sentMessages.push(payload);
@@ -95,6 +96,7 @@ describe('ConversationPanel agent-builder client tool', () => {
   beforeEach(() => {
     sentMessages.length = 0;
     formMethodsRef = null;
+    chatState.isRunning = false;
   });
 
   afterEach(() => {
@@ -358,5 +360,40 @@ describe('ConversationPanel agent-builder client tool', () => {
     await tool.execute({ name: 'N', instructions: 'I' });
 
     expect(formMethodsRef!.getValues('workspaceId')).toBeUndefined();
+  });
+});
+
+describe('ConversationPanel chat busy/done state', () => {
+  beforeEach(() => {
+    sentMessages.length = 0;
+    formMethodsRef = null;
+    chatState.isRunning = false;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows the pending indicator and disables the composer while running', () => {
+    chatState.isRunning = true;
+    const { queryByTestId, getByTestId } = renderPanel(allOff);
+
+    expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
+    const submit = getByTestId('agent-builder-conversation-submit');
+    const input = getByTestId('agent-builder-conversation-input') as HTMLTextAreaElement;
+    expect(submit.hasAttribute('disabled')).toBe(true);
+    expect(submit.getAttribute('aria-label')).toBe('Generating…');
+    expect(input.disabled).toBe(true);
+  });
+
+  it('hides the pending indicator and re-enables the composer when not running', () => {
+    chatState.isRunning = false;
+    const { queryByTestId, getByTestId } = renderPanel(allOff);
+
+    expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
+    const submit = getByTestId('agent-builder-conversation-submit');
+    const input = getByTestId('agent-builder-conversation-input') as HTMLTextAreaElement;
+    expect(submit.getAttribute('aria-label')).toBe('Send');
+    expect(input.disabled).toBe(false);
   });
 });
