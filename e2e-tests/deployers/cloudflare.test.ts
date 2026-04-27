@@ -33,13 +33,13 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
 
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
-      const res = await fetch(`http://localhost:${port}/test`);
+      const res = await fetch(`http://localhost:${port}/mastra/test`);
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!' });
     });
     it('should return tools from the api', async () => {
-      const res = await fetch(`http://localhost:${port}/api/tools`);
+      const res = await fetch(`http://localhost:${port}/mastra/tools`);
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body)).toEqual(['weatherTool']);

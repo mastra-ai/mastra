@@ -6,4 +6,4 @@
 '@mastra/hono': patch
 ---
 
-Fixed custom API routes prefix handling across all adapters. Custom routes now respect the configured prefix but the `/api` prefix is reserved for built-in Mastra routes — custom routes with `/api` prefix are served at bare paths to prevent collisions with future built-in routes.
+Fixed custom API routes prefix handling across all adapters. Custom routes now respect the configured prefix. Using `/api` as the prefix for custom routes now throws an error — it is reserved for built-in Mastra routes. Set a different `apiPrefix` (e.g. `apiPrefix: '/v1'`) in your server config when using custom routes.

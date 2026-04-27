@@ -29,6 +29,7 @@ export const mastra = new Mastra({
     },
   }),
   server: {
+    apiPrefix: '/mastra',
     apiRoutes: [testRoute],
   },
   storage,

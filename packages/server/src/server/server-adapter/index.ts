@@ -287,11 +287,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Returns the effective prefix for custom API routes.
    * The `/api` prefix is reserved for built-in Mastra routes — custom routes
    * must not be mounted there to avoid collisions with future built-in routes.
-   * Any other prefix is applied normally.
    */
   protected getCustomRoutePrefix(): string {
     const prefix = this.prefix ?? '';
-    return prefix === '/api' ? '' : prefix;
+    if (prefix === '/api') {
+      throw new Error(
+        'Custom API routes cannot use the "/api" prefix — it is reserved for built-in Mastra routes. ' +
+          'Set a different "apiPrefix" in your server config (e.g. apiPrefix: "/v1").',
+      );
+    }
+    return prefix;
   }
 
   /**

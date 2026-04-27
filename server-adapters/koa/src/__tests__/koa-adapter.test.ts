@@ -587,6 +587,7 @@ describe('Koa Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
+        prefix: '/v1',
         customApiRoutes: customRoutes,
       });
 
@@ -600,7 +601,7 @@ describe('Koa Server Adapter', () => {
       const port = typeof address === 'object' && address ? address.port : 0;
 
       // Request the custom route
-      const response = await fetch(`http://localhost:${port}/hello`);
+      const response = await fetch(`http://localhost:${port}/v1/hello`);
 
       expect(response.status).toBe(200);
       const data = await response.json();
@@ -626,6 +627,7 @@ describe('Koa Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra,
+        prefix: '/v1',
         customApiRoutes: customRoutes,
       });
 
@@ -637,7 +639,7 @@ describe('Koa Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      const response = await fetch(`http://localhost:${port}/echo`, {
+      const response = await fetch(`http://localhost:${port}/v1/echo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ test: 'data' }),
@@ -648,7 +650,7 @@ describe('Koa Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
 
-    it('should not apply /api prefix to custom routes (reserved for built-in routes)', async () => {
+    it('should throw when /api prefix is used with custom routes', async () => {
       const customRoutes = [
         registerApiRoute('/chat', {
           method: 'GET',
@@ -670,20 +672,9 @@ describe('Koa Server Adapter', () => {
         customApiRoutes: customRoutes,
       });
 
-      await adapter.init();
-
-      server = await new Promise(resolve => {
-        const s = app.listen(0, () => resolve(s));
-      });
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-
       // /api is reserved for built-in Mastra routes — custom routes must
-      // be served at their bare path to avoid collisions.
-      const bare = await fetch(`http://localhost:${port}/chat`);
-      expect(bare.status).toBe(200);
-      const data = await bare.json();
-      expect(data).toEqual({ ok: true });
+      // use a different prefix.
+      await expect(adapter.init()).rejects.toThrow(/\/api.*reserved/);
     });
 
     it('should apply non-/api prefix to custom routes', async () => {

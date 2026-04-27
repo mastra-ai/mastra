@@ -70,18 +70,18 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
-      const res = await fetch(`http://localhost:${port}/test`);
+      const res = await fetch(`http://localhost:${port}/mastra/test`);
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
     it('should resolve api ALL routes', async () => {
-      let res = await fetch(`http://localhost:${port}/all`);
+      let res = await fetch(`http://localhost:${port}/mastra/all`);
       let body = await res.json();
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, GET!' });
 
-      res = await fetch(`http://localhost:${port}/all`, {
+      res = await fetch(`http://localhost:${port}/mastra/all`, {
         method: 'POST',
       });
       body = await res.json();
@@ -90,7 +90,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     });
 
     it('should return tools from the api', async () => {
-      const res = await fetch(`http://localhost:${port}/api/tools`);
+      const res = await fetch(`http://localhost:${port}/mastra/tools`);
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
@@ -256,7 +256,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const delayMs = 1000;
       for (let i = 0; i < maxAttempts; i++) {
         try {
-          const res = await fetch(`http://localhost:${port}/api/tools`);
+          const res = await fetch(`http://localhost:${port}/mastra/tools`);
           if (res.ok) {
             console.log('Server is ready');
             break;
