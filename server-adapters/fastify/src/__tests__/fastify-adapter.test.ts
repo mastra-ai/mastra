@@ -645,9 +645,8 @@ describe('Fastify Server Adapter', () => {
 
       expect(response.status).toBe(200);
       expect(data.file).toBeDefined();
-      expect(data.file.filename).toBe('test.txt');
-      expect(data.file.mimetype).toBeDefined();
-      expect(data.file.buffer).toBeDefined();
+      expect(Buffer.isBuffer(data.file)).toBe(true);
+      expect(data.file.toString()).toBe('hello world');
     });
 
     it('should return error when file exceeds size limit (no hang)', async () => {
