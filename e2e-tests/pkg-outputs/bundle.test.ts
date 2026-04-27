@@ -32,7 +32,7 @@ describe.for(
     expect(pkgJson.private).toBe(true);
   });
 
-  describe.concurrent.for(imports.filter(x => !x.endsWith('.css')).map(x => [x]))('%s', async ([importPath]) => {
+  describe.concurrent.for(imports.filter(x => !x.endsWith('.css') && pkgJson.exports[x] !== null).map(x => [x]))('%s', async ([importPath]) => {
     it.skipIf(pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/'))(
       'should use .js and .d.ts extensions when using import',
       async () => {
@@ -136,5 +136,66 @@ describe('@mastra/core native optional deps', () => {
   it('should not contain native binary files (.node) in dist', async () => {
     const nativeFiles = await globby(join(coreDistDir, '**/*.node'));
     expect(nativeFiles).toHaveLength(0);
+  });
+});
+
+describe('@mastra/core phantom export validation', () => {
+  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
+  if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
+  const coreDistDir = join(corePkg.dir, 'dist');
+  const exports = corePkg.packageJson.exports as Record<string, unknown>;
+
+  it('should block all phantom subpaths with null exports', async () => {
+    // Find all index.d.ts files without a matching index.js (phantom subpaths)
+    const dtsFiles = await globby(join(coreDistDir, '**/index.d.ts'));
+    const phantoms: string[] = [];
+
+    for (const dts of dtsFiles) {
+      const dir = dirname(dts);
+      const js = join(dir, 'index.js');
+      try {
+        await stat(js);
+      } catch {
+        const rel = relative(coreDistDir, dir);
+        // Skip internal type shims
+        if (rel.startsWith('_types')) continue;
+        phantoms.push(`./${rel}`);
+      }
+    }
+
+    const missing = phantoms.filter(p => exports[p] !== null);
+    if (missing.length > 0) {
+      throw new Error(
+        `Found ${missing.length} phantom subpath(s) without null exports in @mastra/core package.json:\n` +
+          missing.map(p => `  ${p}`).join('\n') +
+          '\n\nAdd these as null entries in package.json exports (before the ./* wildcard) to prevent ' +
+          'runtime MODULE_NOT_FOUND errors. See https://github.com/mastra-ai/mastra/issues/15758',
+      );
+    }
+  });
+
+  it('should not have stale null exports for subpaths that now have runtime JS', async () => {
+    const nullExports = Object.entries(exports)
+      .filter(([, v]) => v === null)
+      .map(([k]) => k);
+
+    const stale: string[] = [];
+    for (const subpath of nullExports) {
+      const jsPath = join(coreDistDir, subpath.replace('./', ''), 'index.js');
+      try {
+        await stat(jsPath);
+        stale.push(subpath);
+      } catch {
+        // Expected — no JS file means null export is correct
+      }
+    }
+
+    if (stale.length > 0) {
+      throw new Error(
+        `Found ${stale.length} stale null export(s) in @mastra/core package.json that now have runtime JS:\n` +
+          stale.map(p => `  ${p}`).join('\n') +
+          '\n\nRemove these null entries since the subpaths now have valid runtime modules.',
+      );
+    }
   });
 });
