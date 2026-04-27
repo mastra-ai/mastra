@@ -932,6 +932,7 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-pro-preview-06-05',
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-preview',
+    'google/gemini-3.1-flash-image-preview',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.1-pro-preview-customtools',
@@ -1143,6 +1144,8 @@ export type ProviderModelsMap = {
     'deepseek-v3',
     'deepseek-v3-1',
     'deepseek-v3-2-exp',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
     'kimi-k2-thinking',
@@ -1312,6 +1315,7 @@ export type ProviderModelsMap = {
     'XiaomiMiMo/MiMo-V2-Flash',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-V3.2',
+    'deepseek-ai/DeepSeek-V4-Pro',
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
@@ -2433,6 +2437,7 @@ export type ProviderModelsMap = {
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
     'deepseek-v3.2',
+    'deepseek-v4-flash',
     'devstral-2:123b',
     'devstral-small-2:24b',
     'gemini-3-flash-preview',
@@ -2533,6 +2538,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
     'kimi-k2.6',
   ];
+  readonly 'abliteration-ai': readonly ['abliterated-model'];
   readonly 'wafer.ai': readonly ['GLM-5.1', 'Qwen3.5-397B-A17B'];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',

@@ -4,6 +4,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
+import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -256,6 +257,13 @@ export interface HarnessConfig<TState = {}> {
     acquire: (threadId: string) => void | Promise<void>;
     release: (threadId: string) => void | Promise<void>;
   };
+
+  /**
+   * Observability entrypoint for tracing, scoring, and feedback.
+   * When provided, the internal Mastra instance is configured with this
+   * observability backend so that agent runs produce trace spans.
+   */
+  observability?: ObservabilityEntrypoint;
 }
 
 /**
