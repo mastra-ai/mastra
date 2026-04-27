@@ -418,7 +418,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
-    return { status: result.status, error: errorBody?.error ?? 'Access denied' };
+    return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
   }
 
   /**

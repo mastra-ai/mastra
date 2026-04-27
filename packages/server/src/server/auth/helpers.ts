@@ -240,7 +240,7 @@ export interface AuthMiddlewareContext {
 
 export type AuthResult =
   | { action: 'next'; headers?: Record<string, string> }
-  | { action: 'error'; status: number; body: Record<string, unknown> };
+  | { action: 'error'; status: number; body: Record<string, unknown>; headers?: Record<string, string> };
 
 const pass: AuthResult = { action: 'next' };
 
@@ -343,7 +343,14 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
                 headers: new Headers(rawRequest.headers),
               });
               refreshedRequest.headers.set('Cookie', refreshedCookie);
-              user = await authConfig.authenticateToken(token ?? '', refreshedRequest as any);
+              // Pass the refreshed cookie value as the token so authenticateToken
+              // picks up the new session instead of the stale original.
+              // Auth providers typically read cookies from the request object, but
+              // some may also inspect the token parameter directly.
+              const cookieValue = refreshedCookie.includes('=')
+                ? refreshedCookie.split('=').slice(1).join('=')
+                : refreshedCookie;
+              user = await authConfig.authenticateToken(cookieValue, refreshedRequest as any);
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -359,7 +366,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     if (!user) {
-      return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+      return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
     }
 
     requestContext.set('user', user);
@@ -374,7 +381,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         mastra.getLogger()?.error('mapUserToResourceId failed', {
           error: mapError instanceof Error ? { message: mapError.message, stack: mapError.stack } : mapError,
         });
-        return { action: 'error', status: 500, body: { error: 'Failed to map authenticated user to a resource ID' } };
+        return {
+          action: 'error',
+          status: 500,
+          body: { error: 'Failed to map authenticated user to a resource ID' },
+          headers: refreshHeaders,
+        };
       }
     }
 
@@ -402,7 +414,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     mastra.getLogger()?.error('Authentication error', {
       error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
     });
-    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
   }
 
   // ── Authorization ──
@@ -412,13 +424,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const isAuthorized = await authConfig.authorizeUser(user, rawRequest as any);
 
       if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
       }
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorizeUser', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' } };
+      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
     }
   } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
     try {
@@ -426,7 +438,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
 
       if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
       }
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorize', {
@@ -434,13 +446,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         path,
         method,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' } };
+      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
     }
   } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
     const isAuthorized = await checkRules(authConfig.rules, path, method, user);
 
     if (!isAuthorized) {
-      return { action: 'error', status: 403, body: { error: 'Access denied' } };
+      return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
     }
   } else {
     // No explicit authorization configured (authorizeUser, authorize, or rules)
@@ -452,10 +464,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
 
         if (!isAuthorized) {
-          return { action: 'error', status: 403, body: { error: 'Access denied' } };
+          return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
         }
       } else {
-        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
       }
     }
   }
