@@ -68,6 +68,10 @@ export type StreamInternal = {
   agentBackgroundConfig?: AgentBackgroundConfig;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
+  // When true, backgroundTaskCheckStep returns immediately without waiting for
+  // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
+  // continuation from the outside — the inner loop shouldn't also wait.
+  skipBgTaskWait?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

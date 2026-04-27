@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
-import { Button } from '../Button';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 
 const meta: Meta<typeof Collapsible> = {
   title: 'Layout/Collapsible',

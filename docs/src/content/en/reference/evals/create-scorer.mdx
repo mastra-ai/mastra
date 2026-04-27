@@ -248,9 +248,9 @@ The method can return any value. The returned value will be available to subsequ
   },
   {
     name: 'outputSchema',
-    type: 'ZodSchema',
+    type: 'StandardJSONSchemaV1',
     isOptional: false,
-    description: 'Zod schema for the expected output of the preprocess step.',
+    description: 'Standard JSON Schema for the expected output of the preprocess step.',
   },
   {
     name: 'createPrompt',
@@ -326,9 +326,9 @@ The method can return any value. The returned value will be available to subsequ
   },
   {
     name: 'outputSchema',
-    type: 'ZodSchema',
+    type: 'StandardJSONSchemaV1',
     isOptional: false,
-    description: 'Zod schema for the expected output of the analyze step.',
+    description: 'Standard JSON Schema for the expected output of the analyze step.',
   },
   {
     name: 'createPrompt',
@@ -410,9 +410,9 @@ The method must return a numerical score.
   },
   {
     name: 'outputSchema',
-    type: 'ZodSchema',
+    type: 'StandardJSONSchemaV1',
     isOptional: false,
-    description: 'Zod schema for the expected output of the generateScore step.',
+    description: 'Standard JSON Schema for the expected output of the generateScore step.',
   },
   {
     name: 'createPrompt',

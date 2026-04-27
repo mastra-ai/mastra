@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SideDialog } from './side-dialog';
-import { Button } from '../Button';
 import { useState } from 'react';
+import { Button } from '../Button';
+import { SideDialog } from './side-dialog';
 
 const meta: Meta<typeof SideDialog> = {
   title: 'Layout/SideDialog',

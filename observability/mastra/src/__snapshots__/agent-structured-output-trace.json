@@ -32,9 +32,7 @@
         },
         "input": "Return a list of items separated by commas",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "object": {
             "items": "test structured output"
           },
@@ -58,9 +56,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -103,9 +99,7 @@
               },
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -148,9 +142,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "toolCalls": [],
                   "object": {
                     "items": "test structured output"
@@ -178,9 +170,7 @@
                       "runId": "<runId-1>"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 stream response"
                     }
                   }
                 },
@@ -232,20 +222,12 @@
               "runId": "<runId-1>"
             },
             "input": {
-              "totalChunks": {
-                "__or__": [5, 3]
-              },
-              "accumulatedText": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              }
+              "totalChunks": 3,
+              "accumulatedText": "Mock V2 stream response"
             },
             "output": {
-              "totalChunks": {
-                "__or__": [5, 3]
-              },
-              "accumulatedText": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              }
+              "totalChunks": 3,
+              "accumulatedText": "Mock V2 stream response"
             }
           },
           "children": [
@@ -267,12 +249,7 @@
                 "metadata": {
                   "runId": "<runId-2>"
                 },
-                "input": {
-                  "__or__": [
-                    "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 generate response",
-                    "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 stream response"
-                  ]
-                },
+                "input": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response",
                 "output": {
                   "text": "{\"items\":\"test structured output\"}",
                   "object": {
@@ -298,9 +275,7 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {
-                        "temperature": 0
-                      },
+                      "parameters": {},
                       "finishReason": "stop",
                       "responseId": "<responseId-2>",
                       "responseModel": "mock-model-id",
@@ -330,12 +305,7 @@
                           "content": [
                             {
                               "type": "text",
-                              "text": {
-                                "__or__": [
-                                  "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 generate response",
-                                  "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 stream response"
-                                ]
-                              }
+                              "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
                             }
                           ]
                         }

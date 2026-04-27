@@ -72,6 +72,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   reflection?: ObservationalMemoryConfig['reflection'];
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
+  temporalMarkers?: boolean;
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -2682,7 +2683,9 @@ Notes:
     if (!engine) return null;
 
     const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
-    return new ObservationalMemoryProcessor(engine, this);
+    return new ObservationalMemoryProcessor(engine, this, {
+      temporalMarkers: effectiveConfig.temporalMarkers,
+    });
   }
 }
 

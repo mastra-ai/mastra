@@ -1,36 +1,33 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import type { SpanRecord } from '@mastra/core/storage';
+import { EntityType } from '@mastra/core/observability';
 import {
   Button,
   ButtonWithTooltip,
   ButtonsGroup,
-  ErrorState,
   PageHeader,
   PageLayout,
-  PermissionDenied,
-  SessionExpired,
+  SpanDataPanelView,
+  TraceDataPanelView,
+  TraceKeysAndValues,
+  TracesErrorContent,
   cn,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  parseError,
+  useSpanDetail,
+  useTraceLightSpans,
+  useTraceSpanNavigation,
 } from '@mastra/playground-ui';
+import type { SpanTab } from '@mastra/playground-ui';
 import { ArrowLeftIcon, BookIcon, CircleGaugeIcon, EyeIcon, SaveIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { formatHierarchicalSpans } from '@/domains/traces/components/format-hierarchical-spans';
-import type { SpanTab } from '@/domains/traces/components/observability-traces-list';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
-import { SpanDataPanel } from '@/domains/traces/components/span-data-panel';
-import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
-import { TraceKeysAndValues } from '@/domains/traces/components/trace-keys-and-values';
-import { getAllSpanIds } from '@/domains/traces/hooks/get-all-span-ids';
-import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
+import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
+import { SpanScoring } from '@/domains/traces/components/span-scoring';
 import { Link } from '@/lib/link';
 
-export default function TraceDetailsPage() {
+export default function TracePage() {
   const { traceId } = useParams()! as { traceId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -41,26 +38,21 @@ export default function TraceDetailsPage() {
   const scoreIdParam = searchParams.get('scoreId') || undefined;
 
   const [featuredSpanId, setFeaturedSpanId] = useState<string | null>(spanIdParam ?? null);
-  const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [featuredScore, setFeaturedScore] = useState<ScoreRowData | undefined>();
   const [spanTab, setSpanTab] = useState<SpanTab>(initialSpanTab);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
 
-  const {
-    data: traceData,
-    isLoading: isTraceLoading,
-    error: traceError,
-    isError: isTraceError,
-  } = useTraceSpans(traceId);
-  const traceSpans = useMemo(() => traceData?.spans ?? [], [traceData?.spans]);
-  const rootSpan = useMemo(() => traceSpans.find(s => s.parentSpanId == null), [traceSpans]);
-  const timelineSpanIds = useMemo(() => getAllSpanIds(formatHierarchicalSpans(traceSpans)), [traceSpans]);
-  const spanIdToRecord = useMemo(() => {
-    const m = new Map<string, SpanRecord>();
-    for (const s of traceSpans) m.set(s.spanId, s);
-    return m;
-  }, [traceSpans]);
+  const { data: traceLight, isLoading: isTraceLoading, error: traceError } = useTraceLightSpans(traceId);
+  const lightSpans = useMemo(() => traceLight?.spans ?? [], [traceLight?.spans]);
+  const rootSpan = useMemo(() => lightSpans.find(s => s.parentSpanId == null), [lightSpans]);
+
+  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, featuredSpanId ?? '');
+
+  // Reset pagination whenever the active span changes — otherwise a page index from a previous
+  // span could be reused against a span that has fewer (or no) scores.
+  useEffect(() => setSpanScoresPage(0), [traceId, featuredSpanId]);
+
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
   const { data: spanScoresData, isLoading: isLoadingSpanScoresData } = useTraceSpanScores({
     traceId,
@@ -88,11 +80,10 @@ export default function TraceDetailsPage() {
   );
 
   const handleSpanSelect = useCallback(
-    (span: SpanRecord | undefined) => {
-      const id = span?.spanId ?? null;
+    (spanId: string | undefined) => {
+      const id = spanId ?? null;
       const isSameSpan = id === featuredSpanId;
       setFeaturedSpanId(id);
-      setFeaturedSpanRecord(span);
       if (!isSameSpan) {
         setFeaturedScore(undefined);
         setSpanTab('details');
@@ -104,31 +95,22 @@ export default function TraceDetailsPage() {
 
   const handleSpanClose = useCallback(() => {
     setFeaturedSpanId(null);
-    setFeaturedSpanRecord(undefined);
     setFeaturedScore(undefined);
     setSpanTab('details');
     updateSearchParams({ spanId: null, tab: null, scoreId: null });
   }, [updateSearchParams]);
 
-  const featuredSpanIdx = featuredSpanId ? timelineSpanIds.indexOf(featuredSpanId) : -1;
-
   const goToSpan = useCallback(
     (id: string) => {
       setFeaturedSpanId(id);
-      setFeaturedSpanRecord(spanIdToRecord.get(id));
       setFeaturedScore(undefined);
       setSpanTab('details');
       updateSearchParams({ spanId: id, tab: null, scoreId: null });
     },
-    [spanIdToRecord, updateSearchParams],
+    [updateSearchParams],
   );
 
-  const handlePreviousSpan = featuredSpanIdx > 0 ? () => goToSpan(timelineSpanIds[featuredSpanIdx - 1]) : undefined;
-
-  const handleNextSpan =
-    featuredSpanIdx >= 0 && featuredSpanIdx < timelineSpanIds.length - 1
-      ? () => goToSpan(timelineSpanIds[featuredSpanIdx + 1])
-      : undefined;
+  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, featuredSpanId, goToSpan);
 
   const handleSpanTabChange = useCallback(
     (tab: string) => {
@@ -161,19 +143,12 @@ export default function TraceDetailsPage() {
     setSpanTab('scoring');
     if (rootSpan && featuredSpanId !== rootSpan.spanId) {
       setFeaturedSpanId(rootSpan.spanId);
-      setFeaturedSpanRecord(rootSpan);
       setFeaturedScore(undefined);
       updateSearchParams({ spanId: rootSpan.spanId, tab: 'scoring', scoreId: null });
     } else {
       updateSearchParams({ tab: 'scoring' });
     }
   }, [rootSpan, featuredSpanId, updateSearchParams]);
-
-  const error = useMemo(() => (isTraceError ? parseError(traceError) : undefined), [isTraceError, traceError]);
-
-  const isUnauthorized = !!traceError && is401UnauthorizedError(traceError);
-  const isForbidden = !!traceError && is403ForbiddenError(traceError);
-  const hasOtherError = !!traceError && !isUnauthorized && !isForbidden;
 
   const traceTopAreaSharedContent = (
     <>
@@ -235,18 +210,12 @@ export default function TraceDetailsPage() {
     </>
   );
 
-  if (isUnauthorized || isForbidden || hasOtherError) {
+  if (traceError) {
     return (
       <PageLayout height="full">
         <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>
         <PageLayout.MainArea isCentered>
-          {isUnauthorized ? (
-            <SessionExpired />
-          ) : isForbidden ? (
-            <PermissionDenied resource="traces" />
-          ) : (
-            <ErrorState title="Failed to load trace" message={error?.error ?? 'Unknown error'} />
-          )}
+          <TracesErrorContent error={traceError} resource="traces" errorTitle="Failed to load trace" />
         </PageLayout.MainArea>
       </PageLayout>
     );
@@ -257,7 +226,7 @@ export default function TraceDetailsPage() {
       <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>
 
       <TraceAsItemDialog
-        traceDetails={rootSpan}
+        rootSpanId={rootSpan?.spanId}
         traceId={traceId}
         isOpen={datasetDialogOpen}
         onClose={() => setDatasetDialogOpen(false)}
@@ -266,38 +235,62 @@ export default function TraceDetailsPage() {
       <div
         className={cn(
           'grid h-full min-h-0 gap-4 overflow-hidden items-start mt-4',
-          featuredSpanRecord ? 'grid-cols-[2fr_3fr]' : 'grid-cols-[1fr]',
+          featuredSpanId ? 'grid-cols-[2fr_3fr]' : 'grid-cols-[1fr]',
         )}
       >
-        <TraceDataPanel
+        <TraceDataPanelView
           traceId={traceId}
+          spans={lightSpans}
+          isLoading={isTraceLoading}
           onClose={handleTraceClose}
           onSpanSelect={handleSpanSelect}
           onEvaluateTrace={handleEvaluateTrace}
           initialSpanId={featuredSpanId}
           placement="trace-page"
-          timelineChartWidth={featuredSpanRecord ? 'default' : 'wide'}
+          timelineChartWidth={featuredSpanId ? 'default' : 'wide'}
         />
-        {featuredSpanRecord && !isTraceLoading && (
+        {featuredSpanId && !isTraceLoading && (
           <div
             className={cn(
               'grid gap-4 max-h-full min-h-0 overflow-auto',
               featuredScore ? 'grid-rows-[1fr_1fr]' : 'grid-rows-[1fr]',
             )}
           >
-            <SpanDataPanel
-              span={featuredSpanRecord}
+            <SpanDataPanelView
+              traceId={traceId}
+              spanId={featuredSpanId}
+              span={spanDetailData?.span}
+              isLoading={isLoadingSpanDetail}
               onClose={handleSpanClose}
               onPrevious={handlePreviousSpan}
               onNext={handleNextSpan}
-              scorers={scorers}
-              isLoadingScorers={isLoadingScorers}
-              spanScoresData={spanScoresData}
-              isLoadingSpanScoresData={isLoadingSpanScoresData}
-              onSpanScoresPageChange={setSpanScoresPage}
-              onScoreSelect={handleScoreSelect}
               activeTab={spanTab}
               onTabChange={handleSpanTabChange}
+              scoringTabBadge={spanScoresData?.pagination?.total ?? undefined}
+              scoringTabSlot={({ span, traceId: tid, spanId: sid }) => (
+                <div className="grid gap-6">
+                  <SpanScoring
+                    traceId={tid}
+                    isTopLevelSpan={!Boolean(span.parentSpanId)}
+                    spanId={sid}
+                    entityType={
+                      span.attributes?.agentId || span.entityType === EntityType.AGENT
+                        ? 'Agent'
+                        : span.attributes?.workflowId || span.entityType === EntityType.WORKFLOW_RUN
+                          ? 'Workflow'
+                          : undefined
+                    }
+                    scorers={scorers}
+                    isLoadingScorers={isLoadingScorers}
+                  />
+                  <SpanScoresList
+                    scoresData={spanScoresData}
+                    onPageChange={setSpanScoresPage}
+                    isLoadingScoresData={isLoadingSpanScoresData}
+                    onScoreSelect={handleScoreSelect}
+                  />
+                </div>
+              )}
             />
             {featuredScore && <ScoreDataPanel score={featuredScore} onClose={handleScoreClose} />}
           </div>

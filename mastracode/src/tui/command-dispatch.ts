@@ -73,7 +73,7 @@ export async function dispatchSlashCommand(
 
   switch (command) {
     case 'new':
-      handleNewCommand(buildCtx());
+      await handleNewCommand(buildCtx());
       return true;
     case 'clone':
       await handleCloneCommand(buildCtx());
@@ -204,6 +204,11 @@ async function handleCustomSlashCommand(
       state.allSlashCommandComponents.push(slashComp);
       state.chatContainer.addChild(slashComp);
       state.ui.requestRender();
+
+      if (state.pendingNewThread) {
+        await state.harness.createThread();
+        state.pendingNewThread = false;
+      }
 
       // Wrap in <slash-command> tags so the assistant sees the full
       // content but addUserMessage won't double-render it.

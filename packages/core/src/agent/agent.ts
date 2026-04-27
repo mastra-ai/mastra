@@ -36,6 +36,8 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
+import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
@@ -59,7 +61,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
@@ -94,6 +96,7 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { runStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -192,8 +195,20 @@ export class Agent<
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
+  #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
+   * scope on this Agent instance. A new call for the same scope aborts the
+   * prior one before subscribing so bg-task pubsub events aren't fanned into
+   * two concurrent wrappers (which would forward duplicate events and
+   * trigger duplicate continuation turns).
+   *
+   * Value is the prior wrapper's `forceClose`. Entries remove themselves on
+   * close if they're still the active one.
+   */
+  #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -325,7 +340,24 @@ export class Agent<
     }
 
     if (config.browser) {
+      // Runtime check: Agent requires SDK providers (AgentBrowser, StagehandBrowser)
+      // CLI providers (BrowserViewer) should be used with Workspace instead
+      if (config.browser.providerType !== 'sdk') {
+        const mastraError = new MastraError({
+          id: 'AGENT_INVALID_BROWSER_PROVIDER',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: config.name,
+            providerType: config.browser.providerType,
+          },
+          text: `Agent.browser requires an SDK provider (providerType: 'sdk'), but received '${config.browser.providerType}'. Use @mastra/agent-browser or @mastra/stagehand for Agent.browser. For CLI providers like @mastra/browser-viewer, use Workspace.browser instead.`,
+        });
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
       this.#browser = config.browser;
+      this.#hasExplicitBrowser = true;
     }
 
     if (config.workspace) {
@@ -369,6 +401,32 @@ export class Agent<
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
     return this.#backgroundTasks;
+  }
+
+  /**
+   * Returns the statically-configured sub-agents without executing dynamic
+   * resolvers. Used by Mastra at registration time to detect whether background
+   * tasks should be auto-enabled. Returns undefined when sub-agents are
+   * configured via a function (those get resolved per-request).
+   * @internal
+   */
+  __getStaticAgents(): Record<string, Agent> | undefined {
+    if (typeof this.#agents === 'function') return undefined;
+    return this.#agents as Record<string, Agent> | undefined;
+  }
+
+  /**
+   * True when this agent has any sub-agent registry configured — either a
+   * static record with entries OR a dynamic (function-based) resolver.
+   * Used by Mastra at registration time to decide whether to auto-enable
+   * background tasks; we can't know what a function resolver will return
+   * at request time, so we enable defensively.
+   * @internal
+   */
+  __hasSubAgentsConfigured(): boolean {
+    if (typeof this.#agents === 'function') return true;
+    const record = this.#agents as Record<string, Agent> | undefined;
+    return !!record && Object.keys(record).length > 0;
   }
 
   /**
@@ -467,6 +525,9 @@ export class Agent<
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.#browser = browser;
+    // Mark as explicit so workspace browser doesn't overwrite
+    // Setting to undefined is also explicit (disabling browser tools)
+    this.#hasExplicitBrowser = true;
   }
 
   /**
@@ -474,7 +535,7 @@ export class Agent<
    * Used by Harness to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
-    return Boolean(this.#browser);
+    return this.#hasExplicitBrowser;
   }
 
   /**
@@ -1109,6 +1170,7 @@ export class Agent<
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
+        this.#setBrowserFromWorkspace(this.#workspace);
         return this.#workspace;
       }
 
@@ -1119,6 +1181,10 @@ export class Agent<
       const resolvedWorkspace = await Promise.resolve(result);
 
       if (!resolvedWorkspace) {
+        // Clear derived browser when factory returns no workspace
+        if (!this.#hasExplicitBrowser) {
+          this.#browser = undefined;
+        }
         return undefined;
       }
 
@@ -1134,11 +1200,37 @@ export class Agent<
         });
       }
 
+      this.#setBrowserFromWorkspace(resolvedWorkspace);
+
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    return this.#mastra?.getWorkspace();
+    const globalWorkspace = this.#mastra?.getWorkspace();
+    if (globalWorkspace) {
+      this.#setBrowserFromWorkspace(globalWorkspace);
+    } else if (!this.#hasExplicitBrowser) {
+      // Clear derived browser when no workspace available
+      this.#browser = undefined;
+    }
+    return globalWorkspace;
+  }
+
+  /**
+   * Sets the agent's browser from workspace if:
+   * 1. Agent doesn't already have a browser configured (SDK approach)
+   * 2. Workspace has a browser configured (CLI approach)
+   * @internal
+   */
+  #setBrowserFromWorkspace(workspace: AnyWorkspace): void {
+    // Skip if agent has an explicitly configured browser (SDK approach takes precedence)
+    if (this.#hasExplicitBrowser) {
+      return;
+    }
+
+    // Keep browser in sync with workspace per-request; clear when absent
+    // This allows factory workspaces to return different browsers per request
+    this.#browser = workspace.browser;
   }
 
   get voice() {
@@ -1358,7 +1450,6 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        saveStepMessages: this.saveStepMessages.bind(this),
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
@@ -2656,7 +2747,7 @@ export class Agent<
         processorStates,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext);
+        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -3179,8 +3270,6 @@ export class Agent<
             .optional(),
         });
 
-        const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
-
         const toolObj = createTool({
           id: `agent-${agentName}`,
           description: agent.getDescription() || `Agent: ${agentName}`,
@@ -3246,9 +3335,6 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify.default(this.id)}-${agentName}`;
 
-            const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
-            const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
-
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
@@ -3269,15 +3355,44 @@ export class Agent<
               requestContext.delete(MASTRA_RESOURCE_ID_KEY);
             }
 
+            // Resolve versioned sub-agent if a version override exists on requestContext.
+            // This must happen before onDelegationStart so the rejection branch can
+            // use the correct model version and memory config from the resolved agent.
+            let resolvedAgent = agent;
+            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            if (agentVersionSelector && this.#mastra) {
+              try {
+                resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
+              } catch (versionError) {
+                this.logger.warn('Failed to resolve versioned sub-agent, using code-defined default', {
+                  agent: this.name,
+                  targetAgent: agentName,
+                  targetAgentId: agent.id,
+                  versionSelector: agentVersionSelector,
+                  error: versionError,
+                });
+              }
+            }
+
+            // Recompute derived values from the resolved agent (may differ from
+            // code-defined agent if a stored version changed the model or defaults)
+            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
+            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
+
+            // Propagate parent memory to the resolved agent if it doesn't have its own.
+            // This must happen before onDelegationStart so the rejection path can
+            // save messages via resolvedAgent.getMemory().
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
                 methodType === 'stream' ||
                 methodType === 'streamLegacy') &&
-              supportedLanguageModelSpecifications.includes(modelVersion)
+              supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
-              if (!agent.hasOwnMemory() && this.#memory) {
-                agent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
               }
             }
 
@@ -3301,7 +3416,7 @@ export class Agent<
 
                     if (
                       (methodType === 'stream' || methodType === 'streamLegacy') &&
-                      supportedLanguageModelSpecifications.includes(modelVersion)
+                      supportedLanguageModelSpecifications.includes(resolvedModelVersion)
                     ) {
                       await context.writer?.write({
                         type: 'text-delta',
@@ -3315,7 +3430,7 @@ export class Agent<
                     }
 
                     // Save rejection messages to sub-agent's memory so the UI can display them
-                    const memory = await agent.getMemory({ requestContext });
+                    const memory = await resolvedAgent.getMemory({ requestContext });
                     if (memory) {
                       try {
                         // Create user message with the original prompt
@@ -3412,7 +3527,7 @@ export class Agent<
 
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
-              const agentOwnInstructions = await agent.getInstructions({ requestContext });
+              const agentOwnInstructions = await resolvedAgent.getInstructions({ requestContext });
               if (agentOwnInstructions) {
                 const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
@@ -3467,17 +3582,17 @@ export class Agent<
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const generateResult = resumeData
-                  ? await agent.resumeGenerate(resumeData, {
+                  ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3488,13 +3603,13 @@ export class Agent<
                         : {}),
                       disableBackgroundTasks: true,
                     })
-                  : await agent.generate(messagesForSubAgent, {
+                  : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3536,7 +3651,7 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
+                const memory = await resolvedAgent.getMemory({ requestContext });
                 if (memory) {
                   try {
                     await memory.createThread({
@@ -3570,8 +3685,8 @@ export class Agent<
                 }
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
-              } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
+              } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
+                const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
@@ -3579,17 +3694,17 @@ export class Agent<
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const streamResult = resumeData
-                  ? await agent.resumeStream(resumeData, {
+                  ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3602,13 +3717,13 @@ export class Agent<
                         : {}),
                       disableBackgroundTasks: true,
                     })
-                  : await agent.stream(messagesForSubAgent, {
+                  : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3685,15 +3800,15 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
-                if (memory) {
+                const streamMemory = await resolvedAgent.getMemory({ requestContext });
+                if (streamMemory) {
                   try {
-                    await memory.createThread({
+                    await streamMemory.createThread({
                       resourceId: subAgentResourceId,
                       threadId: subAgentThreadId,
                     });
 
-                    await memory.saveMessages({
+                    await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
                     });
                   } catch (memoryError) {
@@ -3729,7 +3844,7 @@ export class Agent<
                   subAgentToolResults,
                 };
               } else {
-                const streamResult = await agent.streamLegacy(effectivePrompt, {
+                const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                 });
@@ -4452,47 +4567,6 @@ export class Agent<
     return tools;
   }
 
-  /**
-   * Adds response messages from a step to the MessageList and schedules persistence.
-   * This is used for incremental saving: after each agent step, messages are added to a save queue
-   * and a debounced save operation is triggered to avoid redundant writes.
-   *
-   * @param result - The step result containing response messages.
-   * @param messageList - The MessageList instance for the current thread.
-   * @param threadId - The thread ID.
-   * @param memoryConfig - The memory configuration for saving.
-   * @param runId - (Optional) The run ID for logging.
-   * @internal
-   */
-  private async saveStepMessages({
-    result,
-    messageList,
-    runId,
-  }: {
-    result: any;
-    messageList: MessageList;
-    runId?: string;
-  }) {
-    try {
-      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
-      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
-      const stepResponseMessages = result.response.dbMessages?.length
-        ? result.response.dbMessages
-        : result.response.messages;
-      if (stepResponseMessages?.length) {
-        messageList.add(stepResponseMessages, 'response');
-      }
-      // Message saving is now handled by MessageHistory output processor
-    } catch (e) {
-      this.logger.error('Error adding messages on step finish', {
-        agent: this.name,
-        error: e,
-        runId,
-      });
-      throw e;
-    }
-  }
-
   async #runScorers({
     messageList,
     runId,
@@ -4709,6 +4783,41 @@ export class Agent<
   }
 
   /**
+   * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
+   * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
+   * @internal
+   */
+  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId,
+    });
+
+    if (!existingSnapshot) {
+      const hasStorage = !!workflowsStore;
+      throw new MastraError({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
+          (hasStorage
+            ? `The run may have already completed, never suspended, or the runId is invalid. `
+            : `No storage is configured on this Mastra instance, so workflow snapshots cannot be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). `) +
+          `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
+        details: {
+          runId,
+          agentName: this.name,
+          hasStorage,
+        },
+      });
+    }
+
+    return existingSnapshot;
+  }
+
+  /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
@@ -4726,8 +4835,26 @@ export class Agent<
     }
     const requestContext = options.requestContext || new RequestContext();
 
+    // Build version overrides by merging: Mastra defaults < requestContext < call-site
+    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
+
+    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
+    if (options.versions) {
+      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
+    }
+
+    if (mergedVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+    }
+
+    // Resolve workspace early so we can get browser from it if needed
+    const earlyWorkspace = await this.getWorkspace({ requestContext });
+
     // Inject browser context for BrowserContextProcessor
-    if (this.#browser && !requestContext.has('browser')) {
+    // Check both agent's browser (SDK providers) and workspace's browser (CLI providers)
+    const browser = this.#browser ?? earlyWorkspace?.browser;
+    if (browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
       // Normalize memory.thread which can be a string or { id, ... } object
       const memoryThread = options.memory?.thread;
@@ -4740,14 +4867,21 @@ export class Agent<
       // Use thread-aware running check to avoid cross-thread state leakage
       // In thread scope, only report running if this specific thread has a session
       const isThreadRunning = browserThreadId
-        ? this.#browser.hasThreadSession(browserThreadId) && this.#browser.isBrowserRunning()
-        : this.#browser.isBrowserRunning();
+        ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
+        : browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
-        provider: this.#browser.provider,
-        sessionId: this.#browser.getSessionId(browserThreadId),
-        headless: this.#browser.headless,
-        currentUrl: isThreadRunning ? ((await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        provider: browser.provider,
+        providerType: browser.providerType,
+        sessionId: browser.getSessionId(browserThreadId),
+        headless: browser.headless,
+        currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        // For CLI providers, include CDP URL so agent can pass it to CLI commands
+        // Only expose CDP URL if the thread is actually running to avoid stale endpoints
+        cdpUrl:
+          browser.providerType === 'cli' && isThreadRunning
+            ? (browser.getCdpUrl(browserThreadId) ?? undefined)
+            : undefined,
       };
       requestContext.set('browser', browserCtx);
     }
@@ -4853,7 +4987,9 @@ export class Agent<
     });
 
     const memory = await this.getMemory({ requestContext });
-    const workspace = await this.getWorkspace({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -4862,6 +4998,7 @@ export class Agent<
 
     // Create a capabilities object with bound methods
     const capabilities = {
+      agent: this,
       agentName: this.name,
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
@@ -4872,7 +5009,6 @@ export class Agent<
         '_agentNetworkAppend' in this
           ? Boolean((this as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend)
           : undefined,
-      saveStepMessages: this.saveStepMessages.bind(this),
       convertTools: this.convertTools.bind(this),
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
@@ -4935,6 +5071,7 @@ export class Agent<
             backgroundTaskManager: this.#mastra?.backgroundTaskManager,
             agentBackgroundConfig: this.#backgroundTasks,
           }),
+      skipBgTaskWait: options._skipBgTaskWait,
     });
 
     const run = await executionWorkflow.createRun();
@@ -5564,6 +5701,83 @@ export class Agent<
   }
 
   /**
+   * Streams the agent's response and keeps the stream open until all
+   * background tasks dispatched during this turn (and any triggered by
+   * follow-up turns) complete. When a background task finishes, its tool
+   * result is injected into memory by the tool-call-step's `onResult` hook,
+   * and this method re-enters the agentic loop via `agent.stream([], ...)`
+   * so the LLM can process the result immediately — without waiting for a
+   * new user message.
+   *
+   * Invariants:
+   * - Only one inner LLM stream runs at a time (a completion arriving
+   *   mid-turn is queued and processed after the current turn ends).
+   * - When there are no running background tasks and no queued completions,
+   *   the outer stream closes.
+   * - If the agent has no memory configured, this falls through to a plain
+   *   `stream()` call since continuation requires memory.
+   *
+   * Return shape: `streamUntilIdle` returns a `MastraModelOutput` that looks
+   * like the one from `stream()` — *only* `fullStream` spans the initial
+   * turn **and** any auto-continuations. Aggregate properties (`text`,
+   * `toolCalls`, `toolResults`, `finishReason`, `messageList`,
+   * `getFullOutput()`) still resolve against the **first turn's** internal
+   * buffer. If you need an aggregate view across continuations, consume
+   * `fullStream` yourself and accumulate — or follow up with `agent.generate`
+   * once the stream closes.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.streamUntilIdle('Research solana for me', {
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   *
+   * for await (const chunk of stream.fullStream) {
+   *   // chunks from the initial turn AND any continuation turns
+   *   // triggered by background task completions flow through here
+   * }
+   * ```
+   */
+  async streamUntilIdle<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<T>>;
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
+      activeStreams: this.#activeStreamUntilIdle,
+      bgManager: this.#mastra?.backgroundTaskManager,
+    });
+  }
+
+  /**
    * Resumes a previously suspended stream execution.
    * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
    *
@@ -5640,11 +5854,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: streamOptions?.runId ?? '',
-    });
+    const runId = streamOptions?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
 
     const result = await this.#execute({
       ...mergedStreamOptions,
@@ -5768,11 +5979,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: options?.runId ?? '',
-    });
+    const runId = options?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
 
     const result = await this.#execute({
       ...mergedOptions,
