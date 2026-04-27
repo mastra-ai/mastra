@@ -3,6 +3,7 @@ export * from './mount';
 export * from './composite-filesystem';
 export * from './mastra-filesystem';
 export * from './local-filesystem';
+export * from './google-drive-filesystem';
 export * from './fs-utils';
 export * from './file-read-tracker';
 export * from './file-write-lock';
