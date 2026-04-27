@@ -400,6 +400,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        ctx.set(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       // Explicitly set content-type and handle null/undefined to ensure proper JSON response
       // Koa sets 204 No Content when body is null, but we want to return JSON null

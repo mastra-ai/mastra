@@ -1,7 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { MastraAuthConfig } from '@mastra/core/server';
+import type { MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
@@ -272,9 +272,9 @@ export const getAuthenticatedUser = async <TUser = unknown>({
  * Check if an auth config object supports transparent session refresh.
  * Returns true if the auth provider implements the necessary ISessionProvider methods.
  */
-function supportsSessionRefresh(
-  authConfig: MastraAuthConfig,
-): authConfig is MastraAuthConfig &
+export function supportsSessionRefresh(
+  authConfig: MastraAuthConfig | MastraAuthProvider,
+): authConfig is (MastraAuthConfig | MastraAuthProvider) &
   Pick<ISessionProvider, 'refreshSession' | 'getSessionIdFromRequest' | 'getSessionHeaders'> {
   return (
     typeof (authConfig as any).getSessionIdFromRequest === 'function' &&
