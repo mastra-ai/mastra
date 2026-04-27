@@ -101,7 +101,10 @@ async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
 
   return entries
     .filter(
-      entry => (entry.isFile() || entry.isSymbolicLink()) && (entry.name === '.env' || entry.name.startsWith('.env.')),
+      entry =>
+        (entry.isFile() || entry.isSymbolicLink()) &&
+        (entry.name === '.env' || entry.name.startsWith('.env.')) &&
+        !entry.name.endsWith('.example'),
     )
     .map(entry => entry.name)
     .sort((a, b) => a.localeCompare(b));
