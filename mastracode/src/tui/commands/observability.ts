@@ -168,7 +168,10 @@ function handleLocal(ctx: SlashCommandContext, args: string[]): void {
   } else {
     ctx.showInfo(
       `${theme.fg('success', '✓')} Local DuckDB tracing disabled.\n` +
-        theme.fg('dim', 'Restart MastraCode for changes to take effect.\nExisting data remains at the DuckDB path — delete manually if needed.'),
+        theme.fg(
+          'dim',
+          'Restart MastraCode for changes to take effect.\nExisting data remains at the DuckDB path — delete manually if needed.',
+        ),
     );
   }
 }
