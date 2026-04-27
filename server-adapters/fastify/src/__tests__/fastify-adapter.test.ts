@@ -613,7 +613,7 @@ describe('Fastify Server Adapter', () => {
       }
     });
 
-    it('should preserve file metadata (filename, mimetype, buffer)', async () => {
+    it('should expose uploaded file as buffer', async () => {
       app = Fastify();
 
       const adapter = new MastraServer({
@@ -647,8 +647,11 @@ describe('Fastify Server Adapter', () => {
 
       expect(response.status).toBe(200);
       expect(data.file).toBeDefined();
-      expect(Buffer.isBuffer(data.file)).toBe(true);
-      expect(data.file.toString()).toBe('hello world');
+
+      // reconstruct buffer from JSON
+      const reconstructed = Buffer.from(data.file.data);
+
+      expect(reconstructed.toString()).toBe('hello world');
     });
 
     it('should return error when file exceeds size limit (no hang)', async () => {
@@ -685,7 +688,6 @@ describe('Fastify Server Adapter', () => {
       expect(response.status).toBeGreaterThanOrEqual(400);
     });
   });
-
 
   describe('Custom route prefix validation', () => {
     it('should throw when a custom route path starts with the server prefix', async () => {
