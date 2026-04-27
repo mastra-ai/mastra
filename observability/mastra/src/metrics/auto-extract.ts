@@ -16,9 +16,14 @@ export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): voi
   }
 
   const durationMs = span.endTime.getTime() - span.startTime.getTime();
-  metrics.emit(durationMetricName, durationMs, {
-    status: span.errorInfo ? 'error' : 'ok',
-  });
+  metrics.emit(
+    durationMetricName,
+    durationMs,
+    {
+      status: span.errorInfo ? 'error' : 'ok',
+    },
+    { source: 'auto' },
+  );
 }
 
 /** Emit token usage metrics for a model-generation span. */
@@ -65,11 +70,11 @@ function emitUsageMetrics(
   const emit = (name: TokenMetrics, value: number) => {
     const costContext = metricCosts.get(name);
     if (!costContext) {
-      metrics.emit(name, value);
+      metrics.emit(name, value, undefined, { source: 'auto' });
       return;
     }
 
-    metrics.emit(name, value, undefined, { costContext });
+    metrics.emit(name, value, undefined, { costContext, source: 'auto' });
   };
 
   for (const sample of getTokenMetricSamples(usage)) {

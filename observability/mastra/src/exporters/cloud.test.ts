@@ -981,6 +981,46 @@ describe('CloudExporter', () => {
       await multiSignalExporter.shutdown();
     });
 
+    it('should drop auto-extracted metrics by default', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+      });
+
+      await cloudExporter.onMetricEvent(getMockMetricEvent({ source: 'auto' }));
+      await cloudExporter.flush();
+
+      const buffer = (cloudExporter as any).buffer;
+      expect(buffer.totalSize).toBe(0);
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+
+      await cloudExporter.shutdown();
+    });
+
+    it('should allow auto-extracted metrics when the metric filter is overridden', async () => {
+      const cloudExporter = new CloudExporter({
+        accessToken: testJWT,
+        endpoint: 'http://localhost:3000',
+        signalFilters: {
+          metrics: () => true,
+        },
+      });
+
+      await cloudExporter.onMetricEvent(getMockMetricEvent({ source: 'auto' }));
+      await cloudExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'http://localhost:3000/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await cloudExporter.shutdown();
+    });
+
     it('should derive signal endpoints from a base endpoint', async () => {
       const derivedExporter = new CloudExporter({
         accessToken: testJWT,

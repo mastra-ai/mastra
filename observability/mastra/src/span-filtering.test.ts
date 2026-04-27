@@ -1,5 +1,5 @@
-import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
-import type { TracingEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, InternalSpans, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, ObservabilityExporter, AnyExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
@@ -21,9 +21,14 @@ afterAll(() => {
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
+  }
+
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
   }
 
   async shutdown(): Promise<void> {}
@@ -31,6 +36,7 @@ class TestExporter implements ObservabilityExporter {
 
   reset(): void {
     this.events = [];
+    this.metricEvents = [];
   }
 }
 
@@ -263,6 +269,39 @@ describe('Span Filtering', () => {
       const spanNames = testExporter.events.map(e => e.exportedSpan.name);
       expect(spanNames).toContain('prod-agent');
       expect(spanNames).not.toContain('dev-agent');
+    });
+  });
+
+  describe('auto-extracted metrics controls', () => {
+    it('should emit auto-extracted metrics by default', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      agent.end();
+
+      expect(testExporter.metricEvents.length > 0).toBe(true);
+      expect(testExporter.metricEvents[0]?.metric.source).toBe('auto');
+    });
+
+    it('should skip auto-extracted metrics when disabled', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        metrics: { autoExtract: false },
+      });
+
+      const agent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      agent.end();
+
+      expect(testExporter.events.some(e => e.type === TracingEventType.SPAN_ENDED)).toBe(true);
+      expect(testExporter.metricEvents.length > 0).toBe(false);
     });
   });
 

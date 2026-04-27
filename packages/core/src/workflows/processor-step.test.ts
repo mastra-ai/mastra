@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { SpanType } from '../observability';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
@@ -228,6 +229,65 @@ describe('createStep with Processor', () => {
           messages: [{ id: '1', content: 'test', modified: true }],
         }),
       );
+    });
+
+    it('should not create processor spans when processor observability is disabled', async () => {
+      const createChildSpan = vi.fn();
+      const processor: Processor = {
+        id: 'quiet-processor',
+        observability: false,
+        processInput: async ({ messages }) => messages,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await step.execute({
+        inputData: {
+          phase: 'input',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          systemMessages: [],
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(createChildSpan).not.toHaveBeenCalled();
+    });
+
+    it('should create processor spans by default', async () => {
+      const end = vi.fn();
+      const createChildSpan = vi.fn(() => ({ end }));
+      const processor: Processor = {
+        id: 'traced-processor',
+        processInput: async ({ messages }) => messages,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await step.execute({
+        inputData: {
+          phase: 'input',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          systemMessages: [],
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(createChildSpan).toHaveBeenCalledWith(expect.objectContaining({ type: SpanType.PROCESSOR_RUN }));
+      expect(end).toHaveBeenCalled();
     });
 
     it('should call processInputStep when phase is inputStep', async () => {

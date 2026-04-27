@@ -922,7 +922,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
 
       const processorSpan =
-        phase !== 'outputStream'
+        phase !== 'outputStream' && processor.observability !== false
           ? parentSpan?.createChildSpan({
               type: SpanType.PROCESSOR_RUN,
               name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
@@ -1200,7 +1200,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
 
-              if (!processorSpan && parentSpan) {
+              if (!processorSpan && parentSpan && processor.observability !== false) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
                   type: SpanType.PROCESSOR_RUN,

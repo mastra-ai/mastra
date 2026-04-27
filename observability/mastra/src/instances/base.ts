@@ -76,6 +76,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanFilter: config.spanFilter,
       requestContextKeys: config.requestContextKeys ?? [],
       serializationOptions: config.serializationOptions,
+      cardinality: config.cardinality,
+      metrics: {
+        autoExtract: config.metrics?.autoExtract ?? true,
+      },
       logging: config.logging,
     };
 
@@ -631,6 +635,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const exportedSpan = this.getSpanForExport(span);
 
     if (exportedSpan) {
+      if (this.config.metrics?.autoExtract === false) {
+        const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
+        this.emitTracingEvent(event);
+        return;
+      }
+
       try {
         // TODO: We intentionally export first so auto-extracted metrics are skipped
         // when the span is filtered out by processors. Metrics still use the live

@@ -322,6 +322,9 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   /** When true, this processor will also receive `data-*` chunks in processOutputStream. Default: false. */
   processDataParts?: boolean;
 
+  /** Set to `false` to run this processor without emitting PROCESSOR_RUN spans. */
+  observability?: boolean;
+
   /**
    * Process input messages before they are sent to the LLM
    *

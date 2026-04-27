@@ -36,6 +36,10 @@ import type {
   ToolCallInfo,
 } from './index';
 
+function shouldEmitProcessorObservability(processor: object): boolean {
+  return !('observability' in processor) || processor.observability !== false;
+}
+
 /**
  * Implementation of processor state management
  */
@@ -50,17 +54,20 @@ export class ProcessorState<OUTPUT = undefined> {
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<SpanType.PROCESSOR_RUN>;
+  public emitObservability = true;
 
   constructor(
     options?: {
       processorName?: string;
       processorIndex?: number;
       createSpan?: boolean;
+      emitObservability?: boolean;
     } & Partial<ObservabilityContext>,
   ) {
+    this.emitObservability = options?.emitObservability !== false;
     // Only create span if explicitly requested (legacy processors)
     // Workflow processors handle span creation in workflow.ts
-    if (!options?.createSpan || !options.processorName) {
+    if (!options?.createSpan || !options.processorName || !this.emitObservability) {
       return;
     }
 
@@ -427,22 +434,24 @@ export class ProcessorRunner {
       const summarizedResult = result ? summarizeProcessorResultForSpan(result) : undefined;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output processor: ${processor.id}`,
-        entityType: EntityType.OUTPUT_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          ...(summarizedResult ? { result: summarizedResult } : {}),
-          retryCount,
-        },
-      });
+      const processorSpan = shouldEmitProcessorObservability(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `output processor: ${processor.id}`,
+            entityType: EntityType.OUTPUT_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: {
+              processorExecutor: 'legacy',
+              processorIndex: index,
+            },
+            input: {
+              messages: processableMessages,
+              ...(summarizedResult ? { result: summarizedResult } : {}),
+              retryCount,
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -622,6 +631,7 @@ export class ProcessorRunner {
                 ...observabilityContext,
                 processorIndex: index,
                 createSpan: true,
+                emitObservability: shouldEmitProcessorObservability(processor),
               });
               processorStates.set(processor.id, state);
             }
@@ -821,21 +831,23 @@ export class ProcessorRunner {
       const inputSystemMessagesBefore = currentSystemMessages;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input processor: ${processor.id}`,
-        entityType: EntityType.INPUT_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          systemMessages: currentSystemMessages,
-        },
-      });
+      const processorSpan = shouldEmitProcessorObservability(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `input processor: ${processor.id}`,
+            entityType: EntityType.INPUT_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: {
+              processorExecutor: 'legacy',
+              processorIndex: index,
+            },
+            input: {
+              messages: processableMessages,
+              systemMessages: currentSystemMessages,
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1104,28 +1116,30 @@ export class ProcessorRunner {
 
       // Use the current span (the step span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
-      const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input step processor: ${processor.id}`,
-        entityType: EntityType.INPUT_STEP_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: buildProcessInputStepSpanInput({
-          messages: inputData.messages,
-          systemMessages: inputData.systemMessages,
-          stepNumber: inputData.stepNumber,
-          messageId: inputData.messageId,
-          retryCount: args.retryCount ?? 0,
-          model: inputData.model,
-          tools: inputData.tools,
-          toolChoice: inputData.toolChoice,
-          activeTools: inputData.activeTools,
-        }),
-      });
+      const processorSpan = shouldEmitProcessorObservability(processor)
+        ? currentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `input step processor: ${processor.id}`,
+            entityType: EntityType.INPUT_STEP_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: {
+              processorExecutor: 'legacy',
+              processorIndex: index,
+            },
+            input: buildProcessInputStepSpanInput({
+              messages: inputData.messages,
+              systemMessages: inputData.systemMessages,
+              stepNumber: inputData.stepNumber,
+              messageId: inputData.messageId,
+              retryCount: args.retryCount ?? 0,
+              model: inputData.model,
+              tools: inputData.tools,
+              toolChoice: inputData.toolChoice,
+              activeTools: inputData.activeTools,
+            }),
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1335,25 +1349,27 @@ export class ProcessorRunner {
       };
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output step processor: ${processor.id}`,
-        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          systemMessages: currentSystemMessages,
-          stepNumber,
-          ...(finishReason !== undefined ? { finishReason } : {}),
-          ...(toolCalls !== undefined ? { toolCalls } : {}),
-          ...(text !== undefined ? { text } : {}),
-        },
-      });
+      const processorSpan = shouldEmitProcessorObservability(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `output step processor: ${processor.id}`,
+            entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: {
+              processorExecutor: 'legacy',
+              processorIndex: index,
+            },
+            input: {
+              messages: processableMessages,
+              systemMessages: currentSystemMessages,
+              stepNumber,
+              ...(finishReason !== undefined ? { finishReason } : {}),
+              ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(text !== undefined ? { text } : {}),
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1509,24 +1525,26 @@ export class ProcessorRunner {
       let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `request error processor: ${processor.id}`,
-        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          error: error instanceof Error ? error.message : String(error),
-          stepNumber,
-          ...(args.messageId ? { messageId: args.messageId } : {}),
-          retryCount,
-        },
-      });
+      const processorSpan = shouldEmitProcessorObservability(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `request error processor: ${processor.id}`,
+            entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: {
+              processorExecutor: 'legacy',
+              processorIndex: index,
+            },
+            input: {
+              messages: processableMessages,
+              error: error instanceof Error ? error.message : String(error),
+              stepNumber,
+              ...(args.messageId ? { messageId: args.messageId } : {}),
+              retryCount,
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();

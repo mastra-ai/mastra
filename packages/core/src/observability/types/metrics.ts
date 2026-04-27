@@ -21,6 +21,8 @@ export type MetricType = 'counter' | 'gauge' | 'histogram';
 export interface MetricEmitOptions {
   /** Canonical model/cost context for this specific metric row */
   costContext?: CostContext;
+  /** Origin of this metric. Auto-extracted span metrics set this to `auto`. */
+  source?: 'auto' | 'custom';
 }
 
 export interface MetricsContext {
@@ -101,6 +103,9 @@ export interface ExportedMetric {
 
   /** Context for cost estimation */
   costContext?: CostContext;
+
+  /** Origin of this metric. Auto-extracted span metrics set this to `auto`. */
+  source?: 'auto' | 'custom';
 
   /**
    * User-defined metadata.

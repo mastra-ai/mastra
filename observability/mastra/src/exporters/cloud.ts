@@ -17,6 +17,13 @@ export interface CloudExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
+  signalFilters?: {
+    logs?: (log: LogEvent['log']) => boolean;
+    /** Defaults to dropping auto-extracted metrics; override to export them. */
+    metrics?: (metric: MetricEvent['metric']) => boolean;
+    scores?: (score: ScoreEvent['score']) => boolean;
+    feedback?: (feedback: FeedbackEvent['feedback']) => boolean;
+  };
 
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
@@ -37,6 +44,13 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   metrics: '/metrics/publish',
   scores: '/scores/publish',
   feedback: '/feedback/publish',
+};
+
+const DEFAULT_CLOUD_SIGNAL_FILTERS: Required<NonNullable<CloudExporterConfig['signalFilters']>> = {
+  logs: () => true,
+  metrics: metric => metric.source !== 'auto',
+  scores: () => true,
+  feedback: () => true,
 };
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
@@ -214,6 +228,7 @@ type ResolvedCloudConfig = {
   metricsEndpoint: string;
   scoresEndpoint: string;
   feedbackEndpoint: string;
+  signalFilters: Required<NonNullable<CloudExporterConfig['signalFilters']>>;
 };
 
 export class CloudExporter extends BaseExporter {
@@ -276,6 +291,10 @@ export class CloudExporter extends BaseExporter {
       metricsEndpoint: resolveConfiguredSignalEndpoint('metrics', config.metricsEndpoint),
       scoresEndpoint: resolveConfiguredSignalEndpoint('scores', config.scoresEndpoint),
       feedbackEndpoint: resolveConfiguredSignalEndpoint('feedback', config.feedbackEndpoint),
+      signalFilters: {
+        ...DEFAULT_CLOUD_SIGNAL_FILTERS,
+        ...config.signalFilters,
+      },
     };
 
     this.buffer = {
@@ -300,7 +319,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onLogEvent(event: LogEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.logs(event.log)) {
       return;
     }
 
@@ -309,7 +328,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onMetricEvent(event: MetricEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.metrics(event.metric)) {
       return;
     }
 
@@ -318,7 +337,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.scores(event.score)) {
       return;
     }
 
@@ -327,7 +346,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.feedback(event.feedback)) {
       return;
     }
 
