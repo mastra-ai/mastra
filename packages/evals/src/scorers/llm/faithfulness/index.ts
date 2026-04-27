@@ -19,9 +19,9 @@ const getToolInvocationContext = (output: unknown): string[] => {
 
   const assistantMessage = output.find(({ role }) => role === 'assistant');
   return (
-    assistantMessage?.content?.toolInvocations?.map((toolCall: any) =>
-      toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '',
-    ) ?? []
+    assistantMessage?.content?.toolInvocations
+      ?.filter((toolCall: any) => toolCall.state === 'result')
+      .map((toolCall: any) => JSON.stringify(toolCall.result)) ?? []
   );
 };
 
