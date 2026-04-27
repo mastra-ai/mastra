@@ -595,4 +595,93 @@ describe('Fastify Server Adapter', () => {
       await response.json();
     });
   });
+
+  describe('Multipart File Handling (Busboy)', () => {
+    let context: AdapterTestContext;
+    let app: FastifyInstance | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (app) {
+        await app.close();
+        app = null;
+      }
+    });
+
+    it('should preserve file metadata (filename, mimetype, buffer)', async () => {
+      app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload',
+        responseType: 'json',
+        handler: async (params: any) => {
+          return params;
+        },
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      const form = new FormData();
+      form.append('file', new Blob(['hello world']), 'test.txt');
+
+      const response = await fetch(`${address}/test/upload`, {
+        method: 'POST',
+        body: form as any,
+      });
+
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.file).toBeDefined();
+      expect(data.file.filename).toBe('test.txt');
+      expect(data.file.mimetype).toBeDefined();
+      expect(data.file.buffer).toBeDefined();
+    });
+
+    it('should return error when file exceeds size limit (no hang)', async () => {
+      app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        bodyLimitOptions: { maxSize: 1024 }, // 1KB limit
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload-limit',
+        responseType: 'json',
+        handler: async (params: any) => params,
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      const bigBuffer = new Uint8Array(1024 * 10); // 10KB
+
+      const form = new FormData();
+      form.append('file', new Blob([bigBuffer]), 'big.txt');
+
+      const response = await fetch(`${address}/test/upload-limit`, {
+        method: 'POST',
+        body: form as any,
+      });
+
+      expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+  });
 });
