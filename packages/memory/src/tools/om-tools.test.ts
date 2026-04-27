@@ -2389,14 +2389,43 @@ describe('om-tools', () => {
   });
 
   describe('recallTool message scoping', () => {
-    it('should require cursor or threadId for mode="messages"', async () => {
+    it('should default to the current thread when mode="messages" omits cursor and threadId', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const getThreadById = vi.fn().mockResolvedValue({
+        id: 'thread-a',
+        resourceId: 'res-a',
+        createdAt: new Date('2024-01-01T09:00:00Z'),
+        updatedAt: new Date('2024-01-01T10:00:00Z'),
+      });
+      const recallMock = vi.fn().mockResolvedValue({
+        messages: [
+          {
+            id: 'msg-1',
+            threadId: 'thread-a',
+            resourceId: 'res-a',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Message 1' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      const result = await tool.execute?.({ mode: 'messages' }, {
+        memory: { getThreadById, recall: recallMock },
+        agent: { threadId: 'thread-a', resourceId: 'res-a' },
+      } as any);
+
+      expect(getThreadById).toHaveBeenCalledWith({ threadId: 'thread-a' });
+      expect(recallMock).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'thread-a', resourceId: 'res-a' }));
+      expect((result as any)?.messages).toMatch(/^threadId wasn't passed so used default thread-a\.\n\n/);
+      expect((result as any)?.messages).toContain('Message 1');
+    });
+
+    it('should require cursor or current thread for mode="messages"', async () => {
       const tool = recallTool(undefined, { retrievalScope: 'resource' });
 
       await expect(
-        tool.execute?.({ mode: 'messages' }, {
-          memory: {},
-          agent: { threadId: 'thread-a', resourceId: 'res-a' },
-        } as any),
+        tool.execute?.({ mode: 'messages' }, { memory: {}, agent: { resourceId: 'res-a' } } as any),
       ).rejects.toThrow('Either cursor or threadId is required for mode="messages"');
     });
 
