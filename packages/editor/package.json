@@ -46,6 +46,16 @@
         "types": "./dist/storage/index.d.ts",
         "default": "./dist/storage/index.cjs"
       }
+    },
+    "./ee": {
+      "import": {
+        "types": "./dist/ee/index.d.ts",
+        "default": "./dist/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/ee/index.d.ts",
+        "default": "./dist/ee/index.cjs"
+      }
     }
   },
   "files": [
@@ -53,8 +63,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts src/ee/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts src/ee/index.ts --format cjs,esm --dts --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

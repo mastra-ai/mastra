@@ -41,6 +41,16 @@
         "default": "./dist/auth/ee/index.cjs"
       }
     },
+    "./agent-builder/ee": {
+      "import": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/index.d.ts",
+        "default": "./dist/agent-builder/ee/index.cjs"
+      }
+    },
     "./tools/is-vercel-tool": {
       "import": {
         "types": "./dist/tools/is-vercel-tool.d.ts",

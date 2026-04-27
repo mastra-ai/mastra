@@ -42,6 +42,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'mcpClients',
   'skills',
   'workspace',
+  'browser',
 ] as const;
 
 // ============================================================================
@@ -172,6 +173,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     scorers,
     skills,
     workspace,
+    browser,
     requestContextSchema,
   }) => {
     try {
@@ -201,32 +203,38 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Create agent with flat StorageCreateAgentInput
-      // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
-      await agentsStore.create({
-        agent: {
-          id,
-          authorId,
-          metadata,
-          name,
-          description,
-          instructions,
-          model,
-          tools,
-          defaultOptions,
-          workflows,
-          agents,
-          integrationTools,
-          mcpClients,
-          inputProcessors,
-          outputProcessors,
-          memory,
-          scorers,
-          skills,
-          workspace,
-          requestContextSchema,
-        } as StorageCreateAgentInput,
-      });
+      const input = {
+        id,
+        authorId,
+        metadata,
+        name,
+        description,
+        instructions,
+        model,
+        tools,
+        defaultOptions,
+        workflows,
+        agents,
+        integrationTools,
+        mcpClients,
+        inputProcessors,
+        outputProcessors,
+        memory,
+        scorers,
+        skills,
+        workspace,
+        browser,
+        requestContextSchema,
+      } as StorageCreateAgentInput;
+
+      // Use editor.agent.create() when available to apply builder defaults
+      const editor = mastra.getEditor?.();
+      if (editor) {
+        await editor.agent.create(input);
+      } else {
+        // Fallback to direct storage create
+        await agentsStore.create({ agent: input });
+      }
 
       // Return the resolved agent (thin record + version config)
       // Use draft status since newly created entities start as drafts
@@ -291,6 +299,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     scorers,
     skills,
     workspace,
+    browser,
     requestContextSchema,
     // Version metadata
     changeMessage,
@@ -336,6 +345,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 
@@ -357,6 +367,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser,
         requestContextSchema,
       };
 

@@ -23,6 +23,7 @@ declare global {
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
@@ -313,7 +314,7 @@ const routes = [
           ]
         : []),
 
-      { index: true, loader: () => redirect('/agents') },
+      { index: true, element: <StudioIndexRedirect /> },
       { path: '/request-context', element: <RequestContext /> },
     ],
   },

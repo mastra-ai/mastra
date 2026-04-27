@@ -213,16 +213,24 @@ function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
 interface MockEditor {
   agent: {
     clearCache: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
   };
   prompt: {
     preview: ReturnType<typeof vi.fn>;
   };
 }
 
-function createMockEditor(): MockEditor {
+function createMockEditor(agentsStore?: MockAgentsStore): MockEditor {
   return {
     agent: {
       clearCache: vi.fn(),
+      // Delegate to storage so existing assertions work
+      create: vi.fn().mockImplementation(async (input: unknown) => {
+        if (agentsStore) {
+          await agentsStore.create({ agent: input });
+        }
+        return {} as unknown;
+      }),
     },
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions'),
@@ -266,7 +274,7 @@ describe('Stored Agents Handlers', () => {
     mockAgentsData = new Map();
     mockAgentsStore = createMockAgentsStore(mockAgentsData);
     mockStorage = createMockStorage(mockAgentsStore);
-    mockEditor = createMockEditor();
+    mockEditor = createMockEditor(mockAgentsStore);
     mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
   });
 

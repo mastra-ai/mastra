@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import type { AgentBuilderOptions, IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import type {
   IMastraEditor,
   MastraEditorConfig,
@@ -50,6 +51,9 @@ export class MastraEditor implements IMastraEditor {
 
   private __toolProviders: Record<string, ToolProvider>;
   private __processorProviders: Record<string, ProcessorProvider>;
+  private readonly __builderConfig?: AgentBuilderOptions;
+  private __builderInstance?: IAgentBuilder;
+  private __builderResolved = false;
 
   /**
    * @internal — exposed for namespace classes to hydrate stored workspace configs.
@@ -113,6 +117,9 @@ export class MastraEditor implements IMastraEditor {
     this.scorer = new EditorScorerNamespace(this);
     this.workspace = new EditorWorkspaceNamespace(this);
     this.skill = new EditorSkillNamespace(this);
+
+    // Store builder config for EE feature
+    this.__builderConfig = config?.builder;
   }
 
   /**
@@ -124,6 +131,35 @@ export class MastraEditor implements IMastraEditor {
     if (!this.__logger) {
       this.__logger = mastra.getLogger();
     }
+  }
+
+  /**
+   * Sync. OSS-safe. Does NOT import @mastra/editor/ee.
+   * Returns true if builder config is present and enabled.
+   */
+  hasEnabledBuilderConfig(): boolean {
+    if (!this.__builderConfig) return false;
+    return this.__builderConfig.enabled !== false;
+  }
+
+  /**
+   * Async. Dynamic-imports @mastra/editor/ee on first call. Caches result.
+   * Returns undefined if builder is not enabled.
+   */
+  async resolveBuilder(): Promise<IAgentBuilder | undefined> {
+    if (this.__builderResolved) {
+      return this.__builderInstance;
+    }
+
+    if (!this.hasEnabledBuilderConfig()) {
+      this.__builderResolved = true;
+      return undefined;
+    }
+
+    const { EditorAgentBuilder } = await import('./ee');
+    this.__builderInstance = new EditorAgentBuilder(this.__builderConfig);
+    this.__builderResolved = true;
+    return this.__builderInstance;
   }
 
   /** Registered tool providers */
