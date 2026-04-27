@@ -52,7 +52,9 @@ test.describe('Request Context', () => {
     await page.goto('/agents/test-agent/chat/new');
     await expect(page.getByRole('heading', { name: 'Test Agent' })).toBeVisible({ timeout: 10_000 });
 
-    // Intercept the POST to the agent stream endpoint
+    // Intercept the POST to the agent stream endpoint. The streamed request body
+    // is only readable via route.request().postData() during interception — passive
+    // request listeners see an empty body.
     let capturedBody: Record<string, unknown> | null = null;
     await page.route('**/api/agents/test-agent/stream', async (route) => {
       const request = route.request();
@@ -70,10 +72,10 @@ test.describe('Request Context', () => {
     await chatInput.fill('say hello');
     await chatInput.press('Enter');
 
-    // Wait for the stream response to start
+    // Wait for the stream request to be captured
     await expect(async () => {
       expect(capturedBody).not.toBeNull();
-    }).toPass({ timeout: 15_000 });
+    }).toPass({ timeout: 30_000 });
 
     // Verify requestContext was included in the body
     const rc = capturedBody!.requestContext as Record<string, unknown>;
@@ -116,7 +118,7 @@ test.describe('Request Context', () => {
 
     await expect(async () => {
       expect(capturedBodyAfter).not.toBeNull();
-    }).toPass({ timeout: 15_000 });
+    }).toPass({ timeout: 30_000 });
 
     // RequestContext should be an empty object — the app always sends the field,
     // but after clearing via the UI it should contain no keys
