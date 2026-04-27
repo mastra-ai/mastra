@@ -25,6 +25,7 @@ describe('onError hook integration tests', () => {
               500,
             );
           },
+          apiPrefix: '/v1',
           apiRoutes: [
             registerApiRoute('/test/error', {
               method: 'GET',
@@ -39,7 +40,7 @@ describe('onError hook integration tests', () => {
 
       const app = await createHonoServer(mastra, { tools: {} });
 
-      const response = await app.request(new Request('http://localhost/test/error'));
+      const response = await app.request(new Request('http://localhost/v1/test/error'));
 
       expect(response.status).toBe(500);
 
@@ -70,6 +71,7 @@ describe('onError hook integration tests', () => {
             // Return formatted response
             return c.json({ error: 'Internal server error', sentryTracked: true }, 500);
           },
+          apiPrefix: '/v1',
           apiRoutes: [
             registerApiRoute('/test/sentry', {
               method: 'POST',
@@ -85,7 +87,7 @@ describe('onError hook integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       const response = await app.request(
-        new Request('http://localhost/test/sentry', {
+        new Request('http://localhost/v1/test/sentry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -105,6 +107,7 @@ describe('onError hook integration tests', () => {
     it('should use default error handling when onError is not provided', async () => {
       const mastra = new Mastra({
         server: {
+          apiPrefix: '/v1',
           apiRoutes: [
             registerApiRoute('/test/default-error', {
               method: 'GET',
@@ -119,7 +122,7 @@ describe('onError hook integration tests', () => {
 
       const app = await createHonoServer(mastra, { tools: {} });
 
-      const response = await app.request(new Request('http://localhost/test/default-error'));
+      const response = await app.request(new Request('http://localhost/v1/test/default-error'));
 
       expect(response.status).toBe(500);
 
@@ -149,6 +152,7 @@ describe('onError hook integration tests', () => {
               500,
             );
           },
+          apiPrefix: '/v1',
           apiRoutes: [
             registerApiRoute('/test/context-access', {
               method: 'PUT',
@@ -164,7 +168,7 @@ describe('onError hook integration tests', () => {
       const app = await createHonoServer(mastra, { tools: {} });
 
       const response = await app.request(
-        new Request('http://localhost/test/context-access', {
+        new Request('http://localhost/v1/test/context-access', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -176,11 +180,11 @@ describe('onError hook integration tests', () => {
       const result = await response.json();
 
       // Verify context was accessible
-      expect(capturedPath).toBe('/test/context-access');
+      expect(capturedPath).toBe('/v1/test/context-access');
       expect(capturedMethod).toBe('PUT');
 
       // Verify response includes context details
-      expect(result.path).toBe('/test/context-access');
+      expect(result.path).toBe('/v1/test/context-access');
       expect(result.method).toBe('PUT');
     });
 
@@ -201,6 +205,7 @@ describe('onError hook integration tests', () => {
               500,
             );
           },
+          apiPrefix: '/v1',
           apiRoutes: [
             registerApiRoute('/test/http-exception', {
               method: 'GET',
@@ -216,7 +221,7 @@ describe('onError hook integration tests', () => {
 
       const app = await createHonoServer(mastra, { tools: {} });
 
-      const response = await app.request(new Request('http://localhost/test/http-exception'));
+      const response = await app.request(new Request('http://localhost/v1/test/http-exception'));
 
       expect(response.status).toBe(500);
 
