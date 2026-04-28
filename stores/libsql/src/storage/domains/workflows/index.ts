@@ -16,7 +16,7 @@ import {
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { createExecuteWriteOperationWithRetry } from '../../db/utils';
+import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/utils';
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
   #db: LibSQLDB;
@@ -165,7 +165,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
                 VALUES (?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
                 DO UPDATE SET snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
-          args: [workflowName, runId, JSON.stringify(snapshot), now, now],
+          args: [workflowName, runId, safeStringify(snapshot), now, now],
         });
 
         await tx.commit();
@@ -218,7 +218,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Update the snapshot within the same transaction
         await tx.execute({
           sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?) WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(updatedSnapshot), workflowName, runId],
+          args: [safeStringify(updatedSnapshot), workflowName, runId],
         });
 
         await tx.commit();
