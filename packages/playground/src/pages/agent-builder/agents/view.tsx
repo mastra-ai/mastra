@@ -7,8 +7,8 @@ import {
   AgentChatPanelChat,
   AgentChatPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
-import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
@@ -138,7 +138,8 @@ const AgentBuilderAgentViewReady = ({
         }
         chat={<AgentChatPanelChat />}
         configure={
-          <ViewConfigurePanelConnected
+          <ConfigurePanelConnected
+            editable={false}
             agent={agent}
             availableAgentTools={availableAgentTools}
             activeDetail={activeDetail}
@@ -156,32 +157,5 @@ const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
     <Button size="sm" variant="default" onClick={onEdit} disabled={isRunning} data-testid="agent-builder-view-edit">
       Edit configuration
     </Button>
-  );
-};
-
-interface ViewConfigurePanelConnectedProps {
-  agent: ReturnType<typeof storedAgentToAgentConfig>;
-  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-const ViewConfigurePanelConnected = ({
-  agent,
-  availableAgentTools,
-  activeDetail,
-  onActiveDetailChange,
-}: ViewConfigurePanelConnectedProps) => {
-  const isRunning = useStreamRunning();
-  return (
-    <AgentConfigurePanel
-      agent={agent}
-      editable={false}
-      isLoading={false}
-      availableAgentTools={availableAgentTools}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
-      disabled={isRunning}
-    />
   );
 };

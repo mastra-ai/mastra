@@ -5,8 +5,8 @@ import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import {
   ConversationPanelChat,
   ConversationPanelProvider,
@@ -218,6 +218,7 @@ const AgentBuilderAgentEditReady = ({
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected
+            editable
             availableAgentTools={availableAgentTools}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
@@ -260,29 +261,5 @@ const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps)
         <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
       </Button>
     </>
-  );
-};
-
-interface ConfigurePanelConnectedProps {
-  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-const ConfigurePanelConnected = ({
-  availableAgentTools,
-  activeDetail,
-  onActiveDetailChange,
-}: ConfigurePanelConnectedProps) => {
-  const isRunning = useStreamRunning();
-  return (
-    <AgentConfigurePanel
-      editable
-      availableAgentTools={availableAgentTools}
-      isLoading={false}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
-      disabled={isRunning}
-    />
   );
 };
