@@ -39,6 +39,13 @@ export class InMemoryStarsStorage extends StarsStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     this.db.stars.clear();
+    // Keep denormalized counters in sync with the cleared stars map.
+    for (const agent of this.db.agents.values()) {
+      if (agent.starCount) agent.starCount = 0;
+    }
+    for (const skill of this.db.skills.values()) {
+      if (skill.starCount) skill.starCount = 0;
+    }
   }
 
   async star({ userId, entityType, entityId }: StorageStarKey): Promise<StarToggleResult> {
@@ -112,6 +119,15 @@ export class InMemoryStarsStorage extends StarsStorage {
         this.db.stars.delete(key);
         removed++;
       }
+    }
+    // Zero the parent's denormalized counter if the record still exists. The
+    // cascade caller in the server typically deletes the entity first, in
+    // which case this is a no-op — but callers that prune stars for a still
+    // existing entity (e.g. admin reset) need consistent counts.
+    const map = entityType === 'agent' ? this.db.agents : this.db.skills;
+    const entity = map.get(entityId);
+    if (entity && entity.starCount) {
+      entity.starCount = 0;
     }
     return removed;
   }

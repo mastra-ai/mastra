@@ -361,6 +361,9 @@ export class SkillsLibSQL extends SkillsStorage {
         if (starredOnly) {
           conditions.push('st."userId" IS NOT NULL');
         }
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

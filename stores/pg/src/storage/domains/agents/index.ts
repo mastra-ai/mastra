@@ -425,7 +425,6 @@ export class AgentsPG extends AgentsStorage {
           'draft',
           agent.authorId ?? null,
           visibility,
-          visibility,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
           0,
           null, // activeVersionId starts as null
@@ -689,6 +688,9 @@ export class AgentsPG extends AgentsStorage {
 
       if (useJoin && starredOnly) {
         conditions.push('s."userId" IS NOT NULL');
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
       }
 
       const joinClause =

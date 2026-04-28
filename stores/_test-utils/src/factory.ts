@@ -78,6 +78,11 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
         clearList.push(backgroundTasksStorage.dangerouslyClearAll());
       }
 
+      const starsStorage = await storage.getStore('stars');
+      if (starsStorage) {
+        clearList.push(starsStorage.dangerouslyClearAll());
+      }
+
       // Clear all domain data after tests
       await Promise.all(clearList);
     });

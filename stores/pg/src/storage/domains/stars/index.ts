@@ -54,6 +54,9 @@ export class StarsPG extends StarsStorage {
         }),
       );
     }
+    // Lookup index for entity-scoped queries — must mirror init().
+    const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(schemaName) });
+    statements.push(`CREATE INDEX IF NOT EXISTS idx_stars_entity ON ${fullStarsTable} ("entityType", "entityId")`);
     return statements;
   }
 
@@ -253,11 +256,17 @@ export class StarsPG extends StarsStorage {
   async deleteStarsForEntity(input: StorageDeleteStarsForEntityInput): Promise<number> {
     const fullStarsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
     try {
-      const rows = await this.#db.client.manyOrNone<{ userId: string }>(
-        `DELETE FROM ${fullStarsTable} WHERE "entityType" = $1 AND "entityId" = $2 RETURNING "userId"`,
+      // Use a CTE so the server returns the count without materializing each
+      // deleted row. For a hot cascade path this is meaningfully cheaper than
+      // round-tripping every userId back to the client.
+      const result = await this.#db.client.one<{ count: string }>(
+        `WITH deleted AS (
+           DELETE FROM ${fullStarsTable} WHERE "entityType" = $1 AND "entityId" = $2 RETURNING 1
+         )
+         SELECT COUNT(*)::text AS count FROM deleted`,
         [input.entityType, input.entityId],
       );
-      return (rows ?? []).length;
+      return Number(result.count);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

@@ -108,7 +108,6 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const callerId = getCallerAuthorId(requestContext);
       const starsEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
       const honoredStarredOnly = starsEnabled && starredOnly === true;
-      const pinStarredFor = starsEnabled && callerId ? callerId : undefined;
 
       // `?starredOnly=true`: fetch caller's starred IDs, then refilter + recompute total.
       if (honoredStarredOnly) {
@@ -131,7 +130,6 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
           authorId: filter.kind === 'exact' ? filter.authorId : undefined,
           metadata,
           entityIds: starredIds,
-          pinStarredFor,
         });
         const visible = allMatching.agents.filter(record => matchesAuthorFilter(record, filter));
         const total = visible.length;
@@ -150,7 +148,6 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         status,
         authorId: filter.kind === 'exact' ? filter.authorId : undefined,
         metadata,
-        pinStarredFor,
       });
 
       // Post-filter to enforce ownership + visibility rules across all backends.

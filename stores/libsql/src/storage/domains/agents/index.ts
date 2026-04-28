@@ -577,7 +577,8 @@ export class AgentsLibSQL extends AgentsStorage {
 
       // Optional LEFT JOIN on stars for starred-first ordering / starredOnly filter.
       // starredOnly only takes effect when pinStarredFor is also provided (no userId
-      // means no rows can match). The handler passes both together.
+      // means no rows can match). The handler passes both together, but defend
+      // against direct callers that ask for starredOnly without identifying a user.
       const joinUserId = pinStarredFor;
       const useJoin = Boolean(joinUserId);
 
@@ -589,6 +590,9 @@ export class AgentsLibSQL extends AgentsStorage {
         if (starredOnly) {
           conditions.push('s."userId" IS NOT NULL');
         }
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

@@ -248,15 +248,28 @@ describe('InMemoryStarsStorage', () => {
   });
 
   describe('dangerouslyClearAll', () => {
-    it('clears all stars without touching parent counters', async () => {
+    it('clears all stars and resets parent counters', async () => {
       await seedAgent(agents, 'a1');
       await stars.star({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
 
       await stars.dangerouslyClearAll();
       expect(await stars.isStarred({ userId: 'u1', entityType: 'agent', entityId: 'a1' })).toBe(false);
-      // Counter is intentionally not reconciled by clearAll; reconcile is out of scope for v1.
       const agent = await agents.getById('a1');
-      expect(agent?.starCount).toBe(1);
+      expect(agent?.starCount).toBe(0);
+    });
+  });
+
+  describe('deleteStarsForEntity', () => {
+    it('deletes all stars for the entity and resets its starCount when it still exists', async () => {
+      await seedAgent(agents, 'a1');
+      await stars.star({ userId: 'u1', entityType: 'agent', entityId: 'a1' });
+      await stars.star({ userId: 'u2', entityType: 'agent', entityId: 'a1' });
+
+      const removed = await stars.deleteStarsForEntity({ entityType: 'agent', entityId: 'a1' });
+      expect(removed).toBe(2);
+      expect(await stars.isStarred({ userId: 'u1', entityType: 'agent', entityId: 'a1' })).toBe(false);
+      const agent = await agents.getById('a1');
+      expect(agent?.starCount).toBe(0);
     });
   });
 });

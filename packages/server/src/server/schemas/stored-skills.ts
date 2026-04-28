@@ -25,8 +25,8 @@ export const listStoredSkillsQuerySchema = createPagePaginationSchema(100).exten
   authorId: z.string().optional().describe('Filter skills by author identifier'),
   visibility: z.enum(['public']).optional().describe('Filter to only public skills'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter skills by metadata key-value pairs'),
-  starredOnly: z.coerce
-    .boolean()
+  starredOnly: z
+    .stringbool()
     .optional()
     .describe('When true, return only skills starred by the caller (requires the stars EE feature)'),
 });

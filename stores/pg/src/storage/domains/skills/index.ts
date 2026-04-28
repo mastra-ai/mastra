@@ -451,6 +451,9 @@ export class SkillsPG extends SkillsStorage {
 
       if (useJoin && starredOnly) {
         conditions.push('sr."userId" IS NOT NULL');
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
       }
 
       const joinClause =

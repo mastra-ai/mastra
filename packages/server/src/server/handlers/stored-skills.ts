@@ -79,7 +79,6 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       const callerId = getCallerAuthorId(requestContext);
       const starsEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
       const honoredStarredOnly = starsEnabled && starredOnly === true;
-      const pinStarredFor = starsEnabled && callerId ? callerId : undefined;
 
       // `?starredOnly=true` flow: fetch caller's starred IDs, restrict the list
       // to that set, then post-filter by visibility and recompute total/pages.
@@ -104,7 +103,6 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
           authorId: filter.kind === 'exact' ? filter.authorId : undefined,
           metadata,
           entityIds: starredIds,
-          pinStarredFor,
         });
         const visible = allMatching.skills.filter(record => matchesAuthorFilter(record, filter));
         const total = visible.length;
@@ -129,7 +127,6 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         status,
         authorId: filter.kind === 'exact' ? filter.authorId : undefined,
         metadata,
-        pinStarredFor,
       });
 
       const visibleSkills = result.skills.filter(record => matchesAuthorFilter(record, filter));
