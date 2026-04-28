@@ -884,6 +884,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             const provider = model?.provider;
             const modelIdStr = model?.modelId;
+
+            // Handle abort first — a client-disconnect mid-stream is the
+            // expected exit path, not an error. Logging it at error level
+            // pollutes monitoring (see #15844 for the production
+            // numbers). Bail out with a debug log before the upstream /
+            // generic error branches so we never emit an
+            // `error`-level entry for an AbortError.
+            if (isAbortError(error) && options?.abortSignal?.aborted) {
+              logger?.debug?.('LLM execution aborted', { runId });
+              await options?.onAbort?.({
+                steps: inputData?.output?.steps ?? [],
+              });
+
+              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            }
+
             const isUpstreamError = APICallError.isInstance(error);
 
             if (isUpstreamError) {
@@ -902,16 +920,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...(provider && { provider }),
                 ...(modelIdStr && { modelId: modelIdStr }),
               });
-            }
-
-            if (isAbortError(error) && options?.abortSignal?.aborted) {
-              await options?.onAbort?.({
-                steps: inputData?.output?.steps ?? [],
-              });
-
-              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-
-              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
             }
 
             if (isLastModel) {
