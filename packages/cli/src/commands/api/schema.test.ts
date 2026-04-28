@@ -74,6 +74,19 @@ describe('buildCommandExamples', () => {
     ]);
   });
 
+  it('documents raw and explicit data wrapper tool execution input', () => {
+    expect(buildCommandExamples(API_COMMANDS.toolExecute)).toEqual([
+      {
+        description: 'Execute a tool with raw tool input. The CLI sends this as the route data field.',
+        command: 'mastra api tool execute get-weather \'{"location":"San Francisco"}\'',
+      },
+      {
+        description: 'Execute a tool with an explicit data wrapper',
+        command: 'mastra api tool execute get-weather \'{"data":{"location":"San Francisco"}}\'',
+      },
+    ]);
+  });
+
   it('includes mixed query/body input examples for thread commands', () => {
     expect(buildCommandExamples(API_COMMANDS.threadCreate)).toEqual([
       {

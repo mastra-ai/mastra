@@ -93,14 +93,15 @@ export function splitInput(
   if (!input) return {};
   if (descriptor.method === 'GET') return { queryInput: input };
 
+  const normalizedInput = normalizeInput(descriptor, input);
   const queryParamNames = new Set(descriptor.queryParams);
   const bodyParamNames = new Set(descriptor.bodyParams);
-  if (queryParamNames.size === 0) return { bodyInput: input };
+  if (queryParamNames.size === 0) return { bodyInput: normalizedInput };
 
   const queryInput: Record<string, unknown> = {};
   const bodyInput: Record<string, unknown> = {};
 
-  for (const [key, value] of Object.entries(input)) {
+  for (const [key, value] of Object.entries(normalizedInput)) {
     if (queryParamNames.has(key) && !bodyParamNames.has(key)) {
       queryInput[key] = value;
     } else {
@@ -112,6 +113,14 @@ export function splitInput(
     queryInput: Object.keys(queryInput).length ? queryInput : undefined,
     bodyInput: Object.keys(bodyInput).length ? bodyInput : undefined,
   };
+}
+
+function normalizeInput(descriptor: ApiCommandDescriptor, input: Record<string, unknown>): Record<string, unknown> {
+  if ((descriptor.key === 'toolExecute' || descriptor.key === 'mcpToolExecute') && !Object.hasOwn(input, 'data')) {
+    return { data: input };
+  }
+
+  return input;
 }
 
 export async function fetchSchemaManifest(

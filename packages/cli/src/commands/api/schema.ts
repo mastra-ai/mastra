@@ -107,15 +107,23 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
     case 'toolExecute':
       return [
         {
-          description: 'Execute a tool with parameters',
-          command: `${command} weather '{"params":{"city":"San Francisco"}}'`,
+          description: 'Execute a tool with raw tool input. The CLI sends this as the route data field.',
+          command: `${command} get-weather '{"location":"San Francisco"}'`,
+        },
+        {
+          description: 'Execute a tool with an explicit data wrapper',
+          command: `${command} get-weather '{"data":{"location":"San Francisco"}}'`,
         },
       ];
     case 'mcpToolExecute':
       return [
         {
-          description: 'Execute an MCP tool with arguments',
-          command: `${command} github search-repositories '{"args":{"query":"mastra"}}'`,
+          description: 'Execute an MCP tool with raw tool input. The CLI sends this as the route data field.',
+          command: `${command} my-server calculator '{"num1":2,"num2":3,"operation":"add"}'`,
+        },
+        {
+          description: 'Execute an MCP tool with an explicit data wrapper',
+          command: `${command} my-server calculator '{"data":{"num1":2,"num2":3,"operation":"add"}}'`,
         },
       ];
     case 'workflowRunStart':
@@ -128,7 +136,7 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
     case 'workflowRunResume':
       return [
         {
-          description: 'Resume a suspended workflow run',
+          description: 'Resume a suspended workflow run. The run must currently be suspended.',
           command: `${command} data-pipeline run_123 '{"resumeData":{"approved":true}}'`,
         },
       ];
@@ -149,7 +157,7 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
     case 'memoryCurrentUpdate':
       return [
         {
-          description: 'Update current working memory',
+          description: 'Update current working memory. Requires working memory to be enabled for the memory instance.',
           command: `${command} '{"threadId":"thread_abc123","agentId":"code-reviewer","workingMemory":"Remember the user prefers concise responses."}'`,
         },
       ];

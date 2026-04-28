@@ -137,6 +137,23 @@ describe('api command executor', () => {
     expect(JSON.parse(stdout)).toEqual({ data: { text: 'hello', usage: { totalTokens: 12 }, spanId: 'span-1' } });
   });
 
+  it('wraps raw tool execution input in data before sending the request body', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ temperature: 72 }));
+
+    await executeDescriptor(API_COMMANDS.toolExecute, ['get-weather'], '{"location":"Berlin"}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/tools/get-weather/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ data: { location: 'Berlin' } }),
+    });
+  });
+
   it('splits non-GET JSON input into route-defined query params and request body', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'thread-1', resourceId: 'user-1' }));
 
@@ -320,8 +337,12 @@ describe('api command executor', () => {
       },
       examples: [
         {
-          description: 'Execute a tool with parameters',
-          command: 'mastra api tool execute weather \'{"params":{"city":"San Francisco"}}\'',
+          description: 'Execute a tool with raw tool input. The CLI sends this as the route data field.',
+          command: 'mastra api tool execute get-weather \'{"location":"San Francisco"}\'',
+        },
+        {
+          description: 'Execute a tool with an explicit data wrapper',
+          command: 'mastra api tool execute get-weather \'{"data":{"location":"San Francisco"}}\'',
         },
       ],
     });

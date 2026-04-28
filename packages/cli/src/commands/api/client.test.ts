@@ -76,6 +76,36 @@ describe('splitInput', () => {
       bodyInput: { resourceId: 'user-1', title: 'Test thread' },
     });
   });
+
+  it('wraps raw tool execution input as data', () => {
+    expect(
+      splitInput(
+        {
+          ...postDescriptor,
+          key: 'toolExecute',
+          name: 'tool execute',
+          path: '/tools/:toolId/execute',
+          bodyParams: ['data'],
+        },
+        { location: 'Berlin' },
+      ),
+    ).toEqual({ bodyInput: { data: { location: 'Berlin' } } });
+  });
+
+  it('does not double-wrap tool execution input that already has data', () => {
+    expect(
+      splitInput(
+        {
+          ...postDescriptor,
+          key: 'mcpToolExecute',
+          name: 'mcp tool execute',
+          path: '/mcp/:serverId/tools/:toolId/execute',
+          bodyParams: ['data'],
+        },
+        { data: { location: 'Berlin' } },
+      ),
+    ).toEqual({ bodyInput: { data: { location: 'Berlin' } } });
+  });
 });
 
 describe('buildUrl', () => {
