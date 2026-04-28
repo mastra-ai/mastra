@@ -116,6 +116,21 @@ export class ToolCallFilter implements Processor {
     }
   }
 
+  private collectToolInvocationIds(messages: MastraDBMessage[], toolCallIds: Set<string>) {
+    for (const message of messages) {
+      const toolInvocations = (message.content as { toolInvocations?: unknown }).toolInvocations;
+      if (!Array.isArray(toolInvocations)) continue;
+
+      for (const invocation of toolInvocations) {
+        if (!invocation || typeof invocation !== 'object') continue;
+        const toolCallId = (invocation as { toolCallId?: unknown }).toolCallId;
+        if (typeof toolCallId === 'string') {
+          toolCallIds.add(toolCallId);
+        }
+      }
+    }
+  }
+
   private getLatestStepToolCallIds(steps: ProcessInputStepArgs['steps'], messages: MastraDBMessage[]): Set<string> {
     if (!this.preserveLatestStep) {
       return new Set();
@@ -142,15 +157,24 @@ export class ToolCallFilter implements Processor {
       collect((latestStep as { content?: unknown }).content);
     }
 
-    const parts = messages.flatMap(message => message.content?.parts ?? []);
-    const stepStartIndexes = parts.flatMap((part, index) => (part.type === 'step-start' ? [index] : []));
+    const partEntries = messages.flatMap(message =>
+      (message.content?.parts ?? []).map(part => ({
+        part,
+        message,
+      })),
+    );
+    const stepStartIndexes = partEntries.flatMap(({ part }, index) => (part.type === 'step-start' ? [index] : []));
     if (stepStartIndexes.length > 0) {
       const lastStepStartIndex = stepStartIndexes.at(-1)!;
-      const partsAfterLastStepStart = parts.slice(lastStepStartIndex + 1);
-      const latestStepParts = partsAfterLastStepStart.some(part => this.isToolPart(part))
-        ? partsAfterLastStepStart
-        : parts.slice((stepStartIndexes.at(-2) ?? -1) + 1);
-      this.collectToolCallIds(latestStepParts, toolCallIds);
+      const entriesAfterLastStepStart = partEntries.slice(lastStepStartIndex + 1);
+      const latestStepEntries = entriesAfterLastStepStart.some(({ part }) => this.isToolPart(part))
+        ? entriesAfterLastStepStart
+        : partEntries.slice((stepStartIndexes.at(-2) ?? -1) + 1);
+      this.collectToolCallIds(
+        latestStepEntries.map(({ part }) => part),
+        toolCallIds,
+      );
+      this.collectToolInvocationIds([...new Set(latestStepEntries.map(({ message }) => message))], toolCallIds);
     }
 
     return toolCallIds;

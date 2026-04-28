@@ -1057,6 +1057,41 @@ describe('ToolCallFilter', () => {
       expect(JSON.stringify(messageList.get.all.db())).toContain('SECRET_RESULT');
     });
 
+    it('should preserve latest legacy toolInvocations from step-start fallback', async () => {
+      const filter = new ToolCallFilter();
+      const messages = [
+        {
+          id: 'old-step',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' }],
+            toolInvocations: [{ toolCallId: 'call-old', toolName: 'lookup', result: 'OLD_RESULT' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'latest-step',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' }],
+            toolInvocations: [{ toolCallId: 'call-latest', toolName: 'lookup', result: 'LATEST_RESULT' }],
+          },
+          createdAt: new Date(),
+        },
+      ] as unknown as MastraDBMessage[];
+
+      const messageList = new MessageList();
+
+      const result = await filter.processInputStep({
+        ...createProcessInputStepArgs(messageList),
+        messages,
+      });
+      expect(JSON.stringify(result.modelContextMessages)).toContain('LATEST_RESULT');
+      expect(JSON.stringify(result.modelContextMessages)).not.toContain('OLD_RESULT');
+    });
+
     it('should not infer generic raw tool-call and tool-result type suffixes as tool names', async () => {
       const filter = new ToolCallFilter({ exclude: ['result'] });
       const messages = [

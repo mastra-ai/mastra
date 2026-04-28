@@ -1081,14 +1081,31 @@ export class ProcessorRunner {
           );
           const mutations = messageList.stopRecording();
           recordingStopped = true;
+          const rawResult = result as RunProcessInputStepResult & { phase?: string };
+          const workflowProcessInputStepResult: ProcessInputStepResult = {
+            ...rawResult,
+            messageList: undefined,
+            messages:
+              rawResult.messages &&
+              (rawResult.modelContextMessages === undefined ||
+                !areProcessorMessageArraysEqual(rawResult.messages, rawResult.modelContextMessages)) &&
+              !areProcessorMessageArraysEqual(processableMessages, rawResult.messages)
+                ? rawResult.messages
+                : undefined,
+            modelContextMessages: rawResult.modelContextMessages,
+          };
+          delete (workflowProcessInputStepResult as { phase?: string }).phase;
           const {
             messages,
             systemMessages,
             modelContextMessages,
             messageList: _messageList,
-            phase: _phase,
             ...rest
-          } = result as RunProcessInputStepResult & { phase?: string };
+          } = await ProcessorRunner.validateAndFormatProcessInputStepResult(workflowProcessInputStepResult, {
+            messageList,
+            processor: { id: processorOrWorkflow.id },
+            stepNumber,
+          });
 
           if (messages) {
             if (stepInput.modelContextMessages || modelContextMessages) {
