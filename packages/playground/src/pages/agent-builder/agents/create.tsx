@@ -14,10 +14,10 @@ export default function AgentBuilderCreate() {
   // edit page can dispatch the initial message with a tools- and skills-aware schema on
   // its very first render instead of waiting for the queries to resolve.
   const features = useBuilderAgentFeatures();
-  useTools();
+  useTools({ enabled: features.tools });
   useAgents({ enabled: features.agents });
   useWorkflows({ enabled: features.workflows });
-  useStoredSkills();
+  useStoredSkills({ enabled: features.skills });
   const navigate = useNavigate();
   return (
     <>

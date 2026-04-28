@@ -31,15 +31,15 @@ export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
   const features = useBuilderAgentFeatures();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
-  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { isPending: isSkillsPending } = useStoredSkills();
+  const { isPending: isSkillsPending } = useStoredSkills({ enabled: features.skills });
   const isReady =
     Boolean(id) &&
     !isStoredAgentLoading &&
-    !isToolsPending &&
-    !isSkillsPending &&
+    (!features.tools || !isToolsPending) &&
+    (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
     (!features.workflows || !isWorkflowsPending);
 

@@ -39,16 +39,18 @@ export default function AgentBuilderAgentEdit() {
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
-  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills();
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({
+    enabled: features.skills,
+  });
   const { data: workspacesData } = useWorkspaces();
   const isReady =
     Boolean(id) &&
     (fromStarter || !isStoredAgentLoading) &&
-    !isToolsPending &&
-    !isSkillsPending &&
+    (!features.tools || !isToolsPending) &&
+    (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
     (!features.workflows || !isWorkflowsPending);
 
