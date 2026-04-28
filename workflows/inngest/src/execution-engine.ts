@@ -459,7 +459,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     try {
       if (isResume) {
-        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
+        const resumeStepId = resume?.steps?.[0];
+
+        const runIdFromState = resumeStepId && stepResults[resumeStepId]?.suspendPayload?.__workflow_meta?.runId;
+
+        if (!runIdFromState) {
+          throw new Error(`Invalid resume state: missing runId for step "${resumeStepId ?? 'unknown'}"`);
+        }
+
+        runId = runIdFromState;
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
