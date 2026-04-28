@@ -630,6 +630,80 @@ describe('prepareToolsAndToolChoice', () => {
       consoleErrorSpy.mockRestore();
     });
 
+    // Exact wire-shape payload captured from the playground agent-builder
+    // /stream request. This mirrors what processClientTools() ships, including
+    // the enum + nested array shape, additionalProperties: false, and the
+    // https://json-schema.org/draft/2020-12/schema URL that bypasses the
+    // http://-only branch in prepare-tools.ts.
+    it('reproduces /stream crash with exact agent-builder wire payload', () => {
+      const wireTool = {
+        id: 'agentBuilderTool',
+        description: 'Modify the agent configuration that the user is building.',
+        inputSchema: {
+          $schema: 'https://json-schema.org/draft/2020-12/schema',
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            instructions: { type: 'string' },
+            tools: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: {
+                    type: 'string',
+                    enum: ['chef-agent', 'builder-agent', 'weatherTool'],
+                  },
+                  name: { type: 'string', minLength: 1 },
+                },
+                required: ['id', 'name'],
+                additionalProperties: false,
+              },
+            },
+            workspaceId: { type: 'string' },
+          },
+          required: ['name', 'instructions', 'tools'],
+          additionalProperties: false,
+        },
+        outputSchema: {
+          $schema: 'https://json-schema.org/draft/2020-12/schema',
+          type: 'object',
+          properties: { success: { type: 'boolean' } },
+          required: ['success'],
+          additionalProperties: false,
+        },
+      };
+
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result = prepareToolsAndToolChoice({
+        tools: { agentBuilderTool: wireTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      // The current bug: try/catch swallows the inner TypeError, the tool is
+      // dropped, and the user sees "Cannot read properties of undefined
+      // (reading 'jsonSchema')" downstream.
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'agentBuilderTool',
+      });
+      expect((result.tools![0] as any).inputSchema).toMatchObject({
+        type: 'object',
+        properties: expect.objectContaining({
+          name: { type: 'string' },
+          tools: expect.objectContaining({ type: 'array' }),
+        }),
+      });
+
+      consoleErrorSpy.mockRestore();
+    });
+
     it('reproduces the same crash for outputSchema-only client tools', () => {
       const wireTool = {
         id: 'outputOnly',
