@@ -3323,7 +3323,7 @@ export class Agent<
             // generated and the specialist's workflow snapshot (keyed by the original
             // threadId) becomes unreachable, causing the workflow to restart from step 1.
             const subAgentThreadId =
-              (inputData as any).suspendedSubAgentThreadId ||
+              (inputData as any).subAgentThreadId ||
               (inputData.threadId
                 ? `${inputData.threadId}-${randomUUID()}`
                 : context?.mastra?.generateId({
@@ -3334,7 +3334,7 @@ export class Agent<
                   }) || randomUUID());
 
             const subAgentResourceId =
-              (inputData as any).suspendedSubAgentResourceId ||
+              (inputData as any).subAgentResourceId ||
               (inputData.resourceId
                 ? `${inputData.resourceId}-${agentName}`
                 : context?.mastra?.generateId({

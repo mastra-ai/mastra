@@ -23,8 +23,7 @@ type AddToolMetadataOptions = {
   args: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
-  subAgentThreadId?: string;
-  subAgentResourceId?: string;
+  suspendState?: Record<string, unknown>;
 } & (
   | {
       type: 'approval';
@@ -35,6 +34,28 @@ type AddToolMetadataOptions = {
       suspendPayload: unknown;
     }
 );
+
+// Control fields in SuspendOptions that should NOT be stored in suspendState.
+// Everything else the tool passes through options is automatically preserved
+// across suspend/resume so callers don't need per-field plumbing.
+const SUSPEND_OPTIONS_CONTROL_KEYS = new Set([
+  'resumeLabel',
+  'resumeSchema',
+  'requireToolApproval',
+  'isAgentSuspend',
+  'runId',
+]);
+
+function extractSuspendState(options?: SuspendOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const state: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (!SUSPEND_OPTIONS_CONTROL_KEYS.has(key) && value !== undefined) {
+      state[key] = value;
+    }
+  }
+  return Object.keys(state).length > 0 ? state : undefined;
+}
 
 export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
@@ -73,8 +94,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
-        subAgentThreadId,
-        subAgentResourceId,
+        suspendState,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
@@ -98,8 +118,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
             ...(type === 'suspension' ? { suspendPayload } : {}),
-            ...(subAgentThreadId ? { subAgentThreadId } : {}),
-            ...(subAgentResourceId ? { subAgentResourceId } : {}),
+            ...(suspendState && Object.keys(suspendState).length > 0 ? { suspendState } : {}),
             resumeSchema,
           };
           lastAssistantMessage.content.metadata = metadata;
@@ -431,8 +450,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 type: 'approval',
                 suspendedToolRunId: options.runId,
-                subAgentThreadId: options.subAgentThreadId,
-                subAgentResourceId: options.subAgentResourceId,
+                suspendState: extractSuspendState(options),
                 resumeSchema: JSON.stringify(
                   standardSchemaToJSONSchema(
                     toStandardSchema(
@@ -485,8 +503,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args,
                 suspendPayload,
                 suspendedToolRunId: options?.runId,
-                subAgentThreadId: options?.subAgentThreadId,
-                subAgentResourceId: options?.subAgentResourceId,
+                suspendState: extractSuspendState(options),
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
               });
@@ -547,22 +564,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
 
-            // For agent tools, also restore the sub-agent thread/resource IDs
-            // so the specialist resumes with the same memory context.
-            if (isAgentTool) {
-              for (const message of assistantMessages) {
-                const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
-                  message.content.metadata?.pendingToolApprovals) as Record<string, any>;
-                if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
-                  const meta = pendingOrSuspendedTools[inputData.toolName];
-                  if (meta.subAgentThreadId) {
-                    args.suspendedSubAgentThreadId = meta.subAgentThreadId;
-                  }
-                  if (meta.subAgentResourceId) {
-                    args.suspendedSubAgentResourceId = meta.subAgentResourceId;
-                  }
-                  break;
+            // Restore any tool-specific state that was saved during suspension
+            // (e.g. subAgentThreadId/subAgentResourceId for agent tools).
+            // This is a generic mechanism — any data a tool passes through
+            // SuspendOptions is automatically preserved and restored.
+            for (const message of assistantMessages) {
+              const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
+                message.content.metadata?.pendingToolApprovals) as Record<string, any>;
+              if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
+                const savedState = pendingOrSuspendedTools[inputData.toolName].suspendState;
+                if (savedState && typeof savedState === 'object') {
+                  Object.assign(args, savedState);
                 }
+                break;
               }
             }
           }
