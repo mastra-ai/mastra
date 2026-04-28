@@ -132,21 +132,23 @@ If the agent has `backgroundTasks.disabled: true`, every tool call runs synchron
 
 ## Background tasks related stream chunks
 
-When a tool call dispatches as a background task. The agent stream emits `background-task-started` and `background-task-progress`, other `background-task-` chunks are emitted when [`backgroundTaskManager.stream()`](/docs/streaming/background-task-streaming) is used.
+When a tool call dispatches as a background task, two streams may surface lifecycle events for it: the agent's own stream and the [`backgroundTaskManager.stream()`](/docs/streaming/background-task-streaming) SSE stream. Each stream covers a different set of chunk types:
 
-| Chunk type | When it fires |
-| - | - |
-| `background-task-started` | The task has been enqueued and assigned a `taskId`. |
-| `background-task-running` | The task picked up a worker and started executing. |
-| `background-task-progress` | Shows number of running background tasks. |
-| `background-task-output` | A streamed output chunk from the task's `execute`. |
-| `background-task-completed` | The task finished successfully. The `payload.result` matches the eventual tool result. |
-| `background-task-failed` | The task threw or timed out. |
-| `background-task-cancelled` | The task was cancelled before completing. |
+| Chunk type | When it fires | Emitted by |
+| - | - | - |
+| `background-task-started` | The task has been enqueued and assigned a `taskId`. | Agent stream |
+| `background-task-running` | The task picked up a worker and started executing. | Manager stream |
+| `background-task-progress` | Shows number of running background tasks. | Agent stream |
+| `background-task-output` | A streamed output chunk from the task's `execute`. | Manager stream |
+| `background-task-completed` | The task finished successfully. The `payload.result` matches the eventual tool result. | Manager stream |
+| `background-task-failed` | The task threw or timed out. | Manager stream |
+| `background-task-cancelled` | The task was cancelled before completing. | Manager stream |
+
+`agent.stream().fullStream` only emits the agent-loop chunks (`background-task-started`, `background-task-progress`) on its own. `agent.streamUntilIdle()` emits the same two chunks and additionally subscribes to the manager pubsub for the run's memory scope and pipes the five manager chunks (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`) into the same `fullStream`, so consumers of `streamUntilIdle().fullStream` see all seven types.
+
+`backgroundTaskManager.stream()` only emits the five manager chunks.
 
 The full payload shapes are documented in the [background task chunks reference](/reference/streaming/ChunkType#background-task-chunks).
-
-When `agent.streamUntilIdle()` is used, these background task chunks are also included in the stream response.
 
 ## Keep the agent stream open with `streamUntilIdle()`
 
