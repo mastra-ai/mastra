@@ -55,9 +55,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -297,12 +295,6 @@
                       "runId": "<runId-1>",
                       "toolCallId": "call-workflow-1",
                       "toolName": "workflow-simpleWorkflow"
-                    },
-                    "output": {
-                      "result": {
-                        "output": "test input processed"
-                      },
-                      "runId": "<runId-2>"
                     }
                   }
                 }

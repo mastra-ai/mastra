@@ -22,9 +22,11 @@ import { validateBody } from './utils';
 /**
  * Resolves a schema that may be a lazy function (e.g. AI SDK provider tools).
  * Recursively resolves until a non-function value is returned.
+ * Skips functions that are themselves valid schemas (e.g. ArkType types are
+ * callable but also implement StandardSchema via ~standard).
  */
 function resolveLazySchema(schema: unknown): unknown {
-  if (typeof schema === 'function') {
+  if (typeof schema === 'function' && !('~standard' in schema)) {
     return resolveLazySchema(schema());
   }
   return schema;

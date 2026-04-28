@@ -1,9 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Stream } from 'node:stream';
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
 
@@ -41,6 +39,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
@@ -54,6 +53,7 @@ import type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
+  RequireToolApproval,
 } from './types';
 
 // Re-export types for convenience
@@ -67,6 +67,9 @@ export type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
+  RequireToolApproval,
+  RequireToolApprovalFn,
+  RequireToolApprovalContext,
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
@@ -119,6 +122,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private _roots: Root[];
+  private readonly requireToolApproval: RequireToolApproval | undefined;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -146,6 +150,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
+    this.requireToolApproval = server.requireToolApproval;
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
@@ -154,7 +159,10 @@ export class InternalMastraMCPClient extends MastraBase {
     const hasRoots = this._roots.length > 0 || !!capabilities.roots;
     const clientCapabilities = {
       ...capabilities,
-      elicitation: {},
+      // Merge elicitation capabilities instead of overwriting
+      elicitation: {
+        ...(capabilities.elicitation ?? {}),
+      },
       // Auto-enable roots capability if roots are provided
       ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
     };
@@ -166,6 +174,7 @@ export class InternalMastraMCPClient extends MastraBase {
       },
       {
         capabilities: clientCapabilities,
+        ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
       },
     );
 
@@ -641,32 +650,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
   ): Promise<JSONSchema7> {
-    try {
-      await $RefParser.dereference(inputSchema);
-      return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
-    } catch (error: unknown) {
-      let errorDetails: string | undefined;
-      if (error instanceof Error) {
-        errorDetails = error.stack;
-      } else {
-        try {
-          errorDetails = JSON.stringify(error);
-        } catch {
-          errorDetails = String(error);
-        }
-      }
-      this.log('error', 'Failed to dereference JSON schema', {
-        error: errorDetails,
-        originalJsonSchema: inputSchema,
-      });
-
-      throw new MastraError({
-        id: 'MCP_TOOL_INPUT_SCHEMA_CONVERSION_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        details: { error: errorDetails ?? 'Unknown error' },
-      });
-    }
+    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
   }
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
@@ -676,14 +660,36 @@ export class InternalMastraMCPClient extends MastraBase {
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
       try {
+        // Resolve requireToolApproval for this tool
+        let requireApproval: boolean | undefined;
+        let needsApprovalFn: ((args: any, ctx: any) => boolean | Promise<boolean>) | undefined;
+
+        if (typeof this.requireToolApproval === 'function') {
+          // Wrap the server-level function to match the per-tool needsApprovalFn signature.
+          // Note: ctx may be undefined when called via network/index.ts (which only passes args).
+          // We default ctx to {} so the spread doesn't fail and approval fn receives partial context.
+          const serverApprovalFn = this.requireToolApproval;
+          const toolName = tool.name;
+          requireApproval = true; // Signal that approval check is needed
+          needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
+            return serverApprovalFn({ toolName, args, ...ctx });
+          };
+        } else if (this.requireToolApproval === true) {
+          requireApproval = true;
+        }
+        // When requireToolApproval is false/undefined, requireApproval stays undefined
+        // and createTool defaults it to false
+
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
+          strict: getMastraToolStrictMeta((tool as { _meta?: Record<string, unknown> })._meta),
           // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
           // envelope, returning {} for tools without structuredContent.
+          requireApproval,
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
@@ -770,6 +776,12 @@ export class InternalMastraMCPClient extends MastraBase {
             });
           },
         });
+
+        // Set needsApprovalFn directly on the tool instance (same pattern as tool-builder).
+        // This is accessed via (tool as any).needsApprovalFn in tool-call-step.ts.
+        if (needsApprovalFn) {
+          (mastraTool as any).needsApprovalFn = needsApprovalFn;
+        }
 
         if (tool.name) {
           toolsRes[tool.name] = mastraTool;

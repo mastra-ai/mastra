@@ -15,11 +15,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
-        {
-          type: 'doc',
-          id: 'agents/channels',
-          label: 'Channels',
-        },
+        { type: 'doc', id: 'agents/channels', label: 'Channels' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -86,6 +82,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
+        { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
@@ -105,21 +102,13 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
-        {
-          type: 'doc',
-          id: 'client-js/conversations',
-          label: 'Conversations API',
-        },
+        { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
         { type: 'doc', id: 'client-js/logs', label: 'Logs API' },
         { type: 'doc', id: 'client-js/mastra-client', label: 'Mastra Client SDK' },
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
-        {
-          type: 'doc',
-          id: 'client-js/responses',
-          label: 'Responses API',
-        },
+        { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
         { type: 'doc', id: 'client-js/telemetry', label: 'Telemetry API' },
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
@@ -190,6 +179,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
+        { type: 'doc', id: 'evals/filter-run', label: 'filterRun()' },
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
         { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
@@ -386,6 +376,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
+        { type: 'doc', id: 'processors/prefill-error-handler', label: 'PrefillErrorHandler' },
         { type: 'doc', id: 'processors/processor-interface', label: 'Processor Interface' },
         {
           type: 'doc',
@@ -449,6 +440,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
+        { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },
         { type: 'doc', id: 'storage/upstash', label: 'Upstash Storage' },
       ],
     },
@@ -465,6 +457,7 @@ const sidebars = {
             { type: 'doc', id: 'streaming/agents/MastraModelOutput', label: 'MastraModelOutput' },
             { type: 'doc', id: 'streaming/agents/stream', label: '.stream()' },
             { type: 'doc', id: 'streaming/agents/streamLegacy', label: '.streamLegacy()' },
+            { type: 'doc', id: 'streaming/agents/streamUntilIdle', label: '.streamUntilIdle()' },
           ],
         },
         {
@@ -500,6 +493,7 @@ const sidebars = {
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
+        { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
     {
@@ -605,12 +599,15 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
+        { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
+        { type: 'doc', id: 'workspace/docker-sandbox', label: 'DockerSandbox' },
         { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },

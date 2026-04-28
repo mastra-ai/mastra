@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-browser",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Browser automation for Mastra agents using agent-browser",
   "type": "module",
   "files": [
@@ -34,6 +34,7 @@
     "typed-emitter": "^2.1.0"
   },
   "devDependencies": {
+    "@internal/browser-test-utils": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -41,7 +42,7 @@
     "playwright-core": "^1.57.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

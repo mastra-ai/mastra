@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.7.0",
+  "version": "1.7.3",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -31,9 +31,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@lukeed/uuid": "^2.0.1",
     "cloudflare": "^5.2.0",
-    "mongodb": "^7.1.0",
-    "uuid": "^13.0.0"
+    "mongodb": "^7.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -43,7 +43,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

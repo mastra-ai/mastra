@@ -53,9 +53,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -233,9 +231,6 @@
                       "runId": "<runId-1>",
                       "toolCallId": "call-metadata-1",
                       "toolName": "metadataTool"
-                    },
-                    "output": {
-                      "output": "Processed: some data"
                     }
                   }
                 }

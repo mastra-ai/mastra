@@ -1,7 +1,7 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import type { SidebarState } from './main-sidebar-context';
 import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
-import { useLinkComponent } from '@/lib/framework';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarNavHeaderProps = {
@@ -10,6 +10,7 @@ export type MainSidebarNavHeaderProps = {
   state?: SidebarState;
   href?: string;
   isActive?: boolean;
+  LinkComponent?: LinkComponent;
 };
 export function MainSidebarNavHeader({
   children,
@@ -17,9 +18,9 @@ export function MainSidebarNavHeader({
   state = 'default',
   href,
   isActive,
+  LinkComponent: Link,
 }: MainSidebarNavHeaderProps) {
   const isDefaultState = state === 'default';
-  const { Link } = useLinkComponent();
 
   const labelContent = isDefaultState ? children : <VisuallyHidden>{children}</VisuallyHidden>;
 
@@ -32,7 +33,7 @@ export function MainSidebarNavHeader({
           'text-neutral3/75': !isActive,
         })}
       >
-        {href && isDefaultState ? (
+        {href && isDefaultState && Link ? (
           <Link
             href={href}
             className={cn('transition-colors duration-normal', {

@@ -52,9 +52,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -256,9 +254,6 @@
                       "runId": "<runId-1>",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
-                    },
-                    "output": {
-                      "result": 8
                     }
                   }
                 }

@@ -7,8 +7,10 @@
  */
 
 import { Agent } from '@mastra/core/agent';
+import { ProcessorStepSchema } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
@@ -297,6 +299,22 @@ const omTriggerTool = createTool({
 
 const longResponseText = `I understand your request completely. Let me provide you with a comprehensive and detailed response that covers all the important aspects of what you asked about. Here are my thoughts and recommendations based on the information you provided. I hope this detailed explanation helps clarify everything you need to know about the topic at hand. Please let me know if you have any follow-up questions or need additional clarification on any of these points.`;
 
+function createPassthroughProcessorWorkflow(id: string) {
+  return createWorkflow({
+    id,
+    inputSchema: ProcessorStepSchema,
+    outputSchema: ProcessorStepSchema,
+    type: 'processor',
+  })
+    .then({
+      id: `${id}-step`,
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      execute: async ({ inputData }) => inputData,
+    })
+    .commit();
+}
+
 // =============================================================================
 // Test 1: Error State - Observer fails, agent still completes
 // =============================================================================
@@ -393,7 +411,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(textContent).toBe('');
   });
 
-  it('should emit tripwire when observer fails and no observation marker parts are persisted', async () => {
+  it('should emit tripwire when observer fails and persist lifecycle marker parts through OM', async () => {
     // When observation fails, OM calls abort() which triggers a TripWire.
     // The stream completes with a tripwire part, not an error throw.
     const threadId = 'test-error-persist';
@@ -433,7 +451,9 @@ describe('OM Error State', { timeout: 30_000 }, () => {
       );
     });
 
-    expect(persistedObservationMarkerParts).toHaveLength(0);
+    expect(persistedObservationMarkerParts.map((part: any) => part.type)).toEqual(
+      expect.arrayContaining(['data-om-observation-start', 'data-om-observation-failed']),
+    );
   });
 });
 
@@ -523,6 +543,52 @@ describe('OM Persistence', () => {
     const hasOmParts = assistantMessages.some((msg: any) => {
       const parts = msg.content?.parts || [];
       return parts.some((p: any) => typeof p.type === 'string' && p.type.startsWith('data-om-'));
+    });
+
+    expect(hasOmParts).toBe(true);
+  });
+
+  it('should persist OM messages when a workflow processor runs before memory processors', async () => {
+    const threadId = 'test-workflow-processor-thread';
+    const resourceId = 'test-resource';
+    const workflowProcessor = createPassthroughProcessorWorkflow('pre-om-workflow');
+
+    const agentWithWorkflowProcessor = new Agent({
+      id: 'test-persist-agent-with-workflow-processor',
+      name: 'Test Persist Agent With Workflow Processor',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory,
+      inputProcessors: [workflowProcessor],
+    });
+
+    const response = await agentWithWorkflowProcessor.stream('Hello, I need help with something important.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    const reader = response.fullStream.getReader();
+    try {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const memoryStore = await store.getStore('memory');
+    const result = await memoryStore!.listMessages({ threadId });
+
+    const assistantMessages = result.messages.filter((message: any) => message.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    const hasOmParts = assistantMessages.some((message: any) => {
+      const parts = message.content?.parts || [];
+      return parts.some((part: any) => typeof part.type === 'string' && part.type.startsWith('data-om-'));
     });
 
     expect(hasOmParts).toBe(true);

@@ -9,7 +9,7 @@
 import { EntityType, SpanType } from './types';
 import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
 
-const entityTypeValues = new Set(Object.values(EntityType));
+const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
 
 export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | undefined): void {
@@ -18,6 +18,11 @@ export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | u
 
 export function resolveCurrentSpan(): AnySpan | undefined {
   return currentSpanResolver?.();
+}
+
+/** Generate a unique id for an observability signal (log, metric, score, feedback). */
+export function generateSignalId(): string {
+  return crypto.randomUUID();
 }
 
 // --- Lazy resolvers for executeWithContext / executeWithContextSync ---
@@ -73,22 +78,26 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
- * 2. New root spans (when no current span exists)
+ * 2. Children of the ambient span installed by executeWithContext()
+ * 3. New root spans (when no current span exists)
  *
  * @param options - Configuration object for span creation
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
+  const currentSpan =
+    tracingContext?.currentSpan ??
+    (tracingOptions?.traceId || tracingOptions?.parentSpanId ? undefined : resolveCurrentSpan());
 
   const metadata = {
     ...(rest.metadata ?? {}),
     ...(tracingOptions?.metadata ?? {}),
   };
 
-  // If we have a current span, create a child span
-  if (tracingContext?.currentSpan) {
-    return tracingContext.currentSpan.createChildSpan({
+  // If we have a current span, create a child span.
+  if (currentSpan) {
+    return currentSpan.createChildSpan({
       type,
       attributes,
       ...rest,
@@ -158,6 +167,8 @@ export function getEntityTypeForSpan(span: {
   switch (span.spanType) {
     case SpanType.AGENT_RUN:
       return EntityType.AGENT;
+    case SpanType.RAG_INGESTION:
+      return EntityType.RAG_INGESTION;
     case SpanType.SCORER_RUN:
     case SpanType.SCORER_STEP:
       return EntityType.SCORER;

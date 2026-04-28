@@ -1,6 +1,6 @@
 services:
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.4
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.3
     platform: linux/amd64
     ports:
       - '9200:9200'

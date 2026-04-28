@@ -57,9 +57,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -314,11 +312,6 @@
                       "id2": "tacos",
                       "toolCallId": "call-workflow-1",
                       "toolName": "workflowExecutor"
-                    },
-                    "output": {
-                      "result": {
-                        "output": "test input processed"
-                      }
                     }
                   }
                 }

@@ -46,10 +46,12 @@ import type {
   ElicitRequest,
   LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
+import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt } from './types';
@@ -95,6 +97,7 @@ export class MCPServer extends MCPServerBase {
   private resourceOptions?: MCPServerResources;
   private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
+  private jsonSchemaValidator?: jsonSchemaValidator;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
 
@@ -235,10 +238,42 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
+  constructor(
+    opts: MCPServerConfig & {
+      resources?: MCPServerResources;
+      prompts?: MCPServerPrompts;
+      /**
+       * Optional custom JSON Schema validator forwarded to the underlying MCP
+       * SDK server. Use this to opt into a non-default validator
+       * implementation.
+       *
+       * Pass `CfWorkerJsonSchemaValidator` (from
+       * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+       * Cloudflare Workers / V8 isolates: the default
+       * `AjvJsonSchemaValidator` compiles validators with `new Function(...)`,
+       * which workerd refuses to evaluate when a registered tool has an
+       * `outputSchema`.
+       *
+       * @example
+       * ```typescript
+       * import { MCPServer } from '@mastra/mcp';
+       * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+       *
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+       * });
+       * ```
+       */
+      jsonSchemaValidator?: jsonSchemaValidator;
+    },
+  ) {
     super(opts);
     this.resourceOptions = opts.resources;
     this.promptOptions = opts.prompts;
+    this.jsonSchemaValidator = opts.jsonSchemaValidator;
 
     const capabilities: ServerCapabilities = {
       tools: {},
@@ -261,6 +296,7 @@ export class MCPServer extends MCPServerBase {
       {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
+        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
       },
     );
 
@@ -398,6 +434,7 @@ export class MCPServer extends MCPServerBase {
       {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
+        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
       },
     );
 
@@ -428,9 +465,9 @@ export class MCPServer extends MCPServerBase {
           if (tool.mcp?.annotations) {
             toolSpec.annotations = tool.mcp.annotations;
           }
-          // Include _meta if present
-          if (tool.mcp?._meta) {
-            toolSpec._meta = tool.mcp._meta;
+          const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
+          if (toolMeta) {
+            toolSpec._meta = toolMeta;
           }
           return toolSpec;
         }),
@@ -1879,7 +1916,14 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
+    tools: Array<{
+      name: string;
+      description?: string;
+      inputSchema: any;
+      outputSchema?: any;
+      toolType?: MCPToolType;
+      _meta?: Record<string, unknown>;
+    }>;
   } {
     this.logger.debug('Getting tool list', { server: this.name });
     return {
@@ -1890,6 +1934,7 @@ export class MCPServer extends MCPServerBase {
         inputSchema: this.convertSchema(tool.parameters),
         outputSchema: this.convertSchema(tool.parameters),
         toolType: tool.mcp?.toolType,
+        _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
       })),
     };
   }
@@ -1912,9 +1957,16 @@ export class MCPServer extends MCPServerBase {
    * }
    * ```
    */
-  public getToolInfo(
-    toolId: string,
-  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined {
+  public getToolInfo(toolId: string):
+    | {
+        name: string;
+        description?: string;
+        inputSchema: any;
+        outputSchema?: any;
+        toolType?: MCPToolType;
+        _meta?: Record<string, unknown>;
+      }
+    | undefined {
     const tool = this.convertedTools[toolId];
     if (!tool) {
       this.logger.debug('Tool not found', { tool: toolId, server: this.name });
@@ -1927,6 +1979,7 @@ export class MCPServer extends MCPServerBase {
       inputSchema: this.convertSchema(tool.parameters),
       outputSchema: this.convertSchema(tool.outputSchema),
       toolType: tool.mcp?.toolType,
+      _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
     };
   }
 

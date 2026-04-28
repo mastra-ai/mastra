@@ -83,7 +83,7 @@ export class ArthurExporter extends OtelExporter {
     }
 
     // Ensure the endpoint ends with /api/v1/traces
-    const tracesEndpoint = endpoint ? `${endpoint.replace(/\/+$/, '')}/api/v1/traces` : 'http://disabled';
+    const tracesEndpoint = endpoint ? `${stripTrailingSlashes(endpoint)}/api/v1/traces` : 'http://disabled';
 
     if (disabledReason) {
       super({
@@ -143,4 +143,17 @@ export class ArthurExporter extends OtelExporter {
       );
     }
   }
+}
+
+/**
+ * Remove trailing '/' characters procedurally. Avoids the polynomial
+ * backtracking that a greedy regex like `/\/+$/` can exhibit when the
+ * input is attacker-controlled.
+ */
+function stripTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* '/' */) {
+    end--;
+  }
+  return end === s.length ? s : s.slice(0, end);
 }

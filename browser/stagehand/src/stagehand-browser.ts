@@ -7,6 +7,7 @@
  * Stagehand v3 is CDP-native and provides direct CDP access for screencast/input injection.
  */
 
+import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
 import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
@@ -23,6 +24,7 @@ import type { ActInput, ExtractInput, ObserveInput, NavigateInput, TabsInput } f
 import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
+import { getStagehandChromePid, patchProfileExitType } from './utils';
 
 // Type for Stagehand v3 Page
 type V3Page = NonNullable<ReturnType<NonNullable<Stagehand['context']>['activePage']>>;
@@ -73,7 +75,7 @@ export class StagehandBrowser extends MastraBrowser {
       },
       // When a new browser is created for a thread, set up close listener
       onBrowserCreated: (stagehand, threadId) => {
-        this.setupCloseListenerForThread(stagehand, threadId);
+        this.setupCloseListener(stagehand, () => this.handleThreadBrowserDisconnected(threadId), threadId);
       },
     });
   }
@@ -120,6 +122,9 @@ export class StagehandBrowser extends MastraBrowser {
       cdpUrl?: string;
       headless?: boolean;
       viewport?: { width: number; height: number };
+      userDataDir?: string;
+      executablePath?: string;
+      preserveUserDataDir?: boolean;
     };
   }> {
     const config = this.stagehandConfig;
@@ -137,6 +142,9 @@ export class StagehandBrowser extends MastraBrowser {
         cdpUrl?: string;
         headless?: boolean;
         viewport?: { width: number; height: number };
+        userDataDir?: string;
+        executablePath?: string;
+        preserveUserDataDir?: boolean;
       };
     } = {
       env: config.env ?? 'LOCAL',
@@ -158,6 +166,11 @@ export class StagehandBrowser extends MastraBrowser {
       }
     }
 
+    // Ensure profile directory exists if specified (Stagehand doesn't create it)
+    if (config.profile && !existsSync(config.profile)) {
+      mkdirSync(config.profile, { recursive: true });
+    }
+
     // Handle CDP URL for local browser with custom endpoint
     // Stagehand requires a WebSocket URL, so resolve HTTP URLs to WebSocket URLs
     if (config.cdpUrl && config.env !== 'BROWSERBASE') {
@@ -165,13 +178,19 @@ export class StagehandBrowser extends MastraBrowser {
       const wsUrl = await this.resolveWebSocketUrl(resolvedUrl);
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
-        headless: config.headless,
+        headless: this.headless,
         viewport: config.viewport,
+        userDataDir: config.profile,
+        executablePath: config.executablePath,
+        preserveUserDataDir: config.preserveUserDataDir,
       };
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
-        headless: config.headless,
+        headless: this.headless,
         viewport: config.viewport,
+        userDataDir: config.profile,
+        executablePath: config.executablePath,
+        preserveUserDataDir: config.preserveUserDataDir,
       };
     }
 
@@ -210,99 +229,63 @@ export class StagehandBrowser extends MastraBrowser {
     this.threadManager.setSharedManager(this.sharedManager as any);
 
     // Listen for browser/context close events to detect external closure
-    this.setupCloseListenerForSharedScope(this.sharedManager);
+    this.setupCloseListener(this.sharedManager, () => this.handleBrowserDisconnected());
   }
 
   /**
    * Set up close event listener for a shared Stagehand instance.
    * Listens to both context and page close events for robust detection.
    */
-  private setupCloseListenerForSharedScope(stagehand: Stagehand): void {
-    let disconnectHandled = false;
-    const handleDisconnect = () => {
-      if (disconnectHandled) return;
-      disconnectHandled = true;
-      this.handleBrowserDisconnected();
-    };
-
-    try {
-      const context = stagehand.context;
-      if (!context) return;
-
-      // Listen for context close (fires when browser window is closed)
-      const contextWithEvents = context as unknown as { on?: (event: string, cb: () => void) => void };
-      if (contextWithEvents?.on) {
-        contextWithEvents.on('close', handleDisconnect);
-      }
-
-      // Listen for last page closing (primary detection method)
-      const pages = context.pages?.() ?? [];
-      for (const page of pages) {
-        const pageWithEvents = page as unknown as { on?: (event: string, cb: () => void) => void };
-        if (pageWithEvents?.on) {
-          pageWithEvents.on('close', () => {
-            const remainingPages = context.pages?.() ?? [];
-            if (remainingPages.length === 0) {
-              handleDisconnect();
-            }
-          });
-        }
-      }
-    } catch {
-      // Ignore errors setting up close listener
-    }
-  }
-
   /**
-   * Set up close event listener for a thread's Stagehand instance.
-   * Uses CDP Target.targetDestroyed events to detect when all pages are gone.
+   * Set up a CDP-based close listener for a Stagehand instance.
+   *
+   * Tracks page targets via CDP `Target.targetCreated` / `Target.targetDestroyed`.
+   * When all page targets are gone the `onDisconnect` callback fires. This is more
+   * reliable than Playwright's `context.close` / `page.close` events which don't
+   * fire when Chrome is killed externally (SIGTERM/SIGKILL).
    */
-  private setupCloseListenerForThread(stagehand: Stagehand, threadId: string): void {
+  private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void, threadId?: string): void {
+    const chromePid = getStagehandChromePid(stagehand);
+    // Store PID so the base class can kill the process group on disconnect/close
+    if (chromePid != null) {
+      if (threadId) {
+        this.threadBrowserPids.set(threadId, chromePid);
+      } else {
+        this.sharedBrowserPid = chromePid;
+      }
+    }
+
     let disconnectHandled = false;
     const handleDisconnect = () => {
       if (disconnectHandled) return;
       disconnectHandled = true;
-      this.handleThreadBrowserDisconnected(threadId);
+      onDisconnect();
     };
 
     try {
       const stagehandAny = stagehand as any;
       const conn = stagehandAny.ctx?.conn;
+      if (!conn?.on) return;
 
-      if (!conn?.on) {
-        return;
-      }
-
-      // Track page targets - when all are destroyed, browser is closed
+      // Track page targets — when all are destroyed, browser is closed
       const pageTargets = new Set<string>();
 
-      // Initialize with current pages
       const context = stagehand.context;
       if (context) {
-        const pages = context.pages?.() ?? [];
-        for (const page of pages) {
-          const pageAny = page as any;
-          const targetId = pageAny._targetId ?? pageAny.targetId;
-          if (targetId) {
-            pageTargets.add(targetId);
-          }
+        for (const page of context.pages?.() ?? []) {
+          const targetId = (page as any)._targetId ?? (page as any).targetId;
+          if (targetId) pageTargets.add(targetId);
         }
       }
 
-      // Listen for new page targets
       conn.on('Target.targetCreated', (params: { targetInfo: { targetId: string; type: string } }) => {
-        if (params.targetInfo.type === 'page') {
-          pageTargets.add(params.targetInfo.targetId);
-        }
+        if (params.targetInfo.type === 'page') pageTargets.add(params.targetInfo.targetId);
       });
 
-      // Listen for destroyed targets - when all pages gone, browser closed
       conn.on('Target.targetDestroyed', (params: { targetId: string }) => {
         if (pageTargets.has(params.targetId)) {
           pageTargets.delete(params.targetId);
-          if (pageTargets.size === 0) {
-            handleDisconnect();
-          }
+          if (pageTargets.size === 0) handleDisconnect();
         }
       });
     } catch {
@@ -322,6 +305,33 @@ export class StagehandBrowser extends MastraBrowser {
 
     // Reset thread state
     this.setCurrentThread(undefined);
+
+    // Stagehand uses chrome-launcher which sends SIGKILL, racing with Chrome's
+    // Preferences flush. Patch exit_type so the next launch doesn't show
+    // the "Chrome didn't shut down correctly" dialog.
+    // Note: Chrome only creates Default/Preferences after extended use (e.g.,
+    // logging in), not on first launch. Short-lived profiles won't have this file.
+    this.patchExitType();
+  }
+
+  override handleBrowserDisconnected(): void {
+    super.handleBrowserDisconnected();
+    this.patchExitType();
+  }
+
+  protected override handleThreadBrowserDisconnected(threadId: string): void {
+    super.handleThreadBrowserDisconnected(threadId);
+    this.patchExitType();
+  }
+
+  override async closeThreadSession(threadId: string): Promise<void> {
+    await super.closeThreadSession(threadId);
+    this.patchExitType();
+  }
+
+  private patchExitType(): void {
+    if (!this.config.profile) return;
+    patchProfileExitType(this.config.profile, this.logger);
   }
 
   /**

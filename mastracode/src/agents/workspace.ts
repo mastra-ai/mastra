@@ -13,6 +13,89 @@ import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
 // =============================================================================
+// Sandbox Environment
+// =============================================================================
+
+/**
+ * Allowlist of env vars to inherit into the sandbox.
+ * We avoid spreading all of process.env to prevent secrets from leaking
+ * into observability traces and scorer data.
+ */
+const SANDBOX_ENV_ALLOWLIST = [
+  // System essentials
+  'PATH',
+  'HOME',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  // Locale
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  // Terminal
+  'TERM',
+  'COLORTERM',
+  'TERM_PROGRAM',
+  // Node.js
+  'NODE_PATH',
+  'NODE_OPTIONS',
+  'NODE_ENV',
+  // Package managers
+  'NPM_CONFIG_PREFIX',
+  'NPM_CONFIG_CACHE',
+  'PNPM_HOME',
+  'YARN_GLOBAL_FOLDER',
+  'BUN_INSTALL',
+  // Version managers
+  'NVM_DIR',
+  'FNM_DIR',
+  'VOLTA_HOME',
+  'N_PREFIX',
+  // Build tools
+  'CARGO_HOME',
+  'GOPATH',
+  'GOROOT',
+  'RUSTUP_HOME',
+  'JAVA_HOME',
+  'ANDROID_HOME',
+  // Editor
+  'EDITOR',
+  'VISUAL',
+  // Git
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+  // Platform specifics (macOS)
+  'XPC_FLAGS',
+  'XPC_SERVICE_NAME',
+  '__CF_USER_TEXT_ENCODING',
+];
+
+function buildSandboxEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+
+  for (const key of SANDBOX_ENV_ALLOWLIST) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+
+  // Explicit overrides for non-interactive subprocess execution
+  env.FORCE_COLOR = '1';
+  env.CLICOLOR_FORCE = '1';
+  env.TERM = process.env.TERM || 'xterm-256color';
+  env.CI = 'true';
+  env.NONINTERACTIVE = '1';
+  env.DEBIAN_FRONTEND = 'noninteractive';
+
+  return env;
+}
+
+// =============================================================================
 // Create Workspace with Skills
 // =============================================================================
 
@@ -117,15 +200,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     }),
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,
-      env: {
-        ...process.env,
-        FORCE_COLOR: '1',
-        CLICOLOR_FORCE: '1',
-        TERM: process.env.TERM || 'xterm-256color',
-        CI: 'true',
-        NONINTERACTIVE: '1',
-        DEBIAN_FRONTEND: 'noninteractive',
-      },
+      env: buildSandboxEnv(),
     }),
     tools: isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES,
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),

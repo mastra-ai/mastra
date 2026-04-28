@@ -21,6 +21,9 @@
  * Both extend this base class and implement `getTools()` to return their tools.
  */
 
+import { existsSync, unlinkSync, lstatSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 import { isProcessorWorkflow } from '../processors/index';
@@ -38,6 +41,97 @@ export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from '.
 
 // Alias for internal use
 type ScreencastOptions = ScreencastOptionsType;
+
+// =============================================================================
+// Profile Lock File Cleanup
+// =============================================================================
+
+/**
+ * Lock files that Chrome/Chromium creates in the profile directory.
+ * These can become stale if the browser doesn't shut down cleanly.
+ */
+const CHROME_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'chrome.pid', 'RunningChromeVersion'];
+
+/**
+ * Clean up stale Chrome lock files from a profile directory.
+ *
+ * Chrome creates lock files (SingletonLock, SingletonSocket, etc.) to prevent
+ * multiple instances from using the same profile. If the browser crashes or
+ * doesn't shut down cleanly, these files can remain and block future launches.
+ *
+ * This function removes these lock files, allowing the profile to be reused.
+ * It's safe to call even if the files don't exist.
+ *
+ * @param profilePath - Path to the Chrome profile directory
+ * @param logger - Optional logger for debug output
+ */
+export function cleanupProfileLockFiles(
+  profilePath: string,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): void {
+  if (!profilePath || !existsSync(profilePath)) {
+    return;
+  }
+
+  try {
+    const entries = readdirSync(profilePath);
+    for (const entry of entries) {
+      if (CHROME_LOCK_FILES.includes(entry)) {
+        const fullPath = join(profilePath, entry);
+        try {
+          const stat = lstatSync(fullPath);
+          // Remove both regular files and symlinks
+          if (stat.isFile() || stat.isSymbolicLink()) {
+            unlinkSync(fullPath);
+            logger?.debug?.(`Removed stale lock file: ${fullPath}`);
+          }
+        } catch (err) {
+          // File may have been removed between readdir and unlink, ignore
+          logger?.warn?.(`Failed to remove lock file ${fullPath}: ${err}`);
+        }
+      }
+    }
+  } catch (err) {
+    // Profile directory may not be readable, ignore
+    logger?.warn?.(`Failed to clean up profile lock files in ${profilePath}: ${err}`);
+  }
+}
+
+// =============================================================================
+// Process Group Cleanup
+// =============================================================================
+
+/**
+ * Kill a browser process and its children by sending SIGKILL to the process group.
+ *
+ * When Chrome/Chromium is launched, it spawns child processes (GPU, renderer,
+ * network, storage, crashpad handlers). If the main process exits uncleanly,
+ * these children can become orphaned. Killing the process group ensures all
+ * related processes are cleaned up.
+ *
+ * Note: Process group signaling (`-pid`) is POSIX-only. On Windows, this
+ * function is a no-op and orphaned child processes must be cleaned up by
+ * other means (e.g., taskkill).
+ *
+ * @param pid - The PID of the main browser process. If undefined, this is a no-op.
+ * @param logger - Optional logger for debug output.
+ */
+export function killProcessGroup(
+  pid: number | undefined,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): void {
+  if (pid == null) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+    logger?.debug?.(`Killed process group for PID ${pid}`);
+  } catch (err) {
+    // ESRCH = process already gone — expected
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ESRCH') {
+      logger?.warn?.(`Failed to kill process group ${pid}: ${code ?? err}`);
+    }
+  }
+}
 
 // =============================================================================
 // Status & Lifecycle Types
@@ -163,6 +257,49 @@ export interface BrowserConfigBase {
    * Controls image format, quality, and dimensions.
    */
   screencast?: ScreencastOptions;
+
+  // ==========================================================================
+  // Profile & Authentication Options
+  // ==========================================================================
+
+  /**
+   * Path to a Chrome/Chromium user data directory (profile).
+   * When provided, the browser will use this profile's cookies, localStorage,
+   * extensions, and other session data.
+   *
+   * **Important:** Chrome only allows one process to access a profile at a time.
+   * If Chrome is already running with this profile, the browser will fail to launch.
+   * Either close Chrome first, or use a copy of the profile.
+   *
+   * @example
+   * ```ts
+   * // macOS Chrome default profile
+   * { profile: '/Users/you/Library/Application Support/Google/Chrome' }
+   *
+   * // Custom profile directory
+   * { profile: '/path/to/my-automation-profile' }
+   * ```
+   */
+  profile?: string;
+
+  /**
+   * Path to the browser executable to use.
+   * By default, Playwright/Stagehand use their bundled Chromium.
+   * Use this to launch a specific browser installation instead.
+   *
+   * @example
+   * ```ts
+   * // macOS Chrome
+   * { executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }
+   *
+   * // Linux Chrome
+   * { executablePath: '/usr/bin/google-chrome' }
+   *
+   * // Windows Chrome
+   * { executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' }
+   * ```
+   */
+  executablePath?: string;
 }
 
 /**
@@ -265,8 +402,16 @@ export abstract class MastraBrowser extends MastraBase {
   /** Human-readable name */
   abstract readonly name: string;
 
-  /** Provider type (e.g., 'playwright', 'stagehand', 'browserbase') */
+  /** Provider identifier (e.g., 'playwright', 'stagehand', 'browserbase') */
   abstract readonly provider: string;
+
+  /**
+   * Provider type for runtime enforcement.
+   * - 'sdk': SDK providers (AgentBrowser, StagehandBrowser) — use with Agent.browser
+   * - 'cli': CLI providers (BrowserViewer) — use with Workspace.browser
+   * Defaults to 'sdk' for backward compatibility with existing providers.
+   */
+  readonly providerType: 'sdk' | 'cli' = 'sdk';
 
   // ---------------------------------------------------------------------------
   // State
@@ -320,6 +465,23 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Active screencast streams per thread (for triggering reconnects on tab changes) */
   protected activeScreencastStreams = new Map<string, ScreencastStream>();
+
+  // ---------------------------------------------------------------------------
+  // Process ID Tracking (for orphaned process cleanup)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * PID of the shared browser process.
+   * Set by providers after launch so the base class can kill the process group
+   * (GPU, renderer, crashpad, etc.) when the browser disconnects or closes.
+   */
+  protected sharedBrowserPid?: number;
+
+  /**
+   * PIDs of per-thread browser processes.
+   * Set by providers after creating a thread session.
+   */
+  protected threadBrowserPids = new Map<string, number>();
 
   /**
    * Get the stream key for a thread (or shared key for shared scope).
@@ -422,6 +584,22 @@ export abstract class MastraBrowser extends MastraBase {
           '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
       );
     }
+
+    // Validate: cdpUrl is incompatible with launch-time options (profile, executablePath).
+    // CDP connects to an already-running browser — it has its own profile and executable.
+    if (config.cdpUrl && (config.profile || config.executablePath)) {
+      const conflicting = [config.profile && 'profile', config.executablePath && 'executablePath']
+        .filter(Boolean)
+        .join(' and ');
+      throw new Error(
+        `Invalid browser configuration: "cdpUrl" cannot be used with ${conflicting}.\n\n` +
+          '• cdpUrl connects to an existing browser (which has its own profile and executable)\n' +
+          '• profile and executablePath are launch-time options for spawning a new browser\n\n' +
+          'To fix this, either:\n' +
+          '1. Remove cdpUrl to launch a new browser with your profile/executable\n' +
+          '2. Remove profile/executablePath to connect to the existing browser via CDP',
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -441,10 +619,28 @@ export abstract class MastraBrowser extends MastraBase {
   protected abstract doClose(): Promise<void>;
 
   /**
+   * Get the CDP WebSocket URL for connecting to this browser.
+   * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
+   * SDK providers typically return null as they manage their own CDP connections.
+   *
+   * @param _threadId - Thread identifier (for thread-scoped browsers)
+   * @returns The CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)
+   */
+  getCdpUrl(_threadId?: string): string | null {
+    return null;
+  }
+
+  /**
    * Launch the browser.
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
+   * @param _threadId - Thread identifier (for thread-scoped browsers, launches a browser for that thread)
    */
-  async launch(): Promise<void> {
+  async launch(threadId?: string): Promise<void> {
+    // Set current thread if provided, so thread-scoped browsers launch for that thread
+    if (threadId !== undefined) {
+      this.setCurrentThread(threadId);
+    }
+
     // Already ready
     if (this.status === 'ready') {
       return;
@@ -533,16 +729,45 @@ export abstract class MastraBrowser extends MastraBase {
         await this.doClose();
         this.status = 'closed';
         this.notifyBrowserClosed();
+        // Clean up stale lock files only after confirmed shutdown.
+        // Removing them from a live profile (if doClose threw) could cause corruption.
+        if (this.config.profile) {
+          cleanupProfileLockFiles(this.config.profile, this.logger);
+        }
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
         throw err;
       } finally {
         this._closePromise = undefined;
+        // Kill orphaned child processes (GPU, renderer, crashpad, etc.)
+        killProcessGroup(this.sharedBrowserPid, this.logger);
+        this.sharedBrowserPid = undefined;
+        for (const [, pid] of this.threadBrowserPids) {
+          killProcessGroup(pid, this.logger);
+        }
+        this.threadBrowserPids.clear();
       }
     })();
 
     return this._closePromise;
+  }
+
+  /**
+   * Connect to an external browser via CDP URL for screencast.
+   *
+   * Use this when an agent is using their own external CDP (e.g., browser-use cloud).
+   * Connects Playwright to the external browser to enable screencast without launching
+   * our own browser.
+   *
+   * Override this in subclasses that support external CDP connections.
+   * The base implementation throws an error.
+   *
+   * @param cdpUrl - The external CDP WebSocket URL (wss://... or ws://...)
+   * @param threadId - Thread ID to associate the session with
+   */
+  async connectToExternalCdp(_cdpUrl: string, _threadId?: string): Promise<void> {
+    throw new Error(`${this.provider} does not support connecting to external CDP`);
   }
 
   /**
@@ -594,8 +819,9 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Check if the browser is currently running.
+   * @param _threadId - Thread identifier (for thread-scoped browsers)
    */
-  isBrowserRunning(): boolean {
+  isBrowserRunning(_threadId?: string): boolean {
     return this.status === 'ready';
   }
 
@@ -712,6 +938,10 @@ export abstract class MastraBrowser extends MastraBase {
     const threadId = this.getCurrentThread();
 
     if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
+      // Kill orphaned child processes for this thread
+      const pid = this.threadBrowserPids.get(threadId);
+      killProcessGroup(pid, this.logger);
+      this.threadBrowserPids.delete(threadId);
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager!.clearSession(threadId);
       this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
@@ -719,6 +949,9 @@ export abstract class MastraBrowser extends MastraBase {
       // since other threads may still have active browsers
       this.notifyBrowserClosed(threadId);
     } else {
+      // Kill orphaned child processes for the shared browser
+      killProcessGroup(this.sharedBrowserPid, this.logger);
+      this.sharedBrowserPid = undefined;
       // For 'shared' scope or default thread, the shared browser is gone
       this.sharedManager = null;
       // Also clear the shared manager in the thread manager so getManagerForThread
@@ -730,6 +963,12 @@ export abstract class MastraBrowser extends MastraBase {
         this.logger.debug?.('Browser was externally closed, status set to closed');
         this.notifyBrowserClosed();
       }
+    }
+
+    // Clean up stale lock files in the profile directory
+    // This is especially important for external/manual close which may leave locks behind
+    if (this.config.profile) {
+      cleanupProfileLockFiles(this.config.profile, this.logger);
     }
   }
 
@@ -1101,8 +1340,16 @@ export abstract class MastraBrowser extends MastraBase {
       return;
     }
     await this.threadManager.destroySession(threadId);
+    // Kill orphaned child processes for this thread
+    const pid = this.threadBrowserPids.get(threadId);
+    killProcessGroup(pid, this.logger);
+    this.threadBrowserPids.delete(threadId);
     // Notify callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
+    // Clean up any stale lock files in the profile directory
+    if (this.config.profile) {
+      cleanupProfileLockFiles(this.config.profile, this.logger);
+    }
   }
 
   /**
@@ -1116,10 +1363,19 @@ export abstract class MastraBrowser extends MastraBase {
     if (!this.threadManager) {
       return;
     }
+    // Kill orphaned child processes for this thread
+    const pid = this.threadBrowserPids.get(threadId);
+    killProcessGroup(pid, this.logger);
+    this.threadBrowserPids.delete(threadId);
+
     this.threadManager.clearSession(threadId);
     this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
     // Notify only the callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
+    // Clean up any stale lock files in the profile directory
+    if (this.config.profile) {
+      cleanupProfileLockFiles(this.config.profile, this.logger);
+    }
   }
 
   /**
@@ -1152,15 +1408,16 @@ export abstract class MastraBrowser extends MastraBase {
    * - Returns null if the thread doesn't have an existing browser session
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
-    if (!this.isBrowserRunning()) {
-      return null;
-    }
-
     // Merge config screencast defaults with call-site overrides
     const mergedOptions = this.config.screencast || options ? { ...this.config.screencast, ...options } : undefined;
 
     const threadId = mergedOptions?.threadId;
     const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
+
+    // Check if browser is running (pass threadId for thread-scoped checks)
+    if (!this.isBrowserRunning(threadId)) {
+      return null;
+    }
 
     // Shared scope - just start the screencast
     if (scope === 'shared') {
@@ -1169,6 +1426,10 @@ export abstract class MastraBrowser extends MastraBase {
 
     // For 'thread' scope, only start if the thread has an existing session
     if (threadId && !this.hasThreadSession(threadId)) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[MastraBrowser] startScreencastIfBrowserActive: hasThreadSession(${threadId})=false, scope=${scope}`,
+      );
       return null;
     }
 

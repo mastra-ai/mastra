@@ -47,12 +47,51 @@ const memory = new Memory({
 
 See [configuration options](/reference/memory/observational-memory) for full API details.
 
+:::warning
+When you use OM with a client application, send **only the new message** from the client instead of the full conversation history.
+
+Observational memory still relies on stored conversation history. Sending the full history is redundant and can cause message ordering bugs when client-side timestamps conflict with stored timestamps.
+
+For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui#using-mastra-memory).
+:::
+
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
 It uses background agents for managing memory. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
 
 :::
+
+## Temporal gap markers
+
+Temporal gap markers insert a short reminder before a new user message when enough time has passed since the previous message in the thread. They help the agent and the UI see that the conversation resumed after a meaningful pause.
+
+Temporal gap markers are off by default. Enable them with `temporalMarkers: true` in the `observationalMemory` config:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        temporalMarkers: true,
+      },
+    },
+  }),
+})
+```
+
+Mastra inserts a temporal gap marker when the gap is at least 10 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
+
+The observer also sees these markers when it processes the thread, so the observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
+
+See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
 ## Benefits
 
@@ -170,7 +209,7 @@ With retrieval mode enabled, OM:
 - Keeps range metadata visible in the agent's context so the agent knows which observations map to which messages
 - Registers a `recall` tool the agent can call to:
   - Page through the raw messages behind any observation group range
-  - Search by semantic similarity (`mode: "search"` with a `query` string) — requires `vector: true`
+  - Search by semantic similarity (`mode: "search"` with a `query` string); requires `vector: true`
   - List all threads (`mode: "threads"`), browse other threads (`threadId`), and search across all threads (default `scope: 'resource'`)
   - When `scope: 'thread'`: restrict browsing and search to the current thread only
 
@@ -350,8 +389,28 @@ Reflection works similarly — the Reflector runs in the background when observa
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens` — with the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety threshold as a multiplier of `messageTokens`. At `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Only matters if buffering can't keep up. |
+| `activateAfterIdle` | none | Forces buffered observations and buffered reflections to activate after a period of inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. Set this to your prompt cache TTL if you want activation to happen before the next cold prompt. |
+| `activateOnProviderChange` | `false` | Forces buffered observations and reflections to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.blockAfter` | `1.2` | Safety threshold for reflection, same logic as observation. |
+
+If you're relying on prompt caching, set `activateAfterIdle` to match your cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations or reflections first and send a smaller compressed context window.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: '5m',
+      activateOnProviderChange: true,
+    },
+  },
+})
+```
+
+With a 5-minute prompt cache TTL, this activates buffered context after 5 minutes of inactivity so the next uncached prompt uses observations and reflections instead of a larger raw message window. If you prefer, `300_000` works the same way.
+
+Changing model or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered context to activate before the new provider runs. That avoids sending a large raw window to a provider that cannot reuse the previous prompt cache.
 
 ### Disabling
 

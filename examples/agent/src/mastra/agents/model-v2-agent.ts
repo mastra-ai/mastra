@@ -12,6 +12,7 @@ import {
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
+import { cryptoResearchTool, cryptoPriceTool } from '../tools';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
 import {
   createSubscription,
@@ -27,6 +28,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
+  skills: ['.agents/skills'],
 });
 
 const memory = new Memory({
@@ -514,6 +516,61 @@ const generalSubAgent = new Agent({
   model: 'openai/gpt-4o-mini',
 });
 
+/**
+ * Crypto Research Agent with Background Tasks
+ *
+ * This agent demonstrates the background tasks feature with a real-world use case:
+ * - `crypto-research` runs in the background — fetches comprehensive coin data from
+ *   CoinGecko (description, market stats, price history, links). The agent dispatches
+ *   it and continues the conversation while the data loads.
+ * - `crypto-price` runs in the foreground — quick price lookup via CoinGecko's
+ *   /simple/price endpoint, returns instantly.
+ *
+ * Example conversation flow:
+ *   User: "Research Solana for me, and also what's the current price of Bitcoin?"
+ *   Agent: dispatches crypto-research for Solana (background), calls crypto-price
+ *          for Bitcoin (foreground), responds with Bitcoin's price immediately and
+ *          tells the user Solana research is running.
+ *   User: "Thanks, what about Ethereum's price?"
+ *   Agent: calls crypto-price for Ethereum (foreground) — meanwhile the Solana
+ *          research completes in the background and the result is available for
+ *          the next turn.
+ */
+export const cryptoResearchAgent = new Agent({
+  id: 'crypto-research-agent',
+  name: 'Crypto Research Agent',
+  description:
+    'A crypto-focused agent that can research coins in depth (background) or quickly check prices (foreground).',
+  instructions: `You are a cryptocurrency research assistant. You have two tools:
+
+1. **cryptoResearchTool**: Fetches comprehensive data on a cryptocurrency — description, market stats,
+   price changes, all-time highs, supply info, categories, and links. This tool runs in the
+   background because it takes a moment to fetch all the data. When you use it, let the user know
+   the research has started and they'll get the full results shortly.
+
+2. **cryptoPriceTool**: Quickly looks up the current price, market cap, 24h volume, and 24h change
+   for one or more coins. This runs instantly.
+
+Use CoinGecko coin IDs (lowercase, hyphenated): "bitcoin", "ethereum", "solana", "dogecoin",
+"cardano", "polkadot", "avalanche-2", "chainlink", etc.
+
+When the user asks to "research" or "analyze" a coin, use crypto-research.
+When they just want a price or quick stats, use crypto-price.
+You can handle both at the same time — start a background research while answering a quick price check.`,
+  model: openai('gpt-4o-mini'),
+  tools: {
+    cryptoResearchTool,
+    cryptoPriceTool,
+  },
+  memory: new Memory(),
+  backgroundTasks: {
+    tools: {
+      cryptoResearchTool: true,
+    },
+    waitTimeoutMs: 10000,
+  },
+});
+
 export const subscriptionOrchestratorAgent = new Agent({
   id: 'subscription-orchestrator',
   name: 'Subscription Orchestrator',
@@ -523,6 +580,7 @@ export const subscriptionOrchestratorAgent = new Agent({
     You have two sub-agents:
     1. subscriptionAgent - Use this for any CRUD operations on subscriptions (create, read, update, delete, list)
     2. generalAgent - Use this for general questions about plans, pricing, or policies
+    3. cryptoResearchAgent - Use this for cryptocurrency research
 
     Route user requests to the appropriate sub-agent. For follow-up actions on the same subscription
     (e.g., "create a subscription" then "now upgrade it"), make sure to include relevant context
@@ -531,6 +589,12 @@ export const subscriptionOrchestratorAgent = new Agent({
   agents: {
     subscriptionAgent: subscriptionSubAgent,
     generalAgent: generalSubAgent,
+    cryptoResearchAgent,
+  },
+  backgroundTasks: {
+    tools: {
+      cryptoResearchAgent: true,
+    },
   },
   memory: new Memory(),
   defaultOptions: {

@@ -248,31 +248,6 @@ This is useful when you want to restrict operations to a specific thread that yo
 }
 ```
 
-### Special Mastra headers
-
-When integrating with Mastra Cloud or custom clients the following headers can
-be inspected by middleware to tailor behavior:
-
-```typescript prettier:false
-{
-  handler: async (c, next) => {
-    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
-    const clientType = c.req.header('x-mastra-client-type');
-    const isStudio =
-      c.req.header('x-studio') === 'true';
-
-    if (isFromMastraCloud) {
-      // Special handling
-    }
-    await next();
-  },
-}
-```
-
-- `x-mastra-cloud`: request originates from Mastra Cloud
-- `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
-- `x-studio`: request triggered from Studio
-
 # Related
 
 - [Request Context](/docs/server/request-context)

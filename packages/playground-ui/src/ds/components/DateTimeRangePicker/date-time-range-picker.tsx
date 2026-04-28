@@ -2,6 +2,7 @@ import { isValid, parse } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
+import type { ButtonProps } from '@/ds/components/Button/Button';
 import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
@@ -32,6 +33,10 @@ export interface DateTimeRangePickerProps {
   dateTo?: Date;
   onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
   disabled?: boolean;
+  /** Subset of presets to show. If omitted, all presets are shown. */
+  presets?: readonly DateRangePreset[];
+  /** Size passed through to the trigger Button. Defaults to 'default'. */
+  size?: ButtonProps['size'];
 }
 
 export function DateTimeRangePicker({
@@ -41,7 +46,11 @@ export function DateTimeRangePicker({
   dateTo,
   onDateChange,
   disabled,
+  presets,
+  size = 'default',
 }: DateTimeRangePickerProps) {
+  const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
+  const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
   const [draftDateFrom, setDraftDateFrom] = useState<Date | undefined>(dateFrom);
   const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(dateTo);
@@ -88,7 +97,7 @@ export function DateTimeRangePicker({
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="md" disabled={disabled}>
+          <Button size={size} disabled={disabled}>
             <CalendarIcon />
             {dateFrom ? dateFrom.toLocaleDateString() : 'Start'} {' \u2013 '}
             {dateTo ? dateTo.toLocaleDateString() : 'End'}
@@ -144,7 +153,7 @@ export function DateTimeRangePicker({
               )}
               onClick={() => {
                 setCustomRangeError(undefined);
-                handlePresetSelect('all');
+                handlePresetSelect(fallbackPreset);
               }}
             >
               &larr; Presets
@@ -161,13 +170,13 @@ export function DateTimeRangePicker({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button variant="outline" size="md" disabled={disabled}>
+        <Button size={size} disabled={disabled}>
           <CalendarIcon />
           {datePresetLabel}
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start">
-        {DATE_PRESETS.map(p => (
+        {visiblePresets.map(p => (
           <DropdownMenu.Item key={p.value} onSelect={() => handlePresetSelect(p.value)}>
             {p.label}
           </DropdownMenu.Item>

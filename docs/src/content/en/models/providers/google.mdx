@@ -460,7 +460,7 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "google/gemma-4-26b-it",
+    "model": "google/gemma-4-26b-a4b-it",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -593,13 +593,25 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "imageConfig",
-        "type": "{ aspectRatio?: \"1:1\" | \"2:3\" | \"3:2\" | \"3:4\" | \"4:3\" | \"4:5\" | \"5:4\" | \"9:16\" | \"16:9\" | \"21:9\" | undefined; imageSize?: \"1K\" | \"2K\" | \"4K\" | undefined; } | undefined",
+        "type": "{ aspectRatio?: \"1:1\" | \"2:3\" | \"3:2\" | \"3:4\" | \"4:3\" | \"4:5\" | \"5:4\" | \"9:16\" | \"16:9\" | \"21:9\" | \"1:8\" | \"8:1\" | \"1:4\" | \"4:1\" | undefined; imageSize?: \"1K\" | \"2K\" | \"4K\" | \"512\" | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "retrievalConfig",
         "type": "{ latLng?: { latitude: number; longitude: number; } | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "streamFunctionCallArguments",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "serviceTier",
+        "type": "\"standard\" | \"flex\" | \"priority\" | undefined",
         "description": "",
         "isOptional": true
     }

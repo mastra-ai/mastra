@@ -11,7 +11,7 @@ The `Processor` interface defines the contract for all processors in Mastra. Pro
 
 ## When processor methods run
 
-The five processor methods run at different points in the agent execution lifecycle:
+The six processor methods run at different points in the agent execution lifecycle:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -33,10 +33,14 @@ The five processor methods run at different points in the agent execution lifecy
 │  │  └──────────┬──────────┘                                │    │
 │  │             │                                           │    │
 │  │             ▼                                           │    │
-│  │       LLM Execution                                     │    │
-│  │             │                                           │    │
-│  │             ▼                                           │    │
-│  │  ┌──────────────────────┐                               │    │
+│  │       LLM Execution ──── API Error? ──┐                │    │
+│  │             │                          │                │    │
+│  │             │              ┌───────────────────┐        │    │
+│  │             │              │  processAPIError  │        │    │
+│  │             │              └─────────┬─────────┘        │    │
+│  │             │                 retry? └── Loop back ──┐  │    │
+│  │             ▼                                        │  │    │
+│  │  ┌──────────────────────┐                            │  │    │
 │  │  │ processOutputStream  │  ← Runs on EACH stream chunk  │    │
 │  │  └──────────┬───────────┘                               │    │
 │  │             │                                           │    │
@@ -66,6 +70,7 @@ The five processor methods run at different points in the agent execution lifecy
 | - | - | - |
 | `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
 | `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
+| `processAPIError` | When an LLM API call fails | Inspect API rejections, optionally mutate state/messages, and request a retry |
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
 | `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
 | `processOutputResult` | Once after generation completes | Post-process final response, log results |
@@ -73,15 +78,40 @@ The five processor methods run at different points in the agent execution lifecy
 ## Interface definition
 
 ```typescript
-interface Processor<TId extends string = string> {
+interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId
   readonly name?: string
+  readonly description?: string
+  /** Index of this processor in the workflow (set at runtime when combining processors). */
+  processorIndex?: number
+  /** When true, processOutputStream also receives `data-*` chunks. Default: false. */
+  processDataParts?: boolean
 
-  processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult
-  processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult
-  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>
-  processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult
-  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult
+  processInput?(
+    args: ProcessInputArgs<TTripwireMetadata>,
+  ): Promise<ProcessInputResult> | ProcessInputResult
+
+  processInputStep?(
+    args: ProcessInputStepArgs<TTripwireMetadata>,
+  ):
+    | Promise<ProcessInputStepResult | MessageList | MastraDBMessage[] | undefined | void>
+    | ProcessInputStepResult
+    | MessageList
+    | MastraDBMessage[]
+    | void
+    | undefined
+
+  processAPIError?(
+    args: ProcessAPIErrorArgs<TTripwireMetadata>,
+  ): Promise<ProcessAPIErrorResult | void> | ProcessAPIErrorResult | void
+
+  processOutputStream?(
+    args: ProcessOutputStreamArgs<TTripwireMetadata>,
+  ): Promise<ChunkType | null | undefined>
+
+  processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult
+
+  processOutputResult?(args: ProcessOutputResultArgs<TTripwireMetadata>): ProcessorMessageResult
 }
 ```
 
@@ -102,6 +132,19 @@ interface Processor<TId extends string = string> {
     isOptional: true,
   },
   {
+    name: 'description',
+    type: 'string',
+    description: 'Optional human-readable description shown in tracing and Studio.',
+    isOptional: true,
+  },
+  {
+    name: 'processorIndex',
+    type: 'number',
+    description:
+      'Position of the processor in the combined processor list. Set at runtime by Mastra when processors are merged with memory, workspace, and per-call overrides. You do not set this yourself.',
+    isOptional: true,
+  },
+  {
     name: 'processDataParts',
     type: 'boolean',
     description:
@@ -110,6 +153,65 @@ interface Processor<TId extends string = string> {
   },
 ]}
 />
+
+## Message arguments
+
+Most processor methods receive both `messages` and `messageList`. They point to the same underlying conversation but expose it differently.
+
+### `messages` vs `messageList`
+
+- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence.
+- `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
+
+Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
+
+- Read messages from another stage, for example input messages while processing output.
+- Add, remove, or replace whole messages.
+- Convert to another format such as UI or core messages for a third-party API.
+
+`messages` is always derived from `messageList`, so mutating `messageList` is the canonical way to add, remove, or reorder messages. For in-place edits to a message's content (for example, rewriting `content.parts`), mutating `messages` directly is equivalent. If you return a new array from `messages`, Mastra reconciles it against `messageList` for the current stage.
+
+### Persistence
+
+When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. The two return styles are equivalent for persistence:
+
+- Mutating `messageList` directly (or returning the same `MessageList` instance) — recorded mutations are applied in place, so the saved conversation reflects your changes.
+- Returning a `MastraDBMessage[]` or `{ messages, systemMessages }` — Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
+
+Returning a different `MessageList` instance is an error; always mutate the one passed to your processor.
+
+### Reading text from a message
+
+`MastraDBMessage.content` is a structured object, not a string. The canonical way to read user or assistant text is `content.parts`:
+
+```typescript
+import type { MastraDBMessage } from '@mastra/core/memory'
+
+function getText(message: MastraDBMessage): string {
+  let text = ''
+
+  if (message.content.parts) {
+    for (const part of message.content.parts) {
+      if (part.type === 'text' && typeof part.text === 'string') {
+        text += part.text
+      }
+    }
+  }
+
+  // Fallback for legacy messages that only have the flattened `content` string
+  if (!text && typeof message.content.content === 'string') {
+    text = message.content.content
+  }
+
+  return text
+}
+```
+
+Key points:
+
+- `message.content.parts` is the primary source. A single message can contain multiple parts, including non-text parts such as tool calls, tool results, and file parts. Filter by `part.type === 'text'` before reading `part.text`.
+- `message.content.content` is a flattened string kept for backward compatibility. Use it only as a fallback when `parts` is empty or missing.
+- `message.content` itself is never a plain string on `MastraDBMessage`. Legacy `CoreMessage` shapes may be strings, but processors always receive `MastraDBMessage`.
 
 ## Methods
 
@@ -155,8 +257,8 @@ processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInpu
     name: 'retryCount',
     type: 'number',
     description:
-      'Number of times processors have triggered retry for this generation. Use this to limit retry attempts.',
-    isOptional: true,
+      'Number of times processors have triggered retry for this generation. Use this to limit retry attempts. Always passed by Mastra; starts at 0.',
+    isOptional: false,
   },
   {
     name: 'tracingContext',
@@ -204,7 +306,15 @@ The method can return one of three types:
 Processes input messages at each step of the agentic loop, before they're sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
 
 ```typescript prettier:false
-processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+processInputStep?<TTripwireMetadata = unknown>(
+  args: ProcessInputStepArgs<TTripwireMetadata>,
+):
+  | Promise<ProcessInputStepResult | MessageList | MastraDBMessage[] | void | undefined>
+  | ProcessInputStepResult
+  | MessageList
+  | MastraDBMessage[]
+  | void
+  | undefined;
 ```
 
 #### Execution order in the agentic loop
@@ -294,8 +404,16 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
   },
   {
     name: 'abort',
-    type: '(reason?: string) => never',
-    description: 'Function to abort processing.',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description:
+      'Function to abort processing. Throws a TripWire error that stops execution. Pass `retry: true` to request the LLM retry the step with feedback.',
+    isOptional: false,
+  },
+  {
+    name: 'retryCount',
+    type: 'number',
+    description:
+      'Current retry attempt count from `ProcessorContext`. Starts at `0`; use to cap processor-triggered retries.',
     isOptional: false,
   },
   {
@@ -315,7 +433,14 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 
 #### `ProcessInputStepResult`
 
-The method can return any combination of these properties:
+`processInputStep` can return several shapes:
+
+- **`ProcessInputStepResult` object** — override any combination of the properties below for this step (described next).
+- **`MessageList`** — return the same `messageList` instance to signal you mutated messages in place.
+- **`MastraDBMessage[]`** — return a transformed messages array; replaces the step's messages.
+- **`void` or `undefined`** — return nothing to leave the step unchanged.
+
+The object form can return any combination of these properties:
 
 <PropertiesTable
   content={[
@@ -409,6 +534,143 @@ System messages are **reset to their original values** at the start of each step
 
 ---
 
+### `processAPIError`
+
+Handles LLM API rejection errors before they surface as final errors. This runs when the API call fails with a non-retryable error (such as a 400 or 422 status code). Unlike `processOutputStep` which runs after successful responses, this runs when the API rejects the request.
+
+Add processors that implement `processAPIError` to an agent's `errorProcessors` array.
+
+Processors can inspect the error, modify the request (for example, by appending messages to the `messageList`), and return `{ retry: true }` to signal a retry with the modified state.
+
+```typescript prettier:false
+processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> | ProcessAPIErrorResult | void;
+```
+
+#### `ProcessAPIErrorArgs`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'error',
+    type: 'unknown',
+    description: 'The error that occurred during the LLM API call.',
+    isOptional: false,
+  },
+  {
+    name: 'messages',
+    type: 'MastraDBMessage[]',
+    description: 'All messages at the time of the error.',
+    isOptional: false,
+  },
+  {
+    name: 'messageList',
+    type: 'MessageList',
+    description: 'MessageList instance for managing messages. Modify this to change the request before retry.',
+    isOptional: false,
+  },
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description: 'Current step number (0-indexed).',
+    isOptional: false,
+  },
+  {
+    name: 'steps',
+    type: 'StepResult[]',
+    description: 'All completed steps so far.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description: 'Per-processor state that persists across all method calls within this request.',
+    isOptional: false,
+  },
+  {
+    name: 'retryCount',
+    type: 'number',
+    description: 'The current retry count for error handlers. Use this to limit retry attempts.',
+    isOptional: false,
+  },
+  {
+    name: 'abort',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description: 'Function to abort processing.',
+    isOptional: false,
+  },
+  {
+    name: 'writer',
+    type: 'ProcessorStreamWriter',
+    description:
+      'Stream writer for emitting custom data chunks during streaming. Use `writer.custom()` to send transient UI signals.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Request context passed through from the agent call.',
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Signal for cancelling the operation.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### `ProcessAPIErrorResult`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'retry',
+    type: 'boolean',
+    description: 'Whether to retry the LLM call after applying modifications.',
+    isOptional: false,
+  },
+]}
+/>
+
+#### Use cases
+
+- Handling API-specific rejections by modifying the request and retrying
+- Converting non-retryable errors into retryable ones with request modifications
+- Implementing model-specific error recovery strategies
+
+#### Example: Custom error recovery
+
+```typescript title="src/mastra/processors/error-recovery.ts"
+import { APICallError } from '@ai-sdk/provider'
+import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from '@mastra/core/processors'
+
+export class ErrorRecoveryProcessor implements Processor {
+  id = 'error-recovery'
+
+  processAPIError({
+    error,
+    messageList,
+    retryCount,
+  }: ProcessAPIErrorArgs): ProcessAPIErrorResult | void {
+    // Only retry once
+    if (retryCount > 0) return
+
+    // Check for a specific API error
+    if (APICallError.isInstance(error) && error.message.includes('context length exceeded')) {
+      // Trim older messages to fit within context
+      const messages = messageList.get.all.db()
+      if (messages.length > 4) {
+        messageList.removeByIds([messages[1]!.id, messages[2]!.id])
+        return { retry: true }
+      }
+    }
+  }
+}
+```
+
+---
+
 ### `processOutputStream`
 
 Processes streaming output chunks with built-in state management. Allows processors to accumulate chunks and make decisions based on larger context.
@@ -436,13 +698,22 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
   {
     name: 'state',
     type: 'Record<string, unknown>',
-    description: 'Mutable state object that persists across chunks within a single stream.',
+    description:
+      'Mutable per-processor state that persists across every chunk and every method call within a single request. A fresh state object is created for each new generate or stream call.',
     isOptional: false,
   },
   {
     name: 'abort',
-    type: '(reason?: string) => never',
-    description: 'Function to abort the stream.',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description:
+      'Function to abort the stream. Throws a TripWire error that ends the stream and emits a `tripwire` chunk. Pass `retry: true` to request another LLM attempt instead of ending.',
+    isOptional: false,
+  },
+  {
+    name: 'retryCount',
+    type: 'number',
+    description:
+      'Current retry attempt count from `ProcessorContext`. Starts at `0`; use to cap processor-triggered retries.',
     isOptional: false,
   },
   {
@@ -475,8 +746,13 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
 
 #### Return value
 
-- Return the `ChunkType` to emit it (possibly modified)
-- Return `null` or `undefined` to skip emitting the chunk
+`processOutputStream` returns `Promise<ChunkType | null | undefined>`.
+
+- Return the `ChunkType` to emit the chunk. Return the original `part` to emit it unchanged, or a new `ChunkType` to emit a modified chunk.
+- Return `null` to drop the chunk. Nothing is sent to the next processor or the client.
+- Return `undefined` (including implicit `undefined` from a `return;` statement or a method that falls off the end) to drop the chunk. `null` and `undefined` behave the same way.
+
+Dropping a chunk only affects that single chunk. The stream continues and the next chunk is still processed. To stop the stream entirely, call `abort()`.
 
 ---
 
@@ -520,8 +796,16 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
   },
   {
     name: 'abort',
-    type: '(reason?: string) => never',
-    description: 'Function to abort processing.',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description:
+      'Function to abort processing. Throws a TripWire error that stops execution and emits a `tripwire` chunk.',
+    isOptional: false,
+  },
+  {
+    name: 'retryCount',
+    type: 'number',
+    description:
+      'Current retry attempt count from `ProcessorContext`. Starts at `0`; use to cap processor-triggered retries.',
     isOptional: false,
   },
   {
@@ -597,10 +881,29 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
     isOptional: true,
   },
   {
+    name: 'usage',
+    type: 'LanguageModelUsage',
+    description: 'Token usage for the current step (`inputTokens`, `outputTokens`, `totalTokens`).',
+    isOptional: false,
+  },
+  {
     name: 'systemMessages',
     type: 'CoreMessage[]',
     description: 'All system messages for read/modify access.',
-    isOptional: true,
+    isOptional: false,
+  },
+  {
+    name: 'steps',
+    type: 'StepResult[]',
+    description: 'All completed steps so far, including the current step.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description:
+      'Per-processor state that persists across all method calls within this request. Shared with processOutputStream and processOutputResult.',
+    isOptional: false,
   },
   {
     name: 'abort',
@@ -611,8 +914,9 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
   {
     name: 'retryCount',
     type: 'number',
-    description: 'Number of times processors have triggered retry. Use this to limit retry attempts.',
-    isOptional: true,
+    description:
+      'Number of times processors have triggered retry. Use this to limit retry attempts. Always passed by Mastra; starts at 0.',
+    isOptional: false,
   },
   {
     name: 'tracingContext',
@@ -639,7 +943,7 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
 #### Example: Quality guardrail with retry
 
 ```typescript title="src/mastra/processors/quality-guardrail.ts"
-import type { Processor } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
 
 export class QualityGuardrail implements Processor {
   id = 'quality-guardrail'
@@ -680,6 +984,18 @@ type OutputProcessor = Processor &
     | { processOutputStep: required }
     | { processOutputResult: required }
   )
+
+// Must implement processAPIError
+type ErrorProcessor = Processor & { processAPIError: required }
+```
+
+Configure processors that implement `processAPIError` in `errorProcessors`:
+
+```typescript
+const agent = new Agent({
+  // ...
+  errorProcessors: [new PrefillErrorHandler()],
+})
 ```
 
 ## Usage examples
@@ -687,7 +1003,8 @@ type OutputProcessor = Processor &
 ### Basic input processor
 
 ```typescript title="src/mastra/processors/lowercase.ts"
-import type { Processor, MastraDBMessage } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class LowercaseProcessor implements Processor {
   id = 'lowercase'
@@ -709,7 +1026,11 @@ export class LowercaseProcessor implements Processor {
 ### Per-step processor with `processInputStep`
 
 ```typescript title="src/mastra/processors/dynamic-model.ts"
-import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core'
+import type {
+  Processor,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+} from '@mastra/core/processors'
 
 export class DynamicModelProcessor implements Processor {
   id = 'dynamic-model'
@@ -742,7 +1063,8 @@ export class DynamicModelProcessor implements Processor {
 ### Message transformer with `processInputStep`
 
 ```typescript title="src/mastra/processors/reasoning-transformer.ts"
-import type { Processor, MastraDBMessage } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class ReasoningTransformer implements Processor {
   id = 'reasoning-transformer'
@@ -767,7 +1089,9 @@ export class ReasoningTransformer implements Processor {
 ### Hybrid processor (input and output)
 
 ```typescript title="src/mastra/processors/content-filter.ts"
-import type { Processor, MastraDBMessage, ChunkType } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
+import type { ChunkType } from '@mastra/core/stream'
 
 export class ContentFilter implements Processor {
   id = 'content-filter'
@@ -793,7 +1117,7 @@ export class ContentFilter implements Processor {
 
   async processOutputStream({ part, abort }): Promise<ChunkType | null> {
     if (part.type === 'text-delta') {
-      if (this.blockedWords.some(word => part.textDelta.includes(word))) {
+      if (this.blockedWords.some(word => part.payload.text.includes(word))) {
         abort('Blocked content detected in output')
       }
     }
@@ -805,7 +1129,8 @@ export class ContentFilter implements Processor {
 ### Stream accumulator with state
 
 ```typescript title="src/mastra/processors/word-counter.ts"
-import type { Processor, ChunkType } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { ChunkType } from '@mastra/core/stream'
 
 export class WordCounter implements Processor {
   id = 'word-counter'
@@ -818,7 +1143,7 @@ export class WordCounter implements Processor {
 
     // Count words in text chunks
     if (part.type === 'text-delta') {
-      const words = part.textDelta.split(/\s+/).filter(Boolean)
+      const words = part.payload.text.split(/\s+/).filter(Boolean)
       state.wordCount += words.length
     }
 
@@ -832,8 +1157,144 @@ export class WordCounter implements Processor {
 }
 ```
 
+## State lifecycle
+
+Every processor receives a `state` object in `processOutputStream`, `processOutputStep`, `processOutputResult`, and `processAPIError`. State has three important properties:
+
+- **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Two processors with different ids cannot read or overwrite each other's state.
+- **Per-request**: A fresh state object is created at the start of every `agent.generate()` or `agent.stream()` call. State does not leak between requests or between users.
+- **Shared across methods**: Within one request, the same `state` object is passed to `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), `processOutputResult` (once at the end), and `processAPIError` (when an LLM call fails). Accumulate data in `processOutputStream` and read it in `processOutputResult` or `processAPIError`.
+
+Initialize fields defensively on first access, because `state` starts as an empty object:
+
+```typescript
+import type { Processor } from '@mastra/core/processors'
+
+export class WordCounter implements Processor {
+  id = 'word-counter'
+
+  async processOutputStream({ part, state }) {
+    state.wordCount ??= 0
+    if (part.type === 'text-delta') {
+      state.wordCount += part.payload.text.split(/\s+/).filter(Boolean).length
+    }
+    return part
+  }
+}
+```
+
+## Aborting and tripwire chunks
+
+The `abort` function on each method throws a `TripWire` error that stops processing and emits a `tripwire` chunk on the output stream. Clients can detect the chunk to distinguish a blocked response from a normal finish.
+
+```typescript
+abort('Blocked content detected', { retry: false, metadata: { category: 'pii' } })
+```
+
+- `reason`: A human-readable explanation. Appears as `tripwire.payload.reason`.
+- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. When `errorProcessors` are configured, `maxProcessorRetries` defaults to `10` for that call.
+- `metadata`: Optional structured data attached to the `tripwire` chunk for downstream consumers.
+
+The emitted `tripwire` chunk has the shape:
+
+```typescript
+type TripwireChunk = {
+  type: 'tripwire'
+  runId: string
+  from: 'AGENT'
+  payload: {
+    reason: string
+    retry?: boolean
+    metadata?: unknown
+    processorId: string
+  }
+}
+```
+
+In non-streaming calls (`agent.generate()`), the result exposes the same information as `result.tripwire` and `result.finishReason === 'other'`.
+
+## Emitting custom data chunks
+
+Processors with access to `writer` can stream custom `data-*` chunks to the client by calling `writer.custom(chunk)`. Tools can do the same through their own writer. This is the only way for a processor to emit content outside of normal text and tool chunks.
+
+```typescript
+await writer.custom({
+  type: 'data-moderation',
+  runId,
+  from: 'AGENT',
+  data: { level: 'warn', reason: 'Possibly unsafe' },
+})
+```
+
+By default, processors do **not** see `data-*` chunks in `processOutputStream` so they don't accidentally process tool telemetry or their own output. Opt in by setting `processDataParts: true` on the processor:
+
+```typescript
+class ModerationCollector implements Processor {
+  id = 'moderation-collector'
+  processDataParts = true
+
+  async processOutputStream({ part, state }) {
+    if (part.type === 'data-moderation') {
+      state.warnings ??= []
+      state.warnings.push(part.data)
+    }
+    return part
+  }
+}
+```
+
+The chunk `type` must start with `data-` to be treated as a custom data chunk. Returning `null` or `undefined` from `processOutputStream` still drops the chunk, so a processor can inspect, modify, or filter custom data the same way it filters text chunks.
+
+## Configuring processors on an agent
+
+Processors are attached to an agent through three arrays:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { PrefillErrorHandler } from '@mastra/core/processors'
+
+const agent = new Agent({
+  name: 'support-agent',
+  model: 'openai/gpt-5',
+  instructions: '...',
+  inputProcessors: [new ContentFilter(['secret'])],
+  outputProcessors: [new WordCounter()],
+  errorProcessors: [new PrefillErrorHandler()],
+  maxProcessorRetries: 3,
+})
+```
+
+- `inputProcessors`: Run before the LLM. Receives input messages.
+- `outputProcessors`: Run during or after the LLM response. Receives output chunks or messages.
+- `errorProcessors`: Run when the LLM API call throws. Receives the raw error.
+
+Each array also accepts a function so processors can be built per-request from `RequestContext`:
+
+```typescript
+new Agent({
+  // ...
+  inputProcessors: ({ requestContext }) => {
+    const blockedWords = requestContext.get('blockedWords') ?? []
+    return [new ContentFilter(blockedWords)]
+  },
+})
+```
+
+### Per-call overrides
+
+`agent.generate()` and `agent.stream()` accept `inputProcessors`, `outputProcessors`, `errorProcessors`, and `maxProcessorRetries`. When any processor array is set on the call, it **replaces** the matching array configured on the agent for that request. Memory, workspace, skill, channel, and browser processors that Mastra adds automatically are always preserved and run around your array.
+
+```typescript
+await agent.stream('Summarize this', {
+  outputProcessors: [new StreamFilter()],
+  maxProcessorRetries: 5,
+})
+```
+
+`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, processor-requested retries are treated as aborts.
+
 ## Related
 
-- [Processors overview](/docs/agents/processors) - Conceptual guide to processors
-- [Guardrails](/docs/agents/guardrails) - Security and validation processors
-- [Memory Processors](/docs/memory/memory-processors) - Memory-specific processors
+- [Processors overview](/docs/agents/processors): Conceptual guide to processors
+- [Guardrails](/docs/agents/guardrails): Security and validation processors
+- [Memory Processors](/docs/memory/memory-processors): Memory-specific processors

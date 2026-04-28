@@ -45,6 +45,7 @@ export function TimelineNameCol({
           'text-ui-sm flex items-center text-left gap-1.5 text-neutral6 w-full min-w-0 rounded-md h-full px-2 py-1 transition-colors',
           '[&>svg]:transition-all [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:ml-auto',
           'hover:bg-surface4 [&:hover>svg]:opacity-60',
+          'focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
         )}
       >
         <span className="min-w-0 truncate">{span.name}</span>

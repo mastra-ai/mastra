@@ -160,6 +160,30 @@ for await (const part of uiMessageStream) {
 }
 ```
 
+### `streamUntilIdle()`
+
+Stream a response and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.
+
+```typescript
+const response = await agent.streamUntilIdle('Research solana for me', {
+  memory: {
+    thread: 'thread-1',
+    resource: 'resource-1',
+  },
+  maxIdleMs: 5 * 60_000,
+})
+
+response.processDataStream({
+  onChunk: async chunk => {
+    if (chunk.type === 'background-task-completed') {
+      console.log('task complete:', chunk.payload.taskId)
+    }
+  },
+})
+```
+
+The stream emits the same chunk types as `stream()`, plus `background-task-*` chunks for task lifecycle events. Visit [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) for the full server-side API and [background task chunks](/reference/streaming/ChunkType#background-task-chunks) for the payload shapes.
+
 ### `getTool()`
 
 Retrieve information about a specific tool available to the agent:
@@ -221,6 +245,26 @@ const response = await agent.declineToolCall({
 
 response.processDataStream({
   onChunk: async chunk => {
+    console.log(chunk)
+  },
+})
+```
+
+### `resumeStream()`
+
+Resume a suspended agent stream with custom data. Use this to continue execution after a suspension point, such as a workflow suspend within an agent:
+
+```typescript
+const response = await agent.resumeStream(
+  { approved: true, selectedOption: 'plan-b' },
+  {
+    runId: 'run-123',
+    toolCallId: 'tool-call-456', // optional
+  },
+)
+
+await response.processDataStream({
+  onChunk: chunk => {
     console.log(chunk)
   },
 })

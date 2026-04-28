@@ -1,7 +1,19 @@
+import { fileURLToPath } from 'node:url';
 import { embedTypes } from '@internal/types-builder/embed-types';
 import type { ExportDeclaration } from 'ts-morph';
 import { Project, Node, SyntaxKind } from 'ts-morph';
 import { defineConfig } from 'tsup';
+
+const vercelOidcStubPath = fileURLToPath(new URL('../oidc-stub.ts', import.meta.url));
+
+const stubVercelOidcPlugin = {
+  name: 'stub-vercel-oidc',
+  setup(build: any) {
+    build.onResolve({ filter: /^@vercel\/oidc$/ }, () => ({
+      path: vercelOidcStubPath,
+    }));
+  },
+};
 
 async function fixExportBugInDtsFile(dtsFile: string) {
   const project = new Project();
@@ -85,6 +97,7 @@ async function fixExportBugInDtsFile(dtsFile: string) {
 export default defineConfig({
   entry: ['src/index.ts', 'src/internal.ts', 'src/test.ts'],
   format: ['esm'],
+  target: 'node22',
   clean: true,
   dts: false,
   splitting: true,
@@ -93,6 +106,7 @@ export default defineConfig({
   },
   metafile: true,
   sourcemap: true,
+  esbuildPlugins: [stubVercelOidcPlugin],
   onSuccess: async () => {
     const { copyAIDtsFiles } = await import('./scripts/copy-ai-dts-files.js');
     const dtsFiles = await copyAIDtsFiles();
@@ -113,5 +127,8 @@ export default defineConfig({
 
       await fixExportBugInDtsFile(dtsFile);
     }
+  },
+  env: {
+    NODE_ENV: 'production',
   },
 });

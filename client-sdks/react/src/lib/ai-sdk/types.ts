@@ -24,6 +24,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
         suppressFeedback?: boolean;
       };
+      runningBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -40,6 +41,20 @@ export type MastraUIMessageMetadata = {
           suspendPayload: any;
         };
       };
+      /**
+       * Per-tool-call background-task metadata keyed by `toolCallId`. A single
+       * assistant message can carry multiple concurrent background-dispatched
+       * tool calls, so timing/ID is stored per call rather than as one value
+       * on the message.
+       */
+      backgroundTasks?: Record<
+        string,
+        {
+          startedAt?: Date;
+          completedAt?: Date;
+          taskId: string;
+        }
+      >;
     }
   | {
       mode: 'stream';
@@ -47,6 +62,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
         suppressFeedback?: boolean;
       };
+      runningBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -63,6 +79,20 @@ export type MastraUIMessageMetadata = {
           suspendPayload: any;
         };
       };
+      /**
+       * Per-tool-call background-task metadata keyed by `toolCallId`. A single
+       * assistant message can carry multiple concurrent background-dispatched
+       * tool calls, so timing/ID is stored per call rather than as one value
+       * on the message.
+       */
+      backgroundTasks?: Record<
+        string,
+        {
+          startedAt?: Date;
+          completedAt?: Date;
+          taskId: string;
+        }
+      >;
     }
   | {
       mode: 'network';

@@ -31,6 +31,33 @@ const agent = new Agent({
 });
 ```
 
+### AWS credential provider chain
+
+When no credentials are provided, `S3Filesystem` uses the AWS SDK default credential provider chain to discover credentials from the environment automatically (environment variables, `~/.aws` config, ECS container credentials, EC2 instance profiles, etc.).
+
+```typescript
+import { S3Filesystem } from '@mastra/s3';
+
+// SDK discovers credentials from the environment
+const filesystem = new S3Filesystem({
+  bucket: 'my-bucket',
+  region: 'us-east-1',
+});
+```
+
+You can also pass a credential provider function for auto-refreshing credentials, which is useful for ECS, Lambda, SSO, or AssumeRole deployments:
+
+```typescript
+import { S3Filesystem } from '@mastra/s3';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
+
+const filesystem = new S3Filesystem({
+  bucket: 'my-bucket',
+  region: 'us-east-1',
+  credentials: fromNodeProviderChain(),
+});
+```
+
 ### Cloudflare R2
 
 ```typescript

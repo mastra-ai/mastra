@@ -320,10 +320,61 @@ Success criteria:
 })
 ```
 
+## Running subagents in the background
+
+Subagent invocations are dispatched as tool calls, so they can run as [background tasks](./background-tasks). This is useful when one or more delegations are long-running and you don't want them to block the supervisor's response.
+
+Enable the [backgroundTasks manager](/reference/configuration#backgroundtasks) on the Mastra instance, then opt subagents in on the supervisor:
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const supervisor = new Agent({
+  id: 'supervisor',
+  instructions: 'Coordinate research and writing using the available agents.',
+  model: 'openai/gpt-5.4',
+  agents: { researchAgent, writingAgent },
+  // highlight-start
+  backgroundTasks: {
+    tools: {
+      researchAgent: { enabled: true, timeoutMs: 900_000 },
+      writingAgent: { enabled: true, timeoutMs: 900_000 },
+    },
+  },
+  // highlight-end
+})
+
+const stream = await supervisor.streamUntilIdle('Research AI in education and write an article', {
+  memory: { thread: 't1', resource: 'u1' },
+})
+```
+
+Use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) instead of `stream()` so the stream stays open until the subagents complete and the supervisor has had a chance to respond to their results.
+
+If a subagent isn't listed on the supervisor but has its own background-eligible tools, the supervisor still dispatches the subagent as a background task and inherits its config. See [Inheriting from the subagent](./background-tasks#inheriting-from-the-subagent) for details.
+
+## Subagent versioning
+
+When using the [editor](/docs/editor/overview), you can control which stored version of each subagent the supervisor uses at runtime. Set version overrides on the Mastra instance or per invocation:
+
+```typescript
+const result = await supervisor.generate('Research and write about AI safety', {
+  versions: {
+    agents: {
+      'research-agent': { status: 'published' },
+      'writing-agent': { versionId: 'draft-456' },
+    },
+  },
+})
+```
+
+Version overrides propagate automatically through delegation. See [Subagent versioning](/docs/editor/overview#subagent-versioning) for details on resolution order and server API usage.
+
 ## Related
 
+- [Background tasks](./background-tasks)
+- [Subagent versioning](/docs/editor/overview#subagent-versioning)
 - [Guide: Research coordinator](/guides/guide/research-coordinator)
 - [Agent.stream() reference](/reference/streaming/agents/stream)
+- [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)
 - [Agent.generate() reference](/reference/agents/generate)
 - [Agent approval](./agent-approval)
 - [Memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems)

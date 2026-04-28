@@ -2,13 +2,19 @@ import { z } from 'zod/v4';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorState } from '../../../processors';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorState,
+} from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
+  agent: Agent<any, any, any, any>;
   agentName: string;
   logger: MastraBase['logger'];
   getMemory: Agent['getMemory'];
@@ -16,7 +22,6 @@ export type AgentCapabilities = {
   generateMessageId: Mastra['generateId'];
   mastra?: Mastra;
   _agentNetworkAppend?: boolean;
-  saveStepMessages: Agent['saveStepMessages'];
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
@@ -32,6 +37,12 @@ export type AgentCapabilities = {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
       }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
+  errorProcessors?:
+    | ErrorProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: ErrorProcessorOrWorkflow[];
+      }) => Promise<ErrorProcessorOrWorkflow[]> | ErrorProcessorOrWorkflow[]);
   llm: MastraLLMVNext;
 };
 

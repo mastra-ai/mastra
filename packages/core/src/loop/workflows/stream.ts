@@ -53,7 +53,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         },
       };
 
-      const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
+      const outputWriter = async (chunk: ChunkType<OUTPUT>, options?: { messageId?: string }) => {
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
@@ -100,10 +100,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
+          const responseMessageId = options?.messageId ?? messageId;
           if (
             typeof processedChunk.type === 'string' &&
             processedChunk.type.startsWith('data-') &&
-            messageId &&
+            responseMessageId &&
             !('transient' in processedChunk && processedChunk.transient)
           ) {
             const dataPart = {
@@ -111,7 +112,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               data: 'data' in processedChunk ? processedChunk.data : undefined,
             };
             const message: MastraDBMessage = {
-              id: messageId,
+              id: responseMessageId,
               role: 'assistant',
               content: {
                 format: 2,
@@ -187,6 +188,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const run = await agenticLoopWorkflow.createRun({
         runId,
+        resourceId: _internal?.resourceId,
       });
 
       if (requireToolApproval) {
