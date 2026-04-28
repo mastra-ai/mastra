@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { InngestExecutionEngine } from '../execution-engine';
+import { InngestWorkflow } from '../workflow';
 
 describe('InngestExecutionEngine - resume safety', () => {
   it('throws when resume runId is missing', async () => {
@@ -7,7 +8,7 @@ describe('InngestExecutionEngine - resume safety', () => {
       {} as any, // mastra mock
       {
         run: async (_id: string, fn: any) => fn(),
-        invoke: async () => ({}),
+        invoke: async () => ({ result: {}, runId: 'ignored' }),
         sleep: async () => {},
         sleepUntil: async () => {},
       } as any,
@@ -15,10 +16,13 @@ describe('InngestExecutionEngine - resume safety', () => {
       {} as any,
     );
 
+    //Create a REAL InngestWorkflow instance (or prototype)
+    const step = Object.create(InngestWorkflow.prototype);
+
     await expect(
       engine.executeWorkflowStep({
-        step: {} as any,
-        stepResults: {}, // ← critical: missing runId source
+        step: step as any, // critical fix
+        stepResults: {}, // missing runId source
         executionContext: {
           workflowId: 'wf',
           runId: 'run',
@@ -35,6 +39,6 @@ describe('InngestExecutionEngine - resume safety', () => {
         pubsub: { publish: async () => {} } as any,
         startedAt: Date.now(),
       }),
-    ).rejects.toThrow(/missing runId/);
+    ).rejects.toThrow(/missing runId/i);
   });
 });

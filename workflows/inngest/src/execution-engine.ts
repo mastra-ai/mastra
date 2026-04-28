@@ -453,22 +453,25 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     const isResume = !!resume?.steps?.length;
     let result: WorkflowResult<any, any, any, any>;
-    let runId: string;
+    let runId: string = executionContext.runId ?? randomUUID();
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
 
+    if (isResume) {
+      const resumeStepId = resume?.steps?.[0];
+
+      const runIdFromState = resumeStepId && stepResults[resumeStepId]?.suspendPayload?.__workflow_meta?.runId;
+
+      if (!runIdFromState) {
+        throw new Error(`Invalid resume state: missing runId for step "${resumeStepId ?? 'unknown'}"`);
+      }
+
+      runId = runIdFromState;
+    }
     try {
       if (isResume) {
-        const resumeStepId = resume?.steps?.[0];
-
-        const runIdFromState = resumeStepId && stepResults[resumeStepId]?.suspendPayload?.__workflow_meta?.runId;
-
-        if (!runIdFromState) {
-          throw new Error(`Invalid resume state: missing runId for step "${resumeStepId ?? 'unknown'}"`);
-        }
-
-        runId = runIdFromState;
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: runId,
@@ -482,16 +485,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: runId,
             resume: {
               runId: runId,
-              steps: resume.steps.slice(1),
+              steps: resume!.steps.slice(1),
               stepResults: snapshot?.context as any,
-              resumePayload: resume.resumePayload,
-              resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
+              resumePayload: resume!.resumePayload,
+              resumePath: resume!.steps?.[1] ? (snapshot?.suspendedPaths?.[resume!.steps?.[1]] as any) : undefined,
             },
             outputOptions: { includeState: true },
             perStep,
             tracingOptions: nestedTracingContext,
           },
         })) as any;
+
         result = invokeResp.result;
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
