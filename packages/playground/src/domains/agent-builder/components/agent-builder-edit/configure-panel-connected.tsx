@@ -1,3 +1,4 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { AgentConfigurePanel } from './agent-configure-panel';
 import type { ActiveDetail, AgentConfig } from './agent-configure-panel';
 import { useStreamRunning } from './stream-chat-context';
@@ -5,6 +6,7 @@ import type { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-a
 
 interface BaseProps {
   availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
+  availableSkills?: StoredSkillResponse[];
   activeDetail: ActiveDetail;
   onActiveDetailChange: (next: ActiveDetail) => void;
 }
@@ -21,6 +23,7 @@ export const ConfigurePanelConnected = (props: ConfigurePanelConnectedProps) => 
       <AgentConfigurePanel
         editable
         availableAgentTools={props.availableAgentTools}
+        availableSkills={props.availableSkills}
         isLoading={false}
         activeDetail={props.activeDetail}
         onActiveDetailChange={props.onActiveDetailChange}
@@ -35,6 +38,7 @@ export const ConfigurePanelConnected = (props: ConfigurePanelConnectedProps) => 
       editable={false}
       isLoading={false}
       availableAgentTools={props.availableAgentTools}
+      availableSkills={props.availableSkills}
       activeDetail={props.activeDetail}
       onActiveDetailChange={props.onActiveDetailChange}
       disabled={isRunning}

@@ -33,10 +33,6 @@ function buildEnabledRecord(
   );
 }
 
-function emptyToUndefined<T extends Record<string, unknown>>(record: T): T | undefined {
-  return Object.keys(record).length > 0 ? record : undefined;
-}
-
 export function formValuesToSaveParams(
   values: AgentBuilderEditFormValues,
   availableAgentTools: AgentTool[],
@@ -76,10 +72,10 @@ export function formValuesToSaveParams(
     name: values.name,
     description,
     instructions: values.instructions,
-    tools: emptyToUndefined(tools),
-    agents: emptyToUndefined(agents),
-    workflows: emptyToUndefined(workflows),
-    skills: emptyToUndefined(skills),
+    tools,
+    agents,
+    workflows,
+    skills,
     workspace,
     visibility: values.visibility ?? 'private',
   };

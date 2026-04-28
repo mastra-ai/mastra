@@ -187,11 +187,7 @@ const AgentBuilderAgentEditReady = ({
 
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
-    if (mode === 'create') {
-      void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
-    } else {
-      void navigate(`/agent-builder/agents`, { viewTransition: true });
-    }
+    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
   const handleCancel = () => {
@@ -222,6 +218,7 @@ const AgentBuilderAgentEditReady = ({
           <ConfigurePanelConnected
             editable
             availableAgentTools={availableAgentTools}
+            availableSkills={availableSkills}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
           />

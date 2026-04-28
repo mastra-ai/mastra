@@ -1,3 +1,4 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -34,7 +35,7 @@ export default function AgentBuilderAgentView() {
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { isPending: isSkillsPending } = useStoredSkills({ enabled: features.skills });
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({ enabled: features.skills });
   const isReady =
     Boolean(id) &&
     !isStoredAgentLoading &&
@@ -52,6 +53,7 @@ export default function AgentBuilderAgentView() {
       toolsData={toolsData}
       agentsData={agentsData}
       workflowsData={workflowsData}
+      storedSkillsResponse={storedSkillsResponse}
     />
   );
 }
@@ -62,9 +64,17 @@ interface PageProps {
   toolsData: ToolsData | undefined;
   agentsData: AgentsData | undefined;
   workflowsData: WorkflowsData | undefined;
+  storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
 }
 
-const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData, workflowsData }: PageProps) => {
+const AgentBuilderAgentViewPage = ({
+  id,
+  storedAgent,
+  toolsData,
+  agentsData,
+  workflowsData,
+  storedSkillsResponse,
+}: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
   });
@@ -77,6 +87,7 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData, wor
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
         workflowsData={workflowsData ?? {}}
+        storedSkillsResponse={storedSkillsResponse}
       />
     </FormProvider>
   );
@@ -94,6 +105,7 @@ interface AgentBuilderAgentViewReadyProps {
   toolsData: ToolsData;
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
+  storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
 }
 
 const AgentBuilderAgentViewReady = ({
@@ -102,6 +114,7 @@ const AgentBuilderAgentViewReady = ({
   toolsData,
   agentsData,
   workflowsData,
+  storedSkillsResponse,
 }: AgentBuilderAgentViewReadyProps) => {
   const navigate = useNavigate();
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
@@ -124,6 +137,11 @@ const AgentBuilderAgentViewReady = ({
 
   const agent = useMemo(() => storedAgentToAgentConfig(storedAgent, id ?? ''), [storedAgent, id]);
 
+  const availableSkills = useMemo<StoredSkillResponse[]>(
+    () => storedSkillsResponse?.skills ?? [],
+    [storedSkillsResponse],
+  );
+
   return (
     <AgentChatPanelProvider agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description}>
       <WorkspaceLayout
@@ -142,6 +160,7 @@ const AgentBuilderAgentViewReady = ({
             editable={false}
             agent={agent}
             availableAgentTools={availableAgentTools}
+            availableSkills={availableSkills}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
           />
