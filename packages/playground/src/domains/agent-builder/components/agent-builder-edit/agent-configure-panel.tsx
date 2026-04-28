@@ -23,6 +23,7 @@ interface BaseProps {
   isLoading?: boolean;
   activeDetail?: ActiveDetail;
   onActiveDetailChange?: (next: ActiveDetail) => void;
+  disabled?: boolean;
 }
 
 type AgentConfigurePanelProps =
@@ -30,7 +31,13 @@ type AgentConfigurePanelProps =
   | (BaseProps & { editable: false; agent: AgentConfig });
 
 export function AgentConfigurePanel(props: AgentConfigurePanelProps) {
-  const { availableAgentTools = [], isLoading = false, activeDetail = null, onActiveDetailChange = () => {} } = props;
+  const {
+    availableAgentTools = [],
+    isLoading = false,
+    activeDetail = null,
+    onActiveDetailChange = () => {},
+    disabled = false,
+  } = props;
 
   if (isLoading) {
     return <AgentConfigurePanelSkeleton />;
@@ -43,6 +50,7 @@ export function AgentConfigurePanel(props: AgentConfigurePanelProps) {
       availableAgentTools={availableAgentTools}
       activeDetail={activeDetail}
       onActiveDetailChange={onActiveDetailChange}
+      disabled={disabled}
     />
   ) : (
     <ReadOnlyConfigurePanel
@@ -60,11 +68,16 @@ interface ConfigurePanelContentProps {
   onActiveDetailChange: (next: ActiveDetail) => void;
 }
 
+interface EditableConfigurePanelProps extends ConfigurePanelContentProps {
+  disabled?: boolean;
+}
+
 function EditableConfigurePanel({
   availableAgentTools,
   activeDetail,
   onActiveDetailChange,
-}: ConfigurePanelContentProps) {
+  disabled = false,
+}: EditableConfigurePanelProps) {
   const features = useBuilderAgentFeatures();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
@@ -106,7 +119,8 @@ function EditableConfigurePanel({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
+                disabled={disabled}
+                className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload avatar"
                 data-testid="agent-configure-avatar-trigger"
               >
@@ -132,6 +146,7 @@ function EditableConfigurePanel({
                   value={draftName}
                   placeholder="Untitled agent"
                   onChange={e => setDraftName(e.target.value)}
+                  disabled={disabled}
                   testId="agent-configure-name"
                 />
               </div>
@@ -142,6 +157,7 @@ function EditableConfigurePanel({
               value={draftDescription}
               placeholder="What is this agent for?"
               onChange={e => setDraftDescription(e.target.value)}
+              disabled={disabled}
               testId="agent-configure-description"
             />
           </div>
@@ -153,6 +169,7 @@ function EditableConfigurePanel({
             totalToolsCount={totalToolsCount}
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
+            disabled={disabled}
           />
         </div>
       </div>
@@ -160,7 +177,7 @@ function EditableConfigurePanel({
       <DetailPane
         activeDetail={activeDetail}
         features={features}
-        editable
+        editable={!disabled}
         instructionsPrompt={draftInstructions}
         onInstructionsChange={setDraftInstructions}
         onClose={closeDetail}
@@ -253,6 +270,7 @@ interface ConfigRowsProps {
   totalToolsCount: number;
   activeDetail: ActiveDetail;
   toggleDetail: (next: ActiveDetail) => void;
+  disabled?: boolean;
 }
 
 function ConfigRows({
@@ -262,6 +280,7 @@ function ConfigRows({
   totalToolsCount,
   activeDetail,
   toggleDetail,
+  disabled = false,
 }: ConfigRowsProps) {
   return (
     <div className="flex flex-col divide-y divide-border1 border-t border-border1">
@@ -271,6 +290,7 @@ function ConfigRows({
         description={instructionsDescription}
         isActive={activeDetail === 'instructions'}
         onClick={() => toggleDetail('instructions')}
+        disabled={disabled}
         testId="agent-preview-edit-system-prompt"
       />
       {features.tools && (
@@ -282,6 +302,7 @@ function ConfigRows({
           total={totalToolsCount}
           isActive={activeDetail === 'tools'}
           onClick={() => toggleDetail('tools')}
+          disabled={disabled}
           testId="agent-preview-tools-button"
         />
       )}
@@ -337,17 +358,30 @@ interface ConfigRowProps {
   isActive?: boolean;
   onClick: () => void;
   testId: string;
+  disabled?: boolean;
 }
 
-const ConfigRow = ({ icon, label, description, count, total, isActive = false, onClick, testId }: ConfigRowProps) => (
+const ConfigRow = ({
+  icon,
+  label,
+  description,
+  count,
+  total,
+  isActive = false,
+  onClick,
+  testId,
+  disabled = false,
+}: ConfigRowProps) => (
   <button
     type="button"
     onClick={onClick}
+    disabled={disabled}
     data-testid={testId}
     aria-pressed={isActive}
     className={cn(
       'group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3',
       isActive && 'bg-surface3',
+      disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent',
     )}
   >
     <span

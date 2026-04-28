@@ -7,14 +7,16 @@ export type Visibility = 'private' | 'shared';
 export interface VisibilitySelectProps {
   defaultValue?: Visibility;
   onChange?: (value: Visibility) => void;
+  disabled?: boolean;
 }
 
-export function VisibilitySelect({ defaultValue = 'private', onChange }: VisibilitySelectProps) {
+export function VisibilitySelect({ defaultValue = 'private', onChange, disabled = false }: VisibilitySelectProps) {
   const [value, setValue] = useState<Visibility>(defaultValue);
 
   return (
     <Select
       value={value}
+      disabled={disabled}
       onValueChange={next => {
         setValue(next as Visibility);
         onChange?.(next as Visibility);

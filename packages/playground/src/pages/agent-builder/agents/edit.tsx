@@ -7,9 +7,13 @@ import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
+import {
+  ConversationPanelChat,
+  ConversationPanelProvider,
+} from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
+import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
@@ -170,59 +174,93 @@ const AgentBuilderAgentEditReady = ({
   };
 
   return (
-    <WorkspaceLayout
-      isLoading={false}
-      mode="build"
-      creating={mode === 'create'}
-      defaultExpanded={mode === 'edit'}
-      detailOpen={activeDetail !== null}
-      modeAction={<VisibilitySelect />}
-      primaryAction={
-        <>
-          {mode === 'edit' && (
-            <Button
-              size="sm"
-              variant="default"
-              onClick={handleCancel}
-              disabled={isSaving}
-              data-testid="agent-builder-edit-cancel"
-            >
-              Cancel
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="cta"
-            onClick={handleSave}
-            disabled={isSaving}
-            data-testid="agent-builder-edit-save"
-          >
-            <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
-          </Button>
-        </>
-      }
-      chat={
-        <MastraReactProvider baseUrl="http://localhost:4112">
-          <ConversationPanel
-            initialUserMessage={initialUserMessage}
-            isFreshThread={fromStarter}
-            features={features}
-            availableAgentTools={availableAgentTools}
-            availableWorkspaces={availableWorkspaces}
-            toolsReady
-            agentId={id}
-          />
-        </MastraReactProvider>
-      }
-      configure={
-        <AgentConfigurePanel
-          editable
-          availableAgentTools={availableAgentTools}
+    <MastraReactProvider baseUrl="http://localhost:4112">
+      <ConversationPanelProvider
+        initialUserMessage={initialUserMessage}
+        isFreshThread={fromStarter}
+        features={features}
+        availableAgentTools={availableAgentTools}
+        availableWorkspaces={availableWorkspaces}
+        toolsReady
+        agentId={id}
+      >
+        <WorkspaceLayout
           isLoading={false}
-          activeDetail={activeDetail}
-          onActiveDetailChange={setActiveDetail}
+          mode="build"
+          creating={mode === 'create'}
+          defaultExpanded={mode === 'edit'}
+          detailOpen={activeDetail !== null}
+          modeAction={<VisibilitySelectConnected />}
+          primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
+          chat={<ConversationPanelChat />}
+          configure={
+            <ConfigurePanelConnected
+              availableAgentTools={availableAgentTools}
+              activeDetail={activeDetail}
+              onActiveDetailChange={setActiveDetail}
+            />
+          }
         />
-      }
+      </ConversationPanelProvider>
+    </MastraReactProvider>
+  );
+};
+
+const VisibilitySelectConnected = () => {
+  const isRunning = useStreamRunning();
+  return <VisibilitySelect disabled={isRunning} />;
+};
+
+interface HeaderActionsProps {
+  mode: 'create' | 'edit';
+  isSaving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps) => {
+  const isRunning = useStreamRunning();
+  const disabled = isSaving || isRunning;
+  return (
+    <>
+      {mode === 'edit' && (
+        <Button
+          size="sm"
+          variant="default"
+          onClick={onCancel}
+          disabled={disabled}
+          data-testid="agent-builder-edit-cancel"
+        >
+          Cancel
+        </Button>
+      )}
+      <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
+        <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
+      </Button>
+    </>
+  );
+};
+
+interface ConfigurePanelConnectedProps {
+  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
+  activeDetail: ActiveDetail;
+  onActiveDetailChange: (next: ActiveDetail) => void;
+}
+
+const ConfigurePanelConnected = ({
+  availableAgentTools,
+  activeDetail,
+  onActiveDetailChange,
+}: ConfigurePanelConnectedProps) => {
+  const isRunning = useStreamRunning();
+  return (
+    <AgentConfigurePanel
+      editable
+      availableAgentTools={availableAgentTools}
+      isLoading={false}
+      activeDetail={activeDetail}
+      onActiveDetailChange={onActiveDetailChange}
+      disabled={isRunning}
     />
   );
 };

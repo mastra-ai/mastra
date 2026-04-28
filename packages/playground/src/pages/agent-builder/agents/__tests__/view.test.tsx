@@ -51,6 +51,16 @@ vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
 
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel', () => ({
   AgentChatPanel: () => <div data-testid="stub-chat-panel" />,
+  AgentChatPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AgentChatPanelChat: () => <div data-testid="stub-chat-panel" />,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+  StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+  useStreamRunning: () => false,
+  useStreamMessages: () => [],
+  useStreamSend: () => () => {},
 }));
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
   AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,
