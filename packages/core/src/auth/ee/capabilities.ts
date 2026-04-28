@@ -4,7 +4,6 @@
 
 import type { MastraAuthProvider } from '../../server';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
-import { matchesPermission } from './defaults/roles';
 import type { IACLProvider } from './interfaces/acl';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
@@ -124,6 +123,13 @@ function isMastraCloudAuth(auth: unknown): boolean {
 function isSimpleAuth(auth: unknown): boolean {
   if (!auth || typeof auth !== 'object') return false;
   return 'isSimpleAuth' in auth && (auth as { isSimpleAuth: boolean }).isSimpleAuth === true;
+}
+
+/**
+ * Check if a set of permissions includes admin bypass (`*` or `*:*`).
+ */
+function hasAdminBypassPermissions(permissions: string[]): boolean {
+  return permissions.some(p => p === '*' || p === '*:*');
 }
 
 /**
@@ -274,13 +280,26 @@ export async function buildCapabilities(
     }
   }
 
-  // Expose available roles for admin users (for "View as role" feature)
+  // Expose available roles for admin users (for "View as role" feature).
+  // Exclude roles with admin-bypass permissions since previewing as admin
+  // is the same as the current experience.
   let availableRoles: { id: string; name: string }[] | undefined;
   if (access && rbacProvider?.getAvailableRoles) {
-    const isAdmin = access.permissions.some(p => matchesPermission(p, '*'));
-    if (isAdmin) {
+    if (hasAdminBypassPermissions(access.permissions)) {
       try {
-        availableRoles = await rbacProvider.getAvailableRoles();
+        const allRoles = await rbacProvider.getAvailableRoles();
+        if (rbacProvider.getPermissionsForRole) {
+          const nonAdminRoles: { id: string; name: string }[] = [];
+          for (const role of allRoles) {
+            const rolePerms = await rbacProvider.getPermissionsForRole(role.id);
+            if (!hasAdminBypassPermissions(rolePerms)) {
+              nonAdminRoles.push(role);
+            }
+          }
+          availableRoles = nonAdminRoles;
+        } else {
+          availableRoles = allRoles;
+        }
       } catch {
         // Ignore errors
       }
