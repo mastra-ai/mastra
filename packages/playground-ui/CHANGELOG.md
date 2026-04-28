@@ -1,5 +1,23 @@
 # @mastra/playground-ui
 
+## 24.0.0-alpha.4
+
+### Minor Changes
+
+- Added shared `ThemeProvider`, `useTheme`, and `ThemeToggle` to unify theme management. ([#15838](https://github.com/mastra-ai/mastra/pull/15838))
+
+  **Added**
+  - `ThemeProvider` applies the resolved theme class to `<html>` and persists the choice under the shared `mastra-theme` localStorage key, with a one-time migration from previously stored preferences.
+  - `useTheme()` works without a `<ThemeProvider>` ancestor: it returns a read-only fallback that tracks the OS color scheme and exposes a no-op `setTheme`, so theme-aware leaf components (e.g. `CodeDiff`, `CodeEditor`) keep working when embedded standalone.
+  - `ThemeToggle` renders a system/light/dark pill and supports both controlled and uncontrolled usage.
+
+### Patch Changes
+
+- Updated dependencies [[`8a71261`](https://github.com/mastra-ai/mastra/commit/8a71261e3954ae617c6f8e25767b951f99438ab2), [`021a60f`](https://github.com/mastra-ai/mastra/commit/021a60f1f3e0135a70ef23c58be7a9b3aaffe6b4)]:
+  - @mastra/core@1.29.0-alpha.4
+  - @mastra/client-js@1.15.0-alpha.4
+  - @mastra/react@0.2.30-alpha.4
+
 ## 24.0.0-alpha.3
 
 ### Patch Changes
