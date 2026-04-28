@@ -927,9 +927,6 @@ describe('E2BSandbox GCS Mount Configuration', () => {
   });
 });
 
-/**
- * Azure Blob mount command flag tests
- */
 describe('E2BSandbox Azure Blob Mount Configuration', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -1158,7 +1155,7 @@ describe('E2BSandbox Azure Blob Mount Configuration', () => {
       status: 'ready',
       getMountConfig: () => ({
         type: 'azure-blob',
-        container: 'Bad_Name', // uppercase + underscore — not allowed
+        container: 'Bad_Name',
         accountName: 'mystorage',
         accountKey: 'k',
       }),

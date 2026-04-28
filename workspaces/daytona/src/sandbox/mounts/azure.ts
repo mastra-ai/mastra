@@ -112,14 +112,18 @@ function resolveMicrosoftAptRepos(osReleaseOutput: string): MicrosoftAptRepo[] {
   }
 
   if (distroId === 'debian') {
-    const repos = [{ repoUrl: `https://packages.microsoft.com/debian/${versionId.split('.')[0]}/prod`, suite: codename }];
+    const repos = [
+      { repoUrl: `https://packages.microsoft.com/debian/${versionId.split('.')[0]}/prod`, suite: codename },
+    ];
     if (versionId.split('.')[0] !== '12' || codename !== 'bookworm') {
       repos.push({ repoUrl: 'https://packages.microsoft.com/debian/12/prod', suite: 'bookworm' });
     }
     return repos;
   }
   if (distroId === 'ubuntu') {
-    const repos = [{ repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename }];
+    const repos = [
+      { repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename },
+    ];
     if (versionId !== '24.04' || codename !== 'noble') {
       repos.push({ repoUrl: 'https://packages.microsoft.com/ubuntu/24.04/prod', suite: 'noble' });
     }

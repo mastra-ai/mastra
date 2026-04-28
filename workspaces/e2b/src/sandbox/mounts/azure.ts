@@ -112,14 +112,18 @@ function resolveMicrosoftAptRepos(osReleaseOutput: string): MicrosoftAptRepo[] {
   }
 
   if (distroId === 'debian') {
-    const repos = [{ repoUrl: `https://packages.microsoft.com/debian/${versionId.split('.')[0]}/prod`, suite: codename }];
+    const repos = [
+      { repoUrl: `https://packages.microsoft.com/debian/${versionId.split('.')[0]}/prod`, suite: codename },
+    ];
     if (versionId.split('.')[0] !== '12' || codename !== 'bookworm') {
       repos.push({ repoUrl: 'https://packages.microsoft.com/debian/12/prod', suite: 'bookworm' });
     }
     return repos;
   }
   if (distroId === 'ubuntu') {
-    const repos = [{ repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename }];
+    const repos = [
+      { repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename },
+    ];
     if (versionId !== '24.04' || codename !== 'noble') {
       repos.push({ repoUrl: 'https://packages.microsoft.com/ubuntu/24.04/prod', suite: 'noble' });
     }
@@ -235,8 +239,8 @@ export async function mountAzure(
   const auth = resolveAuth(config);
   const prefix = config.prefix ? validatePrefix(config.prefix) : undefined;
 
-  // Install blobfuse2 if not present. Microsoft's apt repo is required, so we
-  // install it at mount time rather than baking it into the default template.
+  // Install blobfuse2 if not present. Prefer Microsoft apt packages and fall
+  // back to the official Azure GitHub release when the repo is unavailable.
   const checkResult = await sandbox.commands.run('which blobfuse2 || echo "not found"');
   if (checkResult.stdout.includes('not found')) {
     logger.warn(`${LOG_PREFIX} blobfuse2 not found, attempting runtime installation...`);
@@ -249,7 +253,8 @@ export async function mountAzure(
 
     const repoSetupResult = await sandbox.commands.run(
       'sudo mkdir -p /etc/apt/keyrings && ' +
-        'curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg',
+        'curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL https://packages.microsoft.com/keys/microsoft.asc -o /tmp/ms-key.asc && ' +
+        'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/microsoft.gpg /tmp/ms-key.asc',
       { timeoutMs: 60_000 },
     );
 
