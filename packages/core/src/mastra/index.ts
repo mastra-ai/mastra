@@ -35,6 +35,7 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -45,6 +46,8 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -78,6 +81,65 @@ function createUndefinedPrimitiveError(
     text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
     details: { status: 400, ...(key && { key }) },
   });
+}
+
+/**
+ * Stable JSON-shape comparison for two `Schedule.target` values. Uses
+ * JSON.stringify because targets are plain JSON-serializable objects (the
+ * storage layer round-trips them through the same encoding). Covers the
+ * `inputData` / `initialState` / `requestContext` payload fields that we
+ * want to detect changes on across redeploys.
+ */
+function targetsEqual(a: Schedule['target'] | undefined, b: Schedule['target']): boolean {
+  if (a === b) return true;
+  if (!a) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Reads the declarative schedule configs off a workflow. Supports both the
+ * new `getScheduleConfigs(): WorkflowScheduleConfig[]` accessor on the evented
+ * engine and a legacy `getScheduleConfig(): WorkflowScheduleConfig | undefined`
+ * fallback used in tests that inject a fake getter.
+ */
+function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
+  const w = workflow as {
+    getScheduleConfigs?: () => WorkflowScheduleConfig[] | undefined;
+    getScheduleConfig?: () => WorkflowScheduleConfig | WorkflowScheduleConfig[] | undefined;
+  };
+  if (typeof w.getScheduleConfigs === 'function') {
+    return w.getScheduleConfigs() ?? [];
+  }
+  if (typeof w.getScheduleConfig === 'function') {
+    const cfg = w.getScheduleConfig();
+    if (!cfg) return [];
+    return Array.isArray(cfg) ? cfg : [cfg];
+  }
+  return [];
+}
+
+/**
+ * Determines whether a stored schedule row id belongs to one of the registered
+ * workflows. Returns the owning workflow id when the row id either equals
+ * `wf_<workflowId>` (single-schedule form) or starts with `wf_<workflowId>__`
+ * (array form). Returns undefined when no registered workflow owns the row.
+ */
+function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string>>): string | undefined {
+  for (const workflowId of byWorkflow.keys()) {
+    if (rowId === `wf_${workflowId}` || rowId.startsWith(`wf_${workflowId}__`)) {
+      return workflowId;
+    }
+  }
+  return undefined;
+}
+
+/** See {@link targetsEqual}. Same approach for free-form metadata. */
+function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
+  const aNorm = a ?? undefined;
+  const bNorm = b ?? undefined;
+  if (aNorm === bNorm) return true;
+  if (!aNorm || !bNorm) return false;
+  return JSON.stringify(aNorm) === JSON.stringify(bNorm);
 }
 
 /**
@@ -295,6 +357,15 @@ export interface Config<
    * while the conversation continues.
    */
   backgroundTasks?: BackgroundTaskManagerConfig;
+
+  /**
+   * Scheduler configuration for cron-driven workflow triggers.
+   *
+   * The scheduler is auto-enabled when any registered workflow declares a
+   * `schedule` config or when `scheduler.enabled` is true. It requires a
+   * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
+   */
+  scheduler?: WorkflowSchedulerConfig;
 }
 
 /**
@@ -374,6 +445,15 @@ export class Mastra<
   #pubsub: PubSub;
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
+  #schedulerConfig?: WorkflowSchedulerConfig;
+  #scheduler?: WorkflowScheduler;
+  #schedulerInitPromise?: Promise<void>;
+  /**
+   * Tracks whether any registered workflow has declared a `schedule` config.
+   * Used as a fast short-circuit so users without scheduled workflows pay
+   * zero cost beyond a boolean check.
+   */
+  #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGateway>;
 
   #events: {
@@ -400,6 +480,18 @@ export class Mastra<
 
   get backgroundTaskManager() {
     return this.#backgroundTaskManager;
+  }
+
+  /**
+   * Returns the workflow scheduler if it has been auto-instantiated.
+   *
+   * The scheduler is created lazily once a workflow with a `schedule`
+   * config is registered (or when `scheduler.enabled` is true on the
+   * Mastra config). Use it to create, pause, resume, or delete
+   * schedules imperatively.
+   */
+  get scheduler() {
+    return this.#scheduler;
   }
 
   get datasets(): DatasetsManager {
@@ -709,6 +801,8 @@ export class Mastra<
     this.#backgroundTaskConfig = config?.backgroundTasks;
     this.#ensureBackgroundTaskManager();
 
+    this.#schedulerConfig = config?.scheduler;
+
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
     this.#mcpServers = {} as TMCPServers;
@@ -837,6 +931,8 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+
+    this.#ensureScheduler();
   }
 
   #ensureBackgroundTaskManager(): void {
@@ -850,6 +946,178 @@ export class Mastra<
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
     });
+  }
+
+  /**
+   * Returns the flat list of declarative schedules sourced from currently
+   * registered workflows. Single-schedule workflows yield one entry keyed by
+   * `wf_${workflowId}`. Array-form workflows yield one entry per array entry
+   * keyed by `wf_${workflowId}__${scheduleId}` so the prefix uniquely
+   * identifies "all rows owned by this workflow's declarative config".
+   */
+  #collectDeclarativeSchedules(): Array<{
+    scheduleId: string;
+    workflowId: string;
+    cfg: WorkflowScheduleConfig;
+  }> {
+    const out: Array<{ scheduleId: string; workflowId: string; cfg: WorkflowScheduleConfig }> = [];
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    for (const workflow of Object.values(workflows ?? {})) {
+      const configs = collectWorkflowScheduleConfigs(workflow);
+      if (configs.length === 0) continue;
+      const isArrayForm = configs.length > 1 || (configs.length === 1 && configs[0]!.id !== undefined);
+      for (const cfg of configs) {
+        const scheduleId = isArrayForm ? `wf_${workflow.id}__${cfg.id}` : `wf_${workflow.id}`;
+        out.push({ scheduleId, workflowId: workflow.id, cfg });
+      }
+    }
+    return out;
+  }
+
+  #shouldEnableScheduler(): boolean {
+    if (this.#schedulerConfig?.enabled === false) return false;
+    if (this.#schedulerConfig?.enabled === true) return true;
+    return this.#hasScheduledWorkflow;
+  }
+
+  #ensureScheduler(): void {
+    if (this.#scheduler || this.#schedulerInitPromise) return;
+    if (!this.#shouldEnableScheduler()) return;
+    if (!this.#storage) return;
+
+    if (!this.#pubsub) {
+      throw new MastraError({
+        id: 'MASTRA_SCHEDULER_REQUIRES_PUBSUB',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Workflow scheduler requires a pubsub instance. Mastra creates an EventEmitterPubSub by default — this error indicates a misconfiguration.',
+      });
+    }
+
+    this.#schedulerInitPromise = this.#initScheduler().catch(error => {
+      this.#schedulerInitPromise = undefined;
+      this.#logger?.error('Failed to initialize workflow scheduler', error);
+    });
+  }
+
+  async #initScheduler(): Promise<void> {
+    if (this.#scheduler) return;
+    const storage = this.#storage;
+    if (!storage) return;
+
+    const schedulesStore = await storage.getStore('schedules');
+    if (!schedulesStore) {
+      throw new MastraError({
+        id: 'MASTRA_SCHEDULER_STORAGE_NOT_AVAILABLE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Workflow scheduler requires a storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`). The configured storage does not provide one.',
+      });
+    }
+
+    const scheduler = new WorkflowScheduler({
+      schedulesStore,
+      pubsub: this.#pubsub,
+      config: this.#schedulerConfig,
+    });
+    if (this.#logger) {
+      scheduler.__setLogger(this.#logger as IMastraLogger);
+    }
+    this.#scheduler = scheduler;
+
+    await this.#registerDeclarativeSchedules(schedulesStore);
+
+    await scheduler.start();
+  }
+
+  async #registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
+    const declared = this.#collectDeclarativeSchedules();
+    const declaredIds = new Set(declared.map(d => d.scheduleId));
+
+    // Group declared ids by workflow so we can detect orphans (rows that
+    // start with `wf_<workflowId>` but aren't in the current declared set).
+    const declaredIdsByWorkflow = new Map<string, Set<string>>();
+    for (const { workflowId, scheduleId } of declared) {
+      if (!declaredIdsByWorkflow.has(workflowId)) declaredIdsByWorkflow.set(workflowId, new Set());
+      declaredIdsByWorkflow.get(workflowId)!.add(scheduleId);
+    }
+
+    for (const { scheduleId, workflowId, cfg } of declared) {
+      try {
+        const existing = await schedulesStore.getSchedule(scheduleId);
+        const now = Date.now();
+        const target: Schedule['target'] = {
+          type: 'workflow',
+          workflowId,
+          inputData: cfg.inputData,
+          initialState: cfg.initialState,
+          requestContext: cfg.requestContext,
+        };
+
+        if (!existing) {
+          await schedulesStore.createSchedule({
+            id: scheduleId,
+            target,
+            cron: cfg.cron,
+            timezone: cfg.timezone,
+            status: 'active',
+            nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
+            createdAt: now,
+            updatedAt: now,
+            metadata: cfg.metadata,
+          });
+          continue;
+        }
+
+        // Diff config fields and patch the existing row if anything changed.
+        // We deliberately leave `status` alone — a row may have been paused
+        // out-of-band via storage, and a redeploy shouldn't unpause it.
+        const patch: ScheduleUpdate = {};
+        const cronChanged = existing.cron !== cfg.cron;
+        const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+
+        if (cronChanged) patch.cron = cfg.cron;
+        if (timezoneChanged) patch.timezone = cfg.timezone;
+        if (!targetsEqual(existing.target, target)) patch.target = target;
+        if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
+
+        // Cron or timezone change invalidates the stored nextFireAt — recompute
+        // from now so we don't fire on the old schedule.
+        if (cronChanged || timezoneChanged) {
+          patch.nextFireAt = computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now });
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await schedulesStore.updateSchedule(scheduleId, patch);
+        }
+      } catch (error) {
+        this.#logger?.error('Failed to register declarative schedule', { scheduleId, workflowId, error });
+      }
+    }
+
+    // Orphan deletion: drop any storage rows owned by a registered workflow
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
+    // present in the current declared set. This keeps the storage in sync
+    // when array-form entries are removed across deploys. We only consider
+    // workflows we actually have registered — schedules belonging to a
+    // removed workflow are left alone (the workflow may be coming back).
+    if (declaredIdsByWorkflow.size > 0) {
+      const allRows = await schedulesStore.listSchedules();
+      for (const row of allRows) {
+        if (declaredIds.has(row.id)) continue;
+        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
+        if (!ownerWorkflowId) continue;
+        try {
+          await schedulesStore.deleteSchedule(row.id);
+        } catch (error) {
+          this.#logger?.error('Failed to delete orphaned declarative schedule', {
+            scheduleId: row.id,
+            workflowId: ownerWorkflowId,
+            error,
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -2579,6 +2847,20 @@ export class Mastra<
       return;
     }
 
+    // Reject declarative schedules on non-evented workflows. The scheduler
+    // publishes `workflow.start` events which only the evented engine consumes.
+    const scheduleConfigs = collectWorkflowScheduleConfigs(workflow);
+    const hasSchedule = scheduleConfigs.length > 0;
+    if (hasSchedule && workflow.engineType !== 'evented') {
+      throw new MastraError({
+        id: 'MASTRA_WORKFLOW_SCHEDULE_REQUIRES_EVENTED_ENGINE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow "${workflow.id}" declares a schedule but is not using the evented engine. Schedule support requires importing createWorkflow from "@mastra/core/workflows/evented".`,
+        details: { workflowId: workflow.id, engineType: workflow.engineType },
+      });
+    }
+
     // Initialize the workflow with Mastra and primitives
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
@@ -2589,6 +2871,28 @@ export class Mastra<
       workflow.commit();
     }
     workflows[workflowKey] = workflow;
+
+    // If a schedule is declared, mark the flag and either register into the
+    // running scheduler or trigger a lazy ensure.
+    if (hasSchedule) {
+      this.#hasScheduledWorkflow = true;
+      if (this.#scheduler) {
+        void (async () => {
+          try {
+            const schedulesStore = await this.#storage?.getStore('schedules');
+            if (!schedulesStore) return;
+            await this.#registerDeclarativeSchedules(schedulesStore);
+          } catch (error) {
+            this.#logger?.error('Failed to register declarative schedule for workflow', {
+              workflowId: workflow.id,
+              error,
+            });
+          }
+        })();
+      } else {
+        this.#ensureScheduler();
+      }
+    }
   }
 
   /**
@@ -3464,6 +3768,20 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    if (this.#schedulerInitPromise) {
+      try {
+        await this.#schedulerInitPromise;
+      } catch {
+        // init errors are already logged
+      }
+    }
+    if (this.#scheduler) {
+      try {
+        await this.#scheduler.stop();
+      } catch (error) {
+        this.#logger?.error('Failed to stop workflow scheduler', error);
+      }
+    }
     await this.stopEventEngine();
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();

@@ -174,6 +174,11 @@ import type {
   ListBackgroundTasksResponse,
   BackgroundTaskResponse,
   StreamBackgroundTasksParams,
+  ListSchedulesParams,
+  ListSchedulesResponse,
+  ScheduleResponse,
+  ListScheduleTriggersParams,
+  ListScheduleTriggersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -1931,5 +1936,38 @@ export class MastraClient extends BaseResource {
         },
       }),
     );
+  }
+
+  /**
+   * Lists workflow schedules with optional filtering by workflowId or status.
+   */
+  public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.workflowId) searchParams.set('workflowId', params.workflowId);
+    if (params.status) searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    return this.request(`/schedules${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single schedule by ID.
+   */
+  public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Lists trigger history for a schedule, ordered by actualFireAt descending.
+   */
+  public listScheduleTriggers(
+    scheduleId: string,
+    params: ListScheduleTriggersParams = {},
+  ): Promise<ListScheduleTriggersResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.fromActualFireAt !== undefined) searchParams.set('fromActualFireAt', String(params.fromActualFireAt));
+    if (params.toActualFireAt !== undefined) searchParams.set('toActualFireAt', String(params.toActualFireAt));
+    const qs = searchParams.toString();
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/triggers${qs ? `?${qs}` : ''}`);
   }
 }

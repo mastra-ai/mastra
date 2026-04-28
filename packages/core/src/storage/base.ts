@@ -16,6 +16,7 @@ import type {
   DatasetsStorage,
   ExperimentsStorage,
   BackgroundTasksStorage,
+  SchedulesStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -35,6 +36,7 @@ export type StorageDomains = {
   skills?: SkillsStorage;
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
+  schedules?: SchedulesStorage;
 };
 
 /**
@@ -288,6 +290,7 @@ export class MastraCompositeStore extends MastraBase {
         skills: resolve('skills'),
         blobs: resolve('blobs'),
         backgroundTasks: resolve('backgroundTasks'),
+        schedules: resolve('schedules'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -382,6 +385,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.backgroundTasks) {
       initTasks.push(this.stores.backgroundTasks.init());
+    }
+
+    if (this.stores?.schedules) {
+      initTasks.push(this.stores.schedules.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

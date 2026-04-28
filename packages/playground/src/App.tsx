@@ -81,7 +81,9 @@ import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
 import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
+import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
+import { WorkflowSchedules } from './pages/workflows/workflow/schedules';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
@@ -277,6 +279,7 @@ const routes = [
       { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
 
       { path: '/workflows', element: <Workflows /> },
+      { path: '/workflows/schedules', element: <SchedulesPage /> },
       {
         path: '/workflows/:workflowId',
         element: (
@@ -292,6 +295,7 @@ const routes = [
           },
           { path: 'graph', element: <Workflow /> },
           { path: 'graph/:runId', element: <Workflow /> },
+          { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
 

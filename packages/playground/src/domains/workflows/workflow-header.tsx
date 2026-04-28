@@ -11,9 +11,10 @@ import {
   DocsIcon,
   Truncate,
 } from '@mastra/playground-ui';
-import { EyeIcon } from 'lucide-react';
+import { CalendarClockIcon, EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { WorkflowCombobox } from './components/workflow-combobox';
+import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 
 export function WorkflowHeader({
   workflowName,
@@ -24,6 +25,9 @@ export function WorkflowHeader({
   workflowId: string;
   runId?: string;
 }) {
+  const { data: schedules } = useSchedules({ workflowId });
+  const scheduleCount = schedules?.length ?? 0;
+
   return (
     <div className="shrink-0">
       <Header>
@@ -47,6 +51,14 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
+          {scheduleCount > 0 && (
+            <Button as={Link} to={`/workflows/${workflowId}/schedules`}>
+              <Icon>
+                <CalendarClockIcon />
+              </Icon>
+              Schedules ({scheduleCount})
+            </Button>
+          )}
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
             <Icon>
               <EyeIcon />

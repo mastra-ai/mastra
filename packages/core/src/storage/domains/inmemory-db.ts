@@ -28,6 +28,7 @@ import type { LogRecord } from './observability/logs';
 import type { MetricRecord } from './observability/metrics';
 import type { ScoreRecord } from './observability/scores';
 import type { PromptBlockVersion } from './prompt-blocks';
+import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
 import type { WorkspaceVersion } from './workspaces';
@@ -79,6 +80,10 @@ export class InMemoryDB {
   // Background tasks domain
   readonly backgroundTasks = new Map<string, BackgroundTask>();
 
+  // Schedules domain
+  readonly schedules = new Map<string, Schedule>();
+  readonly scheduleTriggers: ScheduleTrigger[] = [];
+
   /**
    * Clears all data from all collections.
    * Useful for testing.
@@ -115,5 +120,7 @@ export class InMemoryDB {
     this.experiments.clear();
     this.experimentResults.clear();
     this.backgroundTasks.clear();
+    this.schedules.clear();
+    this.scheduleTriggers.length = 0;
   }
 }
