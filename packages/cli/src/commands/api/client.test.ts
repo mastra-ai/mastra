@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildUrl, fetchSchemaManifest, requestApi } from './client';
+import { buildUrl, fetchSchemaManifest, requestApi, splitInput } from './client';
 import type { ApiCommandDescriptor } from './commands';
 
 const getListDescriptor: ApiCommandDescriptor = {
@@ -14,6 +14,8 @@ const getListDescriptor: ApiCommandDescriptor = {
   list: true,
   description: 'Test list command',
   responseShape: { kind: 'array' },
+  queryParams: ['page', 'perPage', 'filters'],
+  bodyParams: [],
 };
 
 const postDescriptor: ApiCommandDescriptor = {
@@ -27,9 +29,54 @@ const postDescriptor: ApiCommandDescriptor = {
   list: false,
   description: 'Test create command',
   responseShape: { kind: 'single' },
+  queryParams: [],
+  bodyParams: ['value'],
+};
+
+const mixedDescriptor: ApiCommandDescriptor = {
+  key: 'threadCreate',
+  name: 'thread create',
+  method: 'POST',
+  path: '/memory/threads',
+  positionals: [],
+  acceptsInput: true,
+  inputRequired: true,
+  list: false,
+  description: 'Create thread',
+  responseShape: { kind: 'single' },
+  queryParams: ['agentId'],
+  bodyParams: ['resourceId', 'threadId', 'title'],
 };
 
 const fetchMock = vi.fn();
+
+describe('splitInput', () => {
+  it('splits non-GET input into query and body fields from route schemas', () => {
+    expect(
+      splitInput(mixedDescriptor, {
+        agentId: 'weather-agent',
+        resourceId: 'user-1',
+        threadId: 'thread-1',
+        title: 'Test thread',
+      }),
+    ).toEqual({
+      queryInput: { agentId: 'weather-agent' },
+      bodyInput: { resourceId: 'user-1', threadId: 'thread-1', title: 'Test thread' },
+    });
+  });
+
+  it('keeps fields that exist in both query and body in the body', () => {
+    expect(
+      splitInput(
+        { ...mixedDescriptor, queryParams: ['agentId', 'resourceId'], bodyParams: ['resourceId', 'title'] },
+        { agentId: 'weather-agent', resourceId: 'user-1', title: 'Test thread' },
+      ),
+    ).toEqual({
+      queryInput: { agentId: 'weather-agent' },
+      bodyInput: { resourceId: 'user-1', title: 'Test thread' },
+    });
+  });
+});
 
 describe('buildUrl', () => {
   it('adds the /api prefix when the base URL does not include it', () => {
@@ -116,6 +163,33 @@ describe('requestApi', () => {
       headers: { 'content-type': 'application/json', 'X-Test': 'yes' },
       signal: expect.any(AbortSignal),
       body: JSON.stringify({ value: 1 }),
+    });
+  });
+
+  it('sends schema-derived query params and body for mixed non-GET requests', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await expect(
+      requestApi({
+        baseUrl: 'https://example.com/api',
+        headers: {},
+        timeoutMs: 1000,
+        descriptor: mixedDescriptor,
+        pathParams: {},
+        input: {
+          agentId: 'weather-agent',
+          resourceId: 'user-1',
+          threadId: 'thread-1',
+          title: 'Test thread',
+        },
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/memory/threads?agentId=weather-agent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ resourceId: 'user-1', threadId: 'thread-1', title: 'Test thread' }),
     });
   });
 

@@ -74,6 +74,22 @@ describe('buildCommandExamples', () => {
     ]);
   });
 
+  it('includes mixed query/body input examples for thread commands', () => {
+    expect(buildCommandExamples(API_COMMANDS.threadCreate)).toEqual([
+      {
+        description: 'Create a memory thread',
+        command:
+          'mastra api thread create \'{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}\'',
+      },
+    ]);
+    expect(buildCommandExamples(API_COMMANDS.threadDelete)).toEqual([
+      {
+        description: 'Delete a memory thread',
+        command: 'mastra api thread delete thread_abc123 \'{"agentId":"weather-agent","resourceId":"user_123"}\'',
+      },
+    ]);
+  });
+
   it('includes memory status examples for required agentId and optional resource/thread scope', () => {
     expect(buildCommandExamples(API_COMMANDS.memoryStatus)).toEqual([
       {

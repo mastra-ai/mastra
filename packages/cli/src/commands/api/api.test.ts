@@ -137,6 +137,52 @@ describe('api command executor', () => {
     expect(JSON.parse(stdout)).toEqual({ data: { text: 'hello', usage: { totalTokens: 12 }, spanId: 'span-1' } });
   });
 
+  it('splits non-GET JSON input into route-defined query params and request body', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'thread-1', resourceId: 'user-1' }));
+
+    await executeDescriptor(
+      API_COMMANDS.threadCreate,
+      [],
+      '{"agentId":"weather-agent","resourceId":"user-1","threadId":"thread-1","title":"Test thread"}',
+      {
+        url: 'https://example.com',
+        header: [],
+        pretty: false,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/memory/threads?agentId=weather-agent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ resourceId: 'user-1', threadId: 'thread-1', title: 'Test thread' }),
+    });
+  });
+
+  it('encodes DELETE JSON input as query params when the route has no body schema', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ result: 'Thread deleted' }));
+
+    await executeDescriptor(
+      API_COMMANDS.threadDelete,
+      ['thread-1'],
+      '{"agentId":"weather-agent","resourceId":"user-1"}',
+      {
+        url: 'https://example.com',
+        header: [],
+        pretty: false,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/api/memory/threads/thread-1?agentId=weather-agent&resourceId=user-1',
+      {
+        method: 'DELETE',
+        headers: {},
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
   it('encodes GET input with page/perPage query params', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ scores: [], pagination: { total: 125, page: 2, perPage: 50, hasMore: true } }),

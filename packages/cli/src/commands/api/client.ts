@@ -15,12 +15,13 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 
   try {
+    const { queryInput, bodyInput } = splitInput(options.descriptor, options.input);
     const url = buildUrl(
       options.baseUrl,
       options.descriptor.path,
       options.pathParams,
       options.descriptor.method,
-      options.input,
+      queryInput,
     );
     const init: RequestInit = {
       method: options.descriptor.method,
@@ -28,9 +29,9 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
       signal: controller.signal,
     };
 
-    if (options.descriptor.method !== 'GET' && options.input) {
+    if (options.descriptor.method !== 'GET' && bodyInput) {
       init.headers = { 'content-type': 'application/json', ...init.headers };
-      init.body = JSON.stringify(options.input);
+      init.body = JSON.stringify(bodyInput);
     }
 
     const response = await fetch(url, init);
@@ -63,6 +64,7 @@ export function buildUrl(
   method: string,
   input?: Record<string, unknown>,
 ): string {
+  void method;
   const pathParamNames = new Set<string>();
   const resolvedPath = path.replace(/:([A-Za-z0-9_]+)/g, (_, name: string) => {
     pathParamNames.add(name);
@@ -74,7 +76,7 @@ export function buildUrl(
     if (!pathParamNames.has(key)) url.searchParams.set(key, value);
   }
 
-  if (method === 'GET' && input) {
+  if (input) {
     for (const [key, value] of Object.entries(input)) {
       if (value === undefined || value === null) continue;
       url.searchParams.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
@@ -82,6 +84,34 @@ export function buildUrl(
   }
 
   return url.toString();
+}
+
+export function splitInput(
+  descriptor: ApiCommandDescriptor,
+  input?: Record<string, unknown>,
+): { queryInput?: Record<string, unknown>; bodyInput?: Record<string, unknown> } {
+  if (!input) return {};
+  if (descriptor.method === 'GET') return { queryInput: input };
+
+  const queryParamNames = new Set(descriptor.queryParams);
+  const bodyParamNames = new Set(descriptor.bodyParams);
+  if (queryParamNames.size === 0) return { bodyInput: input };
+
+  const queryInput: Record<string, unknown> = {};
+  const bodyInput: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(input)) {
+    if (queryParamNames.has(key) && !bodyParamNames.has(key)) {
+      queryInput[key] = value;
+    } else {
+      bodyInput[key] = value;
+    }
+  }
+
+  return {
+    queryInput: Object.keys(queryInput).length ? queryInput : undefined,
+    bodyInput: Object.keys(bodyInput).length ? bodyInput : undefined,
+  };
 }
 
 export async function fetchSchemaManifest(
@@ -100,6 +130,8 @@ export async function fetchSchemaManifest(
     inputRequired: false,
     list: false,
     responseShape: { kind: 'single' },
+    queryParams: [],
+    bodyParams: [],
   };
   return requestApi({ baseUrl, headers, timeoutMs, descriptor, pathParams: {} });
 }

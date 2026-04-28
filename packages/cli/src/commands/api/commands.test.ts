@@ -52,6 +52,21 @@ describe('API_COMMANDS', () => {
     });
   });
 
+  it('keeps query and body parameter names from route metadata', () => {
+    expect(API_COMMANDS.threadCreate).toMatchObject({
+      path: '/memory/threads',
+      queryParams: ['agentId'],
+      bodyParams: ['metadata', 'resourceId', 'threadId', 'title'],
+    });
+    expect(API_COMMANDS.threadDelete).toMatchObject({
+      path: '/memory/threads/:threadId',
+      acceptsInput: true,
+      inputRequired: true,
+      queryParams: ['agentId', 'resourceId'],
+      bodyParams: [],
+    });
+  });
+
   it('uses the observability logs route for log list', () => {
     expect(API_COMMANDS.logList).toMatchObject({
       path: '/observability/logs',

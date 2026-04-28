@@ -15,6 +15,8 @@ const metadata = Object.fromEntries(
       method: route.method,
       path: route.path,
       pathParams: extractPathParams(route.path),
+      queryParams: extractSchemaProperties(route.queryParamSchema),
+      bodyParams: extractSchemaProperties(route.bodySchema),
       hasQuery: Boolean(route.queryParamSchema),
       hasBody: Boolean(route.bodySchema),
       responseShape: route.responseShape,
@@ -32,4 +34,9 @@ function extractPathParams(path: string): string[] {
   return [...path.matchAll(/:([A-Za-z0-9_]+)/g)]
     .map(match => match[1])
     .filter((value): value is string => Boolean(value));
+}
+
+function extractSchemaProperties(schema: { properties?: unknown } | undefined): string[] {
+  if (!schema?.properties || typeof schema.properties !== 'object' || Array.isArray(schema.properties)) return [];
+  return Object.keys(schema.properties).sort();
 }

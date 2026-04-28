@@ -25,7 +25,9 @@ export async function getCommandSchema(descriptor: ApiCommandDescriptor, target:
     });
   }
 
-  const inputSchema = descriptor.method === 'GET' ? route.queryParamSchema : route.bodySchema;
+  const source = descriptor.method === 'GET' ? 'query' : route.queryParamSchema ? 'query+body' : 'body';
+  const inputSchema =
+    descriptor.method === 'GET' ? route.queryParamSchema : mergeObjectSchemas(route.queryParamSchema, route.bodySchema);
 
   return {
     command: buildCommandUsage(descriptor),
@@ -36,7 +38,7 @@ export async function getCommandSchema(descriptor: ApiCommandDescriptor, target:
     examples: buildCommandExamples(descriptor),
     input: {
       required: descriptor.inputRequired,
-      source: descriptor.method === 'GET' ? 'query' : 'body',
+      source,
       schema: inputSchema,
     },
     schemas: {
@@ -56,6 +58,21 @@ export function buildCommandUsage(descriptor: ApiCommandDescriptor): string {
   const positionals = descriptor.positionals.map(name => `<${name}>`).join(' ');
   const input = descriptor.acceptsInput ? (descriptor.inputRequired ? '<input>' : '[input]') : '';
   return ['mastra api', descriptor.name, positionals, input].filter(Boolean).join(' ');
+}
+
+function mergeObjectSchemas(querySchema: any, bodySchema: any): any {
+  if (!querySchema) return bodySchema;
+  if (!bodySchema) return querySchema;
+
+  return {
+    type: 'object',
+    properties: {
+      ...(querySchema.properties ?? {}),
+      ...(bodySchema.properties ?? {}),
+    },
+    required: [...new Set([...(querySchema.required ?? []), ...(bodySchema.required ?? [])])],
+    additionalProperties: bodySchema.additionalProperties ?? querySchema.additionalProperties,
+  };
 }
 
 function buildPositionals(descriptor: ApiCommandDescriptor, pathParamSchema: any): Array<Record<string, unknown>> {
@@ -159,10 +176,25 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
         },
       ];
     case 'threadCreate':
-      return [{ description: 'Create a memory thread', command: `${command} '{"title":"Support conversation"}'` }];
+      return [
+        {
+          description: 'Create a memory thread',
+          command: `${command} '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'`,
+        },
+      ];
     case 'threadUpdate':
       return [
-        { description: 'Update a memory thread', command: `${command} thread_abc123 '{"title":"Updated title"}'` },
+        {
+          description: 'Update a memory thread',
+          command: `${command} thread_abc123 '{"agentId":"weather-agent","title":"Updated title"}'`,
+        },
+      ];
+    case 'threadDelete':
+      return [
+        {
+          description: 'Delete a memory thread',
+          command: `${command} thread_abc123 '{"agentId":"weather-agent","resourceId":"user_123"}'`,
+        },
       ];
     case 'scoreCreate':
       return [

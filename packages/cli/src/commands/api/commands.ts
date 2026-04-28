@@ -19,6 +19,8 @@ export interface ApiCommandDescriptor {
   inputRequired: boolean;
   list: boolean;
   responseShape: ApiResponseShape;
+  queryParams: string[];
+  bodyParams: string[];
   defaultTimeoutMs?: number;
 }
 
@@ -97,7 +99,12 @@ const API_COMMAND_SPECS = defineCommandSpecs({
     description: 'Update a memory thread',
     inputRequired: true,
   },
-  threadDelete: { route: 'DELETE /memory/threads/:threadId', description: 'Delete a memory thread' },
+  threadDelete: {
+    route: 'DELETE /memory/threads/:threadId',
+    description: 'Delete a memory thread',
+    acceptsInput: true,
+    inputRequired: true,
+  },
   threadMessages: {
     route: 'GET /memory/threads/:threadId/messages',
     description: 'List messages in a memory thread',
@@ -199,6 +206,8 @@ export const API_COMMANDS = Object.fromEntries(
         inputRequired: spec.inputRequired ?? false,
         list: spec.list ?? false,
         responseShape: route.responseShape,
+        queryParams: [...route.queryParams],
+        bodyParams: [...route.bodyParams],
         defaultTimeoutMs: spec.defaultTimeoutMs,
       },
     ];

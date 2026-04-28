@@ -52,7 +52,7 @@ export function registerApiCommand(program: Command): void {
   addAction(thread, 'get [threadId]', API_COMMANDS.threadGet);
   addAction(thread, 'create [input]', API_COMMANDS.threadCreate);
   addAction(thread, 'update [threadId] [input]', API_COMMANDS.threadUpdate);
-  addAction(thread, 'delete [threadId]', API_COMMANDS.threadDelete);
+  addAction(thread, 'delete [threadId] [input]', API_COMMANDS.threadDelete);
   addAction(thread, 'messages [threadId] [input]', API_COMMANDS.threadMessages);
 
   const memory = api.command('memory').description('Search and manage agent memory');
