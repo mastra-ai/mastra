@@ -68,10 +68,10 @@ describe('splitInput', () => {
 
 describe('buildUrl', () => {
   it('normalizes /api prefix and encodes path params', () => {
-    expect(buildUrl('https://example.com', '/agents/:agentId', { agentId: 'agent 1' }, 'GET')).toBe(
+    expect(buildUrl('https://example.com', '/agents/:agentId', { agentId: 'agent 1' })).toBe(
       'https://example.com/api/agents/agent%201',
     );
-    expect(buildUrl('https://example.com/api', '/agents', {}, 'GET')).toBe('https://example.com/api/agents');
+    expect(buildUrl('https://example.com/api', '/agents', {})).toBe('https://example.com/api/agents');
   });
 
   it('adds extra path params and input as query params', () => {
@@ -80,14 +80,17 @@ describe('buildUrl', () => {
         'https://example.com',
         '/workflows/:workflowId/resume-async',
         { workflowId: 'wf', runId: 'run' },
-        'POST',
-        { filters: { passed: true }, perPage: 50, skip: undefined },
+        {
+          filters: { passed: true },
+          perPage: 50,
+          skip: undefined,
+        },
       ),
     ).toBe('https://example.com/api/workflows/wf/resume-async?runId=run&filters=%7B%22passed%22%3Atrue%7D&perPage=50');
   });
 
   it('fails before making malformed URLs when path params are missing', () => {
-    expect(() => buildUrl('https://example.com', '/agents/:agentId', {}, 'GET')).toThrow(
+    expect(() => buildUrl('https://example.com', '/agents/:agentId', {})).toThrow(
       expect.objectContaining({ code: 'MISSING_ARGUMENT', details: { argument: 'agentId' } }),
     );
   });

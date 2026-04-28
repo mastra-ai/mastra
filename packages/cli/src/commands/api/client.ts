@@ -16,13 +16,7 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
 
   try {
     const { queryInput, bodyInput } = splitInput(options.descriptor, options.input);
-    const url = buildUrl(
-      options.baseUrl,
-      options.descriptor.path,
-      options.pathParams,
-      options.descriptor.method,
-      queryInput,
-    );
+    const url = buildUrl(options.baseUrl, options.descriptor.path, options.pathParams, queryInput);
     const init: RequestInit = {
       method: options.descriptor.method,
       headers: { ...options.headers },
@@ -61,10 +55,8 @@ export function buildUrl(
   baseUrl: string,
   path: string,
   pathParams: Record<string, string>,
-  method: string,
   input?: Record<string, unknown>,
 ): string {
-  void method;
   const pathParamNames = new Set<string>();
   const resolvedPath = path.replace(/:([A-Za-z0-9_]+)/g, (_, name: string) => {
     pathParamNames.add(name);
