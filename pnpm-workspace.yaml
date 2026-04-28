@@ -41,6 +41,3 @@ trustPolicyExclude:
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
   - '@clerk/shared@3.47.4'
-  # Package manager check installs semver without the lockfile, which resolves this
-  # transitive root dev dependency to the latest 0.7.x provenance-attested release.
-  - 'prettier-plugin-tailwindcss@0.7.4'
