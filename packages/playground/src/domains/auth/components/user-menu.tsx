@@ -1,5 +1,6 @@
 import { Button, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/playground-ui';
-import { Eye, Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
+import { useState } from 'react';
 
 import { useAuthCapabilities, useLogout } from '../hooks';
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';
@@ -18,6 +19,7 @@ export type UserMenuProps = {
  * user info, role preview options for admins, and logout button.
  */
 export function UserMenu({ user }: UserMenuProps) {
+  const [open, setOpen] = useState(false);
   const { mutate: logout, isPending } = useLogout();
   const { data: capabilities } = useAuthCapabilities();
   const { isImpersonating, impersonatedRole, startImpersonation, stopImpersonation, isSwitching } =
@@ -42,11 +44,10 @@ export function UserMenu({ user }: UserMenuProps) {
   const displayName = user.name || user.email || 'User';
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button type="button" className="flex items-center gap-2 rounded-md p-1 hover:bg-surface2 transition-colors">
           <UserAvatar user={user} size="sm" />
-          {isImpersonating && <Eye className="h-3.5 w-3.5 text-info1" />}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-0">
@@ -85,29 +86,18 @@ export function UserMenu({ user }: UserMenuProps) {
                     } else {
                       void startImpersonation(role);
                     }
+                    setOpen(false);
                   }}
                   className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                    isActive ? 'bg-surface3 text-primary' : 'hover:bg-surface2 text-neutral1'
+                    isActive ? 'bg-surface2' : 'hover:bg-surface2'
                   } ${isSwitching ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {isSwitching ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Eye className={`h-3.5 w-3.5 ${isActive ? 'text-info1' : 'text-neutral3'}`} />
-                  )}
-                  <span className="capitalize">{role.name}</span>
+                  {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span className="flex-1 capitalize">{role.name}</span>
+                  {isActive && <X className="h-3.5 w-3.5 text-neutral3 hover:text-neutral1" />}
                 </button>
               );
             })}
-            {isImpersonating && (
-              <button
-                type="button"
-                onClick={stopImpersonation}
-                className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-neutral3 hover:bg-surface2 transition-colors mt-1"
-              >
-                Exit preview
-              </button>
-            )}
           </div>
         )}
 
