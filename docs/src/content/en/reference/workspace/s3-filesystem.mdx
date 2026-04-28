@@ -62,6 +62,12 @@ const filesystem = new S3Filesystem({
 
 Pass a credential provider function for auto-refreshing credentials. This is useful for deployments on ECS, Lambda, or when using SSO/AssumeRole where temporary credentials expire and need to be refreshed.
 
+Install the AWS SDK credential providers package when calling `fromNodeProviderChain()` directly:
+
+```bash npm2yarn
+npm install @aws-sdk/credential-providers
+```
+
 ```typescript
 import { S3Filesystem } from '@mastra/s3'
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers'
@@ -72,6 +78,8 @@ const filesystem = new S3Filesystem({
   credentials: fromNodeProviderChain(),
 })
 ```
+
+Provider functions only apply to `S3Filesystem` API calls. When mounting the filesystem into an E2B sandbox, mount configuration only supports static `accessKeyId`, `secretAccessKey`, and `sessionToken` values, so credential refresh must be handled outside the mount.
 
 ### Cloudflare R2
 
@@ -140,7 +148,7 @@ const filesystem = new S3Filesystem({
     name: 'sessionToken',
     type: 'string',
     description:
-      'AWS session token for temporary credentials. Used with `accessKeyId`/`secretAccessKey` when credentials come from SSO, AssumeRole, or container credentials.',
+      'AWS session token for static temporary credentials. Use with `accessKeyId`/`secretAccessKey` only when passing a complete temporary credential set manually. For auto-refreshing SSO, AssumeRole, or container credentials, use the `credentials` provider parameter or the SDK default credential provider chain.',
     isOptional: true,
   },
   {
