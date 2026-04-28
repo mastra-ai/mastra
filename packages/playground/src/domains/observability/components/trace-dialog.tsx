@@ -1,5 +1,5 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '@mastra/core/storage';
 import {
   Button,
   ButtonsGroup,
@@ -11,6 +11,7 @@ import {
   getShortId,
   Icon,
   cn,
+  useSpanDetail,
 } from '@mastra/playground-ui';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
@@ -36,9 +37,8 @@ import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores
 import { useLinkComponent } from '@/lib/framework';
 
 type TraceDialogProps = {
-  traceSpans?: SpanRecord[];
+  traceSpans?: LightSpanRecord[];
   traceId?: string;
-  traceDetails?: SpanRecord;
   isOpen: boolean;
   onClose?: () => void;
   onNext?: () => void;
@@ -57,7 +57,6 @@ type TraceDialogProps = {
 export function TraceDialog({
   traceId,
   traceSpans = [],
-  traceDetails,
   isOpen,
   onClose,
   onNext,
@@ -76,7 +75,18 @@ export function TraceDialog({
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const [spanDialogDefaultTab, setSpanDialogDefaultTab] = useState(initialSpanTab || 'details');
-  const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
+
+  // Derive root span ID from lightweight spans
+  const rootSpanId = useMemo(() => traceSpans.find(s => !s.parentSpanId)?.spanId, [traceSpans]);
+
+  // Lazy-load full root span details for trace header info
+  const { data: rootSpanDetail } = useSpanDetail(traceId, rootSpanId);
+  const traceDetails = rootSpanDetail?.span;
+
+  // Lazy-load full selected span details for SpanTabs/SpanDialog
+  const { data: selectedSpanDetail } = useSpanDetail(traceId, selectedSpanId);
+  const selectedSpan = selectedSpanDetail?.span;
+
   const traceInfo = useTraceInfo(traceDetails);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [searchPhrase, setSearchPhrase] = useState<string>('');
@@ -98,6 +108,7 @@ export function TraceDialog({
       .map(span => span.spanId);
 
     setFeaturedSpanIds(newFeaturedSpanIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchPhrase]);
 
   useEffect(() => {
@@ -116,6 +127,7 @@ export function TraceDialog({
     if (spanScoresPage > 0) {
       setSpanScoresPage(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSpanId]);
 
   const hierarchicalSpans = useMemo(() => {
@@ -281,7 +293,7 @@ export function TraceDialog({
               </TextAndIcon>
             </SideDialog.Header>
 
-            {traceDetails && (
+            {(traceDetails || traceSpans.length > 0) && (
               <Sections>
                 <div className="grid xl:grid-cols-[3fr_2fr] gap-4 items-start">
                   <KeyValueList data={traceInfo} LinkComponent={Link} />

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -12,7 +13,6 @@ import type {
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
-import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
 import { isReconnectableMCPError } from './error-utils';
@@ -667,9 +667,7 @@ To fix this you have three different options:
 
   private makeId() {
     const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
-    const idNamespace = uuidv5(`MCPClient`, uuidv5.DNS);
-
-    return uuidv5(text, idNamespace);
+    return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
 
   /**

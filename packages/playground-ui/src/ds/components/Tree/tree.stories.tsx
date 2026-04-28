@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState, useCallback } from 'react';
 import { File, FileCode, FileJson, FileText, Folder, FolderGit2, FolderPlus, Plus, Trash2 } from 'lucide-react';
-import { Tree } from './tree';
+import { useState, useCallback } from 'react';
 import { IconButton } from '../IconButton';
 import { TooltipProvider } from '../Tooltip';
+import { Tree } from './tree';
 
 const meta: Meta<typeof Tree> = {
   title: 'DataDisplay/Tree',

@@ -135,6 +135,21 @@ interface ObservabilityExporter {
   /** Initialize exporter with tracing configuration and/or access to Mastra */
   init?(options: InitExporterOptions): void
 
+  /** Handle tracing events */
+  onTracingEvent?(event: TracingEvent): void | Promise<void>
+
+  /** Handle log events */
+  onLogEvent?(event: LogEvent): void | Promise<void>
+
+  /** Handle metric events */
+  onMetricEvent?(event: MetricEvent): void | Promise<void>
+
+  /** Handle score events */
+  onScoreEvent?(event: ScoreEvent): void | Promise<void>
+
+  /** Handle feedback events */
+  onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>
+
   /** Export tracing events */
   exportTracingEvent(event: TracingEvent): Promise<void>
 
@@ -162,6 +177,13 @@ interface ObservabilityExporter {
   shutdown(): Promise<void>
 }
 ```
+
+Event callback payloads use observability event bus envelopes:
+`TracingEvent` carries span lifecycle events with `exportedSpan`, `LogEvent`
+wraps `ExportedLog` in `log`, `MetricEvent` wraps `ExportedMetric` in
+`metric`, `ScoreEvent` wraps `ExportedScore` in `score`, and `FeedbackEvent`
+wraps `ExportedFeedback` in `feedback`. For Cloud exporter behavior for these
+callbacks, see [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter).
 
 ### `SpanOutputProcessor`
 

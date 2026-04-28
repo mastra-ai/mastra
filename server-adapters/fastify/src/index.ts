@@ -61,7 +61,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     mastra: Mastra;
     requestContext: RequestContext;
-    tools: ToolsInput;
+    registeredTools: ToolsInput;
     abortSignal: AbortSignal;
     taskStore: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
@@ -115,7 +115,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Set context in request object
       request.requestContext = requestContext;
       request.mastra = this.mastra;
-      request.tools = this.tools || {};
+      request.registeredTools = this.tools || {};
       if (this.taskStore) {
         request.taskStore = this.taskStore;
       }
@@ -309,6 +309,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   ): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        reply.header(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       await reply.send(result);
     } else if (route.responseType === 'stream') {
@@ -457,7 +466,17 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       });
 
       if (authError) {
-        return reply.status(authError.status).send({ error: authError.error });
+        // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+        if (authError.headers) {
+          for (const [key, value] of Object.entries(authError.headers)) {
+            void reply.header(key, value);
+          }
+        }
+
+        // If this is an auth error (not just a success-with-headers), return error response
+        if (authError.error) {
+          return reply.status(authError.status).send({ error: authError.error });
+        }
       }
 
       const params = await this.getParams(route, request);
@@ -531,7 +550,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
         requestContext: request.requestContext,
         mastra: this.mastra,
-        tools: request.tools,
+        registeredTools: request.registeredTools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,
@@ -652,7 +671,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         });
 
         if (authError) {
-          return reply.status(authError.status).send({ error: authError.error });
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              void reply.header(key, value);
+            }
+          }
+          if (authError.error) {
+            return reply.status(authError.status).send({ error: authError.error });
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;

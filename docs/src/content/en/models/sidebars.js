@@ -27,7 +27,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'gateways/azure-openai',
-          label: 'Azure-openai',
+          label: 'Azure OpenAI',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/mastra',
+          label: 'Mastra',
         },
         {
           type: 'doc',
@@ -100,6 +105,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
+        },
+        {
+          type: 'doc',
+          id: 'providers/abliteration-ai',
+          label: 'abliteration.ai',
         },
         {
           type: 'doc',
@@ -458,6 +468,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/regolo-ai',
+          label: 'Regolo AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
         },
@@ -503,11 +518,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/tencent-token-plan',
-          label: 'Tencent Token Plan',
-        },
-        {
-          type: 'doc',
           id: 'providers/tencent-tokenhub',
           label: 'Tencent TokenHub',
         },
@@ -535,6 +545,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/vultr',
           label: 'Vultr',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wafer.ai',
+          label: 'Wafer',
         },
         {
           type: 'doc',

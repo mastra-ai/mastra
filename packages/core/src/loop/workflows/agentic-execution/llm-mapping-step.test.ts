@@ -1111,6 +1111,56 @@ describe('createLLMMappingStep toModelOutput', () => {
     expect(withoutTransformPart.providerMetadata).toBeUndefined();
   });
 
+  it('should call toModelOutput for tools loaded dynamically via _internal.stepTools (e.g. ToolSearchProcessor)', async () => {
+    const toModelOutputMock = vi.fn((_output: unknown) => ({
+      type: 'text',
+      value: 'summarized',
+    }));
+
+    // Simulate ToolSearchProcessor: tools is empty, dynamically loaded tools are in _internal.stepTools
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: {
+          generateId: () => 'test-message-id',
+          stepTools: {
+            'dynamic-tool': {
+              execute: async () => ({ heavy: 'data' }),
+              toModelOutput: toModelOutputMock,
+              inputSchema: z.object({}),
+            },
+          },
+        },
+        tools: {}, // Empty — simulates tools: {} on agent with ToolSearchProcessor
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'dynamic-tool',
+        args: {},
+        result: { heavy: 'data' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(toModelOutputMock).toHaveBeenCalledTimes(1);
+    expect(toModelOutputMock).toHaveBeenCalledWith({ heavy: 'data' });
+
+    const calls = (messageList.updateToolInvocation as Mock).mock.calls;
+    const dynamicToolPart = calls.find(([p]: [any]) => p.toolInvocation.toolName === 'dynamic-tool')?.[0];
+    expect(dynamicToolPart.providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'text',
+      value: 'summarized',
+    });
+  });
+
   it('should NOT call toModelOutput when tool result is null/undefined', async () => {
     const toModelOutputMock = vi.fn();
 

@@ -41,6 +41,7 @@ export * from './ds/components/MarkdownRenderer';
 export * from './ds/components/MetricsCard';
 export * from './ds/components/MetricsFlexGrid';
 export * from './ds/components/Popover';
+export * from './ds/components/PropertyFilter';
 export * from './ds/components/RadioGroup';
 export * from './ds/components/ScrollArea';
 export * from './ds/components/Searchbar';
@@ -50,6 +51,8 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/BrandLoader';
 export * from './ds/components/Switch';
+export * from './ds/components/ThemeProvider';
+export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
 
@@ -91,6 +94,7 @@ export * from './ds/components/LogsDataList';
 export * from './ds/components/EntityListPageLayout';
 export * from './ds/components/PageLayout';
 export * from './ds/components/ListSearch';
+export * from './ds/components/ErrorBoundary';
 export * from './ds/components/ErrorState';
 export * from './ds/components/Card';
 export * from './ds/components/DataCodeSection';
@@ -141,7 +145,12 @@ export * from './lib/file';
 export * from './lib/template';
 
 // Store
-export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store/playground-store';
+export { usePlaygroundStore } from './store/playground-store';
+
+// Domains
+export * from './domains/metrics';
+export * from './domains/traces';
+export * from './domains/logs';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

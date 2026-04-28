@@ -341,11 +341,12 @@ export class BackgroundTaskManager {
     runId?: string;
     threadId?: string;
     resourceId?: string;
+    taskId?: string;
     abortSignal?: AbortSignal;
   }): ReadableStream<Record<string, unknown>> {
     const manager = this;
     const pubsub = this.pubsub;
-    const { agentId, runId, threadId, resourceId, abortSignal } = options ?? {};
+    const { agentId, runId, threadId, resourceId, abortSignal, taskId } = options ?? {};
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
@@ -355,13 +356,21 @@ export class BackgroundTaskManager {
       'task.cancelled': 'cancelled',
     };
 
-    const STATUS_EVENT_MAP: Record<string, string> = {
-      pending: 'task.pending',
-      running: 'task.running',
-      completed: 'task.completed',
-      failed: 'task.failed',
-      cancelled: 'task.cancelled',
-      timed_out: 'task.failed',
+    // const STATUS_EVENT_MAP: Record<string, string> = {
+    //   pending: 'task.pending',
+    //   running: 'task.running',
+    //   completed: 'task.completed',
+    //   failed: 'task.failed',
+    //   cancelled: 'task.cancelled',
+    //   timed_out: 'task.failed',
+    // };
+
+    const CHUNK_EVENT_MAP: Record<string, string> = {
+      'task.running': 'background-task-running',
+      'task.output': 'background-task-output',
+      'task.completed': 'background-task-completed',
+      'task.failed': 'background-task-failed',
+      'task.cancelled': 'background-task-cancelled',
     };
 
     return new ReadableStream({
@@ -376,20 +385,41 @@ export class BackgroundTaskManager {
           if (runId && data.runId !== runId) return;
           if (threadId && data.threadId !== threadId) return;
           if (resourceId && data.resourceId !== resourceId) return;
+          if (taskId && data.taskId !== taskId) return;
+
+          const payload: Record<string, unknown> = {
+            taskId: data.taskId,
+            toolName: data.toolName,
+            toolCallId: data.toolCallId,
+            agentId: data.agentId,
+            runId: data.runId,
+          };
+
+          switch (event.type) {
+            case 'task.running':
+              payload.startedAt = data.startedAt;
+              payload.args = data.args;
+              break;
+            case 'task.completed':
+              payload.completedAt = data.completedAt;
+              payload.result = data.result;
+              break;
+            case 'task.failed':
+              payload.completedAt = data.completedAt;
+              payload.error = data.error;
+              break;
+            case 'task.cancelled':
+              payload.completedAt = data.completedAt;
+              break;
+            case 'task.output':
+              payload.payload = data.chunk;
+              break;
+          }
 
           try {
             controller.enqueue({
-              type: event.type,
-              status,
-              taskId: data.taskId,
-              toolName: data.toolName,
-              toolCallId: data.toolCallId,
-              agentId: data.agentId,
-              runId: data.runId,
-              result: data.result,
-              error: data.error,
-              args: data.args,
-              chunk: data.chunk,
+              type: CHUNK_EVENT_MAP[event.type],
+              payload,
             });
           } catch {
             // Controller closed
@@ -422,16 +452,16 @@ export class BackgroundTaskManager {
             if (abortSignal?.aborted) break;
             try {
               controller.enqueue({
-                type: STATUS_EVENT_MAP[task.status] ?? 'task.running',
-                status: task.status,
-                taskId: task.id,
-                toolName: task.toolName,
-                toolCallId: task.toolCallId,
-                agentId: task.agentId,
-                runId: task.runId,
-                result: task.result,
-                error: task.error,
-                args: task.args,
+                type: 'background-task-running',
+                payload: {
+                  taskId: task.id,
+                  toolName: task.toolName,
+                  toolCallId: task.toolCallId,
+                  agentId: task.agentId,
+                  runId: task.runId,
+                  startedAt: task.startedAt,
+                  args: task.args,
+                },
               });
             } catch {
               break;
@@ -508,20 +538,40 @@ export class BackgroundTaskManager {
     // Look up per-task executor
     const ctx = this.taskContexts.get(taskId);
     if (!ctx?.executor) {
+      const errorInfo = { message: 'No executor registered for this task' };
       await storage.updateTask(taskId, {
         status: 'failed',
-        error: { message: 'No executor registered for this task' },
+        error: errorInfo,
         completedAt: new Date(),
       });
       const failedTask = await storage.getTask(taskId);
-      if (failedTask) await this.publishLifecycleEvent('task.failed', failedTask);
+      if (failedTask) {
+        await this.publishLifecycleEvent('task.failed', failedTask);
+        await this.runLocalCompletionHooks(failedTask, 'failed', {
+          error: errorInfo,
+        });
+      }
       this.deregisterTaskContext(taskId);
       return false;
     }
 
     try {
+      void this.runLocalExecutionHook(runningTask!);
       // Build onProgress callback that forwards to the task context hook
+      const progressThrottleMs = this.config.progressThrottleMs;
+      const shouldThrottleProgress =
+        typeof progressThrottleMs === 'number' && Number.isFinite(progressThrottleMs) && progressThrottleMs > 0;
+      let lastProgressEmitMs: number | undefined;
+
       const onProgress = async (chunk: any) => {
+        if (shouldThrottleProgress) {
+          const now = Date.now();
+          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) {
+            return;
+          }
+          lastProgressEmitMs = now;
+        }
+
         await this.publishLifecycleEvent('task.output', {
           ...task,
           chunk,
@@ -543,7 +593,15 @@ export class BackgroundTaskManager {
       });
 
       const completedTask = await storage.getTask(taskId);
-      if (completedTask) await this.publishLifecycleEvent('task.completed', completedTask);
+      if (completedTask) {
+        // Run per-task hooks locally BEFORE publishing. Subscribers to the
+        // `task.completed` pubsub event (e.g. `bgManager.stream` in
+        // `streamUntilIdle`) fire in parallel with `handleResult`; if we
+        // don't run `onResult` first, a continuation can kick off before the
+        // tool result is flushed to memory and the LLM re-dispatches.
+        await this.runLocalCompletionHooks(completedTask, 'completed', { result });
+        await this.publishLifecycleEvent('task.completed', completedTask);
+      }
     } catch (error: any) {
       const currentTask = await storage.getTask(taskId);
       if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
@@ -592,8 +650,13 @@ export class BackgroundTaskManager {
           completedAt: new Date(),
         });
         const failedTask = await storage.getTask(taskId);
-        if (failedTask) await this.publishLifecycleEvent('task.failed', failedTask);
-        // Context cleanup happens in handleResult after it processes the result event
+        if (failedTask) {
+          // Same ordering contract as the completed branch — run hooks
+          // locally (including `onResult`, which writes the failure into
+          // memory) before publishing so subscribers see consistent state.
+          await this.runLocalCompletionHooks(failedTask, 'failed', { error: errorInfo });
+          await this.publishLifecycleEvent('task.failed', failedTask);
+        }
       }
     } finally {
       this.activeAbortControllers.delete(taskId);
@@ -605,62 +668,196 @@ export class BackgroundTaskManager {
     return nacked;
   }
 
+  /**
+   * Run per-task hooks (onChunk, onResult, onComplete/onFailed) locally in the
+   * worker path, before publishing the terminal lifecycle event. Ensures
+   * memory / stream state is consistent by the time any pubsub subscriber is
+   * notified. After running, the task context is deregistered so
+   * `handleResult` (which also fires from pubsub) becomes a no-op for this
+   * task in the same process.
+   *
+   * In distributed deployments where the worker runs in a different process
+   * from the dispatcher, `this.taskContexts` won't contain an entry for
+   * `task.id` — this method is a no-op there, and `handleResult` in the
+   * dispatching process runs the hooks instead.
+   */
+  private async runLocalCompletionHooks(
+    task: BackgroundTask,
+    status: 'completed' | 'failed',
+    extras: { result?: unknown; error?: { message: string; stack?: string } },
+  ): Promise<void> {
+    const ctx = this.taskContexts.get(task.id);
+    if (!ctx) return;
+
+    try {
+      if (status === 'completed') {
+        ctx.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: task.id,
+            toolName: task.toolName,
+            toolCallId: task.toolCallId,
+            runId: task.runId,
+            result: extras.result,
+            completedAt: task.completedAt!,
+            agentId: task.agentId,
+          },
+        });
+
+        await ctx.onResult?.({
+          runId: task.runId,
+          taskId: task.id,
+          toolCallId: task.toolCallId,
+          toolName: task.toolName,
+          agentId: task.agentId,
+          threadId: task.threadId,
+          resourceId: task.resourceId,
+          result: extras.result,
+          status: 'completed',
+          completedAt: task.completedAt!,
+          startedAt: task.startedAt!,
+        });
+
+        // Globals (this.config.onTaskComplete / onTaskFailed) fire from
+        // handleResult via pubsub so they run once per subscribing process
+        // — in distributed deployments that's the dispatching process, which
+        // is where observers/metrics are typically wired.
+        await ctx.onComplete?.(task);
+      } else {
+        ctx.onChunk?.({
+          type: 'background-task-failed',
+          payload: {
+            taskId: task.id,
+            toolName: task.toolName,
+            toolCallId: task.toolCallId,
+            runId: task.runId,
+            error: extras.error ?? { message: 'Unknown error' },
+            completedAt: task.completedAt!,
+            agentId: task.agentId,
+          },
+        });
+
+        await ctx.onResult?.({
+          runId: task.runId,
+          taskId: task.id,
+          toolCallId: task.toolCallId,
+          toolName: task.toolName,
+          agentId: task.agentId,
+          threadId: task.threadId,
+          resourceId: task.resourceId,
+          error: extras.error,
+          status: 'failed',
+          completedAt: task.completedAt!,
+          startedAt: task.startedAt!,
+        });
+
+        // See comment above — globals are handled exclusively by
+        // handleResult so they fire once per subscribing process.
+        await ctx.onFailed?.(task);
+      }
+    } finally {
+      this.deregisterTaskContext(task.id);
+    }
+  }
+
+  private async runLocalExecutionHook(task: BackgroundTask): Promise<void> {
+    const ctx = this.taskContexts.get(task.id);
+    if (!ctx) return;
+
+    try {
+      await ctx.onExecution?.({
+        runId: task.runId,
+        taskId: task.id,
+        toolCallId: task.toolCallId,
+        toolName: task.toolName,
+        agentId: task.agentId,
+        threadId: task.threadId,
+        resourceId: task.resourceId,
+        startedAt: task.startedAt!,
+      });
+    } catch {
+      //fail silently
+    }
+  }
+
   private async handleResult(event: Event): Promise<void> {
     const { taskId, toolName, toolCallId, threadId, resourceId, runId } = event.data;
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
 
-    // Look up per-task hooks
-    const ctx = this.taskContexts.get(taskId);
+    if (task?.completedAt) {
+      // Look up per-task hooks
+      const ctx = this.taskContexts.get(taskId);
 
-    if (event.type === 'task.completed') {
-      ctx?.onChunk?.({
-        type: 'background-task-completed',
-        payload: { taskId, toolName, toolCallId, runId, result: event.data.result },
-      });
+      if (event.type === 'task.completed') {
+        ctx?.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId,
+            toolName,
+            toolCallId,
+            runId,
+            result: event.data.result,
+            completedAt: task.completedAt,
+            agentId: task.agentId,
+          },
+        });
 
-      await ctx?.onResult?.({
-        runId,
-        taskId,
-        toolCallId,
-        toolName,
-        agentId: event.data.agentId,
-        threadId,
-        resourceId,
-        result: event.data.result,
-        status: 'completed',
-      });
+        await ctx?.onResult?.({
+          runId,
+          taskId,
+          toolCallId,
+          toolName,
+          agentId: event.data.agentId,
+          threadId,
+          resourceId,
+          result: event.data.result,
+          status: 'completed',
+          completedAt: task.completedAt!,
+          startedAt: task.startedAt!,
+        });
 
-      if (task) {
-        await Promise.all([ctx?.onComplete?.(task), this.config.onTaskComplete?.(task)]);
+        if (task) {
+          await Promise.all([ctx?.onComplete?.(task), this.config.onTaskComplete?.(task)]);
+        }
       }
-    }
 
-    if (event.type === 'task.failed') {
-      ctx?.onChunk?.({
-        type: 'background-task-failed',
-        payload: { taskId, toolName, toolCallId, runId, error: event.data.error },
-      });
+      if (event.type === 'task.failed') {
+        ctx?.onChunk?.({
+          type: 'background-task-failed',
+          payload: {
+            taskId,
+            toolName,
+            toolCallId,
+            runId,
+            error: event.data.error,
+            completedAt: task.completedAt,
+            agentId: task.agentId,
+          },
+        });
 
-      await ctx?.onResult?.({
-        runId,
-        taskId,
-        toolCallId,
-        toolName,
-        agentId: event.data.agentId,
-        threadId,
-        resourceId,
-        error: event.data.error,
-        status: 'failed',
-      });
+        await ctx?.onResult?.({
+          runId,
+          taskId,
+          toolCallId,
+          toolName,
+          agentId: event.data.agentId,
+          threadId,
+          resourceId,
+          error: event.data.error,
+          status: 'failed',
+          completedAt: task.completedAt!,
+          startedAt: task.startedAt!,
+        });
 
-      if (task) {
-        await Promise.all([ctx?.onFailed?.(task), this.config.onTaskFailed?.(task)]);
+        if (task) {
+          await Promise.all([ctx?.onFailed?.(task), this.config.onTaskFailed?.(task)]);
+        }
       }
-    }
 
-    // Clean up context after terminal result
-    this.deregisterTaskContext(taskId);
+      // Clean up context after terminal result
+      this.deregisterTaskContext(taskId);
+    }
   }
 
   private handleCancel(event: Event): void {
@@ -712,6 +909,8 @@ export class BackgroundTaskManager {
         result: task.result,
         error: task.error,
         chunk: task.chunk,
+        completedAt: task.completedAt,
+        startedAt: task.startedAt,
       },
       runId: task.id,
     });

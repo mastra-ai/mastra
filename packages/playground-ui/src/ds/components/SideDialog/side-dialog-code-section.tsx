@@ -11,7 +11,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Section } from '@/ds/components/Section';
-import { useIsDarkMode } from '@/store/playground-store';
+import { useTheme } from '@/ds/components/ThemeProvider';
 
 /** Dark theme — matches original side-dialog draculaInit settings exactly. */
 function buildSideDialogDarkTheme(): Extension {
@@ -77,7 +77,7 @@ function buildSideDialogLightTheme(): Extension {
 }
 
 const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildSideDialogDarkTheme() : buildSideDialogLightTheme()), [isDark]);
 };
 

@@ -35,6 +35,7 @@ export class CompositeVersionedSkillSource implements SkillSource {
   readonly #sources: Map<string, VersionedSkillSource> = new Map();
   readonly #fallback?: SkillSource;
   readonly #fallbackSkills: Set<string>;
+  readonly #maxVersionCreatedAt: Date;
 
   constructor(
     entries: VersionedSkillEntry[],
@@ -46,15 +47,40 @@ export class CompositeVersionedSkillSource implements SkillSource {
       fallbackSkills?: string[];
     },
   ) {
+    let maxTime = 0;
     for (const entry of entries) {
       this.#sources.set(entry.dirName, new VersionedSkillSource(entry.tree, blobStore, entry.versionCreatedAt));
+      const t = entry.versionCreatedAt.getTime();
+      if (t > maxTime) maxTime = t;
     }
+    this.#maxVersionCreatedAt = maxTime > 0 ? new Date(maxTime) : new Date(0);
     this.#fallback = options?.fallback;
     this.#fallbackSkills = new Set(options?.fallbackSkills ?? []);
   }
 
   #normalizePath(path: string): string {
-    return path.replace(/^[./\\]+|[/\\]+$/g, '');
+    // Strip any leading '.', '/', '\' and any trailing '/', '\' without
+    // using a regex to avoid polynomial backtracking on attacker-crafted
+    // paths like many leading slashes or dots.
+    let start = 0;
+    while (start < path.length) {
+      const c = path.charCodeAt(start);
+      if (c === 46 /* '.' */ || c === 47 /* '/' */ || c === 92 /* '\' */) {
+        start++;
+      } else {
+        break;
+      }
+    }
+    let end = path.length;
+    while (end > start) {
+      const c = path.charCodeAt(end - 1);
+      if (c === 47 /* '/' */ || c === 92 /* '\' */) {
+        end--;
+      } else {
+        break;
+      }
+    }
+    return start === 0 && end === path.length ? path : path.slice(start, end);
   }
 
   /**
@@ -111,8 +137,8 @@ export class CompositeVersionedSkillSource implements SkillSource {
         name: '.',
         type: 'directory',
         size: 0,
-        createdAt: new Date(),
-        modifiedAt: new Date(),
+        createdAt: this.#maxVersionCreatedAt,
+        modifiedAt: this.#maxVersionCreatedAt,
       };
     }
 

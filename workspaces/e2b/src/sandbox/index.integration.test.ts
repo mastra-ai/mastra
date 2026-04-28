@@ -1034,19 +1034,18 @@ if (canRunSharedIntegration && hasGCSCredentials) {
 /**
  * S3+S3 Multi-Mount Integration Tests
  *
- * Same bucket with different prefixes. s3fs FUSE mounts the full bucket,
- * so sandbox paths don't align with prefix-scoped API paths.
- * Only the API-level isolation test runs; sandbox-dependent tests are skipped.
+ * Same bucket with different prefixes. With prefix-aware s3fs mounts,
+ * sandbox paths should align with prefix-scoped API paths so the full
+ * multi-mount scenario suite can run.
  */
 if (canRunSharedIntegration) {
   createWorkspaceIntegrationTests({
     suiteName: 'E2B + S3+S3 Multi-Mount Integration',
     testTimeout: 120000,
-    sandboxPathsAligned: false,
     testScenarios: {
       fileSync: false,
       multiMount: true,
-      crossMountCopy: false,
+      crossMountCopy: true,
     },
     createWorkspace: () => {
       const s3Config = getS3TestConfig();
