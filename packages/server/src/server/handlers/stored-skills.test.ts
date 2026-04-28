@@ -120,11 +120,13 @@ function createMockStorage(skillsStore?: MockSkillsStore): MockStorage {
 
 interface MockMastra {
   getStorage: ReturnType<typeof vi.fn>;
+  getEditor: ReturnType<typeof vi.fn>;
 }
 
 function createMockMastra(options: { storage?: MockStorage } = {}): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
+    getEditor: vi.fn().mockReturnValue(undefined),
   };
 }
 

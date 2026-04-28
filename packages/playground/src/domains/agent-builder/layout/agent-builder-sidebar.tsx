@@ -1,18 +1,36 @@
 import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
-import { LibraryIcon } from 'lucide-react';
+import { Blocks, LibraryIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useLocation } from 'react-router';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useLinkComponent } from '@/lib/framework';
 
-const links: NavLink[] = [
+const baseLinks: NavLink[] = [
   { name: 'My agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
   { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon />, isOnMastraPlatform: true },
 ];
+
+const skillsLink: NavLink = {
+  name: 'Skills',
+  url: '/agent-builder/skills',
+  icon: <Blocks className="h-4 w-4" />,
+  isOnMastraPlatform: true,
+};
 
 export function AgentBuilderSidebar() {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
   const { pathname } = useLocation();
+  const features = useBuilderAgentFeatures();
+
+  const links = useMemo(() => {
+    const result = [...baseLinks];
+    if (features.skills) {
+      result.splice(1, 0, skillsLink); // Insert after "My agents", before "Library"
+    }
+    return result;
+  }, [features.skills]);
 
   return (
     <MainSidebar className="h-full">

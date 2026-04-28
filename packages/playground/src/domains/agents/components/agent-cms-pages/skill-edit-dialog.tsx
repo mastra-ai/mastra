@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, cn, Input, SideDialog, Txt } from '@mastra/playground-ui';
-import { Globe, Lock } from 'lucide-react';
+import { AlertTriangle, Globe, Lock } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useCreateSkill } from '../../hooks/use-create-skill';
@@ -8,7 +8,7 @@ import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation'
 import { createInitialStructure, updateRootFolderName } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
 import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
-import { useWorkspaces } from '@/domains/workspace/hooks';
+import { useWorkspaces, useWorkspaceInfo } from '@/domains/workspace/hooks';
 
 export interface SkillEditDialogProps {
   isOpen: boolean;
@@ -31,6 +31,8 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
     () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
     [workspacesData],
   );
+  const { data: workspaceInfo } = useWorkspaceInfo(workspaceId || undefined);
+  const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
@@ -94,7 +96,7 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
             variant="primary"
             size="sm"
             onClick={handleSave}
-            disabled={!name.trim() || !workspaceId || createSkill.isPending}
+            disabled={!name.trim() || !workspaceId || !hasFilesystem || createSkill.isPending}
             className="mr-6"
           >
             {createSkill.isPending ? 'Creating...' : 'Save'}
@@ -164,6 +166,16 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
             </div>
           )}
         </div>
+
+        {workspaceId && !hasFilesystem && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <Txt variant="ui-xs" className="text-amber-400">
+              The selected workspace has no filesystem configured. Skill files cannot be saved. Add a filesystem to the
+              workspace configuration.
+            </Txt>
+          </div>
+        )}
 
         <div className="h-full border border-border1 rounded-lg overflow-hidden">
           <SkillFolder

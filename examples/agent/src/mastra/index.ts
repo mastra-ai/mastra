@@ -51,7 +51,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
-import { Workspace } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';
 
 const libsqlStore = new LibSQLStore({
@@ -71,6 +71,7 @@ const storage = new MastraCompositeStore({
 
 const workspace = new Workspace({
   id: 'builder-workspace',
+  filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
   sandbox: new DaytonaSandbox(),
 });
 

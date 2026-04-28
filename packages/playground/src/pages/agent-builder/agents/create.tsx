@@ -17,7 +17,7 @@ export default function AgentBuilderCreate() {
   useTools({ enabled: features.tools });
   useAgents({ enabled: features.agents });
   useWorkflows({ enabled: features.workflows });
-  useStoredSkills({ enabled: features.skills });
+  useStoredSkills(undefined, { enabled: features.skills });
   const navigate = useNavigate();
   return (
     <>
