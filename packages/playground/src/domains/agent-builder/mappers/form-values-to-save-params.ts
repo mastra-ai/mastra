@@ -1,4 +1,9 @@
-import type { StoredAgentToolConfig, StoredWorkspaceRef } from '@mastra/client-js';
+import type {
+  StoredAgentSkillConfig,
+  StoredAgentToolConfig,
+  StoredSkillResponse,
+  StoredWorkspaceRef,
+} from '@mastra/client-js';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 
@@ -9,6 +14,7 @@ export interface SaveParams {
   tools: Record<string, StoredAgentToolConfig> | undefined;
   agents: Record<string, StoredAgentToolConfig> | undefined;
   workflows: Record<string, StoredAgentToolConfig> | undefined;
+  skills: Record<string, StoredAgentSkillConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
   visibility: 'private' | 'public';
 }
@@ -34,6 +40,7 @@ function emptyToUndefined<T extends Record<string, unknown>>(record: T): T | und
 export function formValuesToSaveParams(
   values: AgentBuilderEditFormValues,
   availableAgentTools: AgentTool[],
+  availableSkills: StoredSkillResponse[] = [],
 ): SaveParams {
   const toolDescriptionById = new Map<string, string | undefined>();
   const agentDescriptionById = new Map<string, string | undefined>();
@@ -48,9 +55,15 @@ export function formValuesToSaveParams(
     }
   }
 
+  const skillDescriptionById = new Map<string, string | undefined>();
+  for (const skill of availableSkills) {
+    skillDescriptionById.set(skill.id, skill.description);
+  }
+
   const tools = buildEnabledRecord(values.tools, toolDescriptionById);
   const agents = buildEnabledRecord(values.agents, agentDescriptionById);
   const workflows = buildEnabledRecord(values.workflows, workflowDescriptionById);
+  const skills = buildEnabledRecord(values.skills, skillDescriptionById);
 
   const workspace: StoredWorkspaceRef | undefined =
     typeof values.workspaceId === 'string' && values.workspaceId.length > 0
@@ -66,6 +79,7 @@ export function formValuesToSaveParams(
     tools: emptyToUndefined(tools),
     agents: emptyToUndefined(agents),
     workflows: emptyToUndefined(workflows),
+    skills: emptyToUndefined(skills),
     workspace,
     visibility: values.visibility ?? 'private',
   };

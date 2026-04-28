@@ -29,6 +29,51 @@ describe('buildAgentBuilderToolDescription', () => {
     expect(description).toContain('http-fetch');
   });
 
+  it('mentions skills and lists available skills when skills feature is on and skills are available', () => {
+    const skills = [
+      {
+        id: 'researcher',
+        status: 'published',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        name: 'researcher',
+        description: 'Research things',
+        instructions: 'inst',
+      },
+      {
+        id: 'writer',
+        status: 'published',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        name: 'writer',
+        instructions: 'inst',
+      },
+    ] as never;
+    const description = buildAgentBuilderToolDescription({ ...allOff, skills: true }, [], [], skills);
+
+    expect(description).toContain('skills');
+    expect(description).toContain('Available skills');
+    expect(description).toContain('researcher');
+    expect(description).toContain('Research things');
+    expect(description).toContain('writer');
+  });
+
+  it('does not mention skills when feature is off even if skills are provided', () => {
+    const skills = [
+      {
+        id: 'researcher',
+        status: 'published',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        name: 'researcher',
+        instructions: 'inst',
+      },
+    ] as never;
+    const description = buildAgentBuilderToolDescription(allOff, [], [], skills);
+
+    expect(description).not.toContain('Available skills');
+  });
+
   it('lists available workspaces when present', () => {
     const description = buildAgentBuilderToolDescription(
       allOff,

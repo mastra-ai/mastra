@@ -1,4 +1,5 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { StoredSkillResponse } from '@mastra/client-js';
 import type { MastraUIMessage } from '@mastra/react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
@@ -21,6 +22,7 @@ interface ConversationPanelProviderProps {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   availableAgentTools?: AgentTool[];
   availableWorkspaces?: AvailableWorkspace[];
+  availableSkills?: StoredSkillResponse[];
   toolsReady?: boolean;
   agentId: string;
   children: ReactNode;
@@ -34,6 +36,7 @@ export const ConversationPanelProvider = ({
   features,
   availableAgentTools = [],
   availableWorkspaces = [],
+  availableSkills = [],
   toolsReady = true,
   agentId,
   children,
@@ -53,7 +56,12 @@ export const ConversationPanelProvider = ({
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
 
-  const agentBuilderTool = useAgentBuilderTool({ features, availableAgentTools, availableWorkspaces });
+  const agentBuilderTool = useAgentBuilderTool({
+    features,
+    availableAgentTools,
+    availableWorkspaces,
+    availableSkills,
+  });
   const clientTools = useMemo(() => ({ agentBuilderTool }), [agentBuilderTool]);
 
   return (

@@ -18,6 +18,7 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -33,10 +34,12 @@ export default function AgentBuilderAgentView() {
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
+  const { isPending: isSkillsPending } = useStoredSkills();
   const isReady =
     Boolean(id) &&
     !isStoredAgentLoading &&
     !isToolsPending &&
+    !isSkillsPending &&
     (!features.agents || !isAgentsPending) &&
     (!features.workflows || !isWorkflowsPending);
 
