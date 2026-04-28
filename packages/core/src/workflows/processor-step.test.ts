@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { SpanType } from '../observability';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
@@ -226,6 +227,136 @@ describe('createStep with Processor', () => {
       expect(result).toEqual(
         expect.objectContaining({
           messages: [{ id: '1', content: 'test', modified: true }],
+        }),
+      );
+    });
+
+    it('should not create processor spans when processor observability is disabled', async () => {
+      const createChildSpan = vi.fn();
+      const processor: Processor = {
+        id: 'quiet-processor',
+        observability: false,
+        processInput: async ({ messages }) => messages,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await step.execute({
+        inputData: {
+          phase: 'input',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          systemMessages: [],
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(createChildSpan).not.toHaveBeenCalled();
+    });
+
+    it('should create processor spans by default', async () => {
+      const end = vi.fn();
+      const createChildSpan = vi.fn(() => ({ end }));
+      const processor: Processor = {
+        id: 'traced-processor',
+        processInput: async ({ messages }) => messages,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await step.execute({
+        inputData: {
+          phase: 'input',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          systemMessages: [],
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(createChildSpan).toHaveBeenCalledWith(expect.objectContaining({ type: SpanType.PROCESSOR_RUN }));
+      expect(end).toHaveBeenCalled();
+    });
+
+    it('should not create processor spans for phases the processor does not implement', async () => {
+      const createChildSpan = vi.fn();
+      const processInput = vi.fn(async ({ messages }) => messages);
+      const processor: Processor = {
+        id: 'input-only-processor',
+        processInput,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      const result = await step.execute({
+        inputData: {
+          phase: 'outputStep',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          stepNumber: 1,
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          phase: 'outputStep',
+          messages: [{ id: '1', content: 'test' }],
+        }),
+      );
+      expect(processInput).not.toHaveBeenCalled();
+      expect(createChildSpan).not.toHaveBeenCalled();
+    });
+
+    it('should mark errors-only processor spans for cloud export filtering', async () => {
+      const end = vi.fn();
+      const createChildSpan = vi.fn(() => ({ end }));
+      const processor: Processor = {
+        id: 'errors-only-processor',
+        observability: 'errors-only',
+        processInput: async ({ messages }) => messages,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await step.execute({
+        inputData: {
+          phase: 'input',
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          systemMessages: [],
+        },
+        tracingContext: {
+          currentSpan: {
+            createChildSpan,
+            findParent: () => undefined,
+          },
+        },
+      } as any);
+
+      expect(createChildSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: SpanType.PROCESSOR_RUN,
+          attributes: expect.objectContaining({ processorObservability: 'errors-only' }),
         }),
       );
     });
@@ -675,6 +806,54 @@ describe('createStep with Processor', () => {
       };
 
       await expect(step.execute({ inputData } as any)).rejects.toThrow('Unexpected error');
+    });
+
+    it('should end TripWire processor spans as blocked outcomes', async () => {
+      const end = vi.fn();
+      const error = vi.fn();
+      const createChildSpan = vi.fn(() => ({ end, error }));
+      const processor: Processor = {
+        id: 'tripwire-observability-processor',
+        observability: 'errors-only',
+        processInput: async ({ abort }) => {
+          abort('PII detected', { retry: true, metadata: { field: 'email' } });
+          return [];
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      await expect(
+        step.execute({
+          inputData: {
+            phase: 'input',
+            messages: [{ id: '1', content: 'test@example.com' }],
+            messageList,
+            systemMessages: [],
+          },
+          tracingContext: {
+            currentSpan: {
+              createChildSpan,
+              findParent: () => undefined,
+            },
+          },
+        } as any),
+      ).rejects.toThrow(TripWire);
+
+      expect(error).not.toHaveBeenCalled();
+      expect(end).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attributes: {
+            processorOutcome: 'tripwire',
+            tripwireAbort: {
+              reason: 'PII detected',
+              retry: true,
+              metadata: { field: 'email' },
+            },
+          },
+        }),
+      );
     });
   });
 });

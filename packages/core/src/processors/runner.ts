@@ -36,6 +36,35 @@ import type {
   ToolCallInfo,
 } from './index';
 
+function shouldCreateProcessorSpan(processor: Processor): boolean {
+  return processor.observability !== false;
+}
+
+function getProcessorSpanAttributes(processor: Processor, executor: 'workflow' | 'legacy', processorIndex?: number) {
+  return {
+    processorExecutor: executor,
+    processorIndex,
+    ...(processor.observability === 'errors-only' ? { processorObservability: 'errors-only' as const } : {}),
+  };
+}
+
+function getTripWireSpanAttributes(error: TripWire<unknown>) {
+  return {
+    processorOutcome: 'tripwire' as const,
+    tripwireAbort: {
+      reason: error.message,
+      retry: error.options?.retry,
+      metadata: error.options?.metadata,
+    },
+  };
+}
+
+function endTripWireProcessorSpan(span: Span<SpanType.PROCESSOR_RUN> | undefined, error: TripWire<unknown>) {
+  span?.end({
+    attributes: getTripWireSpanAttributes(error),
+  });
+}
+
 /**
  * Implementation of processor state management
  */
@@ -50,17 +79,21 @@ export class ProcessorState<OUTPUT = undefined> {
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<SpanType.PROCESSOR_RUN>;
+  public emitObservability = true;
 
   constructor(
     options?: {
       processorName?: string;
       processorIndex?: number;
+      processor?: Processor;
       createSpan?: boolean;
+      emitObservability?: boolean;
     } & Partial<ObservabilityContext>,
   ) {
+    this.emitObservability = options?.emitObservability !== false;
     // Only create span if explicitly requested (legacy processors)
     // Workflow processors handle span creation in workflow.ts
-    if (!options?.createSpan || !options.processorName) {
+    if (!options?.createSpan || !options.processorName || !this.emitObservability) {
       return;
     }
 
@@ -71,10 +104,11 @@ export class ProcessorState<OUTPUT = undefined> {
       name: `output stream processor: ${options.processorName}`,
       entityType: EntityType.OUTPUT_PROCESSOR,
       entityName: options.processorName,
-      attributes: {
-        processorExecutor: 'legacy',
-        processorIndex: options.processorIndex ?? 0,
-      },
+      attributes: getProcessorSpanAttributes(
+        options.processor ?? ({ id: options.processorName } as Processor),
+        'legacy',
+        options.processorIndex ?? 0,
+      ),
       input: {
         totalChunks: 0,
       },
@@ -427,22 +461,21 @@ export class ProcessorRunner {
       const summarizedResult = result ? summarizeProcessorResultForSpan(result) : undefined;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output processor: ${processor.id}`,
-        entityType: EntityType.OUTPUT_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          ...(summarizedResult ? { result: summarizedResult } : {}),
-          retryCount,
-        },
-      });
+      const processorSpan = shouldCreateProcessorSpan(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `output processor: ${processor.id}`,
+            entityType: EntityType.OUTPUT_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
+            input: {
+              messages: processableMessages,
+              ...(summarizedResult ? { result: summarizedResult } : {}),
+              retryCount,
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -511,17 +544,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -621,7 +644,9 @@ export class ProcessorRunner {
                 processorName: processor.name ?? processor.id,
                 ...observabilityContext,
                 processorIndex: index,
+                processor,
                 createSpan: true,
+                emitObservability: shouldCreateProcessorSpan(processor),
               });
               processorStates.set(processor.id, state);
             }
@@ -649,19 +674,8 @@ export class ProcessorRunner {
           }
         } catch (error) {
           if (error instanceof TripWire) {
-            // Error span for trip-wire abort so it shows as ERROR in traces
             const state = processorStates.get(processor.id);
-            state?.span?.error({
-              error,
-              endSpan: true,
-              attributes: {
-                tripwireAbort: {
-                  reason: error.message,
-                  retry: error.options?.retry,
-                  metadata: error.options?.metadata,
-                },
-              },
-            });
+            endTripWireProcessorSpan(state?.span, error);
             return {
               part: null,
               blocked: true,
@@ -821,21 +835,20 @@ export class ProcessorRunner {
       const inputSystemMessagesBefore = currentSystemMessages;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input processor: ${processor.id}`,
-        entityType: EntityType.INPUT_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          systemMessages: currentSystemMessages,
-        },
-      });
+      const processorSpan = shouldCreateProcessorSpan(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `input processor: ${processor.id}`,
+            entityType: EntityType.INPUT_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
+            input: {
+              messages: processableMessages,
+              systemMessages: currentSystemMessages,
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -973,17 +986,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1104,28 +1107,27 @@ export class ProcessorRunner {
 
       // Use the current span (the step span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
-      const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input step processor: ${processor.id}`,
-        entityType: EntityType.INPUT_STEP_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: buildProcessInputStepSpanInput({
-          messages: inputData.messages,
-          systemMessages: inputData.systemMessages,
-          stepNumber: inputData.stepNumber,
-          messageId: inputData.messageId,
-          retryCount: args.retryCount ?? 0,
-          model: inputData.model,
-          tools: inputData.tools,
-          toolChoice: inputData.toolChoice,
-          activeTools: inputData.activeTools,
-        }),
-      });
+      const processorSpan = shouldCreateProcessorSpan(processor)
+        ? currentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `input step processor: ${processor.id}`,
+            entityType: EntityType.INPUT_STEP_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
+            input: buildProcessInputStepSpanInput({
+              messages: inputData.messages,
+              systemMessages: inputData.systemMessages,
+              stepNumber: inputData.stepNumber,
+              messageId: inputData.messageId,
+              retryCount: args.retryCount ?? 0,
+              model: inputData.model,
+              tools: inputData.tools,
+              toolChoice: inputData.toolChoice,
+              activeTools: inputData.activeTools,
+            }),
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1198,17 +1200,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1335,25 +1327,24 @@ export class ProcessorRunner {
       };
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output step processor: ${processor.id}`,
-        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          systemMessages: currentSystemMessages,
-          stepNumber,
-          ...(finishReason !== undefined ? { finishReason } : {}),
-          ...(toolCalls !== undefined ? { toolCalls } : {}),
-          ...(text !== undefined ? { text } : {}),
-        },
-      });
+      const processorSpan = shouldCreateProcessorSpan(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `output step processor: ${processor.id}`,
+            entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
+            input: {
+              messages: processableMessages,
+              systemMessages: currentSystemMessages,
+              stepNumber,
+              ...(finishReason !== undefined ? { finishReason } : {}),
+              ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(text !== undefined ? { text } : {}),
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1434,17 +1425,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: error.message,
-                retry: error.options?.retry,
-                metadata: error.options?.metadata,
-              },
-            },
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1509,24 +1490,23 @@ export class ProcessorRunner {
       let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `request error processor: ${processor.id}`,
-        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
-        entityId: processor.id,
-        entityName: processor.name,
-        attributes: {
-          processorExecutor: 'legacy',
-          processorIndex: index,
-        },
-        input: {
-          messages: processableMessages,
-          error: error instanceof Error ? error.message : String(error),
-          stepNumber,
-          ...(args.messageId ? { messageId: args.messageId } : {}),
-          retryCount,
-        },
-      });
+      const processorSpan = shouldCreateProcessorSpan(processor)
+        ? parentSpan?.createChildSpan({
+            type: SpanType.PROCESSOR_RUN,
+            name: `request error processor: ${processor.id}`,
+            entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+            entityId: processor.id,
+            entityName: processor.name,
+            attributes: getProcessorSpanAttributes(processor, 'legacy', index),
+            input: {
+              messages: processableMessages,
+              error: error instanceof Error ? error.message : String(error),
+              stepNumber,
+              ...(args.messageId ? { messageId: args.messageId } : {}),
+              retryCount,
+            },
+          })
+        : undefined;
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1593,17 +1573,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (processorError instanceof TripWire) {
-          processorSpan?.error({
-            error: processorError,
-            endSpan: true,
-            attributes: {
-              tripwireAbort: {
-                reason: processorError.message,
-                retry: processorError.options?.retry,
-                metadata: processorError.options?.metadata,
-              },
-            },
-          });
+          endTripWireProcessorSpan(processorSpan, processorError);
           throw processorError;
         }
 

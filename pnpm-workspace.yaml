@@ -41,3 +41,6 @@ trustPolicyExclude:
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
   - '@clerk/shared@3.47.4'
+  # Official prettier-plugin-tailwindcss release published with provenance attestation
+  # while earlier releases used trusted publisher metadata.
+  - 'prettier-plugin-tailwindcss@0.7.4'

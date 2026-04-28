@@ -10,8 +10,8 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { FeedbackEvent, FeedbackInput } from './feedback';
-import type { LoggerContext, LogEvent } from './logging';
-import type { MetricsContext, MetricEvent } from './metrics';
+import type { LoggerContext, LogEvent, LogLevel } from './logging';
+import type { CardinalityConfig, MetricsContext, MetricEvent } from './metrics';
 import type { ScoreEvent, ScoreInput } from './scores';
 import type {
   AnySpan,
@@ -447,6 +447,29 @@ export interface ObservabilityInstanceConfig {
    * Use these to customize truncation limits for large payloads.
    */
   serializationOptions?: SerializationOptions;
+  /**
+   * Cardinality protection settings for metrics.
+   * Controls which labels are blocked and whether UUID-like values are filtered.
+   * Applied to all metrics (auto-extracted and user-defined).
+   */
+  cardinality?: CardinalityConfig;
+  /**
+   * Configuration for automatically emitted metrics derived from spans.
+   */
+  metrics?: {
+    /** Set to `false` to disable auto-extracted duration and token metrics. Defaults to `true`. */
+    autoExtract?: boolean;
+  };
+  /**
+   * Configuration for the observability logger (loggerVNext).
+   * Controls log level filtering and whether dual-write logging is enabled.
+   */
+  logging?: {
+    /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
+    enabled?: boolean;
+    /** Minimum log level to write to observability storage. Defaults to `'warn'`. */
+    level?: LogLevel;
+  };
 }
 
 /**

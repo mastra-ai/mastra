@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -17,6 +17,14 @@ export interface CloudExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
+  signalFilters?: {
+    /** Defaults to dropping high-volume spans that are usually only useful for debugging. */
+    spans?: (span: AnyExportedSpan) => boolean;
+    logs?: (log: LogEvent['log']) => boolean;
+    metrics?: (metric: MetricEvent['metric']) => boolean;
+    scores?: (score: ScoreEvent['score']) => boolean;
+    feedback?: (feedback: FeedbackEvent['feedback']) => boolean;
+  };
 
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
@@ -38,6 +46,47 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   scores: '/scores/publish',
   feedback: '/feedback/publish',
 };
+
+const DEFAULT_CLOUD_SIGNAL_FILTERS: Required<NonNullable<CloudExporterConfig['signalFilters']>> = {
+  spans: span => {
+    if (span.type === SpanType.MODEL_CHUNK) {
+      return false;
+    }
+
+    if (
+      span.type === SpanType.PROCESSOR_RUN &&
+      getProcessorObservability(span) === 'errors-only' &&
+      !span.errorInfo &&
+      getProcessorOutcome(span) !== 'tripwire'
+    ) {
+      return false;
+    }
+
+    return true;
+  },
+  logs: () => true,
+  metrics: () => true,
+  scores: () => true,
+  feedback: () => true,
+};
+
+function getProcessorObservability(span: AnyExportedSpan): string | undefined {
+  if (!span.attributes || typeof span.attributes !== 'object') {
+    return undefined;
+  }
+
+  const attributes = span.attributes as Partial<Record<'processorObservability', unknown>>;
+  return typeof attributes.processorObservability === 'string' ? attributes.processorObservability : undefined;
+}
+
+function getProcessorOutcome(span: AnyExportedSpan): string | undefined {
+  if (!span.attributes || typeof span.attributes !== 'object') {
+    return undefined;
+  }
+
+  const attributes = span.attributes as Partial<Record<'processorOutcome', unknown>>;
+  return typeof attributes.processorOutcome === 'string' ? attributes.processorOutcome : undefined;
+}
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   traces: 'spans',
@@ -214,6 +263,7 @@ type ResolvedCloudConfig = {
   metricsEndpoint: string;
   scoresEndpoint: string;
   feedbackEndpoint: string;
+  signalFilters: Required<NonNullable<CloudExporterConfig['signalFilters']>>;
 };
 
 export class CloudExporter extends BaseExporter {
@@ -276,6 +326,10 @@ export class CloudExporter extends BaseExporter {
       metricsEndpoint: resolveConfiguredSignalEndpoint('metrics', config.metricsEndpoint),
       scoresEndpoint: resolveConfiguredSignalEndpoint('scores', config.scoresEndpoint),
       feedbackEndpoint: resolveConfiguredSignalEndpoint('feedback', config.feedbackEndpoint),
+      signalFilters: {
+        ...DEFAULT_CLOUD_SIGNAL_FILTERS,
+        ...config.signalFilters,
+      },
     };
 
     this.buffer = {
@@ -294,13 +348,17 @@ export class CloudExporter extends BaseExporter {
       return;
     }
 
+    if (!this.cloudConfig.signalFilters.spans(event.exportedSpan)) {
+      return;
+    }
+
     this.addToBuffer(event);
 
     await this.handleBufferedEvent();
   }
 
   async onLogEvent(event: LogEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.logs(event.log)) {
       return;
     }
 
@@ -309,7 +367,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onMetricEvent(event: MetricEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.metrics(event.metric)) {
       return;
     }
 
@@ -318,7 +376,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.scores(event.score)) {
       return;
     }
 
@@ -327,7 +385,7 @@ export class CloudExporter extends BaseExporter {
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || !this.cloudConfig.signalFilters.feedback(event.feedback)) {
       return;
     }
 

@@ -121,13 +121,20 @@ export interface ObservabilityInstanceConfig {
    */
   cardinality?: CardinalityConfig;
   /**
+   * Configuration for automatically emitted metrics derived from spans.
+   */
+  metrics?: {
+    /** Set to `false` to disable auto-extracted duration and token metrics. Defaults to `true`. */
+    autoExtract?: boolean;
+  };
+  /**
    * Configuration for the observability logger (loggerVNext).
    * Controls log level filtering and whether dual-write logging is enabled.
    */
   logging?: {
     /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
     enabled?: boolean;
-    /** Minimum log level to write to observability storage. Defaults to `'debug'`. */
+    /** Minimum log level to write to observability storage. Defaults to `'warn'`. */
     level?: LogLevel;
   };
 }
@@ -195,6 +202,12 @@ const cardinalityConfigSchema = z
   })
   .optional();
 
+const metricsConfigSchema = z
+  .object({
+    autoExtract: z.boolean().optional(),
+  })
+  .optional();
+
 const loggingConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -221,6 +234,7 @@ const observabilityInstanceConfigFields = {
   requestContextKeys: z.array(z.string()).optional(),
   serializationOptions: serializationOptionsSchema,
   cardinality: cardinalityConfigSchema,
+  metrics: metricsConfigSchema,
   logging: loggingConfigSchema,
 };
 

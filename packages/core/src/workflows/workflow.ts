@@ -18,7 +18,7 @@ import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
   EntityType,
   SpanType,
@@ -694,6 +694,24 @@ function createStepFromProcessor<TProcessorId extends string>(
     }
   };
 
+  const shouldCreateProcessorSpan = processor.observability !== false;
+  const getProcessorSpanAttributes = () => ({
+    processorExecutor: 'workflow' as const,
+    processorIndex: processor.processorIndex,
+    ...(processor.observability === 'errors-only' ? { processorObservability: 'errors-only' as const } : {}),
+  });
+  const getTripWireSpanAttributes = (error: TripWire<unknown>) => ({
+    processorOutcome: 'tripwire' as const,
+    tripwireAbort: {
+      reason: error.message,
+      retry: error.options?.retry,
+      metadata: error.options?.metadata,
+    },
+  });
+  const endTripWireProcessorSpan = (span: Span<SpanType> | undefined, error: TripWire<unknown>) => {
+    span?.end({ attributes: getTripWireSpanAttributes(error) });
+  };
+
   // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
   // but TypeScript type inference has issues with the complex discriminated union types.
   // We use type assertions here since toStandardSchema returns the schema directly
@@ -922,7 +940,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
 
       const processorSpan =
-        phase !== 'outputStream'
+        phase !== 'outputStream' && shouldCreateProcessorSpan
           ? parentSpan?.createChildSpan({
               type: SpanType.PROCESSOR_RUN,
               name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
@@ -930,11 +948,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
-              attributes: {
-                processorExecutor: 'workflow',
-                // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
-                processorIndex: processor.processorIndex,
-              },
+              attributes: getProcessorSpanAttributes(),
             })
           : undefined;
 
@@ -1031,9 +1045,8 @@ function createStepFromProcessor<TProcessorId extends string>(
           processorSpan?.end({ output: buildProcessorSpanOutput(result) });
           return result;
         } catch (error) {
-          // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
-            processorSpan?.end({ output: { tripwire: error.message } });
+            endTripWireProcessorSpan(processorSpan, error);
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
           }
@@ -1200,7 +1213,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
 
-              if (!processorSpan && parentSpan) {
+              if (!processorSpan && parentSpan && shouldCreateProcessorSpan) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
                   type: SpanType.PROCESSOR_RUN,
@@ -1208,10 +1221,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
-                  attributes: {
-                    processorExecutor: 'workflow',
-                    processorIndex: processor.processorIndex,
-                  },
+                  attributes: getProcessorSpanAttributes(),
                 });
                 mutableState[spanKey] = processorSpan;
               }
@@ -1241,9 +1251,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                   delete mutableState[spanKey];
                 }
               } catch (error) {
-                // End span with error and clean up state
                 if (error instanceof TripWire) {
-                  processorSpan?.end({ output: { tripwire: error.message } });
+                  endTripWireProcessorSpan(processorSpan, error);
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
                 }
