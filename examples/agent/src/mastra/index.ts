@@ -2,6 +2,7 @@ import { Mastra, type Config } from '@mastra/core/mastra';
 
 import { MastraCompositeStore, FilesystemStore, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
+import { builderAgent } from '@mastra/editor/ee';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -75,6 +76,7 @@ const workspace = new Workspace({
 
 const config: Config = {
   agents: {
+    builderAgent,
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
