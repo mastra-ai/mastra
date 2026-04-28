@@ -3549,7 +3549,14 @@ export class Agent<
               let result: any;
               const suspendedToolRunId = (inputData as any).suspendedToolRunId;
 
-              const { resumeData, suspend } = context?.agent ?? {};
+              const { resumeData: rawSubAgentResumeData, suspend } = context?.agent ?? {};
+              // Normalize empty resumeData objects — defense-in-depth against LLM-hallucinated `resumeData: {}`
+              const resumeData =
+                rawSubAgentResumeData &&
+                typeof rawSubAgentResumeData === 'object' &&
+                Object.keys(rawSubAgentResumeData).length === 0
+                  ? undefined
+                  : rawSubAgentResumeData;
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
@@ -4197,7 +4204,12 @@ export class Agent<
               });
 
               const run = await workflow.createRun({ runId: runIdToUse });
-              const { resumeData, suspend } = context?.agent ?? {};
+              const { resumeData: rawResumeData, suspend } = context?.agent ?? {};
+              // Normalize empty resumeData objects — defense-in-depth against LLM-hallucinated `resumeData: {}`
+              const resumeData =
+                rawResumeData && typeof rawResumeData === 'object' && Object.keys(rawResumeData).length === 0
+                  ? undefined
+                  : rawResumeData;
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
