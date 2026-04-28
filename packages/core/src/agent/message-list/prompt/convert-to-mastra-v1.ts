@@ -5,8 +5,15 @@
 import type { AssistantContent, ToolResultPart } from '@internal/ai-sdk-v4';
 import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraDBMessage } from '../../message-list';
-import { getLegacyContent, getLegacyExperimentalAttachments, getLegacyToolInvocations } from '../utils/legacy-fields';
+import {
+  getConcreteLegacyField,
+  getLegacyContent,
+  getLegacyExperimentalAttachments,
+  getLegacyToolInvocations,
+} from '../utils/legacy-fields';
 import { attachmentsToParts } from './attachments-to-parts';
+
+type DerivedUserTextContent = Extract<MastraMessageV1['content'], Array<unknown>>;
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
   // Track how many times each ID has been used to create unique IDs for split messages
@@ -58,12 +65,14 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
 export function convertToV1Messages(messages: Array<MastraDBMessage>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
+  let previousDerivedUserTextContent: DerivedUserTextContent | undefined;
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const content = getLegacyContent(message.content);
+    const concreteContent = getConcreteLegacyField<string>(message.content, 'content');
+    const content = concreteContent ?? getLegacyContent(message.content);
     const inputAttachments = getLegacyExperimentalAttachments(message.content) ?? [];
     const { parts: inputParts } = message.content;
     const { role } = message;
@@ -90,6 +99,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
     switch (role) {
       case 'user': {
+        const useStringContent = concreteContent !== undefined || previousDerivedUserTextContent?.length === 1;
         if (parts == null) {
           const userContent = experimental_attachments
             ? [{ type: 'text', text: content || '' }, ...attachmentsToParts(experimental_attachments)]
@@ -112,23 +122,25 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           const userContent = experimental_attachments
             ? [...textParts, ...attachmentsToParts(experimental_attachments)]
             : textParts;
+          const outputContent: MastraMessageV1['content'] = useStringContent ? content || '' : userContent;
+
           pushOrCombine({
             role: 'user',
             ...fields,
             type: 'text',
-            content:
-              Array.isArray(userContent) &&
-              userContent.length === 1 &&
-              userContent[0]?.type === `text` &&
-              typeof content !== `undefined`
-                ? content
-                : userContent,
+            content: outputContent,
           });
+
+          previousDerivedUserTextContent =
+            !useStringContent && Array.isArray(userContent) && userContent.every(part => part.type === 'text')
+              ? userContent
+              : undefined;
         }
         break;
       }
 
       case 'assistant': {
+        previousDerivedUserTextContent = undefined;
         if (message.content.parts != null) {
           let currentStep = 0;
           let blockHasToolInvocations = false;
@@ -342,7 +354,9 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             ...fields,
             type: 'tool-call',
             content: [
-              ...(isLastMessage && content && i === 0 ? [{ type: 'text' as const, text: content }] : []),
+              ...(isLastMessage && typeof content === 'string' && i === 0
+                ? [{ type: 'text' as const, text: content }]
+                : []),
               ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
                 type: 'tool-call' as const,
                 toolCallId,

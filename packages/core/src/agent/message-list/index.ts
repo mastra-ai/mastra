@@ -35,6 +35,7 @@ export {
   addLegacyGettersToMessages,
   addLegacyGettersToContent,
   getLegacyAnnotations,
+  getConcreteLegacyField,
   getLegacyContent,
   getLegacyContentForStorage,
   getLegacyExperimentalAttachments,

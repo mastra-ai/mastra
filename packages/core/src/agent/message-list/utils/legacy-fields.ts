@@ -38,7 +38,7 @@ function cloneContentWithoutLegacyFields(
   return strippedContent;
 }
 
-function getConcreteLegacyField<T>(
+export function getConcreteLegacyField<T>(
   content: MastraMessageContentV2,
   field: (typeof legacyFieldNames)[number],
 ): T | undefined {

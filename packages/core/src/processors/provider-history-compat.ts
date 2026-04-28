@@ -109,6 +109,16 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
         }
       }
     }
+
+    const toolInvocations = getLegacyToolInvocations(msg.content);
+    if (toolInvocations) {
+      for (const invocation of toolInvocations) {
+        const newId = idMap.get(invocation.toolCallId);
+        if (newId) {
+          invocation.toolCallId = newId;
+        }
+      }
+    }
   }
 }
 
