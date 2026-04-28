@@ -234,6 +234,27 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
 
         mutableSpan.attributes = { ...processedAttributes, ...mastraOther };
 
+        // Emit tool definitions from mastra.model_step.input as OpenInference llm.tools.*
+        // Only runs when native llm.tools.* attributes are not already present.
+        if (!mutableSpan.attributes['llm.tools.0.tool.json_schema']) {
+          const modelStepRaw = mastraOther[MASTRA_MODEL_STEP_INPUT];
+          if (modelStepRaw) {
+            try {
+              const modelStep = typeof modelStepRaw === 'string' ? JSON.parse(modelStepRaw) : modelStepRaw;
+              if (Array.isArray(modelStep?.tools)) {
+                (modelStep.tools as Record<string, unknown>[]).forEach((tool, i) => {
+                  const { name, description, parameters } = tool;
+                  mutableSpan.attributes[`llm.tools.${i}.tool.json_schema`] = JSON.stringify({
+                    name,
+                    description,
+                    parameters,
+                  });
+                });
+              }
+            } catch {}
+          }
+        }
+
         // Set span kind based on mastra.span.type for proper trace categorization
         const spanType = mastraOther[MASTRA_SPAN_TYPE];
         if (typeof spanType === 'string') {
