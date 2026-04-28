@@ -1,5 +1,6 @@
 import {
   Badge,
+  CopyButton,
   HoverPopover,
   PopoverTrigger,
   PopoverContent,
@@ -199,7 +200,12 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
   if (oldStr === newStr) {
     return (
-      <div className="rounded-md border border-border1 bg-surface2 p-3">
+      <div className="relative rounded-md border border-border1 bg-surface2 p-3">
+        {oldStr && (
+          <div className="absolute top-2 right-2">
+            <CopyButton content={oldStr} tooltip="Copy prompt text" size="sm" />
+          </div>
+        )}
         <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
           {oldStr || '(empty)'}
         </Txt>
@@ -210,7 +216,12 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
   const diffLines = computeLineDiff(oldStr, newStr);
 
   return (
-    <div className="rounded-md border border-border1 overflow-hidden font-mono text-sm">
+    <div className="relative rounded-md border border-border1 overflow-hidden font-mono text-sm">
+      {oldStr && (
+        <div className="absolute top-2 right-2 z-10">
+          <CopyButton content={oldStr} tooltip="Copy this version's text" size="sm" />
+        </div>
+      )}
       {diffLines.map((line, idx) => (
         <div
           key={idx}
@@ -247,7 +258,12 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
   }
 
   return (
-    <div className="rounded-md border border-border1 bg-surface2 p-3">
+    <div className="relative rounded-md border border-border1 bg-surface2 p-3">
+      {text && (
+        <div className="absolute top-2 right-2">
+          <CopyButton content={text} tooltip="Copy prompt text" size="sm" />
+        </div>
+      )}
       <Txt variant="ui-sm" className="text-neutral4 whitespace-pre-wrap font-mono">
         {text || '(empty)'}
       </Txt>
@@ -537,6 +553,15 @@ function ReadOnlyConfigWithDiff({
   );
 }
 
+function CopyInstructionsButton({ blocks }: { blocks: unknown }) {
+  const blocksArr = Array.isArray(blocks) ? blocks : [];
+  const { data: text } = usePreviewInstructions(blocksArr.length > 0 ? blocksArr : undefined, blocksArr.length > 0);
+
+  if (!text) return null;
+
+  return <CopyButton content={text} tooltip="Copy prompt text" size="sm" />;
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -589,7 +614,11 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="System Prompt" icon={<Cpu />}>
+            <CollapsibleSection
+              title="System Prompt"
+              icon={<Cpu />}
+              headerAction={<CopyInstructionsButton blocks={instructionBlocks} />}
+            >
               <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}

@@ -67,9 +67,18 @@ function EditFormContent({
     <Alert variant="info" className="mb-4">
       <AlertTitle>This is a previous version</AlertTitle>
       <AlertDescription as="p">You are seeing a specific version of the agent.</AlertDescription>
-      <div className="pt-2">
+      <div className="pt-2 flex items-center gap-2">
         <Button type="button" variant="light" size="sm" onClick={() => setSearchParams({})}>
           View latest version
+        </Button>
+        <Button
+          type="button"
+          variant="light"
+          size="sm"
+          onClick={() => void handlePublish(selectedVersionId ?? undefined)}
+          disabled={selectedVersionId === activeVersionId}
+        >
+          Publish This Version
         </Button>
       </div>
     </Alert>
