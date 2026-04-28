@@ -76,6 +76,7 @@ export class Harness<TState = {}> {
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
+  private currentTraceId: string | null = null;
   private currentOperationId: number = 0;
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
   private pendingApprovalResolve:
@@ -153,6 +154,19 @@ export class Harness<TState = {}> {
   }
 
   // ===========================================================================
+  // Accessors
+  // ===========================================================================
+
+  /**
+   * Access the internal Mastra instance.
+   * Available after `init()` when storage is configured.
+   * Useful for scorer registration, observability access, and eval tooling.
+   */
+  getMastra(): Mastra | undefined {
+    return this.#internalMastra;
+  }
+
+  // ===========================================================================
   // Initialization
   // ===========================================================================
 
@@ -166,7 +180,11 @@ export class Harness<TState = {}> {
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     if (this.config.storage) {
-      this.#internalMastra = new Mastra({ logger: false, storage: this.config.storage });
+      this.#internalMastra = new Mastra({
+        logger: false,
+        storage: this.config.storage,
+        ...(this.config.observability ? { observability: this.config.observability } : {}),
+      });
       await this.#internalMastra.getStorage()!.init();
     }
 
@@ -1313,6 +1331,7 @@ export class Harness<TState = {}> {
 
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
+    this.currentTraceId = null;
     const agent = this.getCurrentAgent();
     this.emit({ type: 'agent_start' });
 
@@ -1326,6 +1345,11 @@ export class Harness<TState = {}> {
         abortSignal: this.abortController.signal,
         requestContext,
         maxSteps: 1000,
+        // Harness supports suspending + resuming streams (tool approvals, tool suspensions, workflows).
+        // Persisting per-step snapshots ensures `resumeStream()` can load state reliably (especially in CI).
+        // Doesn't do anything when OM is enabled though, OM does its own saving per step
+        // actually disable for now, it still breaks OM somehow! TODO fix it
+        savePerStep: false,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
         ...(tracingContext && { tracingContext }),
@@ -1508,9 +1532,44 @@ export class Harness<TState = {}> {
         };
         [key: string]: unknown;
       }>;
+      metadata?: Record<string, unknown>;
     };
   }): HarnessMessage {
     const content: HarnessMessageContent[] = [];
+    const systemReminder =
+      typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
+        ? msg.content.metadata.systemReminder
+        : undefined;
+
+    if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
+      content.push({
+        type: 'system_reminder',
+        message:
+          'message' in systemReminder && typeof systemReminder.message === 'string' ? systemReminder.message : '',
+        reminderType: systemReminder.type,
+        path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
+        precedesMessageId:
+          'precedesMessageId' in systemReminder && typeof systemReminder.precedesMessageId === 'string'
+            ? systemReminder.precedesMessageId
+            : undefined,
+        gapText:
+          'gapText' in systemReminder && typeof systemReminder.gapText === 'string'
+            ? systemReminder.gapText
+            : undefined,
+        gapMs: 'gapMs' in systemReminder && typeof systemReminder.gapMs === 'number' ? systemReminder.gapMs : undefined,
+        timestamp:
+          'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
+            ? systemReminder.timestamp
+            : undefined,
+      });
+
+      return {
+        id: msg.id,
+        role: msg.role,
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
 
     for (const part of msg.content.parts) {
       switch (part.type) {
@@ -1599,6 +1658,10 @@ export class Harness<TState = {}> {
               message,
               reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
               path: typeof data.path === 'string' ? data.path : undefined,
+              precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
+              gapText: typeof data.gapText === 'string' ? data.gapText : undefined,
+              gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
+              timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
             });
           }
           break;
@@ -1656,9 +1719,12 @@ export class Harness<TState = {}> {
    * Process a stream response (shared between sendMessage and tool approval).
    */
   private async processStream(
-    response: { fullStream: AsyncIterable<any> },
+    response: { fullStream: AsyncIterable<any>; traceId?: string },
     requestContext: RequestContext,
   ): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+    if (response.traceId) {
+      this.currentTraceId = response.traceId;
+    }
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -2071,6 +2137,10 @@ export class Harness<TState = {}> {
               message,
               reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
               path: typeof payload?.path === 'string' ? payload.path : undefined,
+              precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
+              gapText: typeof payload?.gapText === 'string' ? payload.gapText : undefined,
+              gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
+              timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
             });
             this.emit({ type: 'message_update', message: currentMessage });
           }
@@ -2185,6 +2255,10 @@ export class Harness<TState = {}> {
 
   getCurrentRunId(): string | null {
     return this.currentRunId;
+  }
+
+  getCurrentTraceId(): string | null {
+    return this.currentTraceId;
   }
 
   // ===========================================================================

@@ -1,5 +1,149 @@
 # @mastra/server
 
+## 1.29.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`c04417b`](https://github.com/mastra-ai/mastra/commit/c04417ba0a2e4ded66da4352331ef29cd4bd1d79), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51), [`ba6b0c5`](https://github.com/mastra-ai/mastra/commit/ba6b0c51bfce358554fd33c7f2bcd5593633f2ff)]:
+  - @mastra/core@1.29.0-alpha.3
+
+## 1.29.0-alpha.2
+
+### Patch Changes
+
+- Refactored Hono adapter's `registerCustomApiRoutes()` to use the shared `buildCustomRouteHandler()` from the base class instead of duplicating route/handler resolution logic. Added `forwardCustomRouteRequest()` to the base class for adapters that already have a raw `Request` object (avoiding unnecessary request reconstruction). ([#15793](https://github.com/mastra-ai/mastra/pull/15793))
+
+- Custom API routes now validate that their paths don't collide with the built-in route prefix. If a custom route path starts with the server's `apiPrefix` (default `/api`), a descriptive error is thrown at startup. This prevents custom routes from shadowing built-in Mastra routes (e.g. `/api/agents`, `/api/tools`). ([#15743](https://github.com/mastra-ai/mastra/pull/15743))
+
+- Add `POST /api/agents/:agentId/stream-until-idle` SSE route that mirrors `agent.streamUntilIdle()`. The route keeps the SSE stream open through background task completion and the agent's follow-up turn, so clients receive the final answer in a single request. ([#15686](https://github.com/mastra-ai/mastra/pull/15686))
+
+- Updated dependencies [[`9e973b0`](https://github.com/mastra-ai/mastra/commit/9e973b010dacfa15ac82b0072897319f5234b90a), [`dd934a0`](https://github.com/mastra-ai/mastra/commit/dd934a0982ce0f78712fbd559e4f2410bf594b39), [`73f2809`](https://github.com/mastra-ai/mastra/commit/73f2809721db24e98cdf122539652a455211b450), [`aedeea4`](https://github.com/mastra-ai/mastra/commit/aedeea48a94f728323f040478775076b9574be50), [`8126d86`](https://github.com/mastra-ai/mastra/commit/8126d8638411eacfafdc29036ac998e8757ea66f), [`ae97520`](https://github.com/mastra-ai/mastra/commit/ae975206fdb0f6ef03c4d5bf94f7dc7c3f706c02), [`441670a`](https://github.com/mastra-ai/mastra/commit/441670a02c9dc7731c52674f55481e7848a84523)]:
+  - @mastra/core@1.29.0-alpha.2
+
+## 1.29.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`a6dac0a`](https://github.com/mastra-ai/mastra/commit/a6dac0a40c7181161b1add4e8534f962bcbc9aa7), [`9cef83b`](https://github.com/mastra-ai/mastra/commit/9cef83b8a642b8098747772921e3523b492bafbc), [`d30e215`](https://github.com/mastra-ai/mastra/commit/d30e2156c746bc9fd791745cec1cc24377b66789), [`73b45fa`](https://github.com/mastra-ai/mastra/commit/73b45facdef4fbcb8af710c50f0646f18619dbaa), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3)]:
+  - @mastra/core@1.29.0-alpha.1
+
+## 1.29.0-alpha.0
+
+### Minor Changes
+
+- Added support for resuming suspended agent streams over HTTP with custom data. This adds the `POST /agents/:agentId/resume-stream` server endpoint and the client SDK `agent.resumeStream()` method, so apps can continue a suspended agent run through the Mastra client. ([#14579](https://github.com/mastra-ai/mastra/pull/14579))
+
+  **Usage example (client SDK):**
+
+  ```typescript
+  const agent = mastraClient.getAgent('my-agent');
+
+  // Resume a suspended agent stream with custom data
+  const response = await agent.resumeStream(
+    { approved: true, selectedOption: 'plan-b' },
+    { runId: 'previous-run-id', toolCallId: 'tool-123' },
+  );
+
+  await response.processDataStream({
+    onChunk: chunk => console.log(chunk),
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a)]:
+  - @mastra/core@1.29.0-alpha.0
+
+## 1.28.0
+
+### Patch Changes
+
+- Fixed non-Zod Standard Schema types (e.g. ArkType) being incorrectly called as lazy getters in resolveLazySchema, which caused Studio UI tool forms to receive validation errors instead of the actual JSON Schema ([#15670](https://github.com/mastra-ai/mastra/pull/15670))
+
+- Fix: Public origin resolution for AWS ALB deployments ([#15666](https://github.com/mastra-ai/mastra/pull/15666))
+
+  Implement cascading header resolution in getPublicOrigin() to properly handle:
+  - X-Forwarded-Host (traditional reverse proxies) → always HTTPS
+  - Host header (AWS ALB with Preserve Host Header) → respect X-Forwarded-Proto or default HTTPS
+  - request.url (local development) → fallback
+
+  Fixes OAuth callback URLs being resolved to http:// instead of https:// when deployed behind AWS ALB with Preserve Host Header enabled.
+
+- Updated dependencies [[`733bf53`](https://github.com/mastra-ai/mastra/commit/733bf53d9352aedd3ef38c3d501edb275b65b43c), [`5405b3b`](https://github.com/mastra-ai/mastra/commit/5405b3b35325c5b8fb34fc7ac109bd2feb7bb6fe), [`45e29cb`](https://github.com/mastra-ai/mastra/commit/45e29cb5b5737f3083eb3852db02b944b9cf37ed), [`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9), [`c321127`](https://github.com/mastra-ai/mastra/commit/c3211275fc195de9ad1ead2746b354beb8eae6e8), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1), [`696694e`](https://github.com/mastra-ai/mastra/commit/696694e00f29241a25dd1a1b749afa06c3a626b4), [`b084a80`](https://github.com/mastra-ai/mastra/commit/b084a800db0f82d62e1fc3d6e3e3480da1ba5a53), [`82b7a96`](https://github.com/mastra-ai/mastra/commit/82b7a964169636c1d1e0c694fc892a213b0179d5), [`df97812`](https://github.com/mastra-ai/mastra/commit/df97812bd949dcafeb074b80ecab501724b49c3b), [`8bbe360`](https://github.com/mastra-ai/mastra/commit/8bbe36042af7fc4be0244dffd8913f6795179421), [`f6b8ba8`](https://github.com/mastra-ai/mastra/commit/f6b8ba8dbf533b7a8db90c72b6805ddc804a3a72), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1)]:
+  - @mastra/core@1.28.0
+
+## 1.28.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`45e29cb`](https://github.com/mastra-ai/mastra/commit/45e29cb5b5737f3083eb3852db02b944b9cf37ed), [`696694e`](https://github.com/mastra-ai/mastra/commit/696694e00f29241a25dd1a1b749afa06c3a626b4)]:
+  - @mastra/core@1.28.0-alpha.2
+
+## 1.28.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9)]:
+  - @mastra/core@1.28.0-alpha.1
+
+## 1.28.0-alpha.0
+
+### Patch Changes
+
+- Fixed non-Zod Standard Schema types (e.g. ArkType) being incorrectly called as lazy getters in resolveLazySchema, which caused Studio UI tool forms to receive validation errors instead of the actual JSON Schema ([#15670](https://github.com/mastra-ai/mastra/pull/15670))
+
+- Fix: Public origin resolution for AWS ALB deployments ([#15666](https://github.com/mastra-ai/mastra/pull/15666))
+
+  Implement cascading header resolution in getPublicOrigin() to properly handle:
+  - X-Forwarded-Host (traditional reverse proxies) → always HTTPS
+  - Host header (AWS ALB with Preserve Host Header) → respect X-Forwarded-Proto or default HTTPS
+  - request.url (local development) → fallback
+
+  Fixes OAuth callback URLs being resolved to http:// instead of https:// when deployed behind AWS ALB with Preserve Host Header enabled.
+
+- Updated dependencies [[`733bf53`](https://github.com/mastra-ai/mastra/commit/733bf53d9352aedd3ef38c3d501edb275b65b43c), [`5405b3b`](https://github.com/mastra-ai/mastra/commit/5405b3b35325c5b8fb34fc7ac109bd2feb7bb6fe), [`c321127`](https://github.com/mastra-ai/mastra/commit/c3211275fc195de9ad1ead2746b354beb8eae6e8), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1), [`b084a80`](https://github.com/mastra-ai/mastra/commit/b084a800db0f82d62e1fc3d6e3e3480da1ba5a53), [`82b7a96`](https://github.com/mastra-ai/mastra/commit/82b7a964169636c1d1e0c694fc892a213b0179d5), [`df97812`](https://github.com/mastra-ai/mastra/commit/df97812bd949dcafeb074b80ecab501724b49c3b), [`8bbe360`](https://github.com/mastra-ai/mastra/commit/8bbe36042af7fc4be0244dffd8913f6795179421), [`f6b8ba8`](https://github.com/mastra-ai/mastra/commit/f6b8ba8dbf533b7a8db90c72b6805ddc804a3a72), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1)]:
+  - @mastra/core@1.28.0-alpha.0
+
+## 1.27.0
+
+### Patch Changes
+
+- Forward `requestContext` from the `/approve-tool-call`, `/decline-tool-call`, `/approve-tool-call-generate` and `/decline-tool-call-generate` REST handlers to `agent.approveToolCall(...)` / `declineToolCall(...)` / `approveToolCallGenerate(...)` / `declineToolCallGenerate(...)`. ([#15620](https://github.com/mastra-ai/mastra/pull/15620))
+
+  Previously `requestContext` was destructured from the handler arguments but never passed through. On resume, `dynamicInstructions` ran with `requestContext: undefined`, so any value placed on the per-request `RequestContext` by upstream middleware (or by `body.requestContext` auto-merge) was lost for the rest of the turn. Agents whose prompt assembly depends on request-scoped data (e.g. read-only state from the frontend) produced blank or placeholder responses after the user approved a HITL tool call. Other agent entry points (`stream`, `generate`) already forwarded `requestContext` correctly; this brings the approval routes in line.
+
+- Fixed screencast panel staying "Live" after browser closes due to an error. The `ViewerRegistry` now broadcasts `browser_closed` status when a screencast stream emits an error, not just when it stops cleanly. ([#15415](https://github.com/mastra-ai/mastra/pull/15415))
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5), [`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0
+
+## 1.27.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6)]:
+  - @mastra/core@1.27.0-alpha.2
+
+## 1.27.0-alpha.1
+
+### Patch Changes
+
+- Forward `requestContext` from the `/approve-tool-call`, `/decline-tool-call`, `/approve-tool-call-generate` and `/decline-tool-call-generate` REST handlers to `agent.approveToolCall(...)` / `declineToolCall(...)` / `approveToolCallGenerate(...)` / `declineToolCallGenerate(...)`. ([#15620](https://github.com/mastra-ai/mastra/pull/15620))
+
+  Previously `requestContext` was destructured from the handler arguments but never passed through. On resume, `dynamicInstructions` ran with `requestContext: undefined`, so any value placed on the per-request `RequestContext` by upstream middleware (or by `body.requestContext` auto-merge) was lost for the rest of the turn. Agents whose prompt assembly depends on request-scoped data (e.g. read-only state from the frontend) produced blank or placeholder responses after the user approved a HITL tool call. Other agent entry points (`stream`, `generate`) already forwarded `requestContext` correctly; this brings the approval routes in line.
+
+- Fixed screencast panel staying "Live" after browser closes due to an error. The `ViewerRegistry` now broadcasts `browser_closed` status when a screencast stream emits an error, not just when it stops cleanly. ([#15415](https://github.com/mastra-ai/mastra/pull/15415))
+
+- Updated dependencies [[`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0-alpha.1
+
+## 1.26.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5)]:
+  - @mastra/core@1.26.1-alpha.0
+
 ## 1.26.0
 
 ### Minor Changes

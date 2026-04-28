@@ -2,7 +2,7 @@
 export * from './workspace';
 
 // LSP
-export type { LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
+export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';

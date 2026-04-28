@@ -79,7 +79,7 @@ Platform webhooks need a public URL to reach your local server. Use a tunnel to 
 ngrok http 4111
 
 # cloudflared
-cloudflared tunnel --url http://localhost:4111
+npx cloudflared tunnel --url http://localhost:4111
 ```
 
 Copy the generated URL and use it as the base for your webhook paths (e.g. `https://abc123.ngrok.io/api/agents/support-agent/channels/slack/webhook`).
@@ -175,6 +175,7 @@ See [Channels reference](/reference/agents/channels#inline-media) for all `inlin
 
 ## Related
 
+- [Guide: Building a Slack assistant](/guides/guide/slack-assistant)
 - [Agent overview](/docs/agents/overview)
 - [Tool approval](/docs/agents/agent-approval)
 - [Channels reference](/reference/agents/channels)

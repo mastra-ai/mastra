@@ -11,6 +11,7 @@ import {
   ListVectorsCommand,
 } from '@aws-sdk/client-s3vectors';
 import type { S3VectorsClientConfig } from '@aws-sdk/client-s3vectors';
+import { v4 as uuidv4 } from '@lukeed/uuid';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
@@ -26,7 +27,6 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import { v4 as uuidv4 } from 'uuid';
 import { S3VectorsFilterTranslator } from './filter';
 import type { S3VectorsFilter } from './filter';
 

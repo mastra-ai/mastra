@@ -145,6 +145,11 @@ export interface BackgroundTaskManagerConfig {
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
   /**
+   * Minimum delay between chunk-based progress output events for each task, in ms.
+   * Default: undefined (publish every progress chunk).
+   */
+  progressThrottleMs?: number;
+  /**
    * How long the agentic loop waits for a background task to complete before
    * moving on (in ms). If a task hasn't finished within this time, the loop
    * proceeds without setting isContinued — allowing it to end naturally.
@@ -278,6 +283,19 @@ export type ResultInjector = (params: {
   result?: unknown;
   error?: { message: string };
   status: 'completed' | 'failed';
+  completedAt: Date;
+  startedAt: Date;
+}) => void | Promise<void>;
+
+export type ToolExecutionInjector = (params: {
+  runId: string;
+  taskId: string;
+  toolCallId: string;
+  toolName: string;
+  agentId: string;
+  threadId?: string;
+  resourceId?: string;
+  startedAt: Date;
 }) => void | Promise<void>;
 
 // --- Per-task context ---
@@ -295,6 +313,8 @@ export interface TaskContext {
   onChunk?: (chunk: BackgroundTaskResultChunk) => void;
   /** Injects tool results into the caller's message list */
   onResult?: ResultInjector;
+  /** Injects tool execution into the caller's message list */
+  onExecution?: ToolExecutionInjector;
   /** Per-task callback on completion */
   onComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Per-task callback on failure */

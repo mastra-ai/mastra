@@ -2,9 +2,11 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
+import { z } from 'zod/v4';
 import { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
+import { createTool } from '../../../tools/tool';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
 import { testUsage } from '../../test-utils/utils';
@@ -243,6 +245,87 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     expect(toolResult).toEqual(toolCallById['call-1']);
     expect(toolResult.result).toBeUndefined();
+  });
+
+  it('does not continue when finishReason is length with pending tool calls', async () => {
+    const tools = {
+      echo: createTool({
+        id: 'echo',
+        description: 'Echo input text',
+        inputSchema: z.object({
+          text: z.string(),
+        }),
+        execute: vi.fn(async ({ text }) => ({ text })),
+      }),
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'echo',
+                  input: '{"text":"partial"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'length',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(result.output.toolCalls).toEqual([
+      expect.objectContaining({
+        toolCallId: 'call-1',
+        toolName: 'echo',
+      }),
+    ]);
+    expect(result.stepResult.reason).toBe('length');
+    expect(result.stepResult.isContinued).toBe(false);
   });
 
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
@@ -845,5 +928,241 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         provider: 'secondary-provider',
       },
     });
+  });
+
+  it('syncs outputStream.messageId with the rotated id on the API-error retry path', async () => {
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'upstream failed',
+        url: 'https://model.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 500,
+        isRetryable: false,
+      });
+    });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'rotate-on-api-error',
+          processAPIError: vi.fn(async ({ rotateResponseMessageId }) => {
+            rotateResponseMessageId?.();
+            return { retry: true };
+          }),
+        },
+      ],
+      models: [
+        {
+          id: 'only-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'only-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'rotated-response-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    // The retry payload reports outputStream.messageId; if rotateResponseMessageId
+    // did not sync it, the retry would be tagged with the stale `msg-0` and any
+    // subsequent chunks written through the stream would split across two ids.
+    expect(result.stepResult.reason).toBe('retry');
+    expect(result.messageId).toBe('rotated-response-id');
+  });
+
+  it('passes the rotated response message id to processor custom data writers', async () => {
+    const outputWriter = vi.fn(async () => {});
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'response-metadata', id: 'resp-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: testUsage },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter,
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'rotate-and-emit-data',
+          processInputStep: vi.fn(async ({ writer, rotateResponseMessageId }) => {
+            rotateResponseMessageId?.();
+            await writer?.custom({ type: 'data-om-status', data: { status: 'complete' } });
+            return {};
+          }),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'rotated-response-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(outputWriter).toHaveBeenCalledWith(
+      { type: 'data-om-status', data: { status: 'complete' } },
+      { messageId: 'rotated-response-id' },
+    );
+  });
+
+  it('should use configured modelId in message metadata instead of API response modelId', async () => {
+    const configuredModelId = 'gpt-5.4';
+    const apiResponseModelId = 'gpt-5.4-2026-03-05'; // Versioned model ID returned by API
+
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-1',
+          modelId: apiResponseModelId, // API returns versioned model ID
+          timestamp: new Date(0),
+        },
+        {
+          type: 'text-start',
+          id: 'text-1',
+        },
+        {
+          type: 'text-delta',
+          id: 'text-1',
+          delta: 'Hello!',
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'openai',
+            modelId: configuredModelId, // Configured model ID
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    // Find the assistant message with metadata
+    const assistantMessage = messageList.get.all
+      .db()
+      .find(message => message.role === 'assistant' && message.content.metadata);
+
+    // The message metadata should use the configured modelId, not the API response modelId
+    expect(assistantMessage?.content.metadata?.modelId).toBe(configuredModelId);
+    expect(assistantMessage?.content.metadata?.modelId).not.toBe(apiResponseModelId);
+    expect(assistantMessage?.content.metadata?.provider).toBe('openai');
   });
 });

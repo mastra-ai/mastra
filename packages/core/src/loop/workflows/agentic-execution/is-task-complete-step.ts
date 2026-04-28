@@ -48,6 +48,16 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
       if (!hasIsTaskCompleteScorers || inputData.stepResult?.isContinued) {
         return inputData;
       }
+
+      // Skip scoring when the only thing this iteration did was update working
+      // memory. Working-memory updates are housekeeping — not a task response —
+      // so grading them would produce misleading scores. The next iteration
+      // (where the LLM actually answers the user) will be scored instead.
+      const iterationToolCalls = (inputData.output.toolCalls || []) as Array<{ toolName: string }>;
+      const isWorkingMemoryTool = (name: string) => name === 'updateWorkingMemory' || name === 'update-working-memory';
+      if (iterationToolCalls.length > 0 && iterationToolCalls.every(tc => isWorkingMemoryTool(tc.toolName))) {
+        return inputData;
+      }
       // Get the original user message for context
       const userMessages = messageList.get.input.db();
       const firstUserMessage = userMessages[0];

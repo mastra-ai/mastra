@@ -2711,6 +2711,7 @@ export interface StreamBackgroundTasksParams {
   runId?: string;
   threadId?: string;
   resourceId?: string;
+  taskId?: string;
 }
 
 export interface ExperimentReviewCounts {
