@@ -105,6 +105,7 @@ export type ProcessorStepToolsConfig = ToolSet | Record<string, unknown>;
 export type ProcessorInputPhaseType = {
   phase: 'input';
   messages: ProcessorMessageType[];
+  modelContextMessages?: ProcessorMessageType[];
   messageList: MessageList;
   systemMessages?: CoreMessageType[];
   retryCount?: number;
@@ -113,6 +114,7 @@ export type ProcessorInputPhaseType = {
 export type ProcessorInputStepPhaseType = {
   phase: 'inputStep';
   messages: ProcessorMessageType[];
+  modelContextMessages?: ProcessorMessageType[];
   messageList: MessageList;
   stepNumber: number;
   systemMessages?: CoreMessageType[];
@@ -181,6 +183,7 @@ export type ProcessorStepInputType =
 export type ProcessorStepOutputType = {
   phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
   messages?: ProcessorMessageType[];
+  modelContextMessages?: ProcessorMessageType[];
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
   stepNumber?: number;
@@ -512,6 +515,7 @@ const retryCountSchema = z.number().optional();
 export const ProcessorInputPhaseSchema = z.object({
   phase: z.literal('input'),
   messages: messagesSchema,
+  modelContextMessages: messagesSchema.optional(),
   messageList: messageListSchema,
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
@@ -525,6 +529,7 @@ export const ProcessorInputPhaseSchema = z.object({
 export const ProcessorInputStepPhaseSchema = z.object({
   phase: z.literal('inputStep'),
   messages: messagesSchema,
+  modelContextMessages: messagesSchema.optional(),
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
   systemMessages: systemMessagesSchema.optional(),
@@ -639,6 +644,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
 
   // Message-based fields (used by most phases)
   messages: messagesSchema.optional(),
+  modelContextMessages: messagesSchema.optional(),
   messageList: messageListSchema.optional(),
   systemMessages: systemMessagesSchema.optional(),
 

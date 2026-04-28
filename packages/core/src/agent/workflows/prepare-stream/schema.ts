@@ -11,7 +11,23 @@ import type {
 import type { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
+import type { MastraDBMessage } from '../../message-list';
 import type { AgentExecuteOnFinishOptions } from '../../types';
+
+const mastraDBMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant', 'system', 'tool']),
+  createdAt: z.date(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  type: z.string().optional(),
+  content: z
+    .object({
+      format: z.literal(2),
+      parts: z.array(z.unknown()),
+    })
+    .passthrough(),
+}) as z.ZodType<MastraDBMessage>;
 
 export type AgentCapabilities = {
   agent: Agent<any, any, any, any>;
@@ -74,6 +90,9 @@ export const prepareMemoryStepOutputSchema = z.object({
   threadExists: z.boolean(),
   thread: storageThreadSchema.optional(),
   messageList: z.instanceof(MessageList),
+  modelContextMessages: z
+    .array(z.custom<MastraDBMessage>(value => mastraDBMessageSchema.safeParse(value).success))
+    .optional(),
   /** Shared processor states map that persists across loop iterations for both input and output processors */
   processorStates: z.instanceof(Map<string, ProcessorState>),
   /** Tripwire data when input processor triggered abort */

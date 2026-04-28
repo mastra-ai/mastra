@@ -4,7 +4,8 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
+import { MessageList as MessageListClass } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -62,6 +63,17 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
 };
+
+function createModelContextMessageList(messageList: MessageList, messages: MastraDBMessage[]): MessageList {
+  const contextMessageList = new MessageListClass().deserialize(messageList.serialize());
+  contextMessageList.clear.all.db();
+  contextMessageList.replaceAllSystemMessages(messageList.getAllSystemMessages());
+  contextMessageList.add(
+    messages.filter(message => message.role !== 'system'),
+    'input',
+  );
+  return contextMessageList;
+}
 
 function buildResponseModelMetadata(
   runState: AgenticRunState,
@@ -357,6 +369,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
+  modelContextMessages,
   outputWriter,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
@@ -390,6 +403,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
+      let executedModelContextMessages: MastraDBMessage[] | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -431,6 +445,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
+          const hasExplicitModelContextMessages = Object.prototype.hasOwnProperty.call(
+            inputData,
+            'modelContextMessages',
+          );
+          const shouldSeedModelContextMessages =
+            (inputData.output?.steps?.length || 0) === 0 && !hasExplicitModelContextMessages;
           const currentStep: {
             messageId: string;
             model: MastraLanguageModel;
@@ -441,6 +461,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
             structuredOutput?: StructuredOutputOptions<OUTPUT>;
             workspace?: Workspace;
+            modelContextMessages?: MastraDBMessage[];
           } = {
             messageId: currentMessageId,
             model,
@@ -451,6 +472,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             modelSettings,
             structuredOutput,
             workspace,
+            modelContextMessages: shouldSeedModelContextMessages
+              ? modelContextMessages
+              : inputData.modelContextMessages,
           };
 
           const inputStepProcessors = [
@@ -500,6 +524,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 providerOptions,
                 modelSettings,
                 structuredOutput,
+                modelContextMessages: currentStep.modelContextMessages,
                 retryCount: inputData.processorRetryCount || 0,
                 writer: inputStepWriter,
                 abortSignal: options?.abortSignal,
@@ -663,7 +688,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          const promptMessageList = currentStep.modelContextMessages
+            ? createModelContextMessageList(messageList, currentStep.modelContextMessages)
+            : messageList;
+          executedModelContextMessages = currentStep.modelContextMessages;
+          let inputMessages = await promptMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();
@@ -1158,6 +1187,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           messages,
           processorRetryCount: nextProcessorRetryCount,
+          // API-error retries re-run the same model attempt, so preserve the exact
+          // prompt-only context that was executed instead of reseeding from canonical messages.
+          ...(executedModelContextMessages ? { modelContextMessages: executedModelContextMessages } : {}),
           ...(activeFallbackModelIndex > 0 ? { fallbackModelIndex: activeFallbackModelIndex } : {}),
         };
       }
@@ -1410,6 +1442,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
         processorRetryFeedback: retryFeedbackText,
+        ...(shouldRetry && executedModelContextMessages ? { modelContextMessages: executedModelContextMessages } : {}),
         ...(nextFallbackModelIndex > 0 ? { fallbackModelIndex: nextFallbackModelIndex } : {}),
       };
     },

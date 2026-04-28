@@ -174,7 +174,9 @@ export class CustomInputProcessor implements Processor {
 }
 ```
 
-The `processInput()` method receives `messages`, `systemMessages`, and an `abort()` function. Return a `MastraDBMessage[]` to replace messages, or `{ messages, systemMessages }` to also modify system messages.
+The `processInput()` method receives `messages`, `systemMessages`, and an `abort()` function. Return a `MastraDBMessage[]` to replace canonical messages, or `{ messages, systemMessages }` to also modify system messages.
+
+Return `{ modelContextMessages }` when you want to change the next model prompt without changing canonical messages. Later input processors receive that prompt-only list as `messages`, but Mastra does not persist it to memory.
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinput) for all available arguments and return types.
 

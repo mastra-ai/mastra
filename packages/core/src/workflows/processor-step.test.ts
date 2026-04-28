@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
-import type { MastraDBMessage, MessageList } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
@@ -26,6 +27,25 @@ function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
   } as unknown as MessageList;
   return mockMessageList;
 }
+
+const createDbMessage = (
+  id: string,
+  text: string,
+  role: 'user' | 'assistant' | 'system' = 'user',
+): MastraDBMessage => ({
+  id,
+  role,
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text }],
+  },
+  createdAt: new Date(),
+});
+
+const getDbMessageText = (message: MastraDBMessage): string => {
+  const part = message.content.parts?.[0];
+  return part && 'text' in part ? String(part.text) : '';
+};
 
 describe('isProcessor', () => {
   it('should return true for object with processInput method', () => {
@@ -257,6 +277,216 @@ describe('createStep with Processor', () => {
           messages: [{ id: '1', content: 'test', step: 5 }],
         }),
       );
+    });
+
+    it('should pass prompt-only messages through both messages and messageList in processInput', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+      const seen = {
+        messages: [] as string[],
+        messageList: [] as string[],
+      };
+
+      const processor: Processor = {
+        id: 'prompt-only-input-view',
+        processInput: async ({ messages, messageList }) => {
+          seen.messages = messages.map(getDbMessageText);
+          seen.messageList = messageList.get.all.db().map(getDbMessageText);
+          return;
+        },
+      };
+
+      const step = createStep(processor);
+      const result = await step.execute({
+        inputData: {
+          phase: 'input' as const,
+          messages: [canonicalMessage],
+          modelContextMessages: [promptOnlyMessage],
+          messageList,
+          systemMessages: [],
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(seen).toEqual({
+        messages: ['prompt-only input'],
+        messageList: ['prompt-only input'],
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          modelContextMessages: [promptOnlyMessage],
+        }),
+      );
+      expect(result).not.toHaveProperty('messages');
+      expect(messageList.get.all.db()).toEqual([canonicalMessage]);
+    });
+
+    it('should keep prompt-only mode when processInput returns only systemMessages', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+
+      const processor: Processor = {
+        id: 'prompt-only-system-update',
+        processInput: async () => ({
+          systemMessages: [{ role: 'system' as const, content: 'new system' }],
+        }),
+      };
+
+      const step = createStep(processor);
+      const result = await step.execute({
+        inputData: {
+          phase: 'input' as const,
+          messages: [canonicalMessage],
+          modelContextMessages: [promptOnlyMessage],
+          messageList,
+          systemMessages: [],
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          modelContextMessages: [promptOnlyMessage],
+          systemMessages: [{ role: 'system', content: 'new system' }],
+        }),
+      );
+      expect(result).not.toHaveProperty('messages');
+    });
+
+    it('should preserve prompt-only MessageList mutations when processInput returns only systemMessages', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const trimmedPromptMessage = createDbMessage('trimmed-prompt', 'trimmed prompt input');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+
+      const processor: Processor = {
+        id: 'prompt-only-system-update-with-mutation',
+        processInput: async ({ messageList }) => {
+          messageList.clear.all.db();
+          messageList.add([trimmedPromptMessage], 'input');
+          return {
+            systemMessages: [{ role: 'system' as const, content: 'new system' }],
+          };
+        },
+      };
+
+      const step = createStep(processor);
+      const result = await step.execute({
+        inputData: {
+          phase: 'input' as const,
+          messages: [canonicalMessage],
+          modelContextMessages: [promptOnlyMessage],
+          messageList,
+          systemMessages: [],
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          modelContextMessages: [trimmedPromptMessage],
+          systemMessages: [{ role: 'system', content: 'new system' }],
+        }),
+      );
+      expect(result).not.toHaveProperty('messages');
+      expect(messageList.get.all.db()).toEqual([canonicalMessage]);
+    });
+
+    it('should keep canonical system messages visible in prompt-only processInput MessageList views', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+      messageList.addSystem('canonical system');
+      let seenSystemMessages: string[] = [];
+      let seenMessageListSystemMessages: string[] = [];
+
+      const processor: Processor = {
+        id: 'prompt-only-canonical-system-view',
+        processInput: async ({ messageList, systemMessages }) => {
+          seenSystemMessages = systemMessages.map(message => String(message.content));
+          seenMessageListSystemMessages = messageList.getAllSystemMessages().map(message => String(message.content));
+        },
+      };
+
+      const step = createStep(processor);
+      await step.execute({
+        inputData: {
+          phase: 'input' as const,
+          messages: [canonicalMessage],
+          modelContextMessages: [promptOnlyMessage],
+          messageList,
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(seenSystemMessages).toEqual(['canonical system']);
+      expect(seenMessageListSystemMessages).toEqual(['canonical system']);
+      expect(messageList.get.all.db()).toEqual([canonicalMessage]);
+    });
+
+    it('should strip system-role messages from prompt-only processInput results', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const promptOnlySystemMessage = createDbMessage('prompt-only-system', 'ignored system', 'system');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+
+      const processor: Processor = {
+        id: 'prompt-only-system-strip',
+        processInput: async () => ({
+          modelContextMessages: [promptOnlySystemMessage, promptOnlyMessage],
+        }),
+      };
+
+      const step = createStep(processor);
+      const result = await step.execute({
+        inputData: {
+          phase: 'input' as const,
+          messages: [canonicalMessage],
+          messageList,
+          systemMessages: [],
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          modelContextMessages: [promptOnlyMessage],
+        }),
+      );
+    });
+
+    it('should keep prompt-only processInputStep MessageList mutations prompt-only', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const trimmedPromptMessage = createDbMessage('trimmed-prompt', 'trimmed prompt input');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+
+      const processor: Processor = {
+        id: 'prompt-only-step-message-list',
+        processInputStep: async ({ messageList }) => {
+          messageList.clear.all.db();
+          messageList.add([trimmedPromptMessage], 'input');
+          return messageList;
+        },
+      };
+
+      const step = createStep(processor);
+      const result = await step.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: [canonicalMessage],
+          modelContextMessages: [promptOnlyMessage],
+          messageList,
+          stepNumber: 0,
+          systemMessages: [],
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          modelContextMessages: [trimmedPromptMessage],
+        }),
+      );
+      expect(result).not.toHaveProperty('messages');
+      expect(result.messageList).toBe(messageList);
+      expect(messageList.get.all.db()).toEqual([canonicalMessage]);
     });
 
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {

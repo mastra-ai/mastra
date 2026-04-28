@@ -10,6 +10,7 @@ import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
+import type { MastraDBMessage } from '../../message-list';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
@@ -96,8 +97,9 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         // workflow snapshot. Running processors on an empty messageList would cause
         // processors like TokenLimiterProcessor to throw a TripWire.
         let tripwire;
+        let modelContextMessages: MastraDBMessage[] | undefined;
         if (!isResume) {
-          ({ tripwire } = await capabilities.runInputProcessors({
+          ({ tripwire, modelContextMessages } = await capabilities.runInputProcessors({
             requestContext,
             ...observabilityContext,
             messageList,
@@ -110,6 +112,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           threadExists: false,
           thread: thread as StorageThreadType | undefined,
           messageList,
+          modelContextMessages,
           processorStates,
           tripwire,
         };
@@ -176,8 +179,9 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // workflow snapshot. Running processors on an empty messageList would cause
       // processors like TokenLimiterProcessor to throw a TripWire.
       let tripwire;
+      let modelContextMessages: MastraDBMessage[] | undefined;
       if (!isResume) {
-        ({ tripwire } = await capabilities.runInputProcessors({
+        ({ tripwire, modelContextMessages } = await capabilities.runInputProcessors({
           requestContext,
           ...observabilityContext,
           messageList,
@@ -189,6 +193,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       return {
         thread: threadObject,
         messageList: messageList,
+        modelContextMessages,
         processorStates,
         tripwire,
         threadExists: !!existingThread,

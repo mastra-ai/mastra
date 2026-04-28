@@ -20,6 +20,22 @@ import type {
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import type { MastraDBMessage } from '../../agent/message-list';
+
+const mastraDBMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant', 'system', 'tool']),
+  createdAt: z.date(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  type: z.string().optional(),
+  content: z
+    .object({
+      format: z.literal(2),
+      parts: z.array(z.unknown()),
+    })
+    .passthrough(),
+}) as z.ZodType<MastraDBMessage>;
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -87,6 +103,7 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
    */
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  modelContextMessages?: MastraDBMessage[];
   /**
    * True when a background task result was injected and the LLM needs another
    * iteration to process it. When set, isTaskCompleteStep is skipped.
@@ -158,6 +175,7 @@ export const llmIterationOutputSchema = z.object({
   processorRetryCount: z.number().optional(),
   fallbackModelIndex: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
+  modelContextMessages: z.array(mastraDBMessageSchema).optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
   backgroundTaskPending: z.boolean().optional(), // true if a background task result was injected and LLM needs to process it
 });
