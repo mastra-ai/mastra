@@ -43,6 +43,22 @@ export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
  */
 export const MASTRA_VERSIONS_KEY = 'mastra__versions';
 
+/**
+ * Reserved key for the resolved Agent Builder model policy.
+ * Server seeds this from `resolveBuilderModelPolicy(editor)` BEFORE merging client-supplied
+ * request-context entries, so client requests cannot spoof or relax the policy.
+ *
+ * Excluded from `RequestContext.toJSON()` so admin policy never leaks into stored traces or
+ * downstream telemetry. Read in-process only via `requestContext.get(...)`.
+ */
+export const MASTRA_BUILDER_MODEL_POLICY_KEY = 'mastra__builderModelPolicy';
+
+/**
+ * Keys that are reserved for internal server-side use and must not be serialized
+ * by `RequestContext.toJSON()`. Add new internal-only keys here.
+ */
+export const INTERNAL_CONTEXT_KEYS: ReadonlySet<string> = new Set<string>([MASTRA_BUILDER_MODEL_POLICY_KEY]);
+
 export type { VersionOverrides, VersionSelector } from '../mastra/types';
 export { mergeVersionOverrides } from '../mastra/types';
 
@@ -161,6 +177,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   public toJSON(): Record<string, any> {
     const result: Record<string, any> = {};
     for (const [key, value] of this.registry.entries()) {
+      if (INTERNAL_CONTEXT_KEYS.has(key)) continue;
       if (this.isSerializable(value)) {
         result[key] = value;
       }

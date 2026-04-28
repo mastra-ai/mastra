@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -54,6 +55,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { toSlug } from '../utils';
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 
 import { handleError } from './error';
 import {
@@ -1826,6 +1828,12 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
 
+      // Enforce admin model allowlist (Phase 6) before swapping in-memory.
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+      if (policy.active) {
+        assertModelAllowed(policy.allowed, newModel);
+      }
+
       // Update the model in-memory only (for temporary testing)
       // This allows users to test different models without persisting
       // To save permanently, users should use the Edit agent dialog
@@ -1851,6 +1859,19 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   handler: async ({ mastra, agentId }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // Enforce admin model allowlist (Phase 6) BEFORE reset: if the original
+      // model is no longer permitted by the current allowlist, reject loudly
+      // rather than silently restoring a disallowed model.
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+      if (policy.active) {
+        const original = agent.__getOriginalModel();
+        // Dynamic functions can't be statically validated; runtime defense
+        // (Phase 7) is the safety net for those.
+        if (typeof original !== 'function') {
+          assertModelAllowed(policy.allowed, original as Parameters<typeof assertModelAllowed>[1]);
+        }
+      }
 
       agent.__resetToOriginalModel();
 
@@ -1881,6 +1902,9 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
+      // Reorder does not introduce new models, so no static allowlist check
+      // is needed here. Phase 7 runtime defense still validates the active
+      // model at execution time.
       agent.reorderModels(reorderedModelIds);
 
       return { message: 'Model list reordered' };
@@ -1917,6 +1941,17 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const newModel =
         bodyModel?.modelId && bodyModel?.provider ? `${bodyModel.provider}/${bodyModel.modelId}` : modelConfig.model;
+
+      // Enforce admin model allowlist (Phase 6) when the caller supplies a new
+      // provider/model pair. If the body keeps the existing model, we skip —
+      // existing models predate any allowlist toggle and Phase 7 catches
+      // stale-disallowed runs at execution time.
+      if (bodyModel?.modelId && bodyModel?.provider) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, newModel);
+        }
+      }
 
       const updated = {
         ...modelConfig,
@@ -2021,7 +2056,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, agentId, requestContext, instructions, comment }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -2041,11 +2076,14 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
         model,
       });
 
+      // Pass the seeded request context (Phase 7) so the inline agent's runtime model
+      // resolution still sees the Agent Builder model policy.
       const result = await systemPromptAgent.generate(
         `We need to improve the system prompt.
 Current: ${instructions}
 ${comment ? `User feedback: ${comment}` : ''}`,
         {
+          requestContext,
           structuredOutput: {
             schema: enhanceInstructionsResponseSchema,
           },

@@ -1,3 +1,4 @@
+import { builderToModelPolicy } from '@mastra/core/agent-builder/ee';
 import { builderSettingsResponseSchema } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -24,29 +25,33 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
 
       // No editor configured
       if (!editor) {
-        return { enabled: false };
+        return { enabled: false, modelPolicy: { active: false } };
       }
 
       // Editor doesn't support builder (older version or OSS)
       if (typeof editor.resolveBuilder !== 'function') {
-        return { enabled: false };
+        return { enabled: false, modelPolicy: { active: false } };
       }
 
       // Check if builder is enabled in config
       if (!editor.hasEnabledBuilderConfig?.()) {
-        return { enabled: false };
+        return { enabled: false, modelPolicy: { active: false } };
       }
 
       // Resolve the builder instance
       const builder = await editor.resolveBuilder();
       if (!builder || !builder.enabled) {
-        return { enabled: false };
+        return { enabled: false, modelPolicy: { active: false } };
       }
+
+      const modelPolicyWarnings = builder.getModelPolicyWarnings?.() ?? [];
 
       return {
         enabled: true,
         features: builder.getFeatures(),
         configuration: builder.getConfiguration(),
+        modelPolicy: builderToModelPolicy(builder),
+        ...(modelPolicyWarnings.length > 0 ? { modelPolicyWarnings } : {}),
       };
     } catch (error) {
       return handleError(error, 'Error getting builder settings');

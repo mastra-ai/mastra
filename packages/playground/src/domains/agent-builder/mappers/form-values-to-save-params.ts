@@ -1,5 +1,5 @@
 import type { StoredAgentToolConfig, StoredWorkspaceRef } from '@mastra/client-js';
-import type { AgentBuilderEditFormValues } from '../schemas';
+import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 
 export interface SaveParams {
@@ -10,6 +10,12 @@ export interface SaveParams {
   agents: Record<string, StoredAgentToolConfig> | undefined;
   workflows: Record<string, StoredAgentToolConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
+  /**
+   * Static model selection from the form. Conditional models are owned by code;
+   * the form never round-trips them, so this is always either `undefined` or
+   * a `{ provider, name }` pair.
+   */
+  model: AgentBuilderModel | undefined;
 }
 
 function buildEnabledRecord(
@@ -66,5 +72,6 @@ export function formValuesToSaveParams(
     agents: emptyToUndefined(agents),
     workflows: emptyToUndefined(workflows),
     workspace,
+    model: values.model,
   };
 }

@@ -1,3 +1,4 @@
+import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -19,6 +20,7 @@ import {
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
@@ -320,6 +322,14 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+      }
+
+      // Enforce admin model allowlist (Phase 6) before persisting.
+      if (model !== undefined) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
+        }
       }
 
       // Update the agent with both metadata-level and config-level fields

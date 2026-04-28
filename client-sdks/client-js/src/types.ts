@@ -9,8 +9,9 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
-import type { CoreMessage } from '@mastra/core/llm';
+import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
@@ -439,16 +440,25 @@ export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
   messages: MessageListInput;
 } & (OUTPUT extends undefined ? { structuredOutput?: never } : { structuredOutput: StructuredOutputOptions<OUTPUT> });
 
+/**
+ * Provider id widened to accept admin-configured custom gateway providers.
+ * Closed unions over the five hard-coded providers are removed in favor of the
+ * generated `ModelProviderId` union plus a `(string & {})` escape hatch — this
+ * preserves IDE autocomplete on known providers while letting custom gateway
+ * ids flow through (see Phase 1 of the admin model configuration plan).
+ */
+export type AdminProviderId = ModelProviderId | (string & {});
+
 export type UpdateModelParams = {
   modelId: string;
-  provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  provider: AdminProviderId;
 };
 
 export type UpdateModelInModelListParams = {
   modelConfigId: string;
   model?: {
     modelId: string;
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    provider: AdminProviderId;
   };
   maxRetries?: number;
   enabled?: boolean;
@@ -2735,7 +2745,18 @@ export interface BuilderAgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
+  /**
+   * Whether the model picker is visible in the Agent Builder.
+   * Omitted/`false` ⇒ picker hidden (locked mode); admin's `models.default` is applied.
+   */
+  model?: boolean;
 }
+
+/**
+ * Re-exported from `@mastra/core/agent-builder/ee` so SDK consumers don't need
+ * a second import for admin model configuration types. Owned by core.
+ */
+export type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry, ModelProviderId };
 
 /**
  * Response from GET /editor/builder/settings
@@ -2748,4 +2769,16 @@ export interface BuilderSettingsResponse {
   configuration?: {
     agent?: Record<string, unknown>;
   };
+  /**
+   * Server-derived model policy. Always present; `{ active: false }` when no
+   * builder is configured. UI consumers should read this directly rather than
+   * re-deriving from `features` / `configuration`.
+   */
+  modelPolicy?: BuilderModelPolicy;
+  /**
+   * Non-fatal warnings produced by builder config validation (e.g. allowlist
+   * entries with unknown providers that aren't tagged `kind: 'custom'`).
+   * Only present when there is at least one warning.
+   */
+  modelPolicyWarnings?: string[];
 }
