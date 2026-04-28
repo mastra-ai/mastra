@@ -21,6 +21,7 @@ export default function AgentBuilderCreate() {
     <>
       <div className="absolute top-6 left-6 z-10">
         <IconButton
+          variant="ghost"
           onClick={() =>
             navigate('/agent-builder/agents', {
               viewTransition: true,

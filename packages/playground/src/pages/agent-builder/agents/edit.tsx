@@ -1,4 +1,5 @@
 import { Button, Spinner } from '@mastra/playground-ui';
+import { MastraReactProvider } from '@mastra/react';
 import { CheckIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
