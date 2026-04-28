@@ -35,8 +35,10 @@ import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-i
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
+import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list';
 import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
+import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { Link } from '@/lib/link';
 
 export default function TracesPage() {
@@ -63,6 +65,13 @@ export default function TracesPage() {
     traceId: url.traceIdParam,
     spanId: url.spanIdParam,
     page: spanScoresPage,
+  });
+
+  const [feedbackPage, setFeedbackPage] = useState(0);
+  useEffect(() => setFeedbackPage(0), [url.traceIdParam, url.spanIdParam]);
+  const { data: feedbackData, isLoading: isLoadingFeedback } = useTraceFeedback({
+    traceId: url.traceIdParam,
+    page: feedbackPage,
   });
 
   // Trace + span detail fetched at the page level (was inside the old smart components).
@@ -287,6 +296,14 @@ export default function TracesPage() {
               onNext={handleNextSpan}
               activeTab={url.spanTabParam ?? 'details'}
               onTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
+              feedbackTabBadge={feedbackData?.pagination?.total ?? undefined}
+              feedbackTabSlot={() => (
+                <SpanFeedbackList
+                  feedbackData={feedbackData}
+                  onPageChange={setFeedbackPage}
+                  isLoadingFeedbackData={isLoadingFeedback}
+                />
+              )}
               scoringTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoringTabSlot={({ span, traceId: tid, spanId: sid }) => (
                 <div className="grid gap-6">

@@ -377,6 +377,22 @@ describe('executeCommandTool data chunks', () => {
   });
 
   describe('abort signal passthrough', () => {
+    it('accepts timeout as a numeric string and passes milliseconds to sandbox.executeCommand', async () => {
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      const result = await execute({ command: 'echo hi', timeout: '15' as any, cwd: null, tail: null }, context);
+
+      expect(result).toBe('ok');
+      expect(receivedOpts.timeout).toBe(15000);
+    });
+
     it('passes context.abortSignal to sandbox.executeCommand', async () => {
       const controller = new AbortController();
       let receivedOpts: any;
