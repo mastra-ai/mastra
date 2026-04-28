@@ -98,8 +98,8 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isRetryableOpenAIResponsesStreamError(error)).toBe(true);
   });
 
-  it('retries OpenAI Responses stream error chunks through an explicit matcher', async () => {
-    const processor = new StreamErrorRetryProcessor({ matchers: [isRetryableOpenAIResponsesStreamError] });
+  it('retries OpenAI Responses stream error chunks by default', async () => {
+    const processor = new StreamErrorRetryProcessor();
     const error = {
       type: 'error',
       sequence_number: 1,
@@ -111,6 +111,16 @@ describe('StreamErrorRetryProcessor', () => {
     };
 
     await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
+  });
+
+  it('retries stream errors through additional matchers', async () => {
+    const processor = new StreamErrorRetryProcessor({
+      matchers: [error => error instanceof Error && error.message === 'custom retryable stream error'],
+    });
+
+    await expect(
+      processor.processAPIError(makeArgs({ error: new Error('custom retryable stream error') })),
+    ).resolves.toEqual({ retry: true });
   });
 
   it('detects OpenAI Responses failed chunks with explicit retry guidance', () => {
@@ -129,7 +139,7 @@ describe('StreamErrorRetryProcessor', () => {
   });
 
   it('does not retry non-transient OpenAI Responses stream error chunks', async () => {
-    const processor = new StreamErrorRetryProcessor({ matchers: [isRetryableOpenAIResponsesStreamError] });
+    const processor = new StreamErrorRetryProcessor();
     const error = {
       type: 'error',
       sequence_number: 1,
@@ -146,7 +156,6 @@ describe('StreamErrorRetryProcessor', () => {
   it('respects maxRetries', async () => {
     const processor = new StreamErrorRetryProcessor({
       maxRetries: 1,
-      matchers: [isRetryableOpenAIResponsesStreamError],
     });
     const error = {
       type: 'error',

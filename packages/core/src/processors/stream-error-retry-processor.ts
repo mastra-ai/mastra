@@ -20,6 +20,7 @@ const RETRYABLE_OPENAI_ERROR_CODES = [
   'overloaded',
 ];
 const OPENAI_RETRY_MESSAGE_PATTERN = /you can retry your request/i;
+const DEFAULT_MATCHERS = [isRetryableOpenAIResponsesStreamError];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -128,7 +129,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-    this.#matchers = options.matchers ?? [];
+    this.#matchers = [...DEFAULT_MATCHERS, ...(options.matchers ?? [])];
   }
 
   async processAPIError({ error, retryCount }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {

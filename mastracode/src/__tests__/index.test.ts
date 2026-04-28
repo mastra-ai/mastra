@@ -98,7 +98,6 @@ vi.mock('@mastra/core/processors', () => ({
   StreamErrorRetryProcessor: class {
     readonly id = 'stream-error-retry-processor';
   },
-  isRetryableOpenAIResponsesStreamError: vi.fn(),
 }));
 
 vi.mock('./agents/instructions.js', () => ({
