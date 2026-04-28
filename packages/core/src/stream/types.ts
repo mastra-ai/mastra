@@ -923,11 +923,6 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
-  /**
-   * Cache-write tokens, summed across multi-step runs. Mirrors `cachedInputTokens`
-   * for cache reads. Distinct from `providerMetadata.anthropic.cacheCreationInputTokens`,
-   * which is last-step-only.
-   */
   cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
