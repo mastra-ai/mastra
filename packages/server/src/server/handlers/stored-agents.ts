@@ -91,11 +91,11 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
 });
 
 /**
- * GET /stored/agents/:storedAgentId - Get a stored agent by ID
+ * GET /stored/agents/:agentId - Get a stored agent by ID
  */
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
-  path: '/stored/agents/:storedAgentId',
+  path: '/stored/agents/:agentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   queryParamSchema: statusQuerySchema,
@@ -105,7 +105,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
     'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId, status }) => {
+  handler: async ({ mastra, agentId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -118,10 +118,12 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
+      // Use getAgentByIdResolved to automatically resolve from active version
+      // Returns StorageResolvedAgentType (thin record + version config)
+      const agent = await agentsStore.getByIdResolved(agentId, { status });
 
       if (!agent) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, { message: `Stored agent with id ${agentId} not found` });
       }
 
       return agent;
@@ -243,7 +245,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 });
 
 /**
- * PATCH /stored/agents/:storedAgentId - Update a stored agent
+ * PATCH /stored/agents/:agentId - Update a stored agent
  */
 export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   InferParams<typeof storedAgentIdPathParams, undefined, typeof updateStoredAgentBodySchema>,
@@ -259,7 +261,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   '/stored/agents/:storedAgentId'
 > = createRoute({
   method: 'PATCH',
-  path: '/stored/agents/:storedAgentId',
+  path: '/stored/agents/:agentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -270,7 +272,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   requiresAuth: true,
   handler: async ({
     mastra,
-    storedAgentId,
+    agentId,
     // Metadata-level fields
     authorId,
     metadata,
@@ -308,16 +310,16 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       }
 
       // Check if agent exists
-      const existing = await agentsStore.getById(storedAgentId);
+      const existing = await agentsStore.getById(agentId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, { message: `Stored agent with id ${agentId} not found` });
       }
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
       const updatedAgent = await agentsStore.update({
-        id: storedAgentId,
+        id: agentId,
         authorId,
         metadata,
         name,
@@ -368,7 +370,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       const autoVersionResult = await handleAutoVersioning(
         agentsStore as unknown as VersionedStoreInterface,
-        storedAgentId,
+        agentId,
         'agentId',
         AGENT_SNAPSHOT_CONFIG_FIELDS,
         existing,
@@ -384,11 +386,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Clear the cached agent instance so the next request gets the updated config
       const editor = mastra.getEditor();
       if (editor) {
-        editor.agent.clearCache(storedAgentId);
+        editor.agent.clearCache(agentId);
       }
 
       // Return the resolved agent with the latest (draft) version so the UI sees its edits
-      const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
+      const resolved = await agentsStore.getByIdResolved(agentId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }
@@ -401,11 +403,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 });
 
 /**
- * DELETE /stored/agents/:storedAgentId - Delete a stored agent
+ * DELETE /stored/agents/:agentId - Delete a stored agent
  */
 export const DELETE_STORED_AGENT_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/stored/agents/:storedAgentId',
+  path: '/stored/agents/:agentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: deleteStoredAgentResponseSchema,
@@ -413,7 +415,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId }) => {
+  handler: async ({ mastra, agentId }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -427,17 +429,17 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Check if agent exists
-      const existing = await agentsStore.getById(storedAgentId);
+      const existing = await agentsStore.getById(agentId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, { message: `Stored agent with id ${agentId} not found` });
       }
 
-      await agentsStore.delete(storedAgentId);
+      await agentsStore.delete(agentId);
 
       // Clear the cached agent instance
-      mastra.getEditor()?.agent.clearCache(storedAgentId);
+      mastra.getEditor()?.agent.clearCache(agentId);
 
-      return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
+      return { success: true, message: `Agent ${agentId} deleted successfully` };
     } catch (error) {
       return handleError(error, 'Error deleting stored agent');
     }
