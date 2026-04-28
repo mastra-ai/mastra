@@ -19,13 +19,18 @@ let lastServiceClientArgs: { url?: string; hasCredential?: boolean } | undefined
 vi.mock('@azure/storage-blob', () => {
   function makeBlockBlobClient(key: string) {
     return {
-      uploadData: vi.fn(async (buffer: Buffer, options: { blobHTTPHeaders?: { blobContentType?: string }; metadata?: Record<string, string> }) => {
-        mockContainer.set(key, {
-          body: Buffer.from(buffer),
-          metadata: options?.metadata ?? {},
-          contentType: options?.blobHTTPHeaders?.blobContentType ?? 'application/octet-stream',
-        });
-      }),
+      uploadData: vi.fn(
+        async (
+          buffer: Buffer,
+          options: { blobHTTPHeaders?: { blobContentType?: string }; metadata?: Record<string, string> },
+        ) => {
+          mockContainer.set(key, {
+            body: Buffer.from(buffer),
+            metadata: options?.metadata ?? {},
+            contentType: options?.blobHTTPHeaders?.blobContentType ?? 'application/octet-stream',
+          });
+        },
+      ),
       downloadToBuffer: vi.fn(async () => {
         const blob = mockContainer.get(key);
         if (!blob) {
@@ -107,7 +112,8 @@ function createEntry(hash: string, content: string, mimeType?: string): StorageB
 function createStore(opts?: { prefix?: string }) {
   return new AzureBlobStore({
     container: 'test-container',
-    connectionString: 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=key;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;',
+    connectionString:
+      'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=key;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;',
     ...(opts?.prefix !== undefined ? { prefix: opts.prefix } : {}),
   });
 }
@@ -333,7 +339,8 @@ describe('AzureBlobStore', () => {
     it('should use connectionString when provided', async () => {
       const store = new AzureBlobStore({
         container: 'test',
-        connectionString: 'DefaultEndpointsProtocol=https;AccountName=acc;AccountKey=key;EndpointSuffix=core.windows.net',
+        connectionString:
+          'DefaultEndpointsProtocol=https;AccountName=acc;AccountKey=key;EndpointSuffix=core.windows.net',
       });
 
       await store.has('trigger-client-creation');
