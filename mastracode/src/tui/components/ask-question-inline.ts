@@ -22,7 +22,8 @@ import {
   wrapTextWithAnsi,
 } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
-import { BOX_INDENT_STR, theme, getSelectListTheme } from '../theme.js';
+import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultilineInput } from './multiline-input.js';
 
 export interface AskQuestionInlineOptions {
   question: string;
@@ -44,7 +45,7 @@ export interface AskQuestionInlineOptions {
 class AskQuestionBorderedBox {
   questionLines: string[];
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
   private hintText: string;
   items: Array<{ label: string; description?: string }>;
   private answered = false;
@@ -59,7 +60,7 @@ class AskQuestionBorderedBox {
     hintText: string,
     items: Array<{ label: string; description?: string }>,
     selectList?: SelectList,
-    input?: Input,
+    input?: Input | MultilineInput,
     streaming?: boolean,
   ) {
     this.questionLines = questionLines;
@@ -74,7 +75,7 @@ class AskQuestionBorderedBox {
     this.selectList?.invalidate();
   }
 
-  setInteractive(selectList?: SelectList, input?: Input, hintText?: string) {
+  setInteractive(selectList?: SelectList, input?: Input | MultilineInput, hintText?: string) {
     this.streaming = false;
     this.selectList = selectList;
     this.input = input;
@@ -222,7 +223,8 @@ class AskQuestionBorderedBox {
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
+  private tui?: TUI;
   private onSubmit?: (answer: string) => void;
   private onCancel?: () => void;
   private isNegativeAnswer?: (answer: string) => boolean;
@@ -255,8 +257,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
    * Shows the bordered box with "…" indicator. Call updateArgs() as partial JSON
    * arrives, then activate() when the question event fires.
    */
-  static createStreaming(): AskQuestionInlineComponent {
+  static createStreaming(tui?: TUI): AskQuestionInlineComponent {
     const component = new AskQuestionInlineComponent();
+    component.tui = tui;
     return component;
   }
 
@@ -289,6 +292,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   constructor(options?: AskQuestionInlineOptions, _ui?: TUI) {
     super();
 
+    this.tui = _ui;
+
     if (options) {
       // Full construction with interactive elements
       this.onSubmit = options.onSubmit;
@@ -303,7 +308,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         hintText = '↑↓ to navigate · Enter to select · Esc to skip';
         this.buildSelectMode(options.options);
       } else {
-        hintText = 'Enter to submit · Esc to skip';
+        hintText = this.tui
+          ? 'Enter to submit · Shift+Enter for new line · Esc to skip'
+          : 'Enter to submit · Esc to skip';
         this.buildInputMode();
       }
 
@@ -351,10 +358,12 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     options?: Array<{ label: string; description?: string }>;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
+    tui?: TUI;
     onSubmit: (answer: string) => void;
     onCancel: () => void;
   }): void {
     if (this.answered) return;
+    if (options.tui) this.tui = options.tui;
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
     this.isNegativeAnswer = options.isNegativeAnswer;
@@ -370,7 +379,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       hintText = '↑↓ to navigate · Enter to select · Esc to skip';
       this.buildSelectMode(options.options);
     } else {
-      hintText = 'Enter to submit · Esc to skip';
+      hintText = this.tui
+        ? 'Enter to submit · Shift+Enter for new line · Esc to skip'
+        : 'Enter to submit · Esc to skip';
       this.buildInputMode();
     }
 
@@ -411,20 +422,44 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.selectList = undefined;
     this.buildInputMode();
 
+    // Reapply focus to the new input
+    if (this.input) this.input.focused = this._focused;
+
     // Clear items so the answered state renders as free-text, not select
     this.borderedBox.items = [];
-    this.borderedBox.setInteractive(undefined, this.input, 'Enter to submit · Esc to skip');
+    this.borderedBox.setInteractive(
+      undefined,
+      this.input,
+      this.tui ? 'Enter to submit · Shift+Enter for new line · Esc to skip' : 'Enter to submit · Esc to skip',
+    );
   }
 
   private buildInputMode(): void {
-    this.input = new Input();
-    this.input.onSubmit = (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed || this.allowEmptyInput) {
-        this.handleAnswer(trimmed);
-      }
-    };
-    (this.input as any).keybindings = getEditorKeybindings();
+    if (this.tui) {
+      // Use MultilineInput for multiline support when TUI is available
+      const multilineInput = new MultilineInput(this.tui, getEditorTheme());
+      multilineInput.allowEmptySubmit = this.allowEmptyInput;
+      multilineInput.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed || this.allowEmptyInput) {
+          this.handleAnswer(trimmed);
+        }
+      };
+      multilineInput.onEscape = () => {
+        this.handleCancel();
+      };
+      this.input = multilineInput;
+    } else {
+      // Fallback to single-line Input when TUI is not available
+      this.input = new Input();
+      this.input.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed || this.allowEmptyInput) {
+          this.handleAnswer(trimmed);
+        }
+      };
+      (this.input as any).keybindings = getEditorKeybindings();
+    }
   }
 
   private handleAnswer(answer: string): void {

@@ -5,12 +5,14 @@
  */
 
 import { Box, getEditorKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, Component } from '@mariozechner/pi-tui';
-import { theme, getSelectListTheme } from '../theme.js';
+import type { Focusable, SelectItem, Component, TUI } from '@mariozechner/pi-tui';
+import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultilineInput } from './multiline-input.js';
 
 export interface AskQuestionDialogOptions {
   question: string;
   options?: Array<{ label: string; description?: string }>;
+  tui?: TUI;
   onSubmit: (answer: string) => void;
   onCancel: () => void;
 }
@@ -19,7 +21,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
+  private tui?: TUI;
   private onSubmit: (answer: string) => void;
   private onCancel: () => void;
 
@@ -40,6 +43,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
 
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
+    this.tui = options.tui;
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
@@ -94,13 +98,27 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   }
 
   private buildInputMode(): void {
-    this.input = new Input();
-    this.input.onSubmit = (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed) {
-        this.onSubmit(trimmed);
-      }
-    };
+    if (this.tui) {
+      const multilineInput = new MultilineInput(this.tui, getEditorTheme());
+      multilineInput.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed) {
+          this.onSubmit(trimmed);
+        }
+      };
+      multilineInput.onEscape = () => {
+        this.onCancel();
+      };
+      this.input = multilineInput;
+    } else {
+      this.input = new Input();
+      this.input.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed) {
+          this.onSubmit(trimmed);
+        }
+      };
+    }
 
     this.modeChildren = [];
     const inputChild = this.input;
@@ -109,7 +127,10 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     const spacer = new Spacer(1);
     this.addChild(spacer);
     this.modeChildren.push(spacer);
-    const hint = new Text(theme.fg('dim', '  Enter to submit · Esc to skip'), 0, 0);
+    const hintText = this.tui
+      ? '  Enter to submit · Shift+Enter for new line · \\+Enter for new line · Esc to skip'
+      : '  Enter to submit · Esc to skip';
+    const hint = new Text(theme.fg('dim', hintText), 0, 0);
     this.addChild(hint);
     this.modeChildren.push(hint);
   }
