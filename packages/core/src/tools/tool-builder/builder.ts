@@ -86,6 +86,20 @@ export class CoreToolBuilder extends MastraBase {
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
+      // Client tools cross the wire as JSON, so Zod / StandardSchemaWithJSON
+      // wrappers don't survive. Normalize raw JSON Schema objects back into
+      // a StandardSchemaWithJSON so downstream conversion works.
+      const rawInput = this.originalTool.inputSchema as unknown;
+      if (
+        rawInput &&
+        typeof rawInput === 'object' &&
+        !isZodObject(rawInput) &&
+        !isStandardSchemaWithJSON(rawInput) &&
+        !('jsonSchema' in (rawInput as object))
+      ) {
+        this.originalTool.inputSchema = toStandardSchema(rawInput as any) as any;
+      }
+
       if (isBackgroundEligible || isResumableTool) {
         let schema = this.originalTool.inputSchema;
         if (typeof schema === 'function') {

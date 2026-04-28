@@ -28,6 +28,7 @@ export const RESOURCES = [
   'scores',
   'stored',
   'stored-agents',
+  'stored-skills',
   'system',
   'tool-providers',
   'tools',
@@ -107,6 +108,8 @@ export const PERMISSION_PATTERNS = {
   'stored:*': 'stored:*',
   /** Full access to stored agents */
   'stored-agents:*': 'stored-agents:*',
+  /** Full access to stored-skills */
+  'stored-skills:*': 'stored-skills:*',
   /** Full access to system info */
   'system:*': 'system:*',
   /** Full access to tool-providers */
@@ -191,6 +194,8 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:read': 'stored-agents:read',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
+  /** View stored-skills */
+  'stored-skills:read': 'stored-skills:read',
   /** Delete stored */
   'stored:delete': 'stored:delete',
   /** View stored */
@@ -280,6 +285,7 @@ export const PERMISSIONS = [
   'stored-agents:delete',
   'stored-agents:read',
   'stored-agents:write',
+  'stored-skills:read',
   'stored:delete',
   'stored:read',
   'stored:write',

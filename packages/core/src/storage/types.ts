@@ -465,6 +465,11 @@ export interface StorageAgentType {
   visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
+  /**
+   * Denormalized count of stars on this agent. Maintained by the stars
+   * storage domain. Optional; treat undefined as 0 for legacy rows.
+   */
+  starCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -548,6 +553,25 @@ export type StorageListAgentsInput = {
    * Defaults to 'published' if not specified.
    */
   status?: 'draft' | 'published' | 'archived';
+  /**
+   * Restrict results to this set of agent IDs. Used by the stars feature
+   * to fetch a specific subset of starred agents. When provided as an
+   * empty array, the result is empty.
+   */
+  entityIds?: string[];
+  /**
+   * When set, agents starred by this user are returned first, ordered
+   * by `(is_starred DESC, <existing orderBy>, id ASC)` over the full
+   * candidate set before pagination. Implementations that don't support
+   * starred-first sort treat this as undefined.
+   */
+  pinStarredFor?: string;
+  /**
+   * When true, only agents starred by `pinStarredFor` are returned.
+   * Requires `pinStarredFor` to be set. SQL backends collapse this into
+   * the same JOIN used for starred-first sort.
+   */
+  starredOnly?: boolean;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
@@ -1891,6 +1915,11 @@ export interface StorageSkillType {
    * May be undefined for legacy records created before visibility was introduced.
    */
   visibility?: StorageVisibility;
+  /**
+   * Denormalized count of stars on this skill. Maintained by the stars
+   * storage domain. Optional; treat undefined as 0 for legacy rows.
+   */
+  starCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1954,10 +1983,33 @@ export type StorageListSkillsInput = {
    */
   visibility?: StorageVisibility;
   /**
+   * Filter skills by status (exact match).
+   */
+  status?: StorageSkillType['status'];
+  /**
    * Filter skills by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Restrict results to this set of skill IDs. Used by the stars feature
+   * to fetch a specific subset of starred skills. When provided as an
+   * empty array, the result is empty.
+   */
+  entityIds?: string[];
+  /**
+   * When set, skills starred by this user are returned first, ordered
+   * by `(is_starred DESC, <existing orderBy>, id ASC)` over the full
+   * candidate set before pagination. Implementations that don't support
+   * starred-first sort treat this as undefined.
+   */
+  pinStarredFor?: string;
+  /**
+   * When true, only skills starred by `pinStarredFor` are returned.
+   * Requires `pinStarredFor` to be set. SQL backends collapse this into
+   * the same JOIN used for starred-first sort.
+   */
+  starredOnly?: boolean;
 };
 
 /** Paginated list output for thin skill records */
@@ -2570,3 +2622,62 @@ export interface ExperimentReviewCounts {
   reviewed: number;
   complete: number;
 }
+
+// ============================================
+// Stars Storage Types
+// ============================================
+
+/**
+ * Entity types that can be starred.
+ * Currently agents and skills; extend here when other entities opt in.
+ */
+export type StorageStarEntityType = 'agent' | 'skill';
+
+export const STORAGE_STAR_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageStarEntityType[];
+
+/**
+ * A single star row: one user starring one entity. Composite primary key is
+ * `(userId, entityType, entityId)`. Idempotent — re-starring is a no-op.
+ */
+export interface StorageStarType {
+  /** Caller identifier (matches authorId conventions used elsewhere). */
+  userId: string;
+  /** Type of entity being starred. */
+  entityType: StorageStarEntityType;
+  /** ID of the entity being starred. */
+  entityId: string;
+  /** Timestamp the star was created. */
+  createdAt: Date;
+}
+
+/** Identifier for a star row, used by lookup and delete operations. */
+export type StorageStarKey = {
+  userId: string;
+  entityType: StorageStarEntityType;
+  entityId: string;
+};
+
+/**
+ * Input to look up which entities in a candidate set are starred by a given
+ * user. Used to annotate list responses without N+1 queries.
+ */
+export type StorageIsStarredBatchInput = {
+  userId: string;
+  entityType: StorageStarEntityType;
+  entityIds: string[];
+};
+
+/** Input to list all entity IDs starred by a given user, optionally scoped by entity type. */
+export type StorageListStarsInput = {
+  userId: string;
+  entityType: StorageStarEntityType;
+};
+
+/**
+ * Input to remove all stars for a given entity. Called by hard-delete handlers
+ * so star rows do not orphan the deleted entity.
+ */
+export type StorageDeleteStarsForEntityInput = {
+  entityType: StorageStarEntityType;
+  entityId: string;
+};

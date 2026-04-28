@@ -9,6 +9,7 @@ import type {
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageStarType,
   StorageWorkspaceType,
   StorageSkillType,
   StorageWorkflowRun,
@@ -64,6 +65,13 @@ export class InMemoryDB {
   readonly workspaceVersions = new Map<string, WorkspaceVersion>();
   readonly skills = new Map<string, StorageSkillType>();
   readonly skillVersions = new Map<string, SkillVersion>();
+  /**
+   * Stars keyed by `${userId}\u0000${entityType}\u0000${entityId}`. The
+   * stars domain owns reads/writes; this Map lives on InMemoryDB so the
+   * stars domain can also mutate `agents` / `skills` `starCount` atomically
+   * within the same synchronous block.
+   */
+  readonly stars = new Map<string, StorageStarType>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -108,6 +116,7 @@ export class InMemoryDB {
     this.workspaceVersions.clear();
     this.skills.clear();
     this.skillVersions.clear();
+    this.stars.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();

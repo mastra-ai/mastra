@@ -35,6 +35,8 @@ export interface AgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
+  /** Star (favorite) agents and skills with per-user state and aggregate counts. */
+  stars?: boolean;
 }
 
 /**
