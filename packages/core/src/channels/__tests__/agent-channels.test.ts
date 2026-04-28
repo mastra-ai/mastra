@@ -202,6 +202,361 @@ describe('AgentChannels', () => {
       expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
     });
   });
+
+  describe('tool lifecycle hooks', () => {
+    async function* chunks(...items: any[]) {
+      for (const item of items) yield item;
+    }
+
+    function createThread() {
+      return {
+        id: 'thread-1',
+        post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+        startTyping: vi.fn().mockResolvedValue(undefined),
+      } as any;
+    }
+
+    it('calls onToolStart with tool metadata and channel runtime', async () => {
+      const onToolStart = vi.fn();
+      const channels = new AgentChannels({
+        adapters: {
+          slack: { adapter: createMockAdapter('slack'), onToolStart },
+        },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'search_docs', toolCallId: 'call-1', args: { query: 'channels' } },
+          }),
+        },
+        thread,
+        'slack',
+      );
+
+      expect(onToolStart).toHaveBeenCalledTimes(1);
+      expect(onToolStart).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'search_docs',
+          displayName: 'search_docs',
+          toolCallId: 'call-1',
+          args: { query: 'channels' },
+          argsSummary: 'channels',
+          platform: 'slack',
+          thread,
+          channel: expect.objectContaining({ status: expect.any(Object) }),
+        }),
+      );
+    });
+
+    it('calls onToolEnd with result metadata and duration', async () => {
+      const onToolEnd = vi.fn();
+      const channels = new AgentChannels({
+        adapters: {
+          slack: { adapter: createMockAdapter('slack'), onToolEnd },
+        },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks(
+            {
+              type: 'tool-call',
+              payload: { toolName: 'search_docs', toolCallId: 'call-1', args: { query: 'channels' } },
+            },
+            {
+              type: 'tool-result',
+              payload: {
+                toolName: 'search_docs',
+                toolCallId: 'call-1',
+                args: { query: 'channels' },
+                result: { found: true },
+                isError: true,
+              },
+            },
+          ),
+        },
+        thread,
+        'slack',
+      );
+
+      expect(onToolEnd).toHaveBeenCalledTimes(1);
+      expect(onToolEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'search_docs',
+          displayName: 'search_docs',
+          toolCallId: 'call-1',
+          args: { query: 'channels' },
+          argsSummary: 'channels',
+          platform: 'slack',
+          thread,
+          result: { found: true },
+          isError: true,
+          durationMs: expect.any(Number),
+        }),
+      );
+    });
+
+    it('passes enriched completed tool context to formatToolCall', async () => {
+      const formatToolCall = vi.fn().mockReturnValue('custom result');
+      const adapter = createMockAdapter('slack');
+      const channels = new AgentChannels({
+        adapters: {
+          slack: { adapter, formatToolCall },
+        },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks(
+            {
+              type: 'tool-call',
+              payload: { toolName: 'mastra_workspace_search_docs', toolCallId: 'call-1', args: { query: 'channels' } },
+            },
+            {
+              type: 'tool-result',
+              payload: {
+                toolName: 'mastra_workspace_search_docs',
+                toolCallId: 'call-1',
+                args: { query: 'channels' },
+                result: 'done',
+                isError: false,
+              },
+            },
+          ),
+        },
+        thread,
+        'slack',
+      );
+
+      expect(formatToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'mastra_workspace_search_docs',
+          displayName: 'search_docs',
+          args: { query: 'channels' },
+          result: 'done',
+          isError: false,
+          toolCallId: 'call-1',
+          argsSummary: 'channels',
+          channel: expect.any(Object),
+          thread,
+          platform: 'slack',
+          durationMs: expect.any(Number),
+        }),
+      );
+      expect(adapter.editMessage).not.toHaveBeenCalled();
+      expect(thread.post).toHaveBeenCalledWith('custom result');
+    });
+
+    it('uses tool-result args when approval resume pre-seeds a placeholder', async () => {
+      const formatToolCall = vi.fn().mockReturnValue('custom result');
+      const adapter = createMockAdapter('slack');
+      const channels = new AgentChannels({
+        adapters: {
+          slack: { adapter, formatToolCall },
+        },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-result',
+            payload: {
+              toolName: 'mastra_workspace_search_docs',
+              toolCallId: 'call-1',
+              args: { query: 'channels' },
+              result: 'done',
+              isError: false,
+            },
+          }),
+        },
+        thread,
+        'slack',
+        { toolCallId: 'call-1', messageId: 'approval-msg-1' },
+      );
+
+      expect(formatToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'mastra_workspace_search_docs',
+          displayName: 'search_docs',
+          args: { query: 'channels' },
+          argsSummary: 'channels',
+          toolCallId: 'call-1',
+        }),
+      );
+      expect(adapter.editMessage).toHaveBeenCalledWith('thread-1', 'approval-msg-1', 'custom result');
+    });
+
+    it('maps channel status to adapter status capabilities', async () => {
+      const adapter = {
+        ...createMockAdapter('slack'),
+        setStatus: vi.fn().mockResolvedValue(undefined),
+        clearStatus: vi.fn().mockResolvedValue(undefined),
+      };
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        await channel.status.set('Reading file…');
+      });
+      const channels = new AgentChannels({ adapters: { slack: { adapter, onToolStart } } });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+          }),
+        },
+        thread,
+        'slack',
+      );
+
+      expect(adapter.setStatus).toHaveBeenCalledWith('thread-1', 'Reading file…');
+      expect(adapter.clearStatus).toHaveBeenCalledWith('thread-1');
+    });
+
+    it('maps channel status to configured status handlers', async () => {
+      const adapter = createMockAdapter('slack');
+      const setStatus = vi.fn().mockResolvedValue(undefined);
+      const clearStatus = vi.fn().mockResolvedValue(undefined);
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        await channel.status.set('Reading file…');
+      });
+      const channels = new AgentChannels({
+        adapters: { slack: { adapter, status: { set: setStatus, clear: clearStatus }, onToolStart } },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+          }),
+        },
+        thread,
+        'slack',
+      );
+
+      expect(setStatus).toHaveBeenCalledWith({
+        adapter,
+        thread,
+        threadId: 'thread-1',
+        platform: 'slack',
+        text: 'Reading file…',
+      });
+      expect(clearStatus).toHaveBeenCalledWith({ adapter, thread, threadId: 'thread-1', platform: 'slack' });
+    });
+
+    it('no-ops channel status when adapter lacks status support', async () => {
+      const adapter = createMockAdapter('slack');
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        const handle = await channel.status.set('Reading file…');
+        await handle.clear();
+      });
+      const channels = new AgentChannels({ adapters: { slack: { adapter, onToolStart } } });
+
+      await expect(
+        (channels as any).consumeAgentStream(
+          {
+            fullStream: chunks({
+              type: 'tool-call',
+              payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+            }),
+          },
+          createThread(),
+          'slack',
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not call Slack-specific assistant status methods from core', async () => {
+      const adapter = {
+        ...createMockAdapter('slack'),
+        setAssistantStatus: vi.fn().mockResolvedValue(undefined),
+      };
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        const handle = await channel.status.set('Reading file…');
+        await handle.clear();
+      });
+      const channels = new AgentChannels({ adapters: { slack: { adapter, onToolStart } } });
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+          }),
+        },
+        createThread(),
+        'slack',
+      );
+
+      expect(adapter.setAssistantStatus).not.toHaveBeenCalled();
+    });
+
+    it('prevents stale status handles from clearing newer statuses', async () => {
+      const adapter = {
+        ...createMockAdapter('slack'),
+        setStatus: vi.fn().mockResolvedValue(undefined),
+        clearStatus: vi.fn().mockResolvedValue(undefined),
+      };
+      let firstHandle: any;
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        firstHandle = await channel.status.set('First status');
+        await channel.status.set('Second status');
+        await firstHandle.clear();
+      });
+      const channels = new AgentChannels({ adapters: { slack: { adapter, onToolStart } } });
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+          }),
+        },
+        createThread(),
+        'slack',
+      );
+
+      expect(adapter.setStatus).toHaveBeenNthCalledWith(1, 'thread-1', 'First status');
+      expect(adapter.setStatus).toHaveBeenNthCalledWith(2, 'thread-1', 'Second status');
+      expect(adapter.clearStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears status when the stream errors', async () => {
+      const adapter = {
+        ...createMockAdapter('slack'),
+        setStatus: vi.fn().mockResolvedValue(undefined),
+        clearStatus: vi.fn().mockResolvedValue(undefined),
+      };
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        await channel.status.set('Reading file…');
+      });
+      const channels = new AgentChannels({ adapters: { slack: { adapter, onToolStart } } });
+
+      await expect(
+        (channels as any).consumeAgentStream(
+          {
+            fullStream: chunks({
+              type: 'tool-call',
+              payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+            }),
+            error: new Error('boom'),
+          },
+          createThread(),
+          'slack',
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(adapter.clearStatus).toHaveBeenCalledWith('thread-1');
+    });
+  });
 });
 
 describe('matchesDomain', () => {

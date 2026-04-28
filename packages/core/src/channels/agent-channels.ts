@@ -31,6 +31,65 @@ import type { ChannelContext, ThreadHistoryMessage } from './types';
 /** Message content that can be posted to a channel. */
 export type PostableMessage = string | CardElement;
 
+/** Handle returned by a channel status update. */
+export type ChannelStatusHandle = {
+  /** Clear this status if it is still the active status. */
+  clear: () => Promise<void>;
+};
+
+/** Runtime helpers available to channel lifecycle hooks. */
+export type ChannelRuntime = {
+  status: {
+    /** Set a best-effort channel status through configured status handlers or adapter status methods. */
+    set: (text: string) => Promise<ChannelStatusHandle>;
+    /** Clear the active channel status. */
+    clear: () => Promise<void>;
+  };
+};
+
+/** Context passed to adapter status handlers. */
+export type ChannelStatusContext = {
+  adapter: Adapter;
+  thread: Thread;
+  threadId: string;
+  platform: string;
+};
+
+/** Context passed when setting adapter status. */
+export type ChannelStatusSetContext = ChannelStatusContext & {
+  text: string;
+};
+
+/** Optional adapter status handlers. */
+export type ChannelStatusConfig = {
+  set?: (ctx: ChannelStatusSetContext) => Promise<void> | void;
+  clear?: (ctx: ChannelStatusContext) => Promise<void> | void;
+};
+
+/** Context passed when a tool starts running in a channel response. */
+export type ChannelToolStartContext = {
+  toolName: string;
+  displayName: string;
+  toolCallId: string;
+  args: Record<string, unknown>;
+  argsSummary: string;
+  channel: ChannelRuntime;
+  thread: Thread;
+  platform: string;
+};
+
+/** Context passed when a tool completes in a channel response. */
+export type ChannelToolEndContext = ChannelToolStartContext & {
+  result: unknown;
+  isError?: boolean;
+  durationMs?: number;
+};
+
+type StatusCapableAdapter = Adapter & {
+  setStatus?: (threadId: string, text: string) => Promise<void> | void;
+  clearStatus?: (threadId: string) => Promise<void> | void;
+};
+
 /** Per-adapter configuration. */
 export interface ChannelAdapterConfig {
   adapter: Adapter;
@@ -60,12 +119,25 @@ export interface ChannelAdapterConfig {
    *
    * @default - A Card showing the function-call signature and result.
    */
-  formatToolCall?: (info: {
-    toolName: string;
-    args: Record<string, unknown>;
-    result: unknown;
-    isError?: boolean;
-  }) => PostableMessage | null;
+  formatToolCall?: (info: ChannelToolEndContext) => PostableMessage | null;
+
+  /**
+   * Optional status handlers for adapters that do not implement status methods directly.
+   * Use this to bridge third-party adapter APIs to Mastra's channel status runtime.
+   */
+  status?: ChannelStatusConfig;
+
+  /**
+   * Called when a tool starts running in the channel response.
+   * Use this for lifecycle side effects such as setting a platform status.
+   */
+  onToolStart?: (ctx: ChannelToolStartContext) => Promise<void> | void;
+
+  /**
+   * Called when a tool completes in the channel response.
+   * Receives `isError` for failed tool results.
+   */
+  onToolEnd?: (ctx: ChannelToolEndContext) => Promise<void> | void;
 
   /**
    * Override how errors are rendered in the chat.
@@ -1105,12 +1177,82 @@ export class AgentChannels {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
+    const statusAdapter = adapter as StatusCapableAdapter;
+    let statusToken = 0;
+    let activeStatusToken: number | undefined;
+
+    const statusContext: ChannelStatusContext = {
+      adapter,
+      thread: sdkThread,
+      threadId: sdkThread.id,
+      platform,
+    };
+
+    const setAdapterStatus = async (text: string) => {
+      if (typeof adapterConfig?.status?.set === 'function') {
+        await adapterConfig.status.set({ ...statusContext, text });
+        return;
+      }
+      if (typeof statusAdapter.setStatus === 'function') {
+        await statusAdapter.setStatus(sdkThread.id, text);
+      }
+    };
+
+    const clearAdapterStatus = async () => {
+      if (typeof adapterConfig?.status?.clear === 'function') {
+        await adapterConfig.status.clear(statusContext);
+        return;
+      }
+      if (typeof adapterConfig?.status?.set === 'function') {
+        await adapterConfig.status.set({ ...statusContext, text: '' });
+        return;
+      }
+      if (typeof statusAdapter.clearStatus === 'function') {
+        await statusAdapter.clearStatus(sdkThread.id);
+        return;
+      }
+      if (typeof statusAdapter.setStatus === 'function') {
+        await statusAdapter.setStatus(sdkThread.id, '');
+      }
+    };
+
+    const clearStatus = async (token?: number) => {
+      if (token != null && token !== activeStatusToken) return;
+      if (activeStatusToken == null) return;
+      activeStatusToken = undefined;
+      statusToken++;
+      try {
+        await clearAdapterStatus();
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] Status clear failed (best-effort)', { error: e });
+      }
+    };
+
+    const channelRuntime: ChannelRuntime = {
+      status: {
+        set: async text => {
+          const token = ++statusToken;
+          activeStatusToken = token;
+          try {
+            await setAdapterStatus(text);
+          } catch (e) {
+            if (activeStatusToken === token) activeStatusToken = undefined;
+            this.logger?.debug('[CHANNEL] Status set failed (best-effort)', { error: e });
+          }
+          return {
+            clear: async () => clearStatus(token),
+          };
+        },
+        clear: async () => clearStatus(),
+      },
+    };
 
     // Per-stream rendering state
     let textBuffer = '';
     let typingStarted = false;
     interface TrackedTool {
       displayName: string;
+      args?: Record<string, unknown>;
       argsSummary: string;
       startedAt: number;
       messageId?: string; // platform message ID for editing
@@ -1247,8 +1389,28 @@ export class AgentChannels {
             messageId = sentMessage?.id;
           }
 
+          const toolStartContext: ChannelToolStartContext = {
+            toolName: chunk.payload.toolName,
+            displayName,
+            toolCallId: chunk.payload.toolCallId,
+            args: rawArgs,
+            argsSummary,
+            channel: channelRuntime,
+            thread: sdkThread,
+            platform,
+          };
+
+          if (adapterConfig?.onToolStart) {
+            try {
+              await adapterConfig.onToolStart(toolStartContext);
+            } catch (e) {
+              this.logger?.debug('[CHANNEL] onToolStart hook failed (best-effort)', { error: e });
+            }
+          }
+
           toolCalls.set(chunk.payload.toolCallId, {
             displayName,
+            args: rawArgs,
             argsSummary,
             startedAt: Date.now(),
             messageId,
@@ -1262,18 +1424,39 @@ export class AgentChannels {
 
           const tracked = toolCalls.get(chunk.payload.toolCallId);
           const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
-          const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
+          const rawArgs = (tracked?.args ??
+            (typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {})) as Record<
+            string,
+            unknown
+          >;
+          const argsSummary = tracked?.argsSummary || formatArgsSummary(rawArgs);
           const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
           const channelMsgId = tracked?.messageId;
           const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
+          const toolEndContext: ChannelToolEndContext = {
+            toolName: chunk.payload.toolName,
+            displayName,
+            toolCallId: chunk.payload.toolCallId,
+            args: rawArgs,
+            argsSummary,
+            channel: channelRuntime,
+            thread: sdkThread,
+            platform,
+            result: chunk.payload.result,
+            isError: chunk.payload.isError,
+            durationMs,
+          };
+
+          if (adapterConfig?.onToolEnd) {
+            try {
+              await adapterConfig.onToolEnd(toolEndContext);
+            } catch (e) {
+              this.logger?.debug('[CHANNEL] onToolEnd hook failed (best-effort)', { error: e });
+            }
+          }
 
           if (adapterConfig?.formatToolCall) {
-            const custom = adapterConfig.formatToolCall({
-              toolName: displayName,
-              args: (chunk.payload.args ?? {}) as Record<string, unknown>,
-              result: chunk.payload.result,
-              isError: chunk.payload.isError,
-            });
+            const custom = adapterConfig.formatToolCall(toolEndContext);
             if (custom != null) {
               await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
             }
@@ -1325,6 +1508,7 @@ export class AgentChannels {
     } finally {
       clearTimeout(typingFallbackTimer);
       stopTypingKeepalive();
+      await channelRuntime.status.clear();
     }
 
     // Check for errors that occurred during streaming
