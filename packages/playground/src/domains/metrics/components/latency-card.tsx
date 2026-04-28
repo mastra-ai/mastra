@@ -26,7 +26,9 @@ export function LatencyCard() {
           void navigate(getBucketTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] }, tsMs, '1h'));
         }
       }}
-      actions={<OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY.agents })} />}
+      actions={(tab: LatencyTab) => (
+        <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] })} />
+      )}
     />
   );
 }

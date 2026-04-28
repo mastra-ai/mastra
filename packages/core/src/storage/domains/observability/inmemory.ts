@@ -404,6 +404,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     }
 
+    // Root-only attributes: trace identifier and the rootEntity* triplet are
+    // properties of the root span only and must be checked directly.
+    if (filters.traceId !== undefined && rootSpan.traceId !== filters.traceId) {
+      return false;
+    }
+    if (filters.rootEntityType !== undefined && rootSpan.rootEntityType !== filters.rootEntityType) {
+      return false;
+    }
+    if (filters.rootEntityId !== undefined && rootSpan.rootEntityId !== filters.rootEntityId) {
+      return false;
+    }
+    if (filters.rootEntityName !== undefined && rootSpan.rootEntityName !== filters.rootEntityName) {
+      return false;
+    }
+
     // Membership filters: a trace matches when *any* span in the trace matches
     // the given attribute. This aligns the Traces list with what users see in
     // the Metrics view (e.g. filtering by a nested agent's entityName returns

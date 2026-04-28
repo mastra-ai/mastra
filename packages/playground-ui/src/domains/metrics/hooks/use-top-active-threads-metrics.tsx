@@ -41,18 +41,22 @@ export function useTopActiveThreadsMetrics() {
           aggregation: 'count',
           limit: TOP_N,
         }),
-        // Token breakdowns use the same groupBy so we can fold into the top-N
-        // thread set. We intentionally don't apply a limit here — the set is
-        // bounded by the top-N threads we surface below.
+        // Token breakdowns use the same groupBy and a server-side TopK so the
+        // response stays bounded even when the underlying thread set has very
+        // high cardinality. Threads that are top-N by runs but not by tokens
+        // will display 0 tokens (an acceptable approximation in exchange for
+        // a bounded query).
         client.getMetricBreakdown({
           ...breakdownBase,
           name: ['mastra_model_total_input_tokens'],
           aggregation: 'sum',
+          limit: TOP_N,
         }),
         client.getMetricBreakdown({
           ...breakdownBase,
           name: ['mastra_model_total_output_tokens'],
           aggregation: 'sum',
+          limit: TOP_N,
         }),
       ]);
 

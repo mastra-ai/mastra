@@ -303,22 +303,46 @@ function isNeutralValue(v: string): boolean {
   return trimmed === '' || trimmed === NEUTRAL_PICK_VALUE;
 }
 
+/** `rootEntityType` is enum-valued at the backend; URL-supplied or stale stored
+ *  values can be arbitrary strings, so we validate against the allowed set
+ *  before letting them reach the filter object. Returns `undefined` if the
+ *  value isn't a known enum option. */
+const VALID_ROOT_ENTITY_TYPES: ReadonlySet<EntityType> = new Set(
+  METRICS_ROOT_ENTITY_TYPE_OPTIONS.map(o => o.entityType),
+);
+function toValidRootEntityType(v: string): EntityType | undefined {
+  const trimmed = v.trim();
+  return VALID_ROOT_ENTITY_TYPES.has(trimmed as EntityType) ? (trimmed as EntityType) : undefined;
+}
+
 export function buildMetricsDimensionalFilter(tokens: PropertyFilterToken[]): MetricsDimensionalFilter {
   const result: MetricsDimensionalFilter = {};
   for (const token of tokens) {
     const fieldId = token.fieldId as keyof MetricsDimensionalFilter;
     if (Array.isArray(token.value)) {
-      const values = token.value.filter((v): v is string => typeof v === 'string' && !isNeutralValue(v));
+      const values = token.value
+        .filter((v): v is string => typeof v === 'string')
+        .map(v => v.trim())
+        .filter(v => !isNeutralValue(v));
       if (values.length === 0) continue;
       if (fieldId === 'tags') {
         result.tags = values;
+      } else if (fieldId === 'rootEntityType') {
+        const validated = toValidRootEntityType(values[0]);
+        if (validated) result.rootEntityType = validated;
       } else {
         // Backend accepts a single string per dimension; take the first selection.
         (result as Record<string, unknown>)[fieldId] = values[0];
       }
     } else if (typeof token.value === 'string') {
       if (isNeutralValue(token.value)) continue;
-      (result as Record<string, unknown>)[fieldId] = token.value.trim();
+      const trimmed = token.value.trim();
+      if (fieldId === 'rootEntityType') {
+        const validated = toValidRootEntityType(trimmed);
+        if (validated) result.rootEntityType = validated;
+      } else {
+        (result as Record<string, unknown>)[fieldId] = trimmed;
+      }
     }
   }
   return result;

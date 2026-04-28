@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
@@ -54,11 +54,25 @@ export interface LatencyCardViewProps {
   isError: boolean;
   /** Optional drilldown: invoked when a chart node is clicked. Container provides the navigation. */
   onPointClick?: (tab: LatencyTab, point: LatencyPoint) => void;
-  /** Optional slot for top-bar action buttons (e.g. "View in Traces"). */
-  actions?: ReactNode;
+  /**
+   * Optional slot for top-bar action buttons (e.g. "View in Traces").
+   * Pass a function to receive the active tab so the action can scope itself to the current entity type.
+   */
+  actions?: ReactNode | ((tab: LatencyTab) => ReactNode);
 }
 
 export function LatencyCardView({ data, isLoading, isError, onPointClick, actions }: LatencyCardViewProps) {
+  const initialTab: LatencyTab = !data
+    ? 'agents'
+    : data.agentData.length > 0
+      ? 'agents'
+      : data.workflowData.length > 0
+        ? 'workflows'
+        : data.toolData.length > 0
+          ? 'tools'
+          : 'agents';
+  const [activeTab, setActiveTab] = useState<LatencyTab>(initialTab);
+  const renderedActions = typeof actions === 'function' ? actions(activeTab) : actions;
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
   const p50Values = data
     ? Object.values(data)
@@ -75,7 +89,7 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Latency" description="Hourly p50 and p95 latency." />
         {hasData && <MetricsCard.Summary value={avgP50} label="Avg p50" />}
-        {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
+        {hasData && renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -87,15 +101,9 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
             <MetricsCard.NoData message="No latency data yet" />
           ) : (
             <Tabs
-              defaultTab={
-                data.agentData.length > 0
-                  ? 'agents'
-                  : data.workflowData.length > 0
-                    ? 'workflows'
-                    : data.toolData.length > 0
-                      ? 'tools'
-                      : 'agents'
-              }
+              value={activeTab}
+              onValueChange={setActiveTab}
+              defaultTab={initialTab}
               className="overflow-visible"
             >
               <TabList>

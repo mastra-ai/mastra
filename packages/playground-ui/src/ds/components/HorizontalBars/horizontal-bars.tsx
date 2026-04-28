@@ -65,7 +65,9 @@ export function HorizontalBars({
                         const pct = total > 0 ? (val / total) * 100 : 0;
                         const left = d.values.slice(0, si).reduce((s, v) => s + (total > 0 ? (v / total) * 100 : 0), 0);
                         const isLastWithValue = d.values.slice(si + 1).every(v => !v);
-                        const segHref = d.hrefs?.[si];
+                        // Only honor segment-level links when the row itself is not an anchor.
+                        // Otherwise we'd render <a> nested inside <a>, which is invalid HTML.
+                        const segHref = d.href ? undefined : d.hrefs?.[si];
 
                         const segmentNode = (
                           <div

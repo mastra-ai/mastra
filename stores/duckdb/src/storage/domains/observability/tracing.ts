@@ -627,7 +627,12 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   }
   const prefilterOrderBy = `ORDER BY ${orderByField} ${orderDir}`;
 
-  const hasPostAggFilters = Object.keys(postAgg).length > 0 || hasChildError !== undefined;
+  // The fast path orders + paginates on `span_events` `start` rows. Those rows
+  // never carry a non-null `endedAt`, so ordering by `endedAt` would compare
+  // NULLs and produce incorrect pagination. In that case fall back to the slow
+  // path which orders against the reconstructed root spans.
+  const hasPostAggFilters =
+    Object.keys(postAgg).length > 0 || hasChildError !== undefined || orderBy.field === 'endedAt';
 
   if (!hasPostAggFilters) {
     // Fast path: order + paginate in the prefilter, reconstruct only the page.

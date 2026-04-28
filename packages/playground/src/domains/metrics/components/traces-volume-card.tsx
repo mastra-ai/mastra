@@ -18,20 +18,18 @@ export function TracesVolumeCard() {
       data={data}
       isLoading={isLoading}
       isError={isError}
-      getRowHref={(tab, row) =>
-        getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], entityName: row.name })
-      }
+      getRowHref={(tab, row) => getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], entityName: row.name })}
       getErrorSegmentHref={(tab, row) =>
         row.errors > 0
-          ? getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], entityName: row.name, status: 'error' })
+          ? getLogsHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], entityName: row.name, status: 'error' })
           : undefined
       }
-      actions={
+      actions={(tab: VolumeTab) => (
         <>
-          <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY.agents })} />
-          <OpenErrorsInLogsButton href={getLogsHref({ rootEntityType: TAB_TO_ROOT_ENTITY.agents })} />
+          <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] })} />
+          <OpenErrorsInLogsButton href={getLogsHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], status: 'error' })} />
         </>
-      }
+      )}
     />
   );
 }

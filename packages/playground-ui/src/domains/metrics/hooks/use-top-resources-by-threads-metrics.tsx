@@ -41,15 +41,22 @@ export function useTopResourcesByThreadsMetrics() {
           distinctColumn: 'threadId',
           limit: TOP_N,
         }),
+        // Token breakdowns use the same groupBy and a server-side TopK so the
+        // response stays bounded even when the underlying resource set has very
+        // high cardinality. Resources that are top-N by thread count but not by
+        // tokens will display 0 tokens (an acceptable approximation in exchange
+        // for a bounded query).
         client.getMetricBreakdown({
           ...breakdownBase,
           name: ['mastra_model_total_input_tokens'],
           aggregation: 'sum',
+          limit: TOP_N,
         }),
         client.getMetricBreakdown({
           ...breakdownBase,
           name: ['mastra_model_total_output_tokens'],
           aggregation: 'sum',
+          limit: TOP_N,
         }),
       ]);
 

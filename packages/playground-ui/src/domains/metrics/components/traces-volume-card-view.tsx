@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
@@ -46,8 +46,11 @@ export interface TracesVolumeCardViewProps {
   getRowHref?: (tab: VolumeTab, row: VolumeRow) => string | undefined;
   /** Optional drilldown: returns href for clicking the "Errors" segment of a bar. */
   getErrorSegmentHref?: (tab: VolumeTab, row: VolumeRow) => string | undefined;
-  /** Optional slot for top-bar action buttons. */
-  actions?: ReactNode;
+  /**
+   * Optional slot for top-bar action buttons.
+   * Pass a function to receive the active tab so actions can scope themselves to the current entity type.
+   */
+  actions?: ReactNode | ((tab: VolumeTab) => ReactNode);
 }
 
 export function TracesVolumeCardView({
@@ -58,6 +61,8 @@ export function TracesVolumeCardView({
   getErrorSegmentHref,
   actions,
 }: TracesVolumeCardViewProps) {
+  const [activeTab, setActiveTab] = useState<VolumeTab>('agents');
+  const renderedActions = typeof actions === 'function' ? actions(activeTab) : actions;
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
   const total = data
     ? [...data.agentData, ...data.workflowData, ...data.toolData].reduce((s, d) => s + d.completed + d.errors, 0)
@@ -72,7 +77,7 @@ export function TracesVolumeCardView({
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Trace Volume" description="Runs and call counts." />
         {hasData && <MetricsCard.Summary value={formatCompact(total)} label="Total runs" />}
-        {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
+        {hasData && renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -83,7 +88,12 @@ export function TracesVolumeCardView({
           {!hasData ? (
             <MetricsCard.NoData message="No trace volume data yet" />
           ) : (
-            <Tabs defaultTab="agents" className="grid grid-rows-[auto_1fr] overflow-y-auto h-full">
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              defaultTab="agents"
+              className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
+            >
               <TabList>
                 <Tab value="agents">Agents</Tab>
                 <Tab value="workflows">Workflows</Tab>
