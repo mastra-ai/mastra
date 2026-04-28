@@ -55,6 +55,7 @@ jobs:
       TURBO_CACHE: remote:r
     # Minimal permissions - read-only access
     permissions:
+      actions: read
       contents: read
 
     steps:
@@ -87,13 +88,19 @@ jobs:
           BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
           echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
+      - name: Download prebuild outputs
+        uses: dawidd6/action-download-artifact@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id }}
+          name: prebuild-outputs
+          path: prebuild-artifact
+
+      - name: Extract prebuild outputs
+        run: tar -xzf prebuild-artifact/prebuild-outputs.tar.gz
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Run changed tests (Shard ${{ matrix.shard }}/4)
         run: |
@@ -143,6 +150,7 @@ jobs:
       TURBO_CACHE: remote:r
     # Minimal permissions - read-only access
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout PR code
@@ -174,13 +182,19 @@ jobs:
           BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
           echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
+      - name: Download prebuild outputs
+        uses: dawidd6/action-download-artifact@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id }}
+          name: prebuild-outputs
+          path: prebuild-artifact
+
+      - name: Extract prebuild outputs
+        run: tar -xzf prebuild-artifact/prebuild-outputs.tar.gz
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Normalize project name
         id: normalize
@@ -583,6 +597,7 @@ jobs:
     if: always() && github.event.workflow_run.conclusion == 'success'
     # Minimal permissions - read-only access
     permissions:
+      actions: read
       contents: read
 
     steps:
