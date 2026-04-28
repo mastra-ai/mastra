@@ -30,7 +30,7 @@ Follow the [Development Guide](./DEVELOPMENT.md) to learn how to set up this rep
 
 Ensure that the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
 
-**Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and provide feedback or merge it.
+**Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and either provide feedback or merge it.
 
 ### Do you intend to add a new feature or change an existing one?
 
