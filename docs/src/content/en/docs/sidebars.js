@@ -289,6 +289,14 @@ const sidebars = {
           id: 'streaming/workflow-streaming',
           label: 'Workflow Streaming',
         },
+        {
+          type: 'doc',
+          id: 'streaming/background-task-streaming',
+          label: 'Background Task Streaming',
+          customProps: {
+            tags: ['new'],
+          },
+        },
       ],
     },
     {
