@@ -19,6 +19,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
@@ -572,17 +573,18 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       });
 
       if (authError) {
+        const authResult = authError as AuthErrorWithHeaders;
         // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
-        if (authError.headers) {
-          for (const [key, value] of Object.entries(authError.headers)) {
+        if (authResult.headers) {
+          for (const [key, value] of Object.entries(authResult.headers)) {
             ctx.set(key, value);
           }
         }
 
         // If this is an auth error (not just a success-with-headers), return error response
-        if (authError.error) {
-          ctx.status = authError.status;
-          ctx.body = { error: authError.error };
+        if (authResult.error) {
+          ctx.status = authResult.status;
+          ctx.body = { error: authResult.error };
           return;
         }
       }
@@ -806,14 +808,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           });
 
           if (authError) {
-            if (authError.headers) {
-              for (const [key, value] of Object.entries(authError.headers)) {
+            const authResult = authError as AuthErrorWithHeaders;
+            if (authResult.headers) {
+              for (const [key, value] of Object.entries(authResult.headers)) {
                 ctx.set(key, value);
               }
             }
-            if (authError.error) {
-              ctx.status = authError.status;
-              ctx.body = { error: authError.error };
+            if (authResult.error) {
+              ctx.status = authResult.status;
+              ctx.body = { error: authResult.error };
               return;
             }
           }

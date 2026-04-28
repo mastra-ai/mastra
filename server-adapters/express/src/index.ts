@@ -18,6 +18,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
@@ -435,16 +436,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         if (authError) {
+          const authResult = authError as AuthErrorWithHeaders;
           // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
-          if (authError.headers) {
-            for (const [key, value] of Object.entries(authError.headers)) {
+          if (authResult.headers) {
+            for (const [key, value] of Object.entries(authResult.headers)) {
               res.setHeader(key, value);
             }
           }
 
           // If this is an auth error (not just a success-with-headers), return error response
-          if (authError.error) {
-            return res.status(authError.status).json({ error: authError.error });
+          if (authResult.error) {
+            return res.status(authResult.status).json({ error: authResult.error });
           }
         }
 
@@ -623,13 +625,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
 
           if (authError) {
-            if (authError.headers) {
-              for (const [key, value] of Object.entries(authError.headers)) {
+            const authResult = authError as AuthErrorWithHeaders;
+            if (authResult.headers) {
+              for (const [key, value] of Object.entries(authResult.headers)) {
                 res.setHeader(key, value);
               }
             }
-            if (authError.error) {
-              return res.status(authError.status).json({ error: authError.error });
+            if (authResult.error) {
+              return res.status(authResult.status).json({ error: authResult.error });
             }
           }
 
