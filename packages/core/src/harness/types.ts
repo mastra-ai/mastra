@@ -271,8 +271,17 @@ export interface HarnessConfig<TState = {}> {
       {
         start: (opts: { onMessage: (msg: any) => Promise<void> }) => Promise<void>;
         stop: () => Promise<void>;
+
+        send?: (msg: { threadId?: string; userId?: string; content: string }) => Promise<void>;
       }
     >;
+
+    threadContext?: {
+      maxMessages?: number;
+    };
+
+    inlineMedia?: boolean;
+    inlineLinks?: boolean;
   };
 }
 

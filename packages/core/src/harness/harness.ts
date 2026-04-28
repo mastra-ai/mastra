@@ -3248,7 +3248,14 @@ export class Harness<TState = {}> {
   async startChannels(): Promise<void> {
     if (!this.channelsConfig?.adapters) return;
 
-    const adapters = this.channelsConfig.adapters;
+    const adapters = this.channelsConfig.adapters as Record<
+      string,
+      {
+        start: (opts: { onMessage: (msg: any) => Promise<void> }) => Promise<void>;
+        stop: () => Promise<void>;
+        send?: (msg: { threadId?: string; userId?: string; content: string }) => Promise<void>;
+      }
+    >;
 
     for (const platform of Object.keys(adapters) as string[]) {
       if (this.activeChannels.has(platform)) continue;
@@ -3258,23 +3265,37 @@ export class Harness<TState = {}> {
       try {
         await adapter.start({
           onMessage: async (msg: any) => {
-            this.emit({
-              type: 'channel_message_received',
-              platform,
-              threadId: msg.threadId,
-              userId: msg.userId,
-              content: String(msg.content),
-            });
+            try {
+              this.emit({
+                type: 'channel_message_received',
+                platform,
+                threadId: msg.threadId,
+                userId: msg.userId,
+                content: String(msg.content),
+              });
 
-            await this.sendMessage({
-              content: String(msg.content),
-            });
+              if (msg.threadId) {
+                await this.switchThread({
+                  threadId: `${platform}:${msg.threadId}`,
+                });
+              }
 
-            this.emit({
-              type: 'channel_message_sent',
-              platform,
-              threadId: msg.threadId,
-            });
+              await this.sendMessage({
+                content: String(msg.content),
+              });
+
+              this.emit({
+                type: 'channel_message_sent',
+                platform,
+                threadId: msg.threadId,
+              });
+            } catch (error) {
+              this.emit({
+                type: 'channel_error',
+                platform,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
           },
         });
 
