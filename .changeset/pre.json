@@ -133,6 +133,7 @@
     "@mastra/azure": "0.1.0"
   },
   "changesets": [
+    "abort-error-not-error-level",
     "add-azure-workspace-provider",
     "agent-resume-stream-endpoint",
     "automated-provider-registry-20260424-123542",
@@ -149,7 +150,10 @@
     "fix-phantom-exports",
     "fix-ptc-args",
     "fix-remove-hardcoded-temperature-default",
+    "fix-transparent-server-side-refresh",
     "fluffy-tires-cover",
+    "funny-monkeys-sing",
+    "fuzzy-parts-dig",
     "green-birds-knock",
     "hot-apes-pump",
     "icy-bikes-vanish",
@@ -164,6 +168,7 @@
     "rare-schools-repair",
     "refactor-hono-custom-routes",
     "sharp-pianos-carry",
+    "silent-lions-draw",
     "small-falcons-remain",
     "stream-until-idle-client",
     "stream-until-idle-react",

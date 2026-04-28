@@ -1,5 +1,17 @@
 # @mastra/koa
 
+## 1.4.13-alpha.5
+
+### Patch Changes
+
+- Authentication now refreshes expired server-side sessions transparently, so recoverable token expiry no longer causes unexpected user sign-outs. Only truly expired sessions (e.g. refresh token dead) return a 401. ([#15819](https://github.com/mastra-ai/mastra/pull/15819))
+
+  Server adapters now forward refreshed session cookies consistently, and auth-studio logs session validation and refresh failures to improve diagnostics.
+
+- Updated dependencies [[`28caa5b`](https://github.com/mastra-ai/mastra/commit/28caa5b032358545af2589ed90636eccb4dd9d2f), [`a535ff2`](https://github.com/mastra-ai/mastra/commit/a535ff267cf525306de01c70bae95221ef66612b), [`7d056b6`](https://github.com/mastra-ai/mastra/commit/7d056b6ecf603cacaa0f663ff1df025ed885b6c1), [`26f1f94`](https://github.com/mastra-ai/mastra/commit/26f1f9490574b864ba1ecedf2c9632e0767a23bd)]:
+  - @mastra/core@1.29.0-alpha.5
+  - @mastra/server@1.29.0-alpha.5
+
 ## 1.4.13-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.29.0-alpha.5
+
+### Patch Changes
+
+- Stop logging client-disconnect aborts as `Error in LLM execution` at error level. The catch block in `agentic-execution/llm-execution-step.ts` now checks for `isAbortError(error)` first and exits via a `debug`-level log + the existing `onAbort` flow before the upstream-error / generic-error branches run. Closes #15844. ([#15847](https://github.com/mastra-ai/mastra/pull/15847))
+
+- Users now get a clear error when using Observational Memory with agent network. ([#15808](https://github.com/mastra-ai/mastra/pull/15808))
+
+- Fixed `dataset.startExperiment` for workflow targets to match `runEvals`. Previously, scorers running inside a persisted experiment could not access per-step input or output, `requestContext` configured on the experiment was not forwarded into the workflow run, and direct agent calls inside workflow steps could start detached traces instead of nesting under the workflow step span. Step-level data is now exposed to scorers via `run.targetMetadata.stepResults` and `run.targetMetadata.stepExecutionPath`, the workflow's root span ID is available as `run.targetSpanId`, `requestContext` propagates into every step, and ambient workflow step tracing is used when creating nested spans. Fixes [#15613](https://github.com/mastra-ai/mastra/issues/15613). ([#15792](https://github.com/mastra-ai/mastra/pull/15792))
+
 ## 1.29.0-alpha.4
 
 ### Minor Changes
