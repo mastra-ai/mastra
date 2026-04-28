@@ -2743,6 +2743,7 @@ export class Harness<TState = {}> {
           agentType: event.agentType,
           task: event.task,
           modelId: event.modelId,
+          forked: event.forked,
           toolCalls: [],
           textDelta: '',
           status: 'running',
@@ -2986,6 +2987,7 @@ export class Harness<TState = {}> {
         resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
+        getParentModelId: () => this.getCurrentModelId(),
         // Resolved lazily so forked subagents see the current mode's agent
         // even if the mode switches between tool-call scheduling and execution.
         getParentAgent: () => {
@@ -3024,7 +3026,7 @@ export class Harness<TState = {}> {
         // prompt-cache prefix, and stripping it would invalidate the cache.
         // Recursive forking is blocked at runtime instead: see the patched
         // `subagent` execute that the forked tool path installs in `tools.ts`.
-        getParentToolsets: () => this.buildToolsets(requestContext),
+        getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
       });
     }
 

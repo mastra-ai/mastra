@@ -568,6 +568,7 @@ describe('createSubagentTool forked subagent behavior', () => {
       subagents,
       resolveModel,
       fallbackModelId: 'test-model',
+      getParentModelId: () => 'openai/gpt-5.5',
       getParentAgent: () => parentAgent,
       cloneThreadForFork,
     });
@@ -580,10 +581,12 @@ describe('createSubagentTool forked subagent behavior', () => {
     };
     requestContext.set('harness', harnessCtx);
 
-    const result = await (tool as any).execute(
-      { agentType: 'explore', task: 'Dig deeper', forked: true },
-      { requestContext, agent: { toolCallId: 'tc-fork-1' } },
-    );
+    const input: { agentType: 'explore'; task: string; forked: boolean; modelId?: string } = {
+      agentType: 'explore',
+      task: 'Dig deeper',
+      forked: true,
+    };
+    const result = await (tool as any).execute(input, { requestContext, agent: { toolCallId: 'tc-fork-1' } });
 
     expect(result.isError).toBe(false);
 
@@ -600,10 +603,22 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(mockStream).not.toHaveBeenCalled();
 
     const [taskArg, streamOpts] = parentStream.mock.calls[0]!;
-    expect(taskArg).toBe('Dig deeper');
+    expect(taskArg).toContain('Dig deeper');
+    expect(taskArg).toContain('Do not call the `subagent` tool');
     // Memory option points at the cloned thread so history is inherited
     // without polluting the parent thread.
     expect(streamOpts.memory).toEqual({ thread: 'forked-thread-1', resource: 'parent-resource-1' });
+    // Forked runs need multiple steps so an accidental nested-subagent call can
+    // consume the runtime stub and then produce a direct answer on the next step.
+    expect(streamOpts.maxSteps).toBe(1000);
+
+    expect(harnessCtx.emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'subagent_start',
+        modelId: 'openai/gpt-5.5',
+        forked: true,
+      }),
+    );
 
     // Subagent request context points at the fork (not null/'' like non-forked).
     const subagentHarness = streamOpts.requestContext.get('harness') as Partial<HarnessRequestContext>;
@@ -918,6 +933,8 @@ describe('createSubagentTool forked subagent behavior', () => {
 
     expect(result.isError).toBe(false);
     expect(getParentToolsets).toHaveBeenCalledTimes(1);
+    const [forkRequestContext] = getParentToolsets.mock.calls[0]!;
+    expect(forkRequestContext.get('harness')).toMatchObject({ threadId: 'fork-with-toolsets', resourceId: 'rid' });
 
     const [, streamOpts] = parentStream.mock.calls[0]!;
     expect(streamOpts.toolsets).toBeDefined();
@@ -941,8 +958,8 @@ describe('createSubagentTool forked subagent behavior', () => {
     // Only `execute` is swapped, and the original is NOT invoked.
     expect(patchedSubagent.execute).not.toBe(originalSubagentExecute);
     const stubResult = await patchedSubagent.execute({}, {});
-    expect(stubResult.isError).toBe(false);
-    expect(stubResult.content).toMatch(/unavailable inside a forked subagent/i);
+    expect(stubResult.isError).toBe(true);
+    expect(stubResult.content).toMatch(/maximum allowed subagent nesting level/i);
     expect(originalSubagentExecute).not.toHaveBeenCalled();
 
     // The patched copy must not mutate the parent's toolset object — the same

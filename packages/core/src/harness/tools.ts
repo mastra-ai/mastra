@@ -12,6 +12,9 @@ import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } fr
 let questionCounter = 0;
 let planCounter = 0;
 
+const FORKED_SUBAGENT_NESTING_NOTICE =
+  'Do not call the `subagent` tool. You are currently running inside a forked subagent, and this is the maximum allowed subagent nesting level. Further subagent calls will return an error. Answer the task directly using the conversation history and the other tools available to you.';
+
 /**
  * Converts the user's answer into the text returned to the model after the `ask_user`
  * tool resumes. Free-text and single-select prompts already produce a single string,
@@ -370,6 +373,8 @@ export interface CreateSubagentToolOptions {
   harnessTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
   fallbackModelId?: string;
+  /** Returns the parent model ID for display when a subagent call is forked. */
+  getParentModelId?: () => string;
   /**
    * Returns the parent Agent that owns the current run. Invoked when a
    * subagent call is forked so the fork can reuse the parent's
@@ -388,14 +393,12 @@ export interface CreateSubagentToolOptions {
   }) => Promise<{ id: string; resourceId: string }>;
   /**
    * Resolves the toolsets the parent agent runs with for the current request.
-   * When set, forked subagents inherit the parent's toolsets (with `subagent`
-   * stripped) so harness-injected tools like `ask_user` / `submit_plan` /
-   * user-configured harness tools remain available inside the fork.
-   *
-   * Stripping `subagent` is intentional: it prevents a fork from spawning
-   * further forks (unbounded fan-out) by accident.
+   * When set, forked subagents inherit the parent's toolsets so harness-injected
+   * tools like `ask_user` / `submit_plan` / user-configured harness tools remain
+   * available inside the fork. The `subagent` entry is preserved for prompt-cache
+   * stability, but its runtime execute function is patched to block recursion.
    */
-  getParentToolsets?: () => Promise<ToolsetsInput | undefined>;
+  getParentToolsets?: (requestContext?: RequestContext) => Promise<ToolsetsInput | undefined>;
 }
 
 /**
@@ -444,7 +447,10 @@ Use this tool when:
           "If true, fork the parent conversation: clone the parent thread and run with the parent agent's instructions/tools so prompt cache is preserved. Requires memory to be configured on the Harness. Defaults to the subagent definition's `forked` setting.",
         ),
     }),
-    execute: async ({ agentType, task, modelId, forked }, context) => {
+    execute: async (input, context) => {
+      const { agentType, modelId, forked } = input;
+      let { task } = input;
+      const displayTask = task;
       const definition = subagents.find(s => s.id === agentType);
       if (!definition) {
         return {
@@ -525,29 +531,34 @@ Use this tool when:
 
         subagentToRun = parentAgent;
         // Display value only; forked runs use the parent agent's configured model.
-        resolvedModelId = modelId ?? definition.defaultModelId ?? fallbackModelId ?? 'parent-agent';
+        resolvedModelId = opts.getParentModelId?.() || 'parent-agent';
+        task = `${task}\n\n${FORKED_SUBAGENT_NESTING_NOTICE}`;
         streamMemory = { thread: forkedThread.id, resource: forkedThread.resourceId };
-        // Inherit parent agent's step/stop defaults so behavior matches the main run.
-        streamMaxSteps = undefined;
+        // Allow a recovery step if the forked model accidentally calls the
+        // inherited-but-disabled `subagent` tool. Without this, the single-step
+        // default can return only the stub tool result instead of the answer.
+        streamMaxSteps = 1000;
         streamStopWhen = undefined;
         streamPrepareStep = undefined;
 
-        // Inherit the parent's toolsets verbatim so harness-injected tools
-        // (`ask_user`, `submit_plan`, user-configured harness tools, etc.)
-        // remain available inside the fork. The parent Agent's base `tools`
-        // config does not include the harness toolsets, so without this the
-        // fork would run with a noticeably smaller tool set than the parent
-        // it cloned from.
-        //
-        // Recursive forking is blocked at runtime by replacing `subagent`'s
-        // `execute` with a stub that returns a "tool unavailable" message.
-        // The tool's id, description, schemas, and any other prompt-shaping
-        // fields are preserved unchanged so the LLM request prefix (system
-        // prompt + tool schemas) stays byte-identical to the parent's, which
-        // is the whole point of forked mode — anything that perturbs that
-        // prefix invalidates the prompt cache. Stripping the `subagent`
-        // entry entirely would do exactly that.
-        const inheritedToolsets = await opts.getParentToolsets?.();
+        if (context?.requestContext) {
+          subagentRequestContext = new RequestContext(context.requestContext.entries());
+          if (harnessCtx) {
+            // Point at the fork so inherited tools (recall, browser, OM, memory writes, etc.)
+            // operate on the cloned thread instead of the active parent thread.
+            subagentRequestContext.set('harness', {
+              ...harnessCtx,
+              threadId: forkedThread.id,
+              resourceId: forkedThread.resourceId,
+            });
+          }
+        }
+
+        // Inherit the parent's toolsets with the fork request context so tools that
+        // close over request-scoped state use the cloned thread/resource. Preserve
+        // `subagent` in the tool schema to keep the prompt-cache prefix stable, but
+        // patch its runtime execute function so nested forks fail gracefully.
+        const inheritedToolsets = await opts.getParentToolsets?.(subagentRequestContext);
         if (inheritedToolsets) {
           forkedToolsets = {};
           for (const [setName, setTools] of Object.entries(inheritedToolsets)) {
@@ -560,18 +571,6 @@ Use this tool when:
               }
             }
             forkedToolsets[setName] = patched;
-          }
-        }
-
-        if (context?.requestContext) {
-          subagentRequestContext = new RequestContext(context.requestContext.entries());
-          if (harnessCtx) {
-            // Point at the fork so OM / memory writes land on the fork, not the parent.
-            subagentRequestContext.set('harness', {
-              ...harnessCtx,
-              threadId: forkedThread.id,
-              resourceId: forkedThread.resourceId,
-            });
           }
         }
       } else {
@@ -655,8 +654,9 @@ Use this tool when:
         type: 'subagent_start',
         toolCallId,
         agentType,
-        task,
+        task: displayTask,
         modelId: resolvedModelId,
+        forked: runAsForked,
       });
 
       let partialText = '';
@@ -687,25 +687,29 @@ Use this tool when:
               break;
 
             case 'tool-call':
-              emitEvent?.({
-                type: 'subagent_tool_start',
-                toolCallId,
-                agentType,
-                subToolName: chunk.payload.toolName,
-                subToolArgs: chunk.payload.args,
-              });
+              if (!(runAsForked && chunk.payload.toolName === 'subagent')) {
+                emitEvent?.({
+                  type: 'subagent_tool_start',
+                  toolCallId,
+                  agentType,
+                  subToolName: chunk.payload.toolName,
+                  subToolArgs: chunk.payload.args,
+                });
+              }
               break;
 
             case 'tool-result': {
               const isErr = chunk.payload.isError ?? false;
-              emitEvent?.({
-                type: 'subagent_tool_end',
-                toolCallId,
-                agentType,
-                subToolName: chunk.payload.toolName,
-                subToolResult: chunk.payload.result,
-                isError: isErr,
-              });
+              if (!(runAsForked && chunk.payload.toolName === 'subagent')) {
+                emitEvent?.({
+                  type: 'subagent_tool_end',
+                  toolCallId,
+                  agentType,
+                  subToolName: chunk.payload.toolName,
+                  subToolResult: chunk.payload.result,
+                  isError: isErr,
+                });
+              }
               break;
             }
           }
@@ -777,15 +781,14 @@ Use this tool when:
  *    runtime, not in the request payload) but lets us reject recursive
  *    invocations cleanly at runtime.
  *
- * The stub returns a `not isError` result with a clear human-readable message
- * so the parent model can recover gracefully and keep going on its own.
+ * The stub returns a tool-level error result with a clear human-readable
+ * recovery instruction. This does not fail the outer subagent run; the model
+ * receives the tool error and can continue with a direct answer.
  */
 function patchSubagentToolForFork(tool: unknown): any {
   const stubExecute = async () => ({
-    content:
-      'The `subagent` tool is unavailable inside a forked subagent. ' +
-      'Forked subagents do not dispatch nested forks — answer this task directly using the conversation history and the other tools available to you.',
-    isError: false,
+    content: FORKED_SUBAGENT_NESTING_NOTICE,
+    isError: true,
   });
   // Spread preserves id / description / inputSchema / parameters / outputSchema
   // / providerOptions / strict / requireApproval / etc. on whatever shape the
