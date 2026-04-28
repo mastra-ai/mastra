@@ -2,9 +2,9 @@ import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
+import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
-import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
 
