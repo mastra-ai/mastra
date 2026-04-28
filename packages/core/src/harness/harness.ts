@@ -3251,7 +3251,10 @@ export class Harness<TState = {}> {
     const adapters = this.channelsConfig.adapters;
 
     for (const platform of Object.keys(adapters) as string[]) {
+      if (this.activeChannels.has(platform)) continue;
+
       const adapter = adapters[platform]!;
+
       try {
         await adapter.start({
           onMessage: async (msg: any) => {
