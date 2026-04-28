@@ -36,10 +36,10 @@ async function rewritePathAliases(rootDir: string) {
   }
 }
 
-export default defineConfig(options => ({
+export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
-  clean: !options.watch,
+  clean: true,
   dts: false,
   splitting: true,
   treeshake: {
@@ -51,4 +51,4 @@ export default defineConfig(options => ({
     await generateTypes(process.cwd());
     await rewritePathAliases(process.cwd());
   },
-}));
+});

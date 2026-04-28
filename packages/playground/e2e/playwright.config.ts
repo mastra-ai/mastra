@@ -10,7 +10,6 @@ const webservers: PlaywrightTestConfig['webServer'] = [
     command: `pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
     timeout: 120_000,
-    reuseExistingServer: !process.env.CI,
   },
 ];
 
