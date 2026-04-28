@@ -409,7 +409,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
-    // TODO: if there are still active paths don't end the workflow yet
+    // Multi-branch suspend coordination: processWorkflowStepEnd defers workflow.suspend until
+    // sibling branches are terminal; fan-in emits suspend when siblings include mixed success+suspend.
     // handle nested workflow
     if (parentWorkflow) {
       await this.mastra.pubsub.publish('workflows', {
@@ -1621,15 +1622,48 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       return;
     } else if (prevResult.status === 'suspended') {
-      const suspendedPaths: Record<string, number[]> = {};
-      const suspendedStep = getStep(workflow, executionPath);
-      if (suspendedStep) {
-        suspendedPaths[suspendedStep.id] = executionPath;
+      const parentEntry = executionPath.length >= 2 ? workflow.stepGraph[executionPath[0]!] : undefined;
+
+      // Parallel / conditional: do not emit workflow.suspend until every sibling branch has
+      // reached a terminal step result in storage (matches default engine; avoids incomplete
+      // `suspended` metadata when the first branch suspends before siblings persist).
+      if (parentEntry && (parentEntry.type === 'parallel' || parentEntry.type === 'conditional')) {
+        for (const branch of parentEntry.steps) {
+          if (!isExecutableStep(branch)) {
+            continue;
+          }
+          const sr = stepResults[branch.step.id];
+          if (!sr || !['success', 'skipped', 'suspended', 'failed'].includes(sr.status)) {
+            return;
+          }
+        }
       }
 
-      // Extract resume labels from suspend payload metadata
-      const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
+      const suspendedPaths: Record<string, number[]> = {};
+      let resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
         prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
+
+      if (parentEntry && (parentEntry.type === 'parallel' || parentEntry.type === 'conditional')) {
+        for (let i = 0; i < parentEntry.steps.length; i++) {
+          const branch = parentEntry.steps[i];
+          if (branch?.type !== 'step') continue;
+          const sid = branch.step.id;
+          const sr = stepResults[sid] as { status?: string; suspendPayload?: any } | undefined;
+          if (sr?.status === 'suspended') {
+            suspendedPaths[sid] = [executionPath[0]!, i];
+            const labels = sr.suspendPayload?.__workflow_meta?.resumeLabels;
+            if (labels && typeof labels === 'object') {
+              resumeLabels = { ...resumeLabels, ...labels };
+            }
+          }
+        }
+      }
+      if (Object.keys(suspendedPaths).length === 0) {
+        const suspendedStep = getStep(workflow, executionPath);
+        if (suspendedStep) {
+          suspendedPaths[suspendedStep.id] = executionPath;
+        }
+      }
 
       // Check shouldPersistSnapshot option - default to true if not specified
       const shouldPersist =
@@ -1758,13 +1792,112 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
     } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
+      const execBranches = step.steps.filter(s => isExecutableStep(s));
+      const allSiblingTerminal = execBranches.every(b => {
+        const res = stepResults?.[b.step.id];
+        return res && ['success', 'skipped', 'suspended', 'failed'].includes(res.status);
+      });
+      if (!allSiblingTerminal) {
+        return;
+      }
+
+      const anySuspended = execBranches.some(b => stepResults[b.step.id]?.status === 'suspended');
+      if (anySuspended) {
+        const suspendedBranch = execBranches.find(b => stepResults[b.step.id]?.status === 'suspended')!;
+        const suspendedPrev = stepResults[suspendedBranch.step.id] as StepResult<any, any, any, any>;
+        const branchIdx = step.steps.findIndex(b => isExecutableStep(b) && b.step.id === suspendedBranch.step.id);
+        const suspendExecutionPath = branchIdx >= 0 ? [executionPath[0]!, branchIdx] : executionPath;
+
+        const suspendedPaths: Record<string, number[]> = {};
+        let resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
+          suspendedPrev.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
+
+        for (let i = 0; i < step.steps.length; i++) {
+          const branch = step.steps[i];
+          if (branch?.type !== 'step') {
+            continue;
+          }
+          const sid = branch.step.id;
+          const sr = stepResults[sid] as { status?: string; suspendPayload?: any } | undefined;
+          if (sr?.status === 'suspended') {
+            suspendedPaths[sid] = [executionPath[0]!, i];
+            const labels = sr.suspendPayload?.__workflow_meta?.resumeLabels;
+            if (labels && typeof labels === 'object') {
+              resumeLabels = { ...resumeLabels, ...labels };
+            }
+          }
+        }
+
+        const shouldPersistSuspend =
+          workflow?.options?.shouldPersistSnapshot?.({
+            stepResults: stepResults ?? {},
+            workflowStatus: 'suspended',
+          }) ?? true;
+
+        if (shouldPersistSuspend) {
+          await workflowsStore?.updateWorkflowResults({
+            workflowName: workflow.id,
+            runId,
+            stepId: '__state',
+            result: currentState as any,
+            requestContext,
+          });
+
+          await workflowsStore?.updateWorkflowState({
+            workflowName: workflowId,
+            runId,
+            opts: {
+              status: 'suspended',
+              result: suspendedPrev,
+              suspendedPaths,
+              resumeLabels,
+            },
+          });
+        }
+
+        await this.mastra.pubsub.publish('workflows', {
+          type: 'workflow.suspend',
+          runId,
+          data: {
+            workflowId,
+            runId,
+            executionPath: suspendExecutionPath,
+            resumeSteps,
+            parentWorkflow,
+            stepResults,
+            prevResult: suspendedPrev,
+            activeSteps,
+            requestContext,
+            timeTravel,
+            state: currentState,
+            outputOptions,
+          },
+        });
+
+        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-suspended',
+            payload: {
+              id: suspendedBranch.step.id,
+              ...suspendedPrev,
+              suspendedAt: Date.now(),
+              suspendPayload: suspendedPrev.suspendPayload,
+            },
+          },
+        });
+
+        return;
+      }
+
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
-        (acc, step) => {
-          if (isExecutableStep(step)) {
-            const res = stepResults?.[step.step.id];
+        (acc, st) => {
+          if (isExecutableStep(st)) {
+            const res = stepResults?.[st.step.id];
             if (res && res.status === 'success') {
-              acc[step.step.id] = res?.output;
+              acc[st.step.id] = res?.output;
               // @ts-expect-error - skipped status not in type
             } else if (res?.status === 'skipped') {
               skippedCount++;
@@ -1777,7 +1910,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
 
       const keys = Object.keys(allResults);
-      if (keys.length + skippedCount < step.steps.length) {
+      if (keys.length + skippedCount < execBranches.length) {
         return;
       }
 

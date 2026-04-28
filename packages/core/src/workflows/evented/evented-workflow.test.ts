@@ -78,9 +78,8 @@ createWorkflowTestSuite({
     abortStatus: true,
     abortDuringStep: true,
 
-    // Suspend/resume - parallel suspend has race condition (each step publishes workflow.suspend independently)
-    resumeParallelMulti: true,
-    resumeMultiSuspendError: true,
+    resumeParallelMulti: false,
+    resumeMultiSuspendError: false,
     resumeBranchingStatus: true,
     // Suspend/resume - still failing (loop/foreach coordination, nested input propagation)
     resumeLoopInput: true,
