@@ -15,7 +15,7 @@ export type UserMenuProps = {
  * User menu component.
  *
  * Displays user avatar with a dropdown menu containing
- * user info, "View as role" options for admins, and logout button.
+ * user info, role preview options for admins, and logout button.
  */
 export function UserMenu({ user }: UserMenuProps) {
   const { mutate: logout, isPending } = useLogout();
@@ -66,11 +66,11 @@ export function UserMenu({ user }: UserMenuProps) {
           </div>
         </div>
 
-        {/* View as role section — only for admins with available roles */}
+        {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
           <div className="border-b border-border1 p-2">
             <Txt variant="ui-xs" className="px-2 py-1 text-neutral3 uppercase tracking-wider">
-              View as role
+              Preview as role
             </Txt>
             {availableRoles.map(role => {
               const isActive = isImpersonating && impersonatedRole?.id === role.id;
@@ -105,7 +105,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 onClick={stopImpersonation}
                 className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-neutral3 hover:bg-surface2 transition-colors mt-1"
               >
-                Exit role preview
+                Exit preview
               </button>
             )}
           </div>
