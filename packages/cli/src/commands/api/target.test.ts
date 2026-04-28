@@ -21,6 +21,17 @@ vi.mock('../studio/project-config.js', () => ({
 }));
 
 const fetchMock = vi.fn();
+const options = (overrides: Partial<Parameters<typeof resolveTarget>[0]> = {}) => ({
+  header: [],
+  pretty: false,
+  ...overrides,
+});
+const linkedProject = {
+  projectId: 'project-1',
+  projectName: 'Project One',
+  projectSlug: 'project-one',
+  organizationId: 'org-1',
+};
 
 describe('resolveTarget', () => {
   beforeEach(() => {
@@ -35,14 +46,15 @@ describe('resolveTarget', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses an explicit URL without probing local or adding platform auth', async () => {
+  it('uses an explicit URL with only custom headers and no discovery', async () => {
     await expect(
-      resolveTarget({
-        url: 'https://runtime.example.com',
-        header: ['Authorization: Bearer custom', 'X-Test: yes'],
-        timeout: '1234',
-        pretty: false,
-      }),
+      resolveTarget(
+        options({
+          url: 'https://runtime.example.com',
+          header: ['Authorization: Bearer custom', 'X-Test: yes'],
+          timeout: '1234',
+        }),
+      ),
     ).resolves.toEqual({
       baseUrl: 'https://runtime.example.com',
       headers: { Authorization: 'Bearer custom', 'X-Test': 'yes' },
@@ -55,11 +67,11 @@ describe('resolveTarget', () => {
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
   });
 
-  it('uses localhost when the default server is reachable', async () => {
+  it('uses localhost when the default server is reachable and cancels the probe body', async () => {
     const cancel = vi.fn();
     fetchMock.mockResolvedValueOnce({ body: { cancel } });
 
-    await expect(resolveTarget({ header: ['X-Test: yes'], timeout: '5000', pretty: false })).resolves.toEqual({
+    await expect(resolveTarget(options({ header: ['X-Test: yes'], timeout: '5000' }))).resolves.toEqual({
       baseUrl: 'http://localhost:4111',
       headers: { 'X-Test': 'yes' },
       timeoutMs: 5000,
@@ -73,96 +85,58 @@ describe('resolveTarget', () => {
     expect(mocks.loadProjectConfig).not.toHaveBeenCalled();
   });
 
-  it('falls back to platform project discovery when localhost is unavailable', async () => {
-    mocks.loadProjectConfig.mockResolvedValue({
-      projectId: 'project-1',
-      projectName: 'Project One',
-      projectSlug: 'project-one',
-      organizationId: 'org-1',
+  it('falls back to linked platform project discovery by ID or slug', async () => {
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject).mockResolvedValueOnce({
+      ...linkedProject,
+      projectId: 'missing-id',
     });
-    mocks.fetchServerProjects.mockResolvedValue([
-      { id: 'project-2', slug: 'other', instanceUrl: 'https://other.example.com' },
-      { id: 'project-1', slug: 'project-one', instanceUrl: 'https://project.example.com' },
-    ]);
+    mocks.fetchServerProjects
+      .mockResolvedValueOnce([
+        { id: 'project-2', slug: 'other', instanceUrl: 'https://other.example.com' },
+        { id: 'project-1', slug: 'project-one', instanceUrl: 'https://project.example.com' },
+      ])
+      .mockResolvedValueOnce([{ id: 'project-1', slug: 'project-one', instanceUrl: 'https://slug.example.com' }]);
 
-    await expect(resolveTarget({ header: ['X-Test: yes'], pretty: false })).resolves.toEqual({
+    await expect(resolveTarget(options({ header: ['X-Test: yes'] }))).resolves.toEqual({
       baseUrl: 'https://project.example.com',
       headers: { Authorization: 'Bearer platform-token', 'X-Test': 'yes' },
       timeoutMs: 30_000,
     });
+    await expect(resolveTarget(options())).resolves.toMatchObject({ baseUrl: 'https://slug.example.com' });
 
     expect(mocks.loadProjectConfig).toHaveBeenCalledWith(process.cwd());
-    expect(mocks.getToken).toHaveBeenCalled();
+    expect(mocks.getToken).toHaveBeenCalledTimes(2);
     expect(mocks.fetchServerProjects).toHaveBeenCalledWith('platform-token', 'org-1');
   });
 
-  it('matches platform projects by slug when project ID does not match', async () => {
-    mocks.loadProjectConfig.mockResolvedValue({
-      projectId: 'missing-id',
-      projectName: 'Project One',
-      projectSlug: 'project-one',
-      organizationId: 'org-1',
-    });
-    mocks.fetchServerProjects.mockResolvedValue([
-      { id: 'project-1', slug: 'project-one', instanceUrl: 'https://slug.example.com' },
-    ]);
-
-    await expect(resolveTarget({ header: [], pretty: false })).resolves.toMatchObject({
-      baseUrl: 'https://slug.example.com',
-    });
-  });
-
-  it('throws SERVER_UNREACHABLE when localhost and project config are unavailable', async () => {
-    await expect(resolveTarget({ header: [], pretty: false })).rejects.toMatchObject({
+  it('throws target resolution errors for missing local/project/platform URL cases', async () => {
+    await expect(resolveTarget(options())).rejects.toMatchObject({
       code: 'SERVER_UNREACHABLE',
       message: 'Could not connect to target server',
     });
-  });
 
-  it('throws PLATFORM_RESOLUTION_FAILED when the linked project has no runtime URL', async () => {
-    mocks.loadProjectConfig.mockResolvedValue({
-      projectId: 'project-1',
-      projectName: 'Project One',
-      projectSlug: 'project-one',
-      organizationId: 'org-1',
-    });
+    mocks.loadProjectConfig.mockResolvedValue(linkedProject);
     mocks.fetchServerProjects.mockResolvedValue([{ id: 'project-1', slug: 'project-one' }]);
-
-    await expect(resolveTarget({ header: [], pretty: false })).rejects.toMatchObject({
+    await expect(resolveTarget(options())).rejects.toMatchObject({
       code: 'PLATFORM_RESOLUTION_FAILED',
       details: { projectId: 'project-1', projectSlug: 'project-one' },
     });
-  });
 
-  it('wraps platform lookup failures in PLATFORM_RESOLUTION_FAILED', async () => {
-    mocks.loadProjectConfig.mockResolvedValue({
-      projectId: 'project-1',
-      projectName: 'Project One',
-      organizationId: 'org-1',
-    });
     mocks.fetchServerProjects.mockRejectedValue(new Error('platform down'));
-
-    await expect(resolveTarget({ header: [], pretty: false })).rejects.toMatchObject({
+    await expect(resolveTarget(options())).rejects.toMatchObject({
       code: 'PLATFORM_RESOLUTION_FAILED',
       details: { message: 'platform down' },
     });
   });
 
-  it('defaults invalid timeout values to 30 seconds', async () => {
-    await expect(
-      resolveTarget({ url: 'https://runtime.example.com', header: [], timeout: '-1', pretty: false }),
-    ).resolves.toMatchObject({
-      timeoutMs: 30_000,
-    });
-    await expect(
-      resolveTarget({ url: 'https://runtime.example.com', header: [], timeout: 'not-a-number', pretty: false }),
-    ).resolves.toMatchObject({
+  it.each(['-1', 'not-a-number'])(`defaults invalid timeout %s to 30 seconds`, async timeout => {
+    await expect(resolveTarget(options({ url: 'https://runtime.example.com', timeout }))).resolves.toMatchObject({
       timeoutMs: 30_000,
     });
   });
 
   it('throws malformed header errors before probing targets', async () => {
-    await expect(resolveTarget({ header: ['invalid'], pretty: false })).rejects.toMatchObject({
+    await expect(resolveTarget(options({ header: ['invalid'] }))).rejects.toMatchObject({
       code: 'MALFORMED_HEADER',
     });
 

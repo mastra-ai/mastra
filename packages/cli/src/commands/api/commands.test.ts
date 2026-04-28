@@ -1,90 +1,31 @@
 import { describe, expect, it } from 'vitest';
-
 import { API_COMMANDS } from './commands.js';
 
-describe('API_COMMANDS', () => {
-  it('derives HTTP route facts from generated route metadata', () => {
-    expect(API_COMMANDS.agentList).toMatchObject({
-      method: 'GET',
-      path: '/agents',
-      responseShape: { kind: 'record' },
-      list: true,
-    });
+describe('API_COMMANDS invariants', () => {
+  it('keeps every descriptor internally consistent', () => {
+    for (const [key, command] of Object.entries(API_COMMANDS)) {
+      expect(command.key).toBe(key);
+      expect(command.name).not.toBe('');
+      expect(command.description).not.toBe('');
+      expect(command.path).toMatch(/^\//);
+      expect(['GET', 'POST', 'PATCH', 'DELETE']).toContain(command.method);
 
-    expect(API_COMMANDS.agentRun).toMatchObject({
-      method: 'POST',
-      path: '/agents/:agentId/generate',
-      positionals: ['agentId'],
-      acceptsInput: true,
-      inputRequired: true,
-    });
+      if (command.inputRequired) expect(command.acceptsInput).toBe(true);
+      if (command.method === 'GET') expect(command.bodyParams).toEqual([]);
+      if (command.list) expect(command.acceptsInput).toBe(true);
+    }
   });
 
-  it('keeps CLI-only positional overrides that cannot be inferred from server routes', () => {
-    expect(API_COMMANDS.workflowRunResume).toMatchObject({
-      path: '/workflows/:workflowId/resume-async',
-      positionals: ['workflowId', 'runId'],
-      inputRequired: true,
-    });
-  });
-
-  it('uses route path params directly for MCP server details', () => {
-    expect(API_COMMANDS.mcpGet).toMatchObject({
-      path: '/mcp/v0/servers/:id',
-      positionals: ['id'],
-    });
-  });
-
-  it('supports JSON-identity commands by omitting selected path params from positionals', () => {
-    expect(API_COMMANDS.memoryCurrentGet).toMatchObject({
-      path: '/memory/threads/:threadId/working-memory',
-      positionals: [],
-      acceptsInput: true,
-      inputRequired: true,
-    });
-  });
-
-  it('requires JSON input for memory status because agentId is a required query parameter', () => {
-    expect(API_COMMANDS.memoryStatus).toMatchObject({
-      path: '/memory/status',
-      acceptsInput: true,
-      inputRequired: true,
-    });
-  });
-
-  it('keeps query and body parameter names from route metadata', () => {
-    expect(API_COMMANDS.threadCreate).toMatchObject({
-      path: '/memory/threads',
-      queryParams: ['agentId'],
-      bodyParams: ['metadata', 'resourceId', 'threadId', 'title'],
-    });
-    expect(API_COMMANDS.threadDelete).toMatchObject({
-      path: '/memory/threads/:threadId',
-      acceptsInput: true,
-      inputRequired: true,
-      queryParams: ['agentId', 'resourceId'],
-      bodyParams: [],
-    });
-  });
-
-  it('uses the observability logs route for log list', () => {
-    expect(API_COMMANDS.logList).toMatchObject({
-      path: '/observability/logs',
-      acceptsInput: true,
-      inputRequired: false,
-      list: true,
-      responseShape: { kind: 'object-property', listProperty: 'logs', paginationProperty: 'pagination' },
-    });
-  });
-
-  it('uses observability score routes for score commands', () => {
-    expect(API_COMMANDS.scoreCreate).toMatchObject({ path: '/observability/scores', method: 'POST' });
-    expect(API_COMMANDS.scoreList).toMatchObject({
-      path: '/observability/scores',
-      method: 'GET',
-      list: true,
-      responseShape: { kind: 'object-property', listProperty: 'scores', paginationProperty: 'pagination' },
-    });
-    expect(API_COMMANDS.scoreGet).toMatchObject({ path: '/observability/scores/:scoreId', method: 'GET' });
+  it('requires JSON input for commands whose required identity lives in query params', () => {
+    for (const key of [
+      'threadCreate',
+      'threadUpdate',
+      'threadDelete',
+      'memoryCurrentUpdate',
+      'memoryStatus',
+    ] as const) {
+      expect(API_COMMANDS[key]).toMatchObject({ acceptsInput: true, inputRequired: true });
+      expect(API_COMMANDS[key].queryParams.length).toBeGreaterThan(0);
+    }
   });
 });

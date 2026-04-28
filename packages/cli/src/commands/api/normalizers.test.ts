@@ -32,7 +32,7 @@ describe('normalizeData', () => {
     });
   });
 
-  it('normalizes workflow run status values recursively', () => {
+  it('normalizes workflow run status aliases inside run responses', () => {
     expect(
       normalizeData(API_COMMANDS.workflowRunGet, {
         status: 'completed',
@@ -44,11 +44,13 @@ describe('normalizeData', () => {
     });
   });
 
-  it('exposes tool input schema from common server response fields', () => {
-    expect(normalizeData(API_COMMANDS.toolGet, { id: 'weather', parameters: { type: 'object' } })).toEqual({
+  it('adds a stable tool inputSchema when the server returns parameters', () => {
+    const schema = { type: 'object' };
+
+    expect(normalizeData(API_COMMANDS.toolGet, { id: 'weather', parameters: schema })).toEqual({
       id: 'weather',
-      inputSchema: { type: 'object' },
-      parameters: { type: 'object' },
+      inputSchema: schema,
+      parameters: schema,
     });
   });
 });
