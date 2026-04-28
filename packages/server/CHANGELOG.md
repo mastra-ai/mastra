@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.29.0-alpha.6
+
+### Patch Changes
+
+- Fixed Studio observability tabs so runtime-injected observability unlocks them. ([#15821](https://github.com/mastra-ai/mastra/pull/15821))
+
+- Updated the A2A server to match the v0.3 protocol shapes and methods. ([#15720](https://github.com/mastra-ai/mastra/pull/15720))
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343)]:
+  - @mastra/core@1.29.0-alpha.6
+
 ## 1.29.0-alpha.5
 
 ### Patch Changes

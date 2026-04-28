@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.17.2-alpha.0
+
+### Patch Changes
+
+- Fixed the recall tool so message browsing uses the current thread by default and explains when it does. ([#15807](https://github.com/mastra-ai/mastra/pull/15807))
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343)]:
+  - @mastra/core@1.29.0-alpha.6
+
 ## 1.17.1
 
 ### Patch Changes
