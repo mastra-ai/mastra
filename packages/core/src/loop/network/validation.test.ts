@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod/v4';
 
+import type { Agent } from '../../agent';
 import type { CompletionContext, CompletionRunResult, StreamCompletionContext } from './validation';
 import {
   runCompletionScorers,
   formatCompletionFeedback,
   runStreamCompletionScorers,
   formatStreamCompletionFeedback,
+  runDefaultCompletionCheck,
+  generateFinalResult,
+  generateStructuredFinalResult,
 } from './validation';
 
 // Helper to create a mock scorer
@@ -776,5 +781,127 @@ describe('formatStreamCompletionFeedback', () => {
 
     expect(feedback).toContain('Score: 1 ✅');
     expect(feedback).not.toContain('Reason:');
+  });
+});
+
+// ============================================================================
+// Memory forwarding to agent.stream() (regression for observational memory)
+// ============================================================================
+//
+// When ObservationalMemory is configured with scope: 'thread', the OM input
+// processor throws if a threadId is missing from RequestContext/MessageList.
+// The network validation/final-result agent.stream() calls must forward the
+// memory { thread, resource } so the routing agent's input processors (which
+// include memory-derived processors like OM) can resolve the threadId.
+// See https://github.com/mastra-ai/mastra/issues/13651 and #15736.
+
+function createFakeStreamAgent() {
+  const stream = vi.fn(async () => ({
+    objectStream: (async function* () {
+      yield { isComplete: true, finalResult: 'ok', completionReason: 'done' };
+    })(),
+    getFullOutput: async () => ({
+      object: { isComplete: true, finalResult: 'ok', completionReason: 'done' },
+    }),
+  }));
+  return { stream } as unknown as Agent & { stream: ReturnType<typeof vi.fn> };
+}
+
+function createContextWithMemory(): CompletionContext {
+  return {
+    iteration: 1,
+    maxIterations: 10,
+    messages: [],
+    originalTask: 'Test task',
+    selectedPrimitive: { id: 'sub-agent', type: 'agent' },
+    primitivePrompt: 'Do something',
+    primitiveResult: 'Done',
+    networkName: 'test-network',
+    runId: 'run-123',
+    threadId: 'thread-abc',
+    resourceId: 'resource-xyz',
+  };
+}
+
+describe('network validation forwards memory options to agent.stream()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('runDefaultCompletionCheck forwards thread/resource to agent.stream()', async () => {
+    const agent = createFakeStreamAgent();
+    const context = createContextWithMemory();
+
+    await runDefaultCompletionCheck(agent as unknown as Agent, context);
+
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+    const [, options] = agent.stream.mock.calls[0];
+    expect(options?.memory).toEqual({
+      thread: context.threadId,
+      resource: context.resourceId,
+      options: {
+        readOnly: true,
+        workingMemory: { enabled: false },
+      },
+    });
+  });
+
+  it('generateFinalResult forwards thread/resource to agent.stream()', async () => {
+    const agent = createFakeStreamAgent();
+    const context = createContextWithMemory();
+
+    await generateFinalResult(agent as unknown as Agent, context);
+
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+    const [, options] = agent.stream.mock.calls[0];
+    expect(options?.memory).toEqual({
+      thread: context.threadId,
+      resource: context.resourceId,
+      options: {
+        readOnly: true,
+        workingMemory: { enabled: false },
+      },
+    });
+  });
+
+  it('generateStructuredFinalResult forwards thread/resource to agent.stream()', async () => {
+    const agent = createFakeStreamAgent();
+    const context = createContextWithMemory();
+
+    await generateStructuredFinalResult(agent as unknown as Agent, context, {
+      schema: z.object({ answer: z.string() }),
+    });
+
+    expect(agent.stream).toHaveBeenCalledTimes(1);
+    const [, options] = agent.stream.mock.calls[0];
+    expect(options?.memory).toEqual({
+      thread: context.threadId,
+      resource: context.resourceId,
+      options: {
+        readOnly: true,
+        workingMemory: { enabled: false },
+      },
+    });
+  });
+
+  it('runDefaultCompletionCheck falls back to runId/networkName when thread/resource absent', async () => {
+    const agent = createFakeStreamAgent();
+    const context: CompletionContext = {
+      ...createContextWithMemory(),
+      threadId: undefined,
+      resourceId: undefined,
+    };
+
+    await runDefaultCompletionCheck(agent as unknown as Agent, context);
+
+    const [, options] = agent.stream.mock.calls[0];
+    expect(options?.memory).toEqual({
+      thread: context.runId,
+      resource: context.networkName,
+      options: {
+        readOnly: true,
+        workingMemory: { enabled: false },
+      },
+    });
   });
 });

@@ -456,6 +456,14 @@ export async function runDefaultCompletionCheck(
       structuredOutput: {
         schema: defaultCompletionSchema,
       },
+      memory: {
+        thread: context.threadId || context.runId,
+        resource: context.resourceId || context.networkName,
+        options: {
+          readOnly: true,
+          workingMemory: { enabled: false },
+        },
+      },
       abortSignal,
       onAbort,
     });
@@ -573,6 +581,14 @@ export async function generateFinalResult(
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
+    memory: {
+      thread: context.threadId || context.runId,
+      resource: context.resourceId || context.networkName,
+      options: {
+        readOnly: true,
+        workingMemory: { enabled: false },
+      },
+    },
     abortSignal,
     onAbort,
   });
@@ -657,6 +673,14 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
   const stream = await agent.stream<OUTPUT>(prompt, {
     maxSteps: 1,
     structuredOutput: structuredOutputOptions,
+    memory: {
+      thread: context.threadId || context.runId,
+      resource: context.resourceId || context.networkName,
+      options: {
+        readOnly: true,
+        workingMemory: { enabled: false },
+      },
+    },
     abortSignal,
     onAbort,
   });
