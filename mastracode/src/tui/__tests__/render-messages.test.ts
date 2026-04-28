@@ -2,9 +2,10 @@ import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
+import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
-import { addUserMessage } from '../render-messages.js';
+import { addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
 
 function createState(): TUIState {
@@ -15,6 +16,8 @@ function createState(): TUIState {
     allSystemReminderComponents: [],
     allSlashCommandComponents: [],
     allToolComponents: [],
+    pendingTools: new Map(),
+    pendingSubagents: new Map(),
     allShellComponents: [],
     messageComponentsById: new Map(),
     followUpComponents: [],
@@ -118,5 +121,50 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
     expect(state.allSystemReminderComponents).toHaveLength(0);
     expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[0]);
+  });
+});
+
+describe('renderExistingMessages subagents', () => {
+  it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
+    const message: HarnessMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: [
+        {
+          type: 'tool_call',
+          id: 'tool-1',
+          name: 'subagent',
+          args: {
+            agentType: 'explore',
+            task: 'Summarize the thread',
+            forked: true,
+          },
+        },
+        {
+          type: 'tool_result',
+          id: 'tool-1',
+          name: 'subagent',
+          result: 'summary text',
+          isError: false,
+        },
+      ],
+    };
+    const state = createState();
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue([message]),
+      getDisplayState: () => ({ isRunning: false }),
+      getFullModelId: () => 'openai/gpt-5.5',
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(SubagentExecutionComponent);
+    const rendered = (state.chatContainer.children[0] as SubagentExecutionComponent)
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('subagent fork openai/gpt-5.5');
   });
 });

@@ -268,7 +268,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     // Subagent / Task delegation events
     case 'subagent_start':
-      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId);
+      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId, event.forked);
       break;
 
     case 'subagent_tool_start':

@@ -257,7 +257,7 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
       process.stderr.write(event.output);
       break;
     case 'subagent_start':
-      process.stderr.write(`[subagent:${event.agentType}] ${truncate(event.task, 100)}\n`);
+      process.stderr.write(`[subagent:${event.forked ? 'forked:' : ''}${event.agentType}] ${truncate(event.task, 100)}\n`);
       break;
     case 'subagent_end':
       if (event.isError) process.stderr.write(`[subagent error] ${truncate(event.result, 200)}\n`);

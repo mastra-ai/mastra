@@ -293,6 +293,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                   agentType?: string;
                   task?: string;
                   modelId?: string;
+                  forked?: boolean;
                 }
               | undefined;
             const rawResult = toolResult?.type === 'tool_result' ? formatToolResult(toolResult.result) : undefined;
@@ -301,7 +302,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const modelId = meta?.modelId ?? subArgs?.modelId;
+            const currentModelId =
+              typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
+                ? (state.harness as { getFullModelId: () => string }).getFullModelId()
+                : undefined;
+            const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
             const subComponent = new SubagentExecutionComponent(
@@ -309,7 +314,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: state.quietMode },
+              { collapseOnComplete: state.quietMode, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {

@@ -566,11 +566,13 @@ describe('subagent lifecycle', () => {
       agentType: 'explore',
       task: 'Find usages of X',
       modelId: 'gpt-4o',
+      forked: true,
     });
     const sub = harness.getDisplayState().activeSubagents.get('s1');
     expect(sub).toBeDefined();
     expect(sub!.agentType).toBe('explore');
     expect(sub!.task).toBe('Find usages of X');
+    expect(sub!.forked).toBe(true);
     expect(sub!.status).toBe('running');
     expect(sub!.toolCalls).toEqual([]);
   });
