@@ -73,3 +73,28 @@ jobs:
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+      - name: Archive build outputs
+        run: |
+          find . -type d \( -name dist -o -name .next \) \
+            ! -path '*/node_modules/*' \
+            ! -path '*/.next/cache*' \
+            | sed 's#^\./##' > prebuild-output-paths.txt
+
+          if [ ! -s prebuild-output-paths.txt ]; then
+            echo 'No build outputs found to archive.'
+            exit 1
+          fi
+
+          tar \
+            --exclude='*/.next/cache' \
+            --exclude='*/.next/cache/*' \
+            -czf prebuild-outputs.tar.gz \
+            -T prebuild-output-paths.txt
+
+      - name: Upload build outputs
+        uses: actions/upload-artifact@v6
+        with:
+          name: prebuild-outputs
+          path: prebuild-outputs.tar.gz
+          retention-days: 1
