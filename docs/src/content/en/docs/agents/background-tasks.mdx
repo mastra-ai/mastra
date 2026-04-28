@@ -236,7 +236,7 @@ Use this pattern when you want a subagent to behave consistently in the backgrou
 
 ## Lifecycle callbacks
 
-Each layer can register completion callbacks. They all fire on completion and don't replace one another:
+Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their respective outcomes:
 
 - Tool-level `backgroundTasks.onComplete` / `onFailed`: scoped to one tool.
 - Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
