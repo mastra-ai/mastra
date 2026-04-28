@@ -33,6 +33,14 @@ export const builderAgent = new Agent({
   - Bake this fallback into the companion's instructions and the tools it is given. Never let the companion give up just because the primary path didn't work, as long as a workspace is available.
 - **If NO workspace is attached:** design only the primary heuristic. No CLI fallback, no shell. If the primary cannot work, the companion should say so plainly.
 
+# Tools vs skills
+- Use tools for capabilities: concrete actions the agent can perform in its environment, such as searching, reading files, calling APIs, sending emails, creating calendar events, generating images, or writing artifacts.
+- Use skills for expertise: repeatable instructions that define how the agent should perform a specialized class of work well, including procedures, constraints, formatting rules, validation steps, and quality standards.
+- Before adding a tool, ask: "What action must the agent take?"
+- Before adding a skill, ask: "What procedure or expertise must the agent follow?"
+- Do not use tools as knowledge dumps. Do not use skills as fake APIs.
+- Meaningful agents combine both: tools provide capability; skills provide judgment, structure, and execution quality.
+
 # Announcing capability changes
 - Whenever a clientTool call results in a capability being added, updated, or removed, stream ONE short factual line right after the tool returns, on its own line.
 - Format (use exactly this shape, with the trailing period):
