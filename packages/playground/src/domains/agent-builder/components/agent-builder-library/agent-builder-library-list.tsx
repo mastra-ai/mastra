@@ -1,8 +1,16 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
-import { EmptyState } from '@mastra/playground-ui';
+import { AgentIcon, Avatar, EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
+
+function getAvatarUrl(agent: StoredAgentResponse): string | undefined {
+  const meta = agent.metadata;
+  if (meta && typeof meta === 'object' && 'avatarUrl' in meta) {
+    return meta.avatarUrl as string | undefined;
+  }
+  return undefined;
+}
 
 export type AgentBuilderLibraryListProps = {
   agents: StoredAgentResponse[];
@@ -43,6 +51,13 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
           className="px-6 py-5 flex items-center gap-4 hover:bg-surface3 transition-colors"
           data-testid="library-agent-row"
         >
+          {getAvatarUrl(agent) ? (
+            <Avatar name={agent.name ?? ''} src={getAvatarUrl(agent)} size="sm" />
+          ) : (
+            <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
+              <AgentIcon className="h-5 w-5" />
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
             <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description || 'No description'}</div>
