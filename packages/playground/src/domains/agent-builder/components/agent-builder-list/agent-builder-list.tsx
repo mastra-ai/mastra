@@ -1,13 +1,29 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
 import { AgentIcon, Badge, EmptyState } from '@mastra/playground-ui';
-import { Globe, SearchIcon } from 'lucide-react';
+import { Globe, Lock, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
-export type AgentBuilderListProps = {
-  agents: StoredAgentResponse[];
-  search?: string;
-};
+function VisibilityBadge({
+  visibility,
+  size = 'md',
+  className,
+}: {
+  visibility?: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const iconSize = size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3';
+  return (
+    <span className={className}>
+      {visibility === 'public' ? (
+        <Badge icon={<Globe className={iconSize} />}>Public</Badge>
+      ) : (
+        <Badge icon={<Lock className={iconSize} />}>Private</Badge>
+      )}
+    </span>
+  );
+}
 
 function getModelLabel(model: StoredAgentResponse['model']): string {
   if (model && typeof model === 'object' && !Array.isArray(model) && 'provider' in model && 'name' in model) {
@@ -35,6 +51,11 @@ function formatRelativeTime(iso: string): string {
   if (diff < year) return `${Math.floor(diff / month)}mo ago`;
   return `${Math.floor(diff / year)}y ago`;
 }
+
+export type AgentBuilderListProps = {
+  agents: StoredAgentResponse[];
+  search?: string;
+};
 
 export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
   const { Link } = useLinkComponent();
@@ -74,12 +95,15 @@ export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
-            <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description || 'No description'}</div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
+              <VisibilityBadge visibility={agent.visibility} size="sm" className="shrink-0 sm:hidden" />
+            </div>
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
-            {agent.visibility === 'public' && <Badge icon={<Globe className="h-3 w-3" />}>Public</Badge>}
-            <span className="truncate max-w-[16rem]">{getModelLabel(agent.model)}</span>
-            <span>Updated {formatRelativeTime(agent.updatedAt)}</span>
+          <div className="hidden sm:inline-flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
+            <VisibilityBadge visibility={agent.visibility} />
+            <span className="hidden md:inline-flex truncate max-w-[16rem]">{getModelLabel(agent.model)}</span>
+            <span className="hidden lg:inline-flex">Updated {formatRelativeTime(agent.updatedAt)}</span>
           </div>
         </Link>
       ))}
@@ -97,7 +121,7 @@ export function AgentBuilderListSkeleton({ rows = 4 }: { rows?: number }) {
             <div className="h-3.5 w-48 bg-surface3 rounded animate-pulse" />
             <div className="h-3 w-72 max-w-full bg-surface3 rounded animate-pulse" />
           </div>
-          <div className="hidden sm:block h-3 w-24 bg-surface3 rounded animate-pulse" />
+          <div className="h-3 w-16 bg-surface3 rounded animate-pulse" />
         </div>
       ))}
     </div>
