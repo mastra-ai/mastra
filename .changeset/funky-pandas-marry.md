@@ -1,5 +1,5 @@
 ---
-'@mastra/client-js': major
+'@mastra/client-js': minor
 ---
 
 Improved A2A client parity, typed streaming, and unwrapped results
