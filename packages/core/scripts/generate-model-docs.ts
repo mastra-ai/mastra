@@ -37,6 +37,7 @@ function formatProviderName(name: string): string {
     'moonshotai-cn': 'Moonshot AI (China)',
     zhipuai: 'Zhipu AI',
     opencode: 'OpenCode',
+    'azure-openai': 'Azure OpenAI',
   };
 
   const lower = name.toLowerCase();
@@ -115,7 +116,7 @@ const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 
 const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
-const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai'];
+const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
 
 interface ProviderInfo {
   id: string;
@@ -638,7 +639,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "openai/gpt-5"
+      model: "openai/gpt-5.5"
     })
     \`\`\`
 
@@ -652,7 +653,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "anthropic/claude-4-5-sonnet"
+      model: "anthropic/claude-sonnet-4-6"
     })
     \`\`\`
 
@@ -694,7 +695,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "openrouter/anthropic/claude-haiku-4-5"
+      model: "openrouter/anthropic/claude-haiku-4.5"
     })
     \`\`\`
 
@@ -1033,7 +1034,7 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify ? 'import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
+  const logoImport = hasNetlify ? '\nimport { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
 
   return `---
 title: "Gateways"
@@ -1062,9 +1063,18 @@ ${gatewaysList
       if (g === 'azure-openai') {
         return `    <CardGridItem
       title="Azure OpenAI"
-      description="Use your private Azure OpenAI deployments with associated deployment names"
+      description="Private Azure OpenAI deployments"
       href="/models/gateways/${g}"
       logo="${getLogoUrl(g)}"
+    />`;
+      }
+
+      if (g === 'mastra') {
+        return `    <CardGridItem
+      title="Mastra"
+      description="Built-in Observational Memory"
+      href="/models/gateways/${g}"
+      logo="https://mastra.ai/brand/logo.svg"
     />`;
       }
     }
@@ -1085,10 +1095,7 @@ ${gatewaysList
 
     />`;
   })
-  .join(
-    '\
-',
-  )}
+  .join('\n')}
 </CardGrid>`;
 }
 

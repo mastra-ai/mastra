@@ -38,7 +38,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Install dependencies
-        run: pnpm add -w --no-lockfile @octokit/rest fs-extra dotenv --no-lockfile
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile @octokit/rest fs-extra dotenv
 
       - name: Run Template Sync Script
         env:
