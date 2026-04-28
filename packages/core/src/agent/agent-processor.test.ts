@@ -3368,6 +3368,60 @@ describe('Workflow as Processor', () => {
       expect(JSON.stringify(result.toolResults)).toContain('LATEST_TOOL_RESULT');
     });
 
+    it('should not duplicate system messages from prompt-only model context', async () => {
+      const prompts: LanguageModelV2Prompt[] = [];
+
+      const testModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          prompts.push(prompt);
+
+          return {
+            content: [{ type: 'text' as const, text: 'Done!' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: prompt, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const promptOnlyProcessor: Processor = {
+        id: 'prompt-only-system-context',
+        processInputStep: async ({ messages }) => ({
+          modelContextMessages: [
+            {
+              id: 'transient-system-context',
+              role: 'system',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'TRANSIENT_SYSTEM_CONTEXT' }],
+              },
+              createdAt: new Date(),
+            },
+            ...messages,
+          ],
+        }),
+      };
+
+      const agent = new Agent({
+        id: 'prompt-only-system-context-test-agent',
+        name: 'Prompt Only System Context Test Agent',
+        instructions: 'CANONICAL_SYSTEM_INSTRUCTIONS',
+        model: testModel,
+        inputProcessors: [promptOnlyProcessor],
+      });
+
+      await agent.generate('Hello');
+
+      const prompt = prompts[0] ?? [];
+      const promptText = JSON.stringify(prompt);
+      const systemMessages = prompt.filter(message => message.role === 'system');
+
+      expect(systemMessages).toHaveLength(1);
+      expect(promptText).toContain('CANONICAL_SYSTEM_INSTRUCTIONS');
+      expect(promptText).not.toContain('TRANSIENT_SYSTEM_CONTEXT');
+    });
+
     it('should pass accumulated steps to processInputStep across agentic loop iterations', async () => {
       const stepLog: { stepNumber: number; stepsLength: number }[] = [];
 

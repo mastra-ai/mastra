@@ -87,6 +87,9 @@ function createModelContextMessageList(messageList: MessageList, messages: Mastr
   const sourceChecker = messageList.makeMessageSourceChecker();
   contextMessageList.addSystem(messageList.getAllSystemMessages());
   for (const message of messages) {
+    if (message.role === 'system') {
+      continue;
+    }
     contextMessageList.add(
       message,
       sourceChecker.getSource(message) ?? (message.role === 'user' ? 'input' : 'response'),
