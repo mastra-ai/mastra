@@ -1,7 +1,8 @@
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { AnthropicSchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
 import type { z as z3 } from 'zod/v3';
 import type { z as z4 } from 'zod/v4';
-import type { StandardSchemaWithJSON } from '../../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
 
 export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ? undefined : Partial<OUTPUT>;
@@ -69,8 +70,27 @@ export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSc
   return schema;
 }
 
-export function getTransformedSchema<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
-  const jsonSchema = asJsonSchema(schema);
+type SchemaModelInfo = {
+  provider: string;
+  modelId: string;
+  supportsStructuredOutputs: boolean;
+};
+
+export function getTransformedSchema<OUTPUT = undefined>(
+  schema?: StandardSchemaWithJSON<OUTPUT>,
+  options?: { model?: SchemaModelInfo },
+) {
+  if (!schema) {
+    return undefined;
+  }
+
+  const jsonSchema = options?.model
+    ? (applyCompatLayer({
+        schema: schema as PublicSchema<OUTPUT>,
+        compatLayers: [new AnthropicSchemaCompatLayer(options.model)],
+        mode: 'jsonSchema',
+      }) as JSONSchema7)
+    : asJsonSchema(schema);
 
   if (!jsonSchema) {
     return undefined;
@@ -119,7 +139,10 @@ export function getTransformedSchema<OUTPUT = undefined>(schema?: StandardSchema
   };
 }
 
-export function getResponseFormat(schema?: StandardSchemaWithJSON):
+export function getResponseFormat(
+  schema?: StandardSchemaWithJSON,
+  options?: { model?: SchemaModelInfo },
+):
   | {
       type: 'text';
     }
@@ -131,7 +154,7 @@ export function getResponseFormat(schema?: StandardSchemaWithJSON):
       schema?: JSONSchema7;
     } {
   if (schema) {
-    const transformedSchema = getTransformedSchema(schema);
+    const transformedSchema = getTransformedSchema(schema, options);
     return {
       type: 'json',
       schema: transformedSchema?.jsonSchema,

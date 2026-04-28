@@ -87,7 +87,15 @@ export function execute<OUTPUT = undefined>({
       : 'direct'
     : undefined;
 
-  const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
+  const responseFormat = structuredOutput?.schema
+    ? getResponseFormat(structuredOutput?.schema, {
+        model: {
+          provider: model.provider,
+          modelId: model.modelId,
+          supportsStructuredOutputs: true,
+        },
+      })
+    : undefined;
 
   let prompt = inputMessages;
 
