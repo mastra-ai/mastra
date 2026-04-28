@@ -1,3 +1,4 @@
+import { STAR_STORED_SKILL_ROUTE, UNSTAR_STORED_SKILL_ROUTE } from '../../handlers/stored-skill-stars';
 import {
   LIST_STORED_SKILLS_ROUTE,
   GET_STORED_SKILL_ROUTE,
@@ -16,4 +17,7 @@ export const STORED_SKILLS_ROUTES = [
   DELETE_STORED_SKILL_ROUTE,
   // Publish
   PUBLISH_STORED_SKILL_ROUTE,
+  // Stars (EE)
+  STAR_STORED_SKILL_ROUTE,
+  UNSTAR_STORED_SKILL_ROUTE,
 ] as const;

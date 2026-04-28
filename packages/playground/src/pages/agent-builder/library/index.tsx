@@ -21,7 +21,7 @@ import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 export default function AgentBuilderLibraryPage() {
   const [search, setSearch] = useState('');
 
-  const listParams = useMemo<ListStoredAgentsParams>(() => ({ status: 'draft', visibility: 'public' }), []);
+  const listParams = useMemo<ListStoredAgentsParams>(() => ({ visibility: 'public' }), []);
 
   const { data, isLoading, error } = useStoredAgents(listParams);
   const agents = data?.agents ?? [];

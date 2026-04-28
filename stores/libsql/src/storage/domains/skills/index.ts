@@ -7,6 +7,7 @@ import {
   calculatePagination,
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
+  TABLE_STARS,
   SKILLS_SCHEMA,
   SKILL_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -25,7 +26,7 @@ import type {
 } from '@mastra/core/storage/domains/skills';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { buildSelectColumns } from '../../db/utils';
+import { buildSelectColumns, buildSelectColumnsWithAlias } from '../../db/utils';
 
 /**
  * Config fields that live on version rows (from StorageSkillSnapshotType).
@@ -66,7 +67,7 @@ export class SkillsLibSQL extends SkillsStorage {
     await this.#db.alterTable({
       tableName: TABLE_SKILLS,
       schema: SKILLS_SCHEMA,
-      ifNotExists: ['visibility'],
+      ifNotExists: ['visibility', 'starCount'],
     });
 
     // Unique constraint on (skillId, versionNumber) to prevent duplicate versions from concurrent updates
@@ -121,6 +122,7 @@ export class SkillsLibSQL extends SkillsStorage {
           activeVersionId: null,
           authorId: skill.authorId ?? null,
           visibility: visibility ?? null,
+          starCount: 0,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
         },
@@ -296,31 +298,80 @@ export class SkillsLibSQL extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility } = args || {};
+      const {
+        page = 0,
+        perPage: perPageInput,
+        orderBy,
+        authorId,
+        visibility,
+        status,
+        entityIds,
+        pinStarredFor,
+        starredOnly,
+      } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
+
+      // Empty entityIds: short-circuit to no rows.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          skills: [],
+          total: 0,
+          page,
+          perPage: perPageInput ?? 100,
+          hasMore: false,
+        };
+      }
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
       if (authorId !== undefined) {
-        conditions.push('authorId = ?');
+        conditions.push('s_e.authorId = ?');
         queryParams.push(authorId);
       }
 
       if (visibility !== undefined) {
-        conditions.push('visibility = ?');
+        conditions.push('s_e.visibility = ?');
         queryParams.push(visibility);
+      }
+
+      if (status !== undefined) {
+        conditions.push('s_e.status = ?');
+        queryParams.push(status);
+      }
+
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => '?').join(', ');
+        conditions.push(`s_e.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
       }
 
       // Note: metadata filter is ignored for skills since the entity table doesn't have a metadata column.
       // Metadata lives on the version table.
 
+      // Optional LEFT JOIN on stars for starred-first ordering / starredOnly filter.
+      const joinUserId = pinStarredFor;
+      const useJoin = Boolean(joinUserId);
+
+      let joinClause = '';
+      const joinParams: InValue[] = [];
+      if (useJoin && joinUserId) {
+        joinClause = `LEFT JOIN "${TABLE_STARS}" st ON st."entityType" = 'skill' AND st."entityId" = s_e.id AND st."userId" = ?`;
+        joinParams.push(joinUserId);
+        if (starredOnly) {
+          conditions.push('st."userId" IS NOT NULL');
+        }
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM "${TABLE_SKILLS}" ${whereClause}`,
-        args: queryParams,
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_SKILLS}" s_e ${joinClause} ${whereClause}`,
+        args: [...joinParams, ...queryParams],
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -339,9 +390,18 @@ export class SkillsLibSQL extends SkillsStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
+      const orderByParts: string[] = [];
+      if (useJoin && joinUserId) {
+        orderByParts.push(`(st."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`s_e."${field}" ${direction}`);
+      orderByParts.push(`s_e."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
+      const selectCols = buildSelectColumnsWithAlias(TABLE_SKILLS, 's_e');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_SKILLS)} FROM "${TABLE_SKILLS}" ${whereClause} ORDER BY ${field} ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limitValue, start],
+        sql: `SELECT ${selectCols} FROM "${TABLE_SKILLS}" s_e ${joinClause} ${whereClause} ${orderByClause} LIMIT ? OFFSET ?`,
+        args: [...joinParams, ...queryParams, limitValue, start],
       });
 
       const skills = result.rows?.map(row => this.#parseSkillRow(row)) ?? [];
@@ -605,6 +665,7 @@ export class SkillsLibSQL extends SkillsStorage {
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
       visibility: (row.visibility as StorageSkillType['visibility']) ?? undefined,
+      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };

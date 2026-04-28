@@ -31,6 +31,24 @@ export function buildSelectColumns(tableName: TABLE_NAMES): string {
 }
 
 /**
+ * Same as `buildSelectColumns` but qualifies each column with the given table alias.
+ * Used by queries that JOIN multiple tables and need unambiguous column references.
+ */
+export function buildSelectColumnsWithAlias(tableName: TABLE_NAMES, alias: string): string {
+  const parsedAlias = parseSqlIdentifier(alias, 'table alias');
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.keys(schema)
+    .map(col => {
+      const colDef = schema[col];
+      const parsedCol = parseSqlIdentifier(col, 'column name');
+      return colDef?.type === 'jsonb'
+        ? `json(${parsedAlias}."${parsedCol}") as "${parsedCol}"`
+        : `${parsedAlias}."${parsedCol}"`;
+    })
+    .join(', ');
+}
+
+/**
  * Checks if an error is a SQLite lock/busy error that should be retried
  */
 export function isLockError(error: any): boolean {

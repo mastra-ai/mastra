@@ -63,8 +63,8 @@ describe('AgentBuilderSidebar', () => {
   it('renders both Agents and Library links', async () => {
     renderSidebar('/agent-builder/agents');
 
-    const agents = await screen.findByRole('link', { name: /Agents/ });
-    const library = await screen.findByRole('link', { name: /Library/ });
+    const agents = await screen.findByRole('link', { name: /My agents/i });
+    const library = await screen.findByRole('link', { name: /Library/i });
 
     expect(agents.getAttribute('href')).toBe('/agent-builder/agents');
     expect(library.getAttribute('href')).toBe('/agent-builder/library');
@@ -73,11 +73,11 @@ describe('AgentBuilderSidebar', () => {
   it('marks the Library link active when on /agent-builder/library', async () => {
     renderSidebar('/agent-builder/library');
 
-    const libraryLink = await screen.findByRole('link', { name: /Library/ });
+    const libraryLink = await screen.findByRole('link', { name: /Library/i });
     const libraryItem = libraryLink.closest('li');
     expect(libraryItem?.className).toMatch(/before:absolute/);
 
-    const agentsLink = await screen.findByRole('link', { name: /Agents/ });
+    const agentsLink = await screen.findByRole('link', { name: /My agents/i });
     const agentsItem = agentsLink.closest('li');
     expect(agentsItem?.className).not.toMatch(/before:absolute/);
   });

@@ -7,6 +7,7 @@ import {
   calculatePagination,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_STARS,
   AGENTS_SCHEMA,
   AGENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -24,7 +25,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { buildSelectColumns } from '../../db/utils';
+import { buildSelectColumnsWithAlias } from '../../db/utils';
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -48,7 +49,7 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['status', 'authorId', 'visibility'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'starCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
@@ -308,6 +309,7 @@ export class AgentsLibSQL extends AgentsStorage {
       authorId: row.authorId as string | undefined,
       visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
+      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -353,6 +355,7 @@ export class AgentsLibSQL extends AgentsStorage {
           authorId: agent.authorId ?? null,
           visibility,
           metadata: agent.metadata ?? null,
+          starCount: 0,
           createdAt: now,
           updatedAt: now,
         },
@@ -490,7 +493,18 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status, visibility } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      metadata,
+      status,
+      visibility,
+      entityIds,
+      pinStarredFor,
+      starredOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -509,22 +523,33 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // Build WHERE conditions
+      // Empty entityIds is short-circuit: no rows possible.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Build WHERE conditions (referenced by alias `a`).
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
       if (status) {
-        conditions.push('status = ?');
+        conditions.push('a.status = ?');
         queryParams.push(status);
       }
 
       if (authorId !== undefined) {
-        conditions.push('authorId = ?');
+        conditions.push('a.authorId = ?');
         queryParams.push(authorId);
       }
 
       if (visibility !== undefined) {
-        conditions.push('visibility = ?');
+        conditions.push('a.visibility = ?');
         queryParams.push(visibility);
       }
 
@@ -539,17 +564,43 @@ export class AgentsLibSQL extends AgentsStorage {
               details: { key },
             });
           }
-          conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+          conditions.push(`json_extract(a.metadata, '$.${key}') = ?`);
           queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
         }
       }
 
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => '?').join(', ');
+        conditions.push(`a.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
+      }
+
+      // Optional LEFT JOIN on stars for starred-first ordering / starredOnly filter.
+      // starredOnly only takes effect when pinStarredFor is also provided (no userId
+      // means no rows can match). The handler passes both together, but defend
+      // against direct callers that ask for starredOnly without identifying a user.
+      const joinUserId = pinStarredFor;
+      const useJoin = Boolean(joinUserId);
+
+      let joinClause = '';
+      const joinParams: InValue[] = [];
+      if (useJoin && joinUserId) {
+        joinClause = `LEFT JOIN "${TABLE_STARS}" s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = ?`;
+        joinParams.push(joinUserId);
+        if (starredOnly) {
+          conditions.push('s."userId" IS NOT NULL');
+        }
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get total count
+      // Total count (mirrors join + where, no ORDER BY / LIMIT).
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" ${whereClause}`,
-        args: queryParams,
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" a ${joinClause} ${whereClause}`,
+        args: [...joinParams, ...queryParams],
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -563,11 +614,20 @@ export class AgentsLibSQL extends AgentsStorage {
         };
       }
 
-      // Get paginated results
+      // Compose ORDER BY: starred-first when JOIN active, then existing field, then id ASC tie-break.
+      const orderByParts: string[] = [];
+      if (useJoin && joinUserId) {
+        orderByParts.push(`(s."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`a."${field}" ${direction}`);
+      orderByParts.push(`a."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
       const limitValue = perPageInput === false ? total : perPage;
+      const selectCols = buildSelectColumnsWithAlias(TABLE_AGENTS, 'a');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_AGENTS)} FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limitValue, offset],
+        sql: `SELECT ${selectCols} FROM "${TABLE_AGENTS}" a ${joinClause} ${whereClause} ${orderByClause} LIMIT ? OFFSET ?`,
+        args: [...joinParams, ...queryParams, limitValue, offset],
       });
 
       const rows = result.rows ?? [];

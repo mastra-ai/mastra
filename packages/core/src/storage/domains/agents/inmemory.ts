@@ -59,6 +59,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       authorId: agent.authorId,
       visibility,
       metadata: agent.metadata,
+      starCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -117,7 +118,17 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      visibility,
+      metadata,
+      status,
+      entityIds,
+      pinStarredFor,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -135,6 +146,22 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
+
+    // Restrict to a set of IDs (used by ?starredOnly=true).
+    // An empty array means "no candidates" -> empty result.
+    if (entityIds !== undefined) {
+      if (entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageInput === false ? false : perPage,
+          hasMore: false,
+        };
+      }
+      const idSet = new Set(entityIds);
+      agents = agents.filter(agent => idSet.has(agent.id));
+    }
 
     // Filter by status
     if (status) {
@@ -159,8 +186,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       });
     }
 
-    // Sort filtered agents
-    const sortedAgents = this.sortAgents(agents, field, direction);
+    // Sort filtered agents (with optional starred-first compound sort)
+    const starredIds = pinStarredFor ? this.collectStarredIdsFor(pinStarredFor) : undefined;
+    const sortedAgents = this.sortAgents(agents, field, direction, starredIds);
 
     // Deep clone agents to avoid mutation
     const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
@@ -321,13 +349,39 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     agents: StorageAgentType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
+    starredIds?: Set<string>,
   ): StorageAgentType[] {
     return agents.sort((a, b) => {
+      // Compound sort: starred first, then existing orderBy, then id ASC for stable pagination.
+      if (starredIds) {
+        const aStar = starredIds.has(a.id) ? 1 : 0;
+        const bStar = starredIds.has(b.id) ? 1 : 0;
+        if (aStar !== bStar) return bStar - aStar;
+      }
+
       const aValue = new Date(a[field]).getTime();
       const bValue = new Date(b[field]).getTime();
+      if (aValue !== bValue) {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
 
-      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      // Stable tie-break for same `createdAt`/`updatedAt`.
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
+  }
+
+  /**
+   * Collect the set of agent IDs starred by the given user. Returns an empty
+   * Set when the stars domain is not wired or the user has no stars.
+   */
+  private collectStarredIdsFor(userId: string): Set<string> {
+    const starred = new Set<string>();
+    for (const row of this.db.stars.values()) {
+      if (row.userId === userId && row.entityType === 'agent') {
+        starred.add(row.entityId);
+      }
+    }
+    return starred;
   }
 
   private sortVersions(

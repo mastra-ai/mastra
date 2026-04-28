@@ -26,7 +26,7 @@ export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
 
   const listParams = useMemo<ListStoredAgentsParams>(() => {
-    const params: ListStoredAgentsParams = { status: 'draft' };
+    const params: ListStoredAgentsParams = {};
     if (currentUser?.id) {
       params.authorId = currentUser.id;
     }

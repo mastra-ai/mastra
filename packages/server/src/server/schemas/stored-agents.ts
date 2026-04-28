@@ -43,6 +43,10 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
   authorId: z.string().optional().describe('Filter agents by author identifier'),
   visibility: z.enum(['public']).optional().describe('Filter to only public agents'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
+  starredOnly: z
+    .stringbool()
+    .optional()
+    .describe('When true, return only agents starred by the caller (requires the stars EE feature)'),
 });
 
 // ============================================================================
@@ -362,6 +366,8 @@ export const storedAgentSchema = z.object({
   authorId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   visibility: z.enum(['private', 'public']).optional(),
+  starCount: z.number().int().nonnegative().optional().describe('Number of users who have starred this agent'),
+  isStarred: z.boolean().optional().describe('Whether the requesting user has starred this agent'),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   // Version snapshot config fields (resolved from active version)

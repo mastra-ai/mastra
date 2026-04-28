@@ -150,6 +150,10 @@ export const mastra = new Mastra({
           tools: true,
           agents: true,
           workflows: true,
+          stars: true,
+        },
+        skill: {
+          stars: true,
         },
       },
       configuration: {

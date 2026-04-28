@@ -24,7 +24,9 @@ import {
   matchesAuthorFilter,
   resolveAuthorFilter,
 } from './authorship';
+import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
+import { prepareStarsEnrichment, stripStarFields } from './stars-enrichment';
 
 // ============================================================================
 // Route Definitions
@@ -43,7 +45,18 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
   description: 'Returns a paginated list of all skill configurations stored in the database',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, page, perPage, orderBy, authorId, visibility, metadata }) => {
+  handler: async ({
+    mastra,
+    requestContext,
+    page,
+    perPage,
+    orderBy,
+    status,
+    authorId,
+    visibility,
+    metadata,
+    starredOnly,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -63,17 +76,76 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         queryVisibility: visibility,
       });
 
+      const callerId = getCallerAuthorId(requestContext);
+      const starsEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
+      const honoredStarredOnly = starsEnabled && starredOnly === true;
+
+      // `?starredOnly=true` flow: fetch caller's starred IDs, restrict the list
+      // to that set, then post-filter by visibility and recompute total/pages.
+      if (honoredStarredOnly) {
+        const effectivePerPage: number = perPage ?? 100;
+        if (!callerId) {
+          // Caller cannot have starred anything without an identity.
+          return { skills: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
+        }
+        const starsStore = await storage.getStore('stars');
+        if (!starsStore) {
+          throw new HTTPException(500, { message: 'Stars storage domain is not available' });
+        }
+        const starredIds = await starsStore.listStarredIds({ userId: callerId, entityType: 'skill' });
+        if (starredIds.length === 0) {
+          return { skills: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
+        }
+        const allMatching = await skillStore.listResolved({
+          perPage: false,
+          orderBy,
+          status,
+          authorId: filter.kind === 'exact' ? filter.authorId : undefined,
+          metadata,
+          entityIds: starredIds,
+        });
+        const visible = allMatching.skills.filter(record => matchesAuthorFilter(record, filter));
+        const total = visible.length;
+        const startIdx = effectivePerPage === 0 ? 0 : page * effectivePerPage;
+        const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
+        const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
+        const annotated = sliced.map(record => ({ ...record, isStarred: true }));
+        const hasMore = effectivePerPage > 0 && endIdx < total;
+        return {
+          skills: annotated,
+          total,
+          page,
+          perPage: effectivePerPage,
+          hasMore,
+        };
+      }
+
       const result = await skillStore.listResolved({
         page,
         perPage,
         orderBy,
+        status,
         authorId: filter.kind === 'exact' ? filter.authorId : undefined,
         metadata,
       });
 
-      const skills = result.skills.filter(record => matchesAuthorFilter(record, filter));
+      const visibleSkills = result.skills.filter(record => matchesAuthorFilter(record, filter));
 
-      return { ...result, skills };
+      if (!starsEnabled) {
+        return { ...result, skills: visibleSkills.map(stripStarFields) };
+      }
+
+      const enrichment = await prepareStarsEnrichment(
+        mastra,
+        requestContext,
+        'skill',
+        visibleSkills.map(s => s.id),
+      );
+      const annotated = enrichment
+        ? visibleSkills.map(record => ({ ...record, isStarred: enrichment.starredIds.has(record.id) }))
+        : visibleSkills;
+
+      return { ...result, skills: annotated };
     } catch (error) {
       return handleError(error, 'Error listing stored skills');
     }
@@ -114,7 +186,11 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
 
       assertReadAccess({ requestContext, resource: 'skills', resourceId: storedSkillId, record: skill });
 
-      return skill;
+      const enrichment = await prepareStarsEnrichment(mastra, requestContext, 'skill', [skill.id]);
+      if (enrichment) {
+        return { ...skill, isStarred: enrichment.starredIds.has(skill.id) };
+      }
+      return stripStarFields(skill);
     } catch (error) {
       return handleError(error, 'Error getting stored skill');
     }
@@ -347,6 +423,17 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       });
 
       await skillStore.delete(storedSkillId);
+
+      // Cascade: drop any star rows referencing this skill. Failure must not
+      // abort the delete.
+      try {
+        const starsStore = await storage.getStore('stars');
+        await starsStore?.deleteStarsForEntity({ entityType: 'skill', entityId: storedSkillId });
+      } catch (cascadeError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to cascade-delete stars for skill', { storedSkillId, error: cascadeError });
+      }
 
       return {
         success: true,

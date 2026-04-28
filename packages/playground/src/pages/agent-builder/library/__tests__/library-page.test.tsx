@@ -79,7 +79,7 @@ describe('AgentBuilderLibraryPage', () => {
     cleanup();
   });
 
-  it('passes visibility=public and status=draft to the API', async () => {
+  it('passes visibility=public to the API without a status filter', async () => {
     let capturedSearch: URLSearchParams | null = null;
     server.use(
       http.get(`${BASE_URL}/api/stored/agents`, ({ request }) => {
@@ -103,7 +103,7 @@ describe('AgentBuilderLibraryPage', () => {
       expect(capturedSearch).not.toBeNull();
     });
     expect(capturedSearch!.get('visibility')).toBe('public');
-    expect(capturedSearch!.get('status')).toBe('draft');
+    expect(capturedSearch!.get('status')).toBeNull();
   });
 
   it('renders rows from the response with view links', async () => {

@@ -7,6 +7,7 @@ import {
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
   TABLE_SCHEMAS,
+  TABLE_STARS,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -98,7 +99,7 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
-      ifNotExists: ['status', 'authorId', 'visibility'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'starCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
@@ -371,6 +372,7 @@ export class AgentsPG extends AgentsStorage {
       authorId: row.authorId as string | undefined,
       visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
+      starCount: row.starCount === null || row.starCount === undefined ? 0 : Number(row.starCount),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -414,16 +416,17 @@ export class AgentsPG extends AgentsStorage {
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
       await this.#db.client.none(
         `INSERT INTO ${agentsTable} (
-          id, status, "authorId", visibility, metadata,
+          id, status, "authorId", visibility, metadata, "starCount",
           "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           agent.id,
           'draft',
           agent.authorId ?? null,
           visibility,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
+          0,
           null, // activeVersionId starts as null
           nowIso,
           nowIso,
@@ -454,6 +457,7 @@ export class AgentsPG extends AgentsStorage {
         authorId: agent.authorId,
         visibility: visibility ?? undefined,
         metadata: agent.metadata,
+        starCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -599,7 +603,18 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status, visibility } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      metadata,
+      status,
+      visibility,
+      entityIds,
+      pinStarredFor,
+      starredOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -618,39 +633,78 @@ export class AgentsPG extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      // Empty entityIds is short-circuit: no rows possible.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
-      // Build WHERE conditions
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      const starsTable = getTableName({ indexName: TABLE_STARS, schemaName: getSchemaName(this.#schema) });
+
+      // Build WHERE conditions (referenced via alias `a`).
       const conditions: string[] = [];
       const queryParams: any[] = [];
       let paramIdx = 1;
 
+      // JOIN params come first in the query, but we build WHERE first and prepend later.
+      const joinUserId = pinStarredFor;
+      const useJoin = Boolean(joinUserId);
+      let joinSqlIdx: number | null = null;
+      if (useJoin) {
+        joinSqlIdx = paramIdx++;
+      }
+
       if (status) {
-        conditions.push(`status = $${paramIdx++}`);
+        conditions.push(`a.status = $${paramIdx++}`);
         queryParams.push(status);
       }
 
       if (authorId !== undefined) {
-        conditions.push(`"authorId" = $${paramIdx++}`);
+        conditions.push(`a."authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
       }
 
       if (visibility !== undefined) {
-        conditions.push(`visibility = $${paramIdx++}`);
+        conditions.push(`a.visibility = $${paramIdx++}`);
         queryParams.push(visibility);
       }
 
       if (metadata && Object.keys(metadata).length > 0) {
-        conditions.push(`metadata @> $${paramIdx++}::jsonb`);
+        conditions.push(`a.metadata @> $${paramIdx++}::jsonb`);
         queryParams.push(JSON.stringify(metadata));
       }
 
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => `$${paramIdx++}`).join(', ');
+        conditions.push(`a.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
+      }
+
+      if (useJoin && starredOnly) {
+        conditions.push('s."userId" IS NOT NULL');
+      } else if (starredOnly) {
+        // Defensive: starredOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
+      const joinClause =
+        useJoin && joinSqlIdx !== null
+          ? `LEFT JOIN ${starsTable} s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = $${joinSqlIdx}`
+          : '';
+      const joinParams: any[] = useJoin && joinUserId ? [joinUserId] : [];
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get total count
+      // Total count (mirrors join + where, no ORDER BY / LIMIT).
       const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
-        queryParams,
+        `SELECT COUNT(*) as count FROM ${tableName} a ${joinClause} ${whereClause}`,
+        [...joinParams, ...queryParams],
       );
       const total = parseInt(countResult.count, 10);
 
@@ -664,11 +718,21 @@ export class AgentsPG extends AgentsStorage {
         };
       }
 
-      // Get paginated results
+      // Compose ORDER BY: starred-first when JOIN active, then existing field, then id ASC tie-break.
+      const orderByParts: string[] = [];
+      if (useJoin) {
+        orderByParts.push(`(s."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`a."${field}" ${direction}`);
+      orderByParts.push(`a."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
       const limitValue = perPageInput === false ? total : perPage;
+      const limitIdx = paramIdx++;
+      const offsetIdx = paramIdx++;
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-        [...queryParams, limitValue, offset],
+        `SELECT a.* FROM ${tableName} a ${joinClause} ${whereClause} ${orderByClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        [...joinParams, ...queryParams, limitValue, offset],
       );
 
       const agents = (dataResult || []).map(row => this.parseRow(row));

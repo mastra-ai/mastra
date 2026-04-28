@@ -25,6 +25,7 @@ export const AgentBuilderEditFormSchema = z.object({
    * whether this is required at submit time based on the admin's model policy.
    */
   model: AgentBuilderModelSchema.optional(),
+  avatarUrl: z.string().optional(),
 });
 
 export type AgentBuilderModel = z.infer<typeof AgentBuilderModelSchema>;

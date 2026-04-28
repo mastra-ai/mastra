@@ -1,6 +1,12 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { ClientOptions, StoredSkillResponse, UpdateStoredSkillParams, DeleteStoredSkillResponse } from '../types';
+import type {
+  ClientOptions,
+  StoredSkillResponse,
+  UpdateStoredSkillParams,
+  DeleteStoredSkillResponse,
+  StarToggleResponse,
+} from '../types';
 import { requestContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
@@ -54,6 +60,32 @@ export class StoredSkill extends BaseResource {
   delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredSkillResponse> {
     return this.request(
       `/stored/skills/${encodeURIComponent(this.storedSkillId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Stars this skill for the calling user. Idempotent.
+   * Requires the `skill.stars` builder feature flag to be enabled on the server.
+   */
+  star(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+    return this.request(
+      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/star${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+      },
+    );
+  }
+
+  /**
+   * Unstars this skill for the calling user. Idempotent.
+   * Requires the `skill.stars` builder feature flag to be enabled on the server.
+   */
+  unstar(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+    return this.request(
+      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/star${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

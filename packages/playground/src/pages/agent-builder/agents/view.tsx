@@ -143,7 +143,12 @@ const AgentBuilderAgentViewReady = ({
   );
 
   return (
-    <AgentChatPanelProvider agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description}>
+    <AgentChatPanelProvider
+      agentId={id}
+      agentName={storedAgent?.name}
+      agentDescription={storedAgent?.description}
+      agentAvatarUrl={agent?.avatarUrl}
+    >
       <WorkspaceLayout
         isLoading={false}
         mode="test"

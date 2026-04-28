@@ -42,6 +42,11 @@ export function isConditionalStoredModel(model: StoredAgent['model'] | undefined
 }
 
 export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefined): AgentBuilderEditFormValues {
+  const avatarUrl =
+    storedAgent?.metadata && typeof storedAgent.metadata === 'object' && 'avatarUrl' in storedAgent.metadata
+      ? (storedAgent.metadata.avatarUrl as string | undefined)
+      : undefined;
+
   return {
     name: storedAgent?.name ?? '',
     description: storedAgent?.description ?? '',
@@ -52,6 +57,7 @@ export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefi
     skills: Object.fromEntries(Object.keys(flattenAgentSkills(storedAgent?.skills)).map(k => [k, true])),
     workspaceId: extractWorkspaceId(storedAgent?.workspace),
     visibility: storedAgent?.visibility ?? 'private',
+    avatarUrl,
     model: extractStaticModel(storedAgent?.model),
   };
 }

@@ -88,7 +88,7 @@ describe('AgentBuilderAgentsPage', () => {
     isCurrentUserLoading = false;
   });
 
-  it('passes status=draft and authorId to the API when the current user is available', async () => {
+  it('passes authorId to the API when the current user is available', async () => {
     const capturedSearches: URLSearchParams[] = [];
     server.use(
       http.get(`${BASE_URL}/api/stored/agents`, ({ request }) => {
@@ -108,7 +108,7 @@ describe('AgentBuilderAgentsPage', () => {
     await waitFor(() => {
       expect(capturedSearches).toHaveLength(1);
     });
-    expect(capturedSearches[0].get('status')).toBe('draft');
+    expect(capturedSearches[0].get('status')).toBeNull();
     expect(capturedSearches[0].get('authorId')).toBe('user-1');
     expect(capturedSearches[0].get('visibility')).toBeNull();
     expect(screen.queryByText('All agents')).toBeNull();
@@ -145,7 +145,7 @@ describe('AgentBuilderAgentsPage', () => {
     await waitFor(() => {
       expect(capturedSearch).not.toBeNull();
     });
-    expect(capturedSearch!.get('status')).toBe('draft');
+    expect(capturedSearch!.get('status')).toBeNull();
     expect(capturedSearch!.get('authorId')).toBeNull();
     expect(capturedSearch!.get('visibility')).toBeNull();
   });

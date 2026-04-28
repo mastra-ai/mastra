@@ -7,3 +7,4 @@ export { EditorPromptNamespace } from './prompt';
 export { EditorScorerNamespace } from './scorer';
 export { EditorWorkspaceNamespace } from './workspace';
 export { EditorSkillNamespace } from './skill';
+export { EditorStarsNamespace } from './stars';

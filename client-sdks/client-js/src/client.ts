@@ -1140,6 +1140,12 @@ export class MastraClient extends BaseResource {
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
     }
+    if (params?.starredOnly) {
+      searchParams.set('starredOnly', 'true');
+    }
+    if (params?.pinStarredFor) {
+      searchParams.set('pinStarredFor', params.pinStarredFor);
+    }
 
     const queryString = searchParams.toString();
     return this.request(`/stored/agents${queryString ? `?${queryString}` : ''}`);
@@ -1377,6 +1383,12 @@ export class MastraClient extends BaseResource {
     }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+    if (params?.starredOnly) {
+      searchParams.set('starredOnly', 'true');
+    }
+    if (params?.pinStarredFor) {
+      searchParams.set('pinStarredFor', params.pinStarredFor);
     }
 
     const queryString = searchParams.toString();

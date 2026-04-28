@@ -58,6 +58,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       activeVersionId: undefined,
       authorId: skill.authorId,
       visibility,
+      starCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -194,7 +195,17 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      status,
+      visibility,
+      metadata,
+      entityIds,
+      pinStarredFor,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -213,9 +224,30 @@ export class InMemorySkillsStorage extends SkillsStorage {
     // Get all skills and apply filters
     let configs = Array.from(this.db.skills.values());
 
+    // Restrict to a set of IDs (used by ?starredOnly=true).
+    // An empty array means "no candidates" -> empty result.
+    if (entityIds !== undefined) {
+      if (entityIds.length === 0) {
+        return {
+          skills: [],
+          total: 0,
+          page,
+          perPage: perPageInput === false ? false : perPage,
+          hasMore: false,
+        };
+      }
+      const idSet = new Set(entityIds);
+      configs = configs.filter(config => idSet.has(config.id));
+    }
+
     // Filter by authorId if provided
     if (authorId !== undefined) {
       configs = configs.filter(config => config.authorId === authorId);
+    }
+
+    // Filter by status if provided
+    if (status !== undefined) {
+      configs = configs.filter(config => config.status === status);
     }
 
     // Filter by visibility if provided
@@ -232,8 +264,9 @@ export class InMemorySkillsStorage extends SkillsStorage {
       });
     }
 
-    // Sort filtered configs
-    const sortedConfigs = this.sortConfigs(configs, field, direction);
+    // Sort filtered configs (with optional starred-first compound sort)
+    const starredIds = pinStarredFor ? this.collectStarredIdsFor(pinStarredFor) : undefined;
+    const sortedConfigs = this.sortConfigs(configs, field, direction, starredIds);
 
     // Deep clone to avoid mutation
     const clonedConfigs = sortedConfigs.map(config => this.deepCopyConfig(config));
@@ -385,13 +418,39 @@ export class InMemorySkillsStorage extends SkillsStorage {
     configs: StorageSkillType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
+    starredIds?: Set<string>,
   ): StorageSkillType[] {
     return configs.sort((a, b) => {
+      // Compound sort: starred first, then existing orderBy, then id ASC for stable pagination.
+      if (starredIds) {
+        const aStar = starredIds.has(a.id) ? 1 : 0;
+        const bStar = starredIds.has(b.id) ? 1 : 0;
+        if (aStar !== bStar) return bStar - aStar;
+      }
+
       const aValue = a[field].getTime();
       const bValue = b[field].getTime();
+      if (aValue !== bValue) {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
 
-      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      // Stable tie-break for same `createdAt`/`updatedAt`.
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
+  }
+
+  /**
+   * Collect the set of skill IDs starred by the given user. Returns an empty
+   * Set when the stars domain is not wired or the user has no stars.
+   */
+  private collectStarredIdsFor(userId: string): Set<string> {
+    const starred = new Set<string>();
+    for (const row of this.db.stars.values()) {
+      if (row.userId === userId && row.entityType === 'skill') {
+        starred.add(row.entityId);
+      }
+    }
+    return starred;
   }
 
   private sortVersions(

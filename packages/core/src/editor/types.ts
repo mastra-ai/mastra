@@ -279,6 +279,63 @@ export interface IEditorSkillNamespace {
 }
 
 // ============================================================================
+// Stars Namespace Interface
+// ============================================================================
+
+/** Entity kinds that can be starred. Mirrors `STORAGE_STAR_ENTITY_TYPES`. */
+export type EditorStarEntityType = 'agent' | 'skill';
+
+export interface EditorStarToggleResult {
+  /** Whether the entity is starred by the caller after the operation. */
+  starred: boolean;
+  /** Aggregate star count on the entity post-mutation. */
+  starCount: number;
+}
+
+export interface EditorStarTargetInput {
+  entityType: EditorStarEntityType;
+  entityId: string;
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+export interface EditorListStarredIdsInput {
+  entityType: EditorStarEntityType;
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+export interface EditorIsStarredBatchInput {
+  entityType: EditorStarEntityType;
+  entityIds: string[];
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+/**
+ * Stars (favorites) namespace. Optional: only present on EE-enabled builds
+ * with `features.agent.stars === true`.
+ *
+ * **Authorization layering**: the namespace verifies the target entity exists
+ * (404 if missing) and performs the storage mutation. Visibility / ownership
+ * checks (`assertReadAccess`) are performed by the route handler at the
+ * server boundary. Direct namespace callers must run their own visibility
+ * check before invoking these methods.
+ */
+export interface IEditorStarsNamespace {
+  star(input: EditorStarTargetInput): Promise<EditorStarToggleResult>;
+  unstar(input: EditorStarTargetInput): Promise<EditorStarToggleResult>;
+  isStarred(input: EditorStarTargetInput): Promise<boolean>;
+  /**
+   * Look up which entity IDs in the candidate set are starred by the caller.
+   * Used for one-shot annotation of list responses (avoids N+1 queries).
+   * Returns a `Set<string>` of starred entity IDs; order is irrelevant.
+   */
+  isStarredBatch(input: EditorIsStarredBatchInput): Promise<Set<string>>;
+  listStarredIds(input: EditorListStarredIdsInput): Promise<string[]>;
+}
+
+// ============================================================================
 // Main Editor Interface
 // ============================================================================
 
@@ -313,6 +370,13 @@ export interface IMastraEditor {
 
   /** Skill management namespace */
   readonly skill: IEditorSkillNamespace;
+
+  /**
+   * Stars (favorites) namespace. Present only when the EE stars feature is
+   * enabled. Route handlers must hard-gate with `requireBuilderFeature`
+   * before calling this namespace.
+   */
+  readonly stars?: IEditorStarsNamespace;
 
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;
