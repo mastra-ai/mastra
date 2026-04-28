@@ -13,6 +13,8 @@ export class MastraWorkflowStream<
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
   };
   #streamPromise: {
     promise: Promise<void>;
@@ -48,11 +50,15 @@ export class MastraWorkflowStream<
             inputTokens?: `${number}` | number;
             outputTokens?: `${number}` | number;
             totalTokens?: `${number}` | number;
+            cachedInputTokens?: `${number}` | number;
+            cacheCreationInputTokens?: `${number}` | number;
           }
         | {
             promptTokens?: `${number}` | number;
             completionTokens?: `${number}` | number;
             totalTokens?: `${number}` | number;
+            cachedInputTokens?: `${number}` | number;
+            cacheCreationInputTokens?: `${number}` | number;
           },
     ) => {
       if ('inputTokens' in usage) {
@@ -64,6 +70,8 @@ export class MastraWorkflowStream<
         this.#usageCount.outputTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
       }
       this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
+      this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
+      this.#usageCount.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
     };
 
     super({

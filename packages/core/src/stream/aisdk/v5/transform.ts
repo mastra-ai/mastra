@@ -606,6 +606,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: undefined,
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
+      cacheCreationInputTokens: undefined,
       raw: undefined,
     };
   }
@@ -620,6 +621,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
+      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
       raw: usage,
     };
   }
@@ -632,6 +634,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
     raw: usage,
   };
 }

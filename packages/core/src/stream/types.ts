@@ -924,6 +924,12 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   /**
+   * Cache-write tokens, summed across multi-step runs. Mirrors `cachedInputTokens`
+   * for cache reads. Distinct from `providerMetadata.anthropic.cacheCreationInputTokens`,
+   * which is last-step-only.
+   */
+  cacheCreationInputTokens?: number;
+  /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:
    * { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
