@@ -50,5 +50,9 @@ export function buildAgentBuilderToolDescription(
     ? ' When enabling skills, each entry in `skills` MUST include both `id` (from the available skills list) and `name` (a concise Title Case display label). The `name` is shown to the user in chat.'
     : '';
 
-  return `Modify the agent configuration that the user is building. Supported fields: ${descriptionParts.join(', ')}.${toolsGuidance}${skillsGuidance}${availableToolsBlock}${availableSkillsBlock}${availableWorkspacesBlock}`;
+  const createSkillGuidance = features.skills
+    ? ' If the user asks to create a NEW skill (one that does not already exist), call the separate `createSkillTool` tool with `name`, `description`, `instructions`, optional `workspaceId`, and optional `visibility`. The new skill will be auto-attached to the agent. Use this `agentBuilderTool` `skills` field only to attach skills that already exist.'
+    : '';
+
+  return `Modify the agent configuration that the user is building. Supported fields: ${descriptionParts.join(', ')}.${toolsGuidance}${skillsGuidance}${createSkillGuidance}${availableToolsBlock}${availableSkillsBlock}${availableWorkspacesBlock}`;
 }

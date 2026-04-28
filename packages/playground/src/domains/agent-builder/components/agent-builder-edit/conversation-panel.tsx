@@ -10,6 +10,7 @@ import { MessageList } from '../chat-primitives/message-list';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
 import type { AvailableWorkspace } from './hooks/use-agent-builder-tool';
 import { useChatDraft } from './hooks/use-chat-draft';
+import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from './hooks/use-create-skill-tool';
 import { useInitialMessage } from './hooks/use-initial-message';
 import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-chat-context';
 import { StreamChatProvider } from './stream-chat-provider';
@@ -62,7 +63,11 @@ export const ConversationPanelProvider = ({
     availableWorkspaces,
     availableSkills,
   });
-  const clientTools = useMemo(() => ({ agentBuilderTool }), [agentBuilderTool]);
+  const createSkillTool = useCreateSkillTool({ availableWorkspaces });
+  const clientTools = useMemo(
+    () => (features.skills ? { agentBuilderTool, [CREATE_SKILL_TOOL_NAME]: createSkillTool } : { agentBuilderTool }),
+    [agentBuilderTool, createSkillTool, features.skills],
+  );
 
   return (
     <StreamChatProvider

@@ -58,6 +58,16 @@ describe('buildAgentBuilderToolDescription', () => {
     expect(description).toContain('writer');
   });
 
+  it('mentions createSkillTool when skills feature is on', () => {
+    const description = buildAgentBuilderToolDescription({ ...allOff, skills: true }, [], []);
+    expect(description).toContain('createSkillTool');
+  });
+
+  it('does not mention createSkillTool when skills feature is off', () => {
+    const description = buildAgentBuilderToolDescription(allOff, [], []);
+    expect(description).not.toContain('createSkillTool');
+  });
+
   it('does not mention skills when feature is off even if skills are provided', () => {
     const skills = [
       {
