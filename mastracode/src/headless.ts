@@ -336,8 +336,8 @@ function finalizeSummary<TState extends Record<string, unknown>>(
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
-async function resolveThread(
-  harness: Harness,
+async function resolveThread<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
   const threads = await harness.listThreads();
