@@ -423,13 +423,6 @@ export class DatadogExporter extends BaseExporter {
       } catch (e) {
         this.logger.error('Error flushing llmobs', { error: e });
       }
-    } else if ((tracer as any).flush) {
-      try {
-        await (tracer as any).flush();
-        this.logger.debug('Datadog tracer flushed');
-      } catch (e) {
-        this.logger.error('Error flushing tracer', { error: e });
-      }
     }
   }
 
