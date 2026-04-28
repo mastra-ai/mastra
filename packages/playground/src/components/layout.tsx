@@ -1,5 +1,4 @@
 import { ErrorBoundary, MainSidebarProvider, ThemeProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
-import { Agentation } from 'agentation';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
@@ -51,7 +50,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>
-      {import.meta.env.DEV && <Agentation />}
     </div>
   );
 };
