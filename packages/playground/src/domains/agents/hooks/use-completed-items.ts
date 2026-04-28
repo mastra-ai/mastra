@@ -2,6 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../context/review-queue-context';
 import { useAgentExperiments } from './use-agent-experiments';
+import { fetchResultCommentsByExperiment } from '@/domains/review/utils/fetch-result-comments';
 
 /**
  * Loads completed review items (status='complete') for auditing.
@@ -18,7 +19,10 @@ export const useCompletedItems = (agentId: string) => {
       const allResults = await Promise.all(
         experiments.map(async exp => {
           try {
-            const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
+            const [{ results }, comments] = await Promise.all([
+              client.listDatasetExperimentResults(exp.datasetId, exp.id),
+              fetchResultCommentsByExperiment(client, exp.id),
+            ]);
             return results
               .filter(r => r.status === 'complete')
               .map(r => ({
@@ -32,7 +36,7 @@ export const useCompletedItems = (agentId: string) => {
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: '',
+                comment: comments.get(r.id) ?? '',
               }));
           } catch {
             return [];

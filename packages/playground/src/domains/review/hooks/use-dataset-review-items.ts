@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../components/review-item-card';
+import { fetchResultCommentsByExperiment } from '../utils/fetch-result-comments';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 /**
@@ -20,7 +21,10 @@ export const useDatasetReviewItems = (datasetId: string) => {
         experiments.map(async exp => {
           if (!exp.datasetId) return [];
           try {
-            const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
+            const [{ results }, comments] = await Promise.all([
+              client.listDatasetExperimentResults(exp.datasetId, exp.id),
+              fetchResultCommentsByExperiment(client, exp.id),
+            ]);
             return results
               .filter(r => r.status === 'needs-review')
               .map(r => ({
@@ -34,7 +38,7 @@ export const useDatasetReviewItems = (datasetId: string) => {
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: '',
+                comment: comments.get(r.id) ?? '',
               }));
           } catch {
             return [];
@@ -66,7 +70,10 @@ export const useDatasetCompletedItems = (datasetId: string) => {
         experiments.map(async exp => {
           if (!exp.datasetId) return [];
           try {
-            const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
+            const [{ results }, comments] = await Promise.all([
+              client.listDatasetExperimentResults(exp.datasetId, exp.id),
+              fetchResultCommentsByExperiment(client, exp.id),
+            ]);
             return results
               .filter(r => r.status === 'complete')
               .map(r => ({
@@ -80,7 +87,7 @@ export const useDatasetCompletedItems = (datasetId: string) => {
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: '',
+                comment: comments.get(r.id) ?? '',
               }));
           } catch {
             return [];
