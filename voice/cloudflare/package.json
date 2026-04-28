@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
@@ -32,17 +32,17 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "cloudflare": "^4.5.0"
+    "cloudflare": "^5.2.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251111.0",
+    "@cloudflare/workers-types": "^4.20260418.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

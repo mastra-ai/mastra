@@ -9,7 +9,7 @@ packages:
 
 The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -44,7 +44,7 @@ const text = await voice.listen(audioStream, {
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -112,7 +112,7 @@ const text = await voice.listen(audioStream, {
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using OpenAI's text-to-speech models.
 
@@ -156,7 +156,7 @@ Converts text to speech using OpenAI's text-to-speech models.
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+### `listen()`
 
 Transcribes audio using OpenAI's Whisper model.
 
@@ -193,7 +193,7 @@ Transcribes audio using OpenAI's Whisper model.
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 

@@ -11,50 +11,103 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 
 The `.generate()` method enables non-streaming response generation from an agent with enhanced capabilities. It accepts messages and optional generation options.
 
-## Usage example
+## Usage examples
 
-```typescript
-// Basic usage
+### Basic usage
+
+Call the agent with a message to generate a response:
+
+```ts
 const result = await agent.generate('message for agent')
+```
 
-// With model settings (e.g., limiting output tokens)
+### With model settings
+
+Example of limiting output tokens and setting temperature:
+
+```ts
 const limitedResult = await agent.generate('Write a short poem about coding', {
   modelSettings: {
     maxOutputTokens: 50,
     temperature: 0.7,
   },
 })
+```
 
-// With structured output
-const structuredResult = await agent.generate("Extract the user's name and age", {
-  structuredOutput: {
-    schema: z.object({
-      name: z.string(),
-      age: z.number(),
-    }),
-  },
-})
+### With memory
 
-// With memory for conversation persistence
+Give your agent access to conversation history and persistence by configuring memory options. This allows the agent to remember previous interactions and maintain context across messages.
+
+```ts
 const memoryResult = await agent.generate('Remember my favorite color is blue', {
   memory: {
     thread: 'user-123-thread',
     resource: 'user-123',
   },
 })
+```
 
-// Accessing response headers
+### Accessing response headers
+
+Some model providers return useful information in response headers, such as remaining token counts or rate limit status. You can access these headers from the result object after generation completes.
+
+```ts
 const result = await agent.generate('Hello!')
 const remainingRequests = result.response?.headers?.['anthropic-ratelimit-requests-remaining']
 const remainingTokens = result.response?.headers?.['x-ratelimit-remaining-tokens']
 console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remainingTokens}`)
 ```
 
-:::info
+### Analyzing images
 
-**Model Compatibility**: This method requires AI SDK v5+ models. If you're using AI SDK v4 models, use the [`.generateLegacy()`](./generateLegacy) method instead. The framework automatically detects your model version and will throw an error if there's a mismatch.
+Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
 
-:::
+```typescript
+const response = await agent.generate([
+  {
+    role: 'user',
+    content: [
+      {
+        type: 'image',
+        image: 'https://placebear.com/cache/395-205.jpg',
+        mimeType: 'image/jpeg',
+      },
+      {
+        type: 'text',
+        text: 'Describe the image in detail, and extract all the text in the image.',
+      },
+    ],
+  },
+])
+
+console.log(response.text)
+```
+
+### Using `maxSteps`
+
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
+
+```typescript
+const response = await agent.generate('Help me organize my day', {
+  maxSteps: 10,
+})
+
+console.log(response.text)
+```
+
+### Using `onStepFinish`
+
+You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
+
+`onStepFinish` is only available when streaming or generating text without structured output.
+
+```typescript
+const response = await agent.generate('Help me organize my day', {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage })
+  },
+})
+```
 
 ## Parameters
 
@@ -423,9 +476,9 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
                 parameters: [
                   {
                     name: 'schema',
-                    type: 'z.ZodSchema<S>',
+                    type: 'StandardJSONSchemaV1',
                     isOptional: false,
-                    description: 'Zod schema defining the expected output structure.',
+                    description: 'Standard JSON Schema defining the expected output structure.',
                   },
                 ],
               },
@@ -580,7 +633,7 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
                     type: 'MemoryConfig',
                     isOptional: true,
                     description:
-                      'Additional memory configuration options including lastMessages, readOnly, semanticRecall, and workingMemory.',
+                      'Additional memory configuration options including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
                   },
                 ],
               },
@@ -713,7 +766,8 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
-            description: 'Save messages incrementally after each generation step completes (default: false).',
+            description:
+              'Save messages incrementally after each generation step completes (default: false). Disabled internally when observational memory is enabled.',
           },
           {
             name: 'providerOptions',
@@ -861,6 +915,49 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
             ],
           },
           {
+            name: 'versions',
+            type: 'VersionOverrides',
+            isOptional: true,
+            description:
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+            properties: [
+              {
+                type: 'VersionOverrides',
+                parameters: [
+                  {
+                    name: 'agents',
+                    type: 'Record<string, VersionSelector>',
+                    isOptional: true,
+                    description: 'A map of agent IDs to their version selectors.',
+                    properties: [
+                      {
+                        type: 'VersionSelector',
+                        parameters: [
+                          {
+                            name: 'versionId',
+                            type: 'string',
+                            isOptional: true,
+                            description: 'Target a specific version by ID.',
+                          },
+                        ],
+                      },
+                      {
+                        parameters: [
+                          {
+                            name: 'status',
+                            type: "'draft' | 'published'",
+                            isOptional: true,
+                            description: 'Target the latest version with this publication status.',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          {
             name: 'includeRawChunks',
             type: 'boolean',
             isOptional: true,
@@ -872,6 +969,34 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
   },
 ]}
 />
+
+## Response structure
+
+`Agent.generate()` returns the final data collected during execution. `steps` is an array of step objects. The tool arrays in the result, including top-level `toolCalls` and `toolResults` and the nested `step.toolCalls` and `step.toolResults` arrays, use Mastra's chunk format.
+
+That means tool data is wrapped in `payload`:
+
+```ts
+const response = await agent.generate('Check the weather in Lagos')
+
+for (const toolCall of response.toolCalls) {
+  console.log(toolCall.type) // 'tool-call'
+  console.log(toolCall.runId)
+  console.log(toolCall.from)
+  console.log(toolCall.payload.toolName)
+  console.log(toolCall.payload.args)
+}
+
+for (const step of response.steps) {
+  for (const toolResult of step.toolResults) {
+    console.log(toolResult.type) // 'tool-result'
+    console.log(toolResult.payload.toolName)
+    console.log(toolResult.payload.result)
+  }
+}
+```
+
+For the streaming version of the same chunk shape, see the [ChunkType reference](/reference/streaming/ChunkType).
 
 ## Returns
 
@@ -896,13 +1021,124 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
   },
   {
     name: 'toolCalls',
-    type: 'ToolCall[]',
-    description: 'Array of tool calls made during generation.',
+    type: 'ToolCallChunk[]',
+    description: 'Array of tool call chunks made during generation.',
+    properties: [
+      {
+        type: 'ToolCallChunk',
+        parameters: [
+          {
+            name: 'type',
+            type: "'tool-call'",
+            description: 'Chunk type identifier.',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Execution run identifier.',
+          },
+          {
+            name: 'from',
+            type: 'ChunkFrom',
+            description: 'Source of the chunk, such as AGENT or WORKFLOW.',
+          },
+          {
+            name: 'payload',
+            type: 'ToolCallPayload',
+            description: 'Tool call data.',
+            properties: [
+              {
+                type: 'ToolCallPayload',
+                parameters: [
+                  {
+                    name: 'toolCallId',
+                    type: 'string',
+                    description: 'Unique identifier for the tool call.',
+                  },
+                  {
+                    name: 'toolName',
+                    type: 'string',
+                    description: 'Name of the tool that was called.',
+                  },
+                  {
+                    name: 'args',
+                    type: 'Record<string, unknown>',
+                    isOptional: true,
+                    description: 'Arguments passed to the tool.',
+                  },
+                  {
+                    name: 'providerExecuted',
+                    type: 'boolean',
+                    isOptional: true,
+                    description: 'Whether the model provider executed the tool directly.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'toolResults',
-    type: 'ToolResult[]',
-    description: 'Array of results from tool executions.',
+    type: 'ToolResultChunk[]',
+    description: 'Array of tool result chunks from tool executions.',
+    properties: [
+      {
+        type: 'ToolResultChunk',
+        parameters: [
+          {
+            name: 'type',
+            type: "'tool-result'",
+            description: 'Chunk type identifier.',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Execution run identifier.',
+          },
+          {
+            name: 'from',
+            type: 'ChunkFrom',
+            description: 'Source of the chunk, such as AGENT or WORKFLOW.',
+          },
+          {
+            name: 'payload',
+            type: 'ToolResultPayload',
+            description: 'Tool result data.',
+            properties: [
+              {
+                type: 'ToolResultPayload',
+                parameters: [
+                  {
+                    name: 'toolCallId',
+                    type: 'string',
+                    description: 'Unique identifier for the tool call.',
+                  },
+                  {
+                    name: 'toolName',
+                    type: 'string',
+                    description: 'Name of the tool that produced the result.',
+                  },
+                  {
+                    name: 'result',
+                    type: 'unknown',
+                    description: 'Value returned by the tool.',
+                  },
+                  {
+                    name: 'isError',
+                    type: 'boolean',
+                    isOptional: true,
+                    description: 'Whether the tool execution failed.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'usage',
@@ -911,8 +1147,51 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
   },
   {
     name: 'steps',
-    type: 'Step[]',
+    type: 'object[]',
     description: 'Array of execution steps, useful for debugging multi-step generations.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'text',
+            type: 'string',
+            description: 'Text generated in this step.',
+          },
+          {
+            name: 'toolCalls',
+            type: 'ToolCallChunk[]',
+            description: 'Tool calls emitted during this step.',
+          },
+          {
+            name: 'toolResults',
+            type: 'ToolResultChunk[]',
+            description: 'Tool results emitted during this step.',
+          },
+          {
+            name: 'finishReason',
+            type: 'string',
+            isOptional: true,
+            description: 'Why this step finished.',
+          },
+          {
+            name: 'usage',
+            type: 'LanguageModelUsage',
+            description: 'Token usage for this step.',
+          },
+          {
+            name: 'request',
+            type: '{ body?: unknown }',
+            description: 'Request metadata for this step.',
+          },
+          {
+            name: 'response',
+            type: 'object',
+            description: 'Response metadata for this step.',
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'finishReason',
@@ -1096,6 +1375,13 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
       'The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.',
   },
   {
+    name: 'spanId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'The root span ID associated with this execution when Tracing is enabled. Use this for span-level lookup and correlation.',
+  },
+  {
     name: 'messages',
     type: 'MastraDBMessage[]',
     description: 'All messages from this execution including input, memory history, and response.',
@@ -1125,9 +1411,3 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
   },
 ]}
 />
-
-## Related
-
-- [Agent Networks](/docs/agents/networks) - Using the supervisor pattern for multi-agent coordination
-- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
-- [Guide: Research Coordinator](/guides/guide/research-coordinator)

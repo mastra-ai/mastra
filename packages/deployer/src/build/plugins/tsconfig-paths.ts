@@ -6,6 +6,7 @@ import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
 
 const PLUGIN_NAME = 'tsconfig-paths';
+const JS_IMPORT_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 
 export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean };
 
@@ -32,6 +33,26 @@ export function hasPaths(tsConfigPath: string): boolean {
 
 export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }: PluginOptions = {}): Plugin {
   const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
+
+  function resolveJsImportToSourceFile(moduleName: string): string {
+    if (fs.existsSync(moduleName)) {
+      return moduleName;
+    }
+
+    const parsed = path.parse(moduleName);
+    if (parsed.ext !== '.js') {
+      return moduleName;
+    }
+
+    for (const extension of JS_IMPORT_SOURCE_EXTENSIONS) {
+      const candidate = path.join(parsed.dir, `${parsed.name}${extension}`);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return moduleName;
+  }
 
   // Find tsconfig.json file starting from a directory and walking up
   function findTsConfigForFile(filePath: string): string | null {
@@ -159,9 +180,11 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
           };
         }
 
+        const resolvedModuleName = resolveJsImportToSourceFile(moduleName);
+
         // When a module does not have an extension, we need to resolve it to a file
-        if (!path.extname(moduleName)) {
-          const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
+        if (!path.extname(resolvedModuleName)) {
+          const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
 
           if (!resolved) {
             return null;
@@ -179,7 +202,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
         }
 
         // Always pass through bundler's resolution to ensure proper path normalization
-        const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
+        const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
 
         if (!resolved) {
           return null;

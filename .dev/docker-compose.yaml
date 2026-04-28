@@ -1,7 +1,7 @@
 services:
   db:
     # pgvector 0.8.0+ required for halfvec support (Issue #10999)
-    image: pgvector/pgvector:0.8.0-pg16
+    image: pgvector/pgvector:0.8.2-pg16
     container_name: 'pg-vector-db'
     ports:
       - '5432:5432'
@@ -26,6 +26,13 @@ services:
       - 6379:6379
     volumes:
       - redis_data:/data
+
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    container_name: 'pubsub-emulator'
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085
+    ports:
+      - '8085:8085'
 
 volumes:
   pgdata:

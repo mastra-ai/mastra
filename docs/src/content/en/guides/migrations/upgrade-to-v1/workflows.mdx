@@ -278,11 +278,11 @@ npx @mastra/codemod@latest v1/workflow-stream-vnext .
 
 :::
 
-### `suspend` and `setState` aren't available in step condition functions parameters
+### `suspend()` and `setState()` aren't available in step condition functions parameters
 
-The `suspend` and `setState` functions aren't available in step condition functions parameters.
+The `suspend()` and `setState()` functions aren't available in step condition function parameters.
 
-To migrate, use the `suspend` function in the step execute function instead.
+To migrate, use the `suspend()` function in the step execute function instead.
 
 ```diff
 .dowhile(step, async ({ suspend, state, setState }) => {
@@ -306,7 +306,7 @@ To migrate, use the new workflow API. No direct migration path exists from legac
 + // Migrate to the new workflow API
 ```
 
-### `pipeThrough` and `pipeTo` methods from WorkflowRunOutput
+### `pipeThrough` and `pipeTo` methods from `WorkflowRunOutput`
 
 The `pipeThrough()` and `pipeTo()` methods on `WorkflowRunOutput` are deprecated. These methods still work but show console warnings.
 

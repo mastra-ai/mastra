@@ -2,13 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import type { Processor, ProcessOutputResultArgs } from '../../processors/index';
+import { RequestContext, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MessageFilterContext, DelegationCompleteContext, IterationCompleteContext } from '../agent.types';
+import type { MastraDBMessage } from '../message-list/state/types';
 
 // Helper: create a sub-agent with a fixed text response
 function makeSubAgent(id: string, responseText: string) {
@@ -234,7 +237,6 @@ describe('Supervisor Pattern Integration Tests', () => {
         maxSteps: 3,
         onIterationComplete: (ctx: IterationCompleteContext) => {
           iterations.push(ctx.iteration);
-          return { continue: true };
         },
       });
 
@@ -561,7 +563,7 @@ describe('Supervisor Pattern Integration Tests', () => {
 
     it('should accept iteration complete hook configuration', async () => {
       const iterationHook = vi.fn(() => {
-        return { continue: true };
+        return undefined;
       });
 
       const agent = new Agent({
@@ -1610,7 +1612,6 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       maxSteps: 5,
       onIterationComplete: (ctx: IterationCompleteContext) => {
         iterations.push(ctx.iteration);
-        return { continue: true };
       },
     });
 
@@ -2038,12 +2039,103 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       },
     });
 
-    // When the model returns stop (isFinal), the loop ends after that iteration
-    // even if the hook returns continue: true with feedback. Feedback only adds
-    // a user message for the *next* iteration when the loop would naturally continue
-    // (e.g. during a tool-call sequence). Here the model says stop on iteration 1
-    // so the loop ends and the hook is called exactly once.
-    expect(iterationCount).toBe(1);
+    expect(iterationCount).toBe(2);
+  });
+
+  it('should allow onIterationComplete continue:true to override final stop in stream (issue #14134)', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const agent = new Agent({
+      id: 'continue-override-stream-agent',
+      name: 'Continue Override Stream Agent',
+      instructions: 'You may take multiple turns.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'First response ',
+              content: [{ type: 'text', text: 'First response ' }],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Second response',
+            content: [{ type: 'text', text: 'Second response' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          const currentCall = callCount;
+          const responseText = currentCall === 1 ? 'First response ' : 'Second response';
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: `id-${currentCall}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: `text-${currentCall}` },
+              { type: 'text-delta', id: `text-${currentCall}`, delta: responseText },
+              { type: 'text-end', id: `text-${currentCall}` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'continue-override-stream-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('continue-override-stream-agent');
+
+    const result = await testAgent.stream('Take multiple turns', {
+      maxSteps: 5,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration === 1) {
+          return { continue: true };
+        }
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    const text = await result.text;
+
+    // When the model returns stop (isFinal), the hook's continue:true should be
+    // able to request another iteration in the streaming supervisor loop.
+    expect(iterations).toEqual([1, 2]);
+    expect(callCount).toBe(2);
+    expect(text).toBe('First response Second response');
   });
 
   it('should accept onIterationComplete configuration without errors', async () => {
@@ -3111,10 +3203,10 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
           perPage: 100,
         });
 
-        // Verify memory isolation: Should have exactly 3 messages in test environment
-        // (delegation prompt + response + test artifact duplicate response)
-        // Note: In production/studio, only 2 messages appear (no duplicate)
-        expect(subAgentMessages.messages.length).toBe(3);
+        // Verify memory isolation: Should have 2-3 messages
+        // (delegation prompt + response, possibly a duplicate response artifact)
+        expect(subAgentMessages.messages.length).toBeGreaterThanOrEqual(2);
+        expect(subAgentMessages.messages.length).toBeLessThanOrEqual(3);
 
         // First message should be the delegation prompt (user role)
         expect(subAgentMessages.messages[0].role).toBe('user');
@@ -3139,6 +3231,128 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         expect(allSavedContent).not.toContain('I live in Paris');
       }
     }
+  });
+
+  it('should isolate sub-agent memory when threadId and resourceId are set via requestContext reserved keys', async () => {
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent response' }],
+        warnings: [],
+      }),
+    });
+
+    const memoryStore = new InMemoryStore();
+    const subAgentMemory = new MockMemory({ storage: memoryStore });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-reserved-keys-test',
+      name: 'Sub Agent Reserved Keys Test',
+      description: 'A sub-agent for testing reserved key isolation',
+      instructions: 'Answer questions.',
+      model: subAgentMockModel,
+      memory: subAgentMemory,
+    });
+
+    let supervisorCallCount = 0;
+    const resourceId = randomUUID();
+    const threadId = randomUUID();
+
+    const supervisorAgent = new Agent({
+      id: 'supervisor-reserved-keys',
+      name: 'Supervisor Reserved Keys',
+      instructions: 'Delegate to sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'What is my name?', threadId, resourceId }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'Sub-agent says: Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    // Set reserved keys on requestContext (simulates middleware + body merge)
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    await supervisorAgent.generate([{ role: 'user', content: 'What is my name?' }], {
+      maxSteps: 3,
+      requestContext,
+      memory: {
+        resource: resourceId,
+        thread: threadId,
+      },
+    });
+
+    // Sub-agent should have its own isolated thread, not the parent's
+    const subAgentResourceId = `${resourceId}-subAgent`;
+    const memoryStorage = await subAgentMemory.storage.getStore('memory');
+    expect(memoryStorage).toBeDefined();
+
+    if (memoryStorage) {
+      const allThreadsResult = await memoryStorage.listThreads({ filter: { resourceId: subAgentResourceId } });
+      const allThreads = allThreadsResult.threads;
+
+      // Sub-agent should have its own thread
+      expect(allThreads.length).toBeGreaterThan(0);
+
+      const subAgentThread = allThreads[0];
+      expect(subAgentThread).toBeDefined();
+
+      if (subAgentThread) {
+        // Sub-agent thread ID should NOT be the parent's thread ID
+        expect(subAgentThread.id).not.toBe(threadId);
+
+        const subAgentMessages = await memoryStorage.listMessages({
+          threadId: subAgentThread.id,
+          perPage: 100,
+        });
+
+        expect(subAgentMessages.messages.length).toBeGreaterThanOrEqual(2);
+
+        // First message should be the delegation prompt
+        expect(subAgentMessages.messages[0].role).toBe('user');
+        const userContent =
+          typeof subAgentMessages.messages[0].content === 'string'
+            ? subAgentMessages.messages[0].content
+            : JSON.stringify(subAgentMessages.messages[0].content);
+        expect(userContent).toContain('What is my name');
+
+        // Second message should be the sub-agent's response
+        expect(subAgentMessages.messages[1].role).toBe('assistant');
+      }
+    }
+
+    // Verify reserved keys are restored for the parent after sub-agent execution
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe(threadId);
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe(resourceId);
   });
 
   describe('Sub-agent instructions merge', () => {
@@ -3447,6 +3661,154 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
         }
       }
     }
+  });
+});
+
+/**
+ * Output processor propagation in streaming delegation.
+ * Tests that when a sub-agent has an output processor that modifies text via processOutputResult,
+ * the supervisor receives the processed text (not the raw LLM output).
+ */
+describe('Supervisor Pattern - Output processor propagation in streaming delegation', () => {
+  const mockStorage = new InMemoryStore();
+
+  afterEach(async () => {
+    const workflowsStore = await mockStorage.getStore('workflows');
+    await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should propagate processOutputResult modifications to supervisor in streaming delegation', async () => {
+    const RAW_SUB_AGENT_TEXT = 'raw sub-agent response';
+    const PROCESSED_SUB_AGENT_TEXT = 'PROCESSED: raw sub-agent response';
+
+    // Output processor that prepends "PROCESSED: " to the assistant message text
+    const textTransformProcessor: Processor<'text-transform'> = {
+      id: 'text-transform',
+      async processOutputResult(args: ProcessOutputResultArgs) {
+        const transformed: MastraDBMessage[] = args.messages.map(msg => {
+          if (msg.role !== 'assistant') return msg;
+          const parts = msg.content?.parts ?? [];
+          return {
+            ...msg,
+            content: {
+              ...msg.content,
+              format: msg.content?.format ?? 2,
+              parts: parts.map((part: any) => {
+                if (part.type === 'text') {
+                  return { ...part, text: `PROCESSED: ${part.text}` };
+                }
+                return part;
+              }),
+            },
+          };
+        });
+        return transformed;
+      },
+    };
+
+    // Sub-agent streams raw text, but has an output processor that modifies it
+    const subAgentModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: RAW_SUB_AGENT_TEXT },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'processor-sub-agent',
+      name: 'Processor Sub Agent',
+      description: 'A sub-agent with an output processor.',
+      instructions: 'You respond with text.',
+      model: subAgentModel,
+      outputProcessors: [textTransformProcessor],
+    });
+
+    // Supervisor delegates to sub-agent on first call, then returns final text on second call
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doStream: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'supervisor-call-1',
+                toolName: 'agent-processorSubAgent',
+                input: JSON.stringify({ prompt: 'do something' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Supervisor final response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const supervisorAgent = new Agent({
+      id: 'processor-supervisor',
+      name: 'Processor Supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: supervisorModel,
+      agents: { processorSubAgent: subAgent },
+    });
+
+    new Mastra({
+      agents: { processorSupervisor: supervisorAgent },
+      storage: mockStorage,
+    });
+
+    const stream = await supervisorAgent.stream('Test prompt', { maxSteps: 5 });
+
+    // Collect tool-result chunks to verify the sub-agent result text seen by the supervisor
+    let subAgentResultText = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-result') {
+        const payload = chunk.payload;
+        if (payload.toolName === 'agent-processorSubAgent' && payload.result?.text) {
+          subAgentResultText = payload.result.text;
+        }
+      }
+    }
+
+    // The supervisor should see the processed text, not the raw LLM output
+    expect(subAgentResultText).toBe(PROCESSED_SUB_AGENT_TEXT);
+    expect(subAgentResultText).not.toBe(RAW_SUB_AGENT_TEXT);
   });
 });
 

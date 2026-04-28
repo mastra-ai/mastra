@@ -1,3 +1,4 @@
+import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -108,6 +109,34 @@ export interface Root {
 }
 
 /**
+ * Context passed to `requireToolApproval` when it's a function.
+ * Provides information about the tool call and the current execution environment.
+ */
+export interface RequireToolApprovalContext {
+  /** Name of the tool being called */
+  toolName: string;
+  /** Arguments the LLM is passing to the tool */
+  args: Record<string, unknown>;
+  /** Request-scoped context (e.g., user info, auth data) as a plain object */
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * Function type for dynamic tool approval logic.
+ * Return `true` to require approval, `false` to allow execution.
+ */
+export type RequireToolApprovalFn = (ctx: RequireToolApprovalContext) => boolean | Promise<boolean>;
+
+/**
+ * Whether tools from this server require explicit user approval before execution.
+ *
+ * - `true`: All tools from this server require approval.
+ * - `false` or omitted: No approval required (default).
+ * - Function: Called per tool invocation to dynamically decide.
+ */
+export type RequireToolApproval = boolean | RequireToolApprovalFn;
+
+/**
  * Base options common to all MCP server definitions.
  */
 export type BaseServerOptions = {
@@ -121,6 +150,27 @@ export type BaseServerOptions = {
   enableServerLogs?: boolean;
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
+  /**
+   * Whether tools from this server require explicit user approval before execution.
+   *
+   * - `true`: All tools require approval before running.
+   * - `false` or omitted: Tools run without approval (default).
+   * - Function: Called per tool invocation with context to dynamically decide.
+   *
+   * @example
+   * ```typescript
+   * // Require approval for all tools
+   * requireToolApproval: true
+   *
+   * // Dynamic approval based on tool name or args
+   * requireToolApproval: ({ toolName, args }) => {
+   *   if (toolName === 'list_repos') return false;
+   *   if (toolName === 'delete_repo') return true;
+   *   return false;
+   * }
+   * ```
+   */
+  requireToolApproval?: RequireToolApproval;
   /**
    * List of filesystem roots to expose to the MCP server.
    *
@@ -158,6 +208,20 @@ export type StdioServerDefinition = BaseServerOptions & {
   args?: string[];
   /** Optional environment variables for the subprocess */
   env?: Record<string, string>;
+  /**
+   * How to handle stderr of the child process. Matches the semantics of Node's `child_process.spawn`.
+   *
+   * - `"inherit"` (default): stderr is printed to the parent process's stderr
+   * - `"pipe"`: stderr is captured and available via `StdioClientTransport.stderr`
+   * - `"ignore"`: stderr is discarded
+   */
+  stderr?: IOType;
+  /**
+   * The working directory to use when spawning the subprocess.
+   *
+   * If not specified, the current working directory will be inherited.
+   */
+  cwd?: string;
 
   url?: never;
   requestInit?: never;
@@ -185,6 +249,8 @@ export type HttpServerDefinition = BaseServerOptions & {
   command?: never;
   args?: never;
   env?: never;
+  stderr?: never;
+  cwd?: never;
 
   /**
    * Custom fetch implementation used for all network requests.

@@ -1,4 +1,4 @@
-import { type ItemListColumn } from './types';
+import type { ItemListColumn } from './types';
 
 export function getItemListColumnTemplate(columns?: ItemListColumn[]): string {
   if (!columns || columns.length === 0) {

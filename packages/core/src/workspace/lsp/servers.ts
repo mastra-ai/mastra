@@ -13,7 +13,7 @@ import { dirname, join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { getLanguageId } from './language';
-import type { LSPConfig, LSPServerDef } from './types';
+import type { CustomLSPServer, LSPConfig, LSPServerDef } from './types';
 
 /** Check if a binary exists on PATH. */
 function whichSync(binary: string): boolean {
@@ -166,6 +166,47 @@ export async function findProjectRootAsync(
 }
 
 /**
+ * Build an extension → language ID map from custom server definitions.
+ * Each extension is mapped to the first language ID of the server that declares it.
+ *
+ * When multiple servers declare the same extension, the last server wins
+ * (iteration order of `Object.values`). A warning is emitted on collision
+ * so the user can spot misconfiguration.
+ */
+export function buildCustomExtensions(servers?: Record<string, CustomLSPServer>): Record<string, string> {
+  if (!servers) return {};
+  const extensions: Record<string, string> = {};
+  for (const server of Object.values(servers)) {
+    const languageId = server.languageIds[0];
+    if (!languageId) continue;
+    for (const ext of server.extensions) {
+      const existing = extensions[ext];
+      if (existing && existing !== languageId) {
+        console.warn(
+          `[LSP] Extension "${ext}" is claimed by language "${existing}" and "${languageId}" (server "${server.id}") — using "${languageId}"`,
+        );
+      }
+      extensions[ext] = languageId;
+    }
+  }
+  return extensions;
+}
+
+/**
+ * Convert a public custom server config to an internal server definition.
+ */
+function toServerDef(custom: CustomLSPServer): LSPServerDef {
+  return {
+    id: custom.id,
+    name: custom.name,
+    languageIds: custom.languageIds,
+    markers: custom.markers,
+    command: () => custom.command,
+    initialization: custom.initializationOptions ? () => custom.initializationOptions! : undefined,
+  };
+}
+
+/**
  * Build a set of server definitions that incorporate LSP config overrides.
  *
  * Resolution order per server:
@@ -178,11 +219,14 @@ export async function findProjectRootAsync(
  *
  * `config.searchPaths` also extends TypeScript module resolution
  * (used to locate typescript/lib/tsserver.js when it lives outside the project).
+ *
+ * When `config.servers` is provided, custom servers are merged after built-in
+ * definitions. Custom servers with the same ID as a built-in will replace it.
  */
 export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
   const { binaryOverrides, searchPaths, packageRunner } = config ?? {};
 
-  return {
+  const builtins: Record<string, LSPServerDef> = {
     typescript: {
       id: 'typescript',
       name: 'TypeScript Language Server',
@@ -265,6 +309,14 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
       },
     },
   };
+
+  if (config?.servers) {
+    for (const custom of Object.values(config.servers)) {
+      builtins[custom.id] = toServerDef(custom);
+    }
+  }
+
+  return builtins;
 }
 
 /**
@@ -277,13 +329,15 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = buildServerDefs();
  * Get all server definitions that can handle the given file.
  * Filters by language ID match only — the manager resolves the root and checks command availability.
  * Pass `defs` to use config-aware server definitions from `buildServerDefs()`.
+ * Pass `customExtensions` to recognize file extensions registered by custom servers.
  */
 export function getServersForFile(
   filePath: string,
   disabledServers?: string[],
   defs?: Record<string, LSPServerDef>,
+  customExtensions?: Record<string, string>,
 ): LSPServerDef[] {
-  const languageId = getLanguageId(filePath);
+  const languageId = getLanguageId(filePath, customExtensions);
   if (!languageId) return [];
 
   const disabled = new Set(disabledServers ?? []);

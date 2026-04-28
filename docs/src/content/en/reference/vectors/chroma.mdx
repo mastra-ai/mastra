@@ -1,11 +1,11 @@
 ---
-title: "Reference: Chroma Vector Store | Vectors"
+title: "Reference: Chroma vector store | Vectors"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 packages:
   - "@mastra/chroma"
 ---
 
-# Chroma Vector Store
+# Chroma vector store
 
 The ChromaVector class provides vector search using [Chroma](https://docs.trychroma.com/docs/overview/getting-started), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
@@ -20,7 +20,7 @@ Chroma Cloud powers serverless vector and full-text search. It's extremely fast,
 
 :::
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -77,7 +77,7 @@ Chroma Cloud powers serverless vector and full-text search. It's extremely fast,
 ]}
 />
 
-## Running a Chroma Server
+## Running a Chroma server
 
 If you are a Chroma Cloud user, provide the `ChromaVector` constructor your API key, tenant, and database name.
 
@@ -91,7 +91,7 @@ Otherwise, you have several options for setting up your single-node Chroma serve
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -115,7 +115,7 @@ Otherwise, you have several options for setting up your single-node Chroma serve
 ]}
 />
 
-### forkIndex()
+### `forkIndex()`
 
 Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS **distributed** Chroma.
 
@@ -136,7 +136,7 @@ Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS *
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -171,7 +171,7 @@ Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS *
 ]}
 />
 
-### query()
+### `query()`
 
 Query an index using a `queryVector`. Returns an array of semantically similar records in order of distance from the `queryVector`. Each record has the shape:
 
@@ -228,7 +228,7 @@ You can also provide the shape of your metadata to a `query` call for type infer
 ]}
 />
 
-### get()
+### `get()`
 
 Get records from your Chroma index by IDs, metadata, and document filters. It returns an array of records of the shape:
 
@@ -292,11 +292,11 @@ You can also provide the shape of your metadata to a `get` call for type inferen
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -318,7 +318,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -330,7 +330,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -398,7 +398,7 @@ await vectorStore.updateVector({
 })
 ```
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -415,7 +415,7 @@ await vectorStore.updateVector({
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. This method enables bulk deletion and source-based vector management. Either `ids` or `filter` must be provided, but not both.
 
@@ -465,7 +465,7 @@ await vectorStore.deleteVectors({
 })
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -479,7 +479,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 

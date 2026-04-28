@@ -44,6 +44,23 @@ export type MCPServerResources = {
 };
 
 /**
+ * Extends the MCP SDK Prompt type with an optional version field.
+ *
+ * The MCP protocol does not include `version` on prompts, so this field is
+ * only used server-side for internal prompt lookup and is not sent over the wire.
+ *
+ * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
+ * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
+ */
+export type MastraPrompt = Prompt & {
+  /**
+   * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
+   * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
+   */
+  version?: string;
+};
+
+/**
  * Callback function to retrieve messages for a specific prompt.
  *
  * @param params - Parameters for prompt message retrieval
@@ -60,6 +77,10 @@ export type MCPServerPromptMessagesCallback = ({
   extra,
 }: {
   name: string;
+  /**
+   * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
+   * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
+   */
   version?: string;
   args?: any;
   extra: MCPRequestHandlerExtra;
@@ -72,7 +93,7 @@ export type MCPServerPromptMessagesCallback = ({
  */
 export type MCPServerPrompts = {
   /** Function to list all available prompts */
-  listPrompts: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<Prompt[]>;
+  listPrompts: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<MastraPrompt[]>;
   /** Optional function to get messages for a specific prompt */
   getPromptMessages?: MCPServerPromptMessagesCallback;
 };

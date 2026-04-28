@@ -1,0 +1,120 @@
+---
+title: "Stagehand | Browser"
+description: "Use the Stagehand provider for AI-powered browser automation with natural language selectors."
+packages:
+  - "@mastra/stagehand"
+---
+
+# Stagehand
+
+The `@mastra/stagehand` package provides browser automation using the [Stagehand SDK](https://docs.browserbase.com/stagehand/introduction) from Browserbase. Stagehand uses AI to understand page context and locate elements, enabling natural language descriptions instead of explicit selectors.
+
+## When to use Stagehand
+
+Use Stagehand when you need:
+
+- Natural language element targeting ("select the login button")
+- AI-powered data extraction from pages
+- Native Browserbase cloud integration
+- Simpler tool interface for common actions
+
+## Quickstart
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/stagehand
+```
+
+Create a browser instance and assign it to an agent:
+
+```typescript title="src/mastra/agents/stagehand-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { StagehandBrowser } from '@mastra/stagehand'
+
+const browser = new StagehandBrowser({
+  headless: false,
+  model: 'openai/gpt-5.4',
+})
+
+export const stagehandAgent = new Agent({
+  id: 'stagehand-agent',
+  name: 'Stagehand Agent',
+  model: 'openai/gpt-5.4',
+  browser,
+  instructions: `You are a web automation assistant.
+
+Use stagehand tools to interact with pages:
+- stagehand_navigate to go to URLs
+- stagehand_act to perform actions described in natural language
+- stagehand_extract to get structured data from the page
+- stagehand_observe to find available actions on the page`,
+})
+```
+
+## Natural language actions
+
+When the agent uses the `stagehand_act` tool, it accepts natural language descriptions of actions:
+
+- "Press the Sign In button"
+- "Type `'[user@example.com](mailto:user@example.com)'` in the email field"
+- "Select 'United States' from the country dropdown"
+
+Stagehand's AI interprets the action and finds the appropriate element on the page.
+
+## Data extraction
+
+When the agent uses the `stagehand_extract` tool, it can pull structured data from pages.
+
+Example instruction: "Extract the product name, price, and availability"
+
+The tool returns structured data based on page content:
+
+```json
+{
+  "name": "Widget Pro",
+  "price": "$29.99",
+  "availability": "In Stock"
+}
+```
+
+## Observing actions
+
+When the agent uses the `stagehand_observe` tool, it analyzes the current page and returns possible actions.
+
+Example instruction: "What actions can I take on this login form?"
+
+Returns a list of available actions:
+
+```json
+[
+  { "action": "Press 'Sign In' button", "element": "button" },
+  { "action": "Type in 'Email' field", "element": "input" },
+  { "action": "Open 'Forgot Password' link", "element": "a" }
+]
+```
+
+## Browserbase
+
+Stagehand has native Browserbase integration for cloud browser infrastructure:
+
+```typescript
+const browser = new StagehandBrowser({
+  env: 'BROWSERBASE',
+  apiKey: process.env.BROWSERBASE_API_KEY,
+  projectId: process.env.BROWSERBASE_PROJECT_ID,
+  model: 'openai/gpt-5.4',
+})
+```
+
+:::note
+
+See [StagehandBrowser reference](/reference/browser/stagehand-browser) for all configuration options.
+
+:::
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [AgentBrowser](/docs/browser/agent-browser)
+- [StagehandBrowser reference](/reference/browser/stagehand-browser)

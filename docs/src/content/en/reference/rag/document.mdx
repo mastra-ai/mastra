@@ -26,9 +26,9 @@ The MDocument class processes documents for RAG applications. The main methods a
 ]}
 />
 
-## Static Methods
+## Static methods
 
-### fromText()
+### `fromText()`
 
 Creates a document from plain text content.
 
@@ -36,7 +36,7 @@ Creates a document from plain text content.
 static fromText(text: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromHTML()
+### `fromHTML()`
 
 Creates a document from HTML content.
 
@@ -44,7 +44,7 @@ Creates a document from HTML content.
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromMarkdown()
+### `fromMarkdown()`
 
 Creates a document from Markdown content.
 
@@ -52,7 +52,7 @@ Creates a document from Markdown content.
 static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromJSON()
+### `fromJSON()`
 
 Creates a document from JSON content.
 
@@ -60,9 +60,9 @@ Creates a document from JSON content.
 static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 ```
 
-## Instance Methods
+## Instance methods
 
-### chunk()
+### `chunk()`
 
 Splits document into chunks and optionally extracts metadata.
 
@@ -72,7 +72,7 @@ async chunk(params?: ChunkParams): Promise<Chunk[]>
 
 See [chunk() reference](./chunk) for detailed options.
 
-### getDocs()
+### `getDocs()`
 
 Returns array of processed document chunks.
 
@@ -80,7 +80,7 @@ Returns array of processed document chunks.
 getDocs(): Chunk[]
 ```
 
-### getText()
+### `getText()`
 
 Returns array of text strings from chunks.
 
@@ -88,7 +88,7 @@ Returns array of text strings from chunks.
 getText(): string[]
 ```
 
-### getMetadata()
+### `getMetadata()`
 
 Returns array of metadata objects from chunks.
 
@@ -96,7 +96,7 @@ Returns array of metadata objects from chunks.
 getMetadata(): Record<string, any>[]
 ```
 
-### extractMetadata()
+### `extractMetadata()`
 
 Extracts metadata using specified extractors. See [ExtractParams reference](./extract-params) for details.
 

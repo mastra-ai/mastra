@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
+import { cn } from '@/lib/utils';
 
 export type MultiColumnProps = {
   children?: React.ReactNode;
@@ -115,13 +115,7 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
         isLeft ? 'left-0' : 'right-0',
       )}
     >
-      <Button
-        onClick={onClick}
-        variant="standard"
-        size="large"
-        className="w-full h-full px-0"
-        aria-label={`Scroll ${direction}`}
-      >
+      <Button onClick={onClick} className="w-full h-full px-0" aria-label={`Scroll ${direction}`}>
         <Icon />
       </Button>
     </div>

@@ -11,13 +11,15 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 :::warning[Deprecated]
 
-Agent networks are deprecated and will be removed in a future release. Use the [supervisor pattern](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
+Agent networks are deprecated and will be removed in a future release. Use [supervisor agents](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
 
 :::
 
 Framework-agnostic handler for streaming network execution in AI SDK-compatible format. Use this function directly when you need to handle network streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature.
 
 `handleNetworkStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
+
+`handleNetworkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
 
 Use [`networkRoute()`](/reference/ai-sdk/network-route) if you want to create a network route inside a Mastra server.
 
@@ -46,6 +48,14 @@ export async function POST(req: Request) {
 <PropertiesTable
   content={[
   {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
+  {
     name: 'mastra',
     type: 'Mastra',
     description: 'The Mastra instance to use for agent lookup and execution.',
@@ -56,6 +66,13 @@ export async function POST(req: Request) {
     type: 'string',
     description: 'The ID of the routing agent to execute as a network.',
     isOptional: false,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
   },
   {
     name: 'params',

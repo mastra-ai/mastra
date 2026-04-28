@@ -1,14 +1,10 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { cn } from '@/lib/utils';
-import {
-  formElementSizes,
-  formElementFocusWithin,
-  formElementRadius,
-  type FormElementSize,
-} from '@/ds/primitives/form-element';
+import { formElementSizes, formElementFocusWithin, formElementRadius } from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type SearchbarProps = {
   onSearch: (search: string) => void;
@@ -84,7 +80,7 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-none',
+            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-hidden',
             searchbarSizeClasses[size],
           )}
           name={id}

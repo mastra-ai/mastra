@@ -1,9 +1,13 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { createLLMMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import type { TestCase } from '../../utils';
 import { createAgentTestRun, createTestMessage, isCloserTo } from '../../utils';
 import { createAnswerRelevancyScorer } from '.';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 const testCases: TestCase[] = [
   {

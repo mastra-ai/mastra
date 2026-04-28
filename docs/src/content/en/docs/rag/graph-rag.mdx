@@ -83,7 +83,7 @@ const ragAgent = new Agent({
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 When answering questions, use the graph query tool to find relevant information and relationships.
 Base your answers on the context provided by the tool, and clearly state if the context doesn't contain enough information.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: {
     graphQueryTool,
   },
@@ -205,7 +205,7 @@ const agent = new Agent({
   name: 'RAG Agent',
   instructions: `Use vector search for simple fact-finding queries.
 Use graph search when you need to understand relationships or find connected information.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: {
     vectorQueryTool,
     graphQueryTool,

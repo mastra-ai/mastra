@@ -4,8 +4,8 @@ import { type FullOutput, MastraModelOutput, MastraAgentNetworkStream } from '@m
 import type { GenerateTextResult, GenerateObjectResult, StreamTextResult, StreamObjectResult } from '@mastra/core/llm';
 import { openai as openaiV4 } from 'openai-v4';
 import { openai as openaiV5 } from 'openai-v5';
-import { z } from 'zod';
-import { z as zv4 } from 'zod/v4';
+import { z as zv3 } from 'zod-v3';
+import { z as zv4 } from 'zod-v4';
 
 // Extract the model property type from Agent constructor parameters
 type AgentConstructorParams = ConstructorParameters<typeof Agent>[0];
@@ -19,9 +19,9 @@ const agent = new Agent({
   model: 'openai/gpt-4o',
 });
 
-const sentimentSchema = z.object({
-  sentiment: z.enum(['positive', 'negative', 'neutral']),
-  confidence: z.number(),
+const sentimentSchema = zv3.object({
+  sentiment: zv3.enum(['positive', 'negative', 'neutral']),
+  confidence: zv3.number(),
 });
 
 const sentimentSchemaV4 = zv4.object({
@@ -57,13 +57,13 @@ describe('Constructor', () => {
 
 describe('Agent with defaultOption', () => {
   // Create an agent with a typed TOutput via the generic parameter (zod v3)
-  const typedOutputSchema = z.object({
-    answer: z.string(),
-    confidence: z.number(),
-    sources: z.array(z.string()),
+  const typedOutputSchema = zv3.object({
+    answer: zv3.string(),
+    confidence: zv3.number(),
+    sources: zv3.array(zv3.string()),
   });
 
-  type TypedOutput = z.infer<typeof typedOutputSchema>;
+  type TypedOutput = zv3.infer<typeof typedOutputSchema>;
 
   const typedAgent = new Agent<'typed-agent', {}, TypedOutput>({
     id: 'typed-agent',
@@ -85,8 +85,8 @@ describe('Agent with defaultOption', () => {
     });
 
     it('should override TOutput when structuredOutput is explicitly provided', async () => {
-      const overrideSchema = z.object({
-        customField: z.boolean(),
+      const overrideSchema = zv3.object({
+        customField: zv3.boolean(),
       });
 
       const result = await typedAgent.generate('Override', {
@@ -105,8 +105,8 @@ describe('Agent with defaultOption', () => {
     });
 
     it('should override TOutput when structuredOutput is explicitly provided', async () => {
-      const overrideSchema = z.object({
-        streamedField: z.string(),
+      const overrideSchema = zv3.object({
+        streamedField: zv3.string(),
       });
 
       const result = await typedAgent.stream('Override', {
@@ -131,8 +131,8 @@ describe('Agent with defaultOption', () => {
     });
 
     it('should override TOutput when structuredOutput is explicitly provided', async () => {
-      const overrideSchema = z.object({
-        networkResult: z.string(),
+      const overrideSchema = zv3.object({
+        networkResult: zv3.string(),
       });
 
       const result = await typedAgent.network('Override', {
@@ -211,9 +211,9 @@ describe('generate', () => {
   });
 
   it('should infer OUTPUT type from structuredOutput schema (zod v3)', async () => {
-    const customSchema = z.object({
-      items: z.array(z.string()),
-      count: z.number(),
+    const customSchema = zv3.object({
+      items: zv3.array(zv3.string()),
+      count: zv3.number(),
     });
 
     const result = await agent.generate('List items', {
@@ -288,13 +288,13 @@ describe('stream', () => {
   });
 
   it('should infer OUTPUT type from complex schema', async () => {
-    const taskSchema = z.object({
-      tasks: z.array(
-        z.object({
-          id: z.string(),
-          title: z.string(),
-          completed: z.boolean(),
-          priority: z.enum(['low', 'medium', 'high']),
+    const taskSchema = zv3.object({
+      tasks: zv3.array(
+        zv3.object({
+          id: zv3.string(),
+          title: zv3.string(),
+          completed: zv3.boolean(),
+          priority: zv3.enum(['low', 'medium', 'high']),
         }),
       ),
     });
@@ -339,11 +339,11 @@ describe('generateLegacy', () => {
   });
 
   it('should correctly type output with complex schema', async () => {
-    const reviewSchema = z.object({
-      rating: z.number().min(1).max(5),
-      summary: z.string(),
-      pros: z.array(z.string()),
-      cons: z.array(z.string()),
+    const reviewSchema = zv3.object({
+      rating: zv3.number().min(1).max(5),
+      summary: zv3.string(),
+      pros: zv3.array(zv3.string()),
+      cons: zv3.array(zv3.string()),
     });
 
     const result = await agent.generateLegacy('Review product', {
@@ -383,14 +383,14 @@ describe('streamLegacy', () => {
   });
 
   it('should correctly type stream result with complex schema', async () => {
-    const analysisSchema = z.object({
-      categories: z.array(
-        z.object({
-          name: z.string(),
-          score: z.number(),
+    const analysisSchema = zv3.object({
+      categories: zv3.array(
+        zv3.object({
+          name: zv3.string(),
+          score: zv3.number(),
         }),
       ),
-      overallSentiment: z.enum(['positive', 'negative', 'neutral']),
+      overallSentiment: zv3.enum(['positive', 'negative', 'neutral']),
     });
 
     const result = await agent.streamLegacy('Analyze text', {
@@ -439,18 +439,18 @@ describe('network', () => {
   });
 
   it('should infer OUTPUT type from complex schema', async () => {
-    const reportSchema = z.object({
-      title: z.string(),
-      sections: z.array(
-        z.object({
-          heading: z.string(),
-          content: z.string(),
-          importance: z.enum(['high', 'medium', 'low']),
+    const reportSchema = zv3.object({
+      title: zv3.string(),
+      sections: zv3.array(
+        zv3.object({
+          heading: zv3.string(),
+          content: zv3.string(),
+          importance: zv3.enum(['high', 'medium', 'low']),
         }),
       ),
-      metadata: z.object({
-        author: z.string(),
-        createdAt: z.string(),
+      metadata: zv3.object({
+        author: zv3.string(),
+        createdAt: zv3.string(),
       }),
     });
 

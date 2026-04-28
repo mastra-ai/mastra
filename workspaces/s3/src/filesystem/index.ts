@@ -45,6 +45,12 @@ export interface S3MountConfig extends FilesystemMountConfig {
   secretAccessKey?: string;
   /** AWS session token for temporary credentials (SSO, AssumeRole, container credentials, etc.) */
   sessionToken?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Uses s3fs `bucket:/prefix` syntax to scope the mount to a specific path.
+   * Leading/trailing slashes are normalized automatically.
+   */
+  prefix?: string;
   /** Mount as read-only */
   readOnly?: boolean;
 }
@@ -251,13 +257,37 @@ export class S3Filesystem extends MastraFilesystem {
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
     // Trim leading/trailing slashes from prefix using iterative approach (avoids polynomial regex)
-    this.prefix = options.prefix ? trimSlashes(options.prefix) + '/' : '';
+    const trimmedPrefix = options.prefix ? trimSlashes(options.prefix) : '';
+    this.prefix = trimmedPrefix ? trimmedPrefix + '/' : '';
 
     // Display metadata - detect icon first, then derive displayName from it
     this.icon = options.icon ?? this.detectIconFromEndpoint(options.endpoint);
     this.displayName = options.displayName ?? this.getDefaultDisplayName(this.icon);
     this.description = options.description;
     this.readOnly = options.readOnly;
+  }
+
+  /**
+   * Get the underlying S3Client instance for direct access to AWS S3 APIs.
+   *
+   * Use this when you need to access S3 features not exposed through the
+   * WorkspaceFilesystem interface (e.g., presigned URLs, multipart uploads,
+   * custom S3 operations, etc.).
+   *
+   * @example Generate a presigned URL
+   * ```typescript
+   * import { GetObjectCommand } from '@aws-sdk/client-s3';
+   * import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+   *
+   * const s3Client = fs.client;
+   * const url = await getSignedUrl(s3Client, new GetObjectCommand({
+   *   Bucket: 'my-bucket',
+   *   Key: 'my-file.txt',
+   * }));
+   * ```
+   */
+  get client(): S3Client {
+    return this.getClient();
   }
 
   /**
@@ -278,6 +308,10 @@ export class S3Filesystem extends MastraFilesystem {
       if (this.sessionToken) {
         config.sessionToken = this.sessionToken;
       }
+    }
+
+    if (this.prefix) {
+      config.prefix = this.prefix;
     }
 
     if (this.readOnly) {
@@ -453,8 +487,8 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   private toKey(path: string): string {
-    // Remove leading slash and add prefix
-    const cleanPath = path.replace(/^\/+/, '');
+    // Remove leading slashes, then resolve "." and "./" to empty string (root)
+    const cleanPath = path.replace(/^\/+/, '').replace(/^\.(?:\/|$)/, '');
     return this.prefix + cleanPath;
   }
 

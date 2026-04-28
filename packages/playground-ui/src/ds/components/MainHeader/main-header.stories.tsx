@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MainHeader } from './main-header';
 import { BotIcon, Edit2Icon } from 'lucide-react';
 import { Button } from '../Button';
-import { TextAndIcon } from '../Text';
 import { CopyButton } from '../CopyButton';
+import { TextAndIcon } from '../Text';
 import { TooltipProvider } from '../Tooltip';
+import { MainHeader } from './main-header';
 
 const meta: Meta<typeof MainHeader> = {
   title: 'Layout/MainHeader',
@@ -29,7 +29,7 @@ export const Default: Story = {
           <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
         </MainHeader.Column>
         <MainHeader.Column>
-          <Button variant="cta" size="default">
+          <Button>
             <Edit2Icon />
             Edit
           </Button>
@@ -121,7 +121,7 @@ export const WithSecondColumn: Story = {
         <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
-        <Button variant="cta" size="default">
+        <Button>
           <Edit2Icon />
           Edit
         </Button>

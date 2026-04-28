@@ -1,8 +1,8 @@
 import { expectTypeOf, describe, it } from 'vitest';
 import { createTool, Tool } from '@mastra/core/tools';
 import type { ToolExecutionContext, ToolAction } from '@mastra/core/tools';
-import { z } from 'zod';
-import { z as zv4 } from 'zod/v4';
+import { z as zv3 } from 'zod-v3';
+import { z as zv4 } from 'zod-v4';
 
 describe('createTool', () => {
   describe('basic tool creation', () => {
@@ -31,9 +31,9 @@ describe('createTool', () => {
 
   describe('inputSchema typing (zod v3)', () => {
     it('should infer input type from inputSchema', () => {
-      const inputSchema = z.object({
-        name: z.string(),
-        age: z.number(),
+      const inputSchema = zv3.object({
+        name: zv3.string(),
+        age: zv3.number(),
       });
 
       const tool = createTool({
@@ -53,9 +53,9 @@ describe('createTool', () => {
       const tool = createTool({
         id: 'typed-input-tool',
         description: 'Tool with typed input',
-        inputSchema: z.object({
-          query: z.string(),
-          limit: z.number().optional(),
+        inputSchema: zv3.object({
+          query: zv3.string(),
+          limit: zv3.number().optional(),
         }),
         execute: async inputData => {
           expectTypeOf(inputData.query).toBeString();
@@ -66,15 +66,15 @@ describe('createTool', () => {
     });
 
     it('should handle complex nested schemas', () => {
-      const complexSchema = z.object({
-        user: z.object({
-          id: z.string(),
-          profile: z.object({
-            name: z.string(),
-            email: z.string().email(),
+      const complexSchema = zv3.object({
+        user: zv3.object({
+          id: zv3.string(),
+          profile: zv3.object({
+            name: zv3.string(),
+            email: zv3.string().email(),
           }),
         }),
-        options: z.array(z.enum(['a', 'b', 'c'])),
+        options: zv3.array(zv3.enum(['a', 'b', 'c'])),
       });
 
       const tool = createTool({
@@ -112,9 +112,9 @@ describe('createTool', () => {
 
   describe('outputSchema typing', () => {
     it('should infer output type from outputSchema (zod v3)', () => {
-      const outputSchema = z.object({
-        success: z.boolean(),
-        data: z.string(),
+      const outputSchema = zv3.object({
+        success: zv3.boolean(),
+        data: zv3.string(),
       });
 
       const tool = createTool({
@@ -148,9 +148,9 @@ describe('createTool', () => {
 
   describe('suspend and resume schemas', () => {
     it('should type suspendSchema correctly', () => {
-      const suspendSchema = z.object({
-        reason: z.string(),
-        pendingAction: z.enum(['approve', 'reject']),
+      const suspendSchema = zv3.object({
+        reason: zv3.string(),
+        pendingAction: zv3.enum(['approve', 'reject']),
       });
 
       const tool = createTool({
@@ -173,9 +173,9 @@ describe('createTool', () => {
     });
 
     it('should type resumeSchema correctly', () => {
-      const resumeSchema = z.object({
-        approved: z.boolean(),
-        comment: z.string().optional(),
+      const resumeSchema = zv3.object({
+        approved: zv3.boolean(),
+        comment: zv3.string().optional(),
       });
 
       const tool = createTool({
@@ -320,7 +320,7 @@ describe('createTool', () => {
       const tool = new Tool({
         id: 'direct-tool',
         description: 'Directly instantiated tool',
-        inputSchema: z.object({ value: z.number() }),
+        inputSchema: zv3.object({ value: zv3.number() }),
         execute: async inputData => {
           return { doubled: inputData.value * 2 };
         },
@@ -333,23 +333,23 @@ describe('createTool', () => {
 
   describe('complete tool with all schemas', () => {
     it('should correctly type a fully specified tool', () => {
-      const inputSchema = z.object({
-        action: z.enum(['create', 'update', 'delete']),
-        itemId: z.string(),
+      const inputSchema = zv3.object({
+        action: zv3.enum(['create', 'update', 'delete']),
+        itemId: zv3.string(),
       });
 
-      const outputSchema = z.object({
-        success: z.boolean(),
-        message: z.string(),
+      const outputSchema = zv3.object({
+        success: zv3.boolean(),
+        message: zv3.string(),
       });
 
-      const suspendSchema = z.object({
-        confirmationRequired: z.boolean(),
-        actionDescription: z.string(),
+      const suspendSchema = zv3.object({
+        confirmationRequired: zv3.boolean(),
+        actionDescription: zv3.string(),
       });
 
-      const resumeSchema = z.object({
-        confirmed: z.boolean(),
+      const resumeSchema = zv3.object({
+        confirmed: zv3.boolean(),
       });
 
       const tool = createTool({

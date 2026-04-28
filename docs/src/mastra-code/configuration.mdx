@@ -13,6 +13,12 @@ Mastra Code is configured through project-level files, global settings, and envi
 
 Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.
 
+:::note
+
+Use the `/setup` command to interactively configure authentication and models.
+
+:::
+
 ### API keys
 
 The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
@@ -26,6 +32,15 @@ export CEREBRAS_API_KEY=...
 ```
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
+
+### Interactive API key prompt
+
+When you select a model from the model selector (`/models`) that doesn't have an API key configured, Mastra Code prompts you to enter one. The prompt displays the required environment variable name (for example, `ANTHROPIC_API_KEY`) and lets you paste your key directly.
+
+- **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
+- **Cancel the prompt**: Press Escape to dismiss. The model selection continues without storing a key, and the model remains marked as unavailable.
+
+Stored API keys persist across sessions. On the next startup, Mastra Code loads them into the environment automatically. Environment variables always take priority — if you later set a key via `export`, it overrides the stored value.
 
 ### OAuth login (optional)
 
@@ -204,8 +219,10 @@ Define reusable prompt templates as markdown files. Mastra Code scans these dire
 | - | - | - |
 | Highest | `.mastracode/commands/` | Project |
 | | `.claude/commands/` | Project (Claude Code compatible) |
+| | `.opencode/command/` | Project (Opencode compatible) |
 | | `~/.mastracode/commands/` | Global |
-| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+| | `~/.claude/commands/` | Global (Claude Code compatible) |
+| Lowest | `~/.opencode/command/` | Global (Opencode compatible) |
 
 Each command file can include YAML frontmatter with `name` and `description` fields:
 
@@ -287,7 +304,7 @@ Configure the scope through:
 
 ### OM model settings
 
-The observer and reflector models default to `google/gemini-2.5-flash`. Override them per-thread through the `/settings` panel or in the harness state.
+The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the harness state.
 
 ### OM thresholds
 
@@ -302,9 +319,9 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 
 ### Detection order
 
-1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
+1. `MASTRA_THEME` environment variable: explicit `dark` or `light`
 1. Persisted setting from `/theme` command (stored in `settings.json`)
-1. OSC 11 query — asks your terminal for its actual background color
+1. OSC 11 query: asks your terminal for its actual background color
 1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
 1. Falls back to dark theme
 

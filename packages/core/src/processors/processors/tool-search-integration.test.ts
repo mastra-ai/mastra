@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
 import { MessageList } from '../../agent/message-list';

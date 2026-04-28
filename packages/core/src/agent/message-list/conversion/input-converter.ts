@@ -1,6 +1,6 @@
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 
-import { AIV4Adapter, AIV5Adapter } from '../adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type {
   MastraDBMessage,
@@ -10,6 +10,7 @@ import type {
   UIMessageWithMetadata,
 } from '../state/types';
 import type { MessageInput } from '../types';
+import { stampMessageParts } from '../utils/stamp-part';
 
 /**
  * Context required for input conversion functions.
@@ -58,26 +59,27 @@ export function inputToMastraDBMessage(
   }
 
   if (TypeDetector.isMastraMessageV1(message)) {
-    return mastraMessageV1ToMastraDBMessage(message, messageSource, context);
+    return stampMessageParts(mastraMessageV1ToMastraDBMessage(message, messageSource, context), messageSource);
   }
   if (TypeDetector.isMastraDBMessage(message)) {
-    return hydrateMastraDBMessageFields(message, context);
+    return stampMessageParts(hydrateMastraDBMessageFields(message, context), messageSource);
   }
   if (TypeDetector.isAIV4CoreMessage(message)) {
-    return AIV4Adapter.fromCoreMessage(message, context, messageSource);
+    return stampMessageParts(AIV4Adapter.fromCoreMessage(message, context, messageSource), messageSource);
   }
   if (TypeDetector.isAIV4UIMessage(message)) {
-    return AIV4Adapter.fromUIMessage(message as UIMessageV4 | UIMessageWithMetadata, context, messageSource);
+    return stampMessageParts(
+      AIV4Adapter.fromUIMessage(message as UIMessageV4 | UIMessageWithMetadata, context, messageSource),
+      messageSource,
+    );
   }
 
   // Use custom ID generator if message doesn't have an ID, otherwise keep the original
   const hasOriginalId = 'id' in message && typeof message.id === 'string';
   const id = hasOriginalId ? message.id : context.newMessageId();
 
-  if (TypeDetector.isAIV5CoreMessage(message)) {
-    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
-    // Only use the original createdAt from input message metadata, not the generated one from the static method
-    // This fixes issue #10683 where messages without createdAt would get shuffled
+  if (TypeDetector.isAIV6CoreMessage(message)) {
+    const dbMsg = AIV6Adapter.fromModelMessage(message, messageSource, context);
     const rawCreatedAt =
       'metadata' in message &&
       message.metadata &&
@@ -93,10 +95,8 @@ export function inputToMastraDBMessage(
       resourceId: context.memoryInfo?.resourceId,
     };
   }
-  if (TypeDetector.isAIV5UIMessage(message)) {
-    const dbMsg = AIV5Adapter.fromUIMessage(message);
-    // Only use the original createdAt from input message, not the generated one from the static method
-    // This fixes issue #10683 where messages without createdAt would get shuffled
+  if (TypeDetector.isAIV6UIMessage(message)) {
+    const dbMsg = AIV6Adapter.fromUIMessage(message);
     const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
     return {
       ...dbMsg,
@@ -105,6 +105,45 @@ export function inputToMastraDBMessage(
       threadId: context.memoryInfo?.threadId,
       resourceId: context.memoryInfo?.resourceId,
     };
+  }
+
+  if (TypeDetector.isAIV5CoreMessage(message)) {
+    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
+    // Only use the original createdAt from input message metadata, not the generated one from the static method
+    // This fixes issue #10683 where messages without createdAt would get shuffled
+    const rawCreatedAt =
+      'metadata' in message &&
+      message.metadata &&
+      typeof message.metadata === 'object' &&
+      'createdAt' in message.metadata
+        ? message.metadata.createdAt
+        : undefined;
+    return stampMessageParts(
+      {
+        ...dbMsg,
+        id,
+        createdAt: context.generateCreatedAt(messageSource, rawCreatedAt),
+        threadId: context.memoryInfo?.threadId,
+        resourceId: context.memoryInfo?.resourceId,
+      },
+      messageSource,
+    );
+  }
+  if (TypeDetector.isAIV5UIMessage(message)) {
+    const dbMsg = AIV5Adapter.fromUIMessage(message);
+    // Only use the original createdAt from input message, not the generated one from the static method
+    // This fixes issue #10683 where messages without createdAt would get shuffled
+    const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
+    return stampMessageParts(
+      {
+        ...dbMsg,
+        id,
+        createdAt: context.generateCreatedAt(messageSource, rawCreatedAt),
+        threadId: context.memoryInfo?.threadId,
+        resourceId: context.memoryInfo?.resourceId,
+      },
+      messageSource,
+    );
   }
 
   throw new Error(`Found unhandled message ${JSON.stringify(message)}`);

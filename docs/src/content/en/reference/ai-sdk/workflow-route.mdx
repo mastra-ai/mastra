@@ -14,6 +14,8 @@ Creates a workflow route handler for streaming workflow execution using the AI S
 
 Use [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream) if you need a framework-agnostic handler.
 
+`workflowRoute()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
 :::tip Agent streaming in workflows
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
@@ -63,6 +65,14 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
   {
     name: 'path',
     type: 'string',

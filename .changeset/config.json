@@ -18,6 +18,7 @@
     "!create-mastra",
     "!mastracode",
     "!@mastra/*",
-    "!@internal/playground"
+    "!@internal/playground",
+    "!@internal/core"
   ]
 }

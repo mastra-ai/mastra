@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
 import { injectStudioHtmlConfig } from '@mastra/deployer/build';
 import { copy, move } from 'fs-extra/esm';
@@ -18,6 +19,25 @@ export class VercelDeployer extends Deployer {
 
     const { studio, ...overrides } = options;
     this.vcConfigOverrides = { ...overrides };
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    // Always force externals: true for Vercel deployments.
+    // Vercel serverless functions resolve dependencies from node_modules,
+    // so bundling them inline serves no purpose. Bundling inline can also cause
+    // circular module evaluation deadlocks when dynamic imports produce chunks
+    // that depend back on the entry module via static imports, resulting in
+    // "Detected unsettled top-level await" errors (Node.js exit code 13).
+    // See: https://github.com/mastra-ai/mastra/issues/14860
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -83,10 +103,12 @@ export const HEAD = handle(app);
       apiPrefix: `'/api'`,
       basePath: '',
       hideCloudCta: `'true'`,
+      templates: `'false'`,
       cloudApiEndpoint: `''`,
       experimentalFeatures: `'false'`,
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
+      experimentalUI: `'false'`,
     });
 
     writeFileSync(indexPath, html);

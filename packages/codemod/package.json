@@ -27,7 +27,7 @@
     "codemod"
   ],
   "dependencies": {
-    "@clack/prompts": "^1.0.1",
+    "@clack/prompts": "^1.1.0",
     "commander": "^14.0.3",
     "debug": "^4.4.3",
     "jscodeshift": "^17.3.0"
@@ -35,12 +35,12 @@
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
     "@internal/lint": "workspace:*",
-    "@types/debug": "^4.1.12",
+    "@types/debug": "^4.1.13",
     "@types/jscodeshift": "^17.3.0",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

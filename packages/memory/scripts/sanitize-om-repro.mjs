@@ -3,12 +3,10 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
-import { Tiktoken } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import { estimateTokenCount } from 'tokenx';
 
-const encoder = new Tiktoken(o200k_base);
-const DEFAULT_CACHE_SOURCE = 'v1:o200k_base';
-const TOKEN_ESTIMATE_CACHE_VERSION = 1;
+const DEFAULT_CACHE_SOURCE = 'v6:tokenx';
+const TOKEN_ESTIMATE_CACHE_VERSION = 6;
 const JSON_FILES = new Set(['input.json', 'pre-state.json', 'output.json', 'post-state.json']);
 const FIXTURES_ROOT = resolve('src/processors/observational-memory/__fixtures__/repro-captures');
 const canonicalEstimateRegistry = new Map();
@@ -143,7 +141,7 @@ function getExistingTokenEstimate(holder) {
 
 function countStringTokens(value) {
   if (!value) return 0;
-  return encoder.encode(value, 'all').length;
+  return estimateTokenCount(typeof value === 'string' ? value : String(value));
 }
 
 function countJsonTokens(value) {

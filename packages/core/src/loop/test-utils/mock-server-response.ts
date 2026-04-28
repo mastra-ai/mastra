@@ -24,10 +24,20 @@ class MockServerResponse {
     this.emit('close');
   }
 
-  writeHead(statusCode: number, statusMessage: string, headers: Record<string, string>): void {
+  writeHead(statusCode: number, headers: Record<string, string>): void;
+  writeHead(statusCode: number, statusMessage: string, headers: Record<string, string>): void;
+  writeHead(
+    statusCode: number,
+    statusMessageOrHeaders?: string | Record<string, string>,
+    headers?: Record<string, string>,
+  ): void {
     this.statusCode = statusCode;
-    this.statusMessage = statusMessage;
-    this.headers = headers;
+    if (typeof statusMessageOrHeaders === 'string') {
+      this.statusMessage = statusMessageOrHeaders;
+      this.headers = headers ?? {};
+    } else {
+      this.headers = statusMessageOrHeaders ?? {};
+    }
   }
 
   // Add event emitter methods required by AI SDK

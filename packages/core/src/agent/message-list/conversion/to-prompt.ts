@@ -227,7 +227,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
       }
 
       case 'tool-result': {
-        if (role === `assistant` || role === `user`) {
+        if (role === `user`) {
           throw new Error(incompatibleMessage);
         }
         roleContent[role].push({

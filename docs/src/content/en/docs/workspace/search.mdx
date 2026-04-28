@@ -1,11 +1,11 @@
 ---
-title: "Search and Indexing | Workspace"
+title: "Search and indexing | Workspace"
 description: Index workspace content for BM25 keyword search, vector semantic search, or hybrid mode.
 packages:
   - "@mastra/core"
 ---
 
-# Search and Indexing
+# Search and indexing
 
 **Added in:** `@mastra/core@1.1.0`
 
@@ -152,7 +152,7 @@ Configure `autoIndexPaths` to automatically index files when the workspace initi
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
-  autoIndexPaths: ['/docs', '/support/faq'],
+  autoIndexPaths: ['docs', 'support/faq'],
 })
 
 await workspace.init()
@@ -167,7 +167,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
   // highlight-next-line
-  autoIndexPaths: ['/docs/**/*.md', '/support/**/*.txt'],
+  autoIndexPaths: ['docs/**/*.md', 'support/**/*.txt'],
 })
 ```
 

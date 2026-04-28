@@ -2,9 +2,9 @@ import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptio
 import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod/v3';
+import type { z } from 'zod/v4';
 import type { TracingPolicy } from '../../observability';
-import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../../schema';
+import type { StandardSchemaWithJSON, InferStandardSchemaOutput, ZodSchema } from '../../schema';
 import type { ScoringData } from './base.types';
 import type { ModelRouterModelId } from './provider-registry.js';
 

@@ -148,7 +148,7 @@ function formatTokensThreshold(n: number): string {
 function colorByPercent(text: string, percent: number): string {
   if (percent >= 90) return chalk.hex(mastra.red)(text); // Mastra red
   if (percent >= 70) return chalk.hex(mastra.orange)(text); // Mastra orange
-  return chalk.hex(mastra.darkGray)(text); // Mastra dark gray
+  return chalk.hex('#71717a')(text); // Zinc-500
 }
 /**
  * Format OM observation threshold for status bar.
@@ -178,7 +178,9 @@ export function formatObservationStatus(
   const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
   const buffered =
     compact !== 'noBuffer' && state.buffered.observations.projectedMessageRemoval > 0
-      ? theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`)
+      ? chalk.italic(
+          theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`),
+        )
       : '';
   return styleLabel(`${label} `) + colorByPercent(fraction, percent) + buffered;
 }
@@ -210,8 +212,8 @@ export function formatReflectionStatus(
   const fraction = `${formatTokensValue(state.observationTokens)}/${formatTokensThreshold(state.reflectionThreshold)}`;
   const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
   const buffered =
-    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete'
-      ? theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`)
+    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete' && savings > 0
+      ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`))
       : '';
   return label + colorByPercent(fraction, percent) + buffered;
 }

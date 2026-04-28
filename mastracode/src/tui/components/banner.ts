@@ -1,13 +1,13 @@
 /**
  * ASCII art banner for the Mastra Code TUI header.
- * Renders "MASTRA CODE" or "MASTRA" in block-letter art with a purple gradient.
+ * Renders "MASTRA CODE" or "MASTRA" in block-letter art with a green gradient.
  */
 import chalk from 'chalk';
 
 import { theme } from '../theme.js';
 
-// Mastra brand purple gradient stops (left → right)
-const GRADIENT_STOPS = ['#5b21b6', '#6d28d9', '#7c3aed', '#8b5cf6', '#a78bfa'];
+// Mastra brand green gradient stops (left → right)
+const GRADIENT_STOPS = ['#085314', '#0d8020', '#16c858', '#62f69d', '#a1fac7'];
 
 // Full "MASTRA CODE" banner (42 chars wide)
 const FULL_ART = [

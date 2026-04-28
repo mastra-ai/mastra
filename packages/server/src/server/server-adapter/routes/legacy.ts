@@ -9,9 +9,8 @@ import {
 } from '../../handlers/agent-builder';
 import { GENERATE_LEGACY_ROUTE, STREAM_GENERATE_LEGACY_ROUTE } from '../../handlers/agents';
 import { STREAM_LEGACY_WORKFLOW_ROUTE, OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE } from '../../handlers/workflows';
-import type { ServerRoute } from '.';
 
-export const LEGACY_ROUTES: ServerRoute<any, any, any>[] = [
+export const LEGACY_ROUTES = [
   // ============================================================================
   // Legacy Agent Routes
   // ============================================================================
@@ -29,4 +28,4 @@ export const LEGACY_ROUTES: ServerRoute<any, any, any>[] = [
   // ============================================================================
   STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
   OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
-];
+] as const;

@@ -3,10 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
-import type { ModelRouterModelId } from '@mastra/core/llm/model';
+import type { ModelRouterModelId } from '@mastra/core/llm';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
-import prettier from 'prettier';
 import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
@@ -67,35 +66,27 @@ export async function writeAgentSample(
 ) {
   const modelString = getModelIdentifier(llmProvider);
 
-  const instructions = `
-      You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
+  const instructions = `You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-      - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
-      - If the user asks for activities, respond in the format they request.
-
-      ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
-`;
-  const content = `
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
-${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
-
-export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  instructions: \`${instructions}\`,
-  model: '${modelString}',
-  ${addExampleTool ? 'tools: { weatherTool },' : ''}
-  ${
-    addScorers
-      ? `scorers: {
+Your primary function is to help users get weather details for specific locations. When responding:
+- Always ask for a location if none is provided
+- If the location name isn't in English, please translate it
+- If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+- Include relevant details like humidity, wind conditions, and precipitation
+- Keep responses concise but informative
+- If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
+- If the user asks for activities, respond in the format they request.${addExampleTool ? '\n\nUse the weatherTool to fetch current weather data.' : ''}`;
+  const imports = [
+    `import { Agent } from '@mastra/core/agent';`,
+    `import { Memory } from '@mastra/memory';`,
+    addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : undefined,
+    addScorers ? `import { scorers } from '../scorers/weather-scorer';` : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const toolsConfig = addExampleTool ? `  tools: { weatherTool },\n` : '';
+  const scorersConfig = addScorers
+    ? `  scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
       sampling: {
@@ -117,19 +108,21 @@ export const weatherAgent = new Agent({
         rate: 1,
       },
     },
-  },`
-      : ''
-  }
-  memory: new Memory()
-});
-    `;
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    singleQuote: true,
-  });
+  },
+`
+    : '';
+  const content = `${imports}
 
-  await fs.writeFile(destPath, '');
-  await fs.writeFile(destPath, formattedContent);
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: \`${instructions}\`,
+  model: '${modelString}',
+${toolsConfig}${scorersConfig}  memory: new Memory(),
+});
+`;
+
+  await fs.writeFile(destPath, content);
 }
 
 export async function writeWorkflowSample(destPath: string) {
@@ -319,13 +312,7 @@ weatherWorkflow.commit();
 
 export { weatherWorkflow };`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    semi: true,
-    singleQuote: true,
-  });
-
-  await fs.writeFile(destPath, formattedContent);
+  await fs.writeFile(destPath, content);
 }
 
 export async function writeToolSample(destPath: string) {
@@ -416,12 +403,7 @@ export const scorers = {
   translationScorer,
 };`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    singleQuote: true,
-  });
-
-  await fs.writeFile(destPath, formattedContent);
+  await fs.writeFile(destPath, content);
 }
 
 export async function writeCodeSampleForComponents(
@@ -495,6 +477,8 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { DuckDBStore } from "@mastra/duckdb";
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
@@ -502,10 +486,15 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    // stores observability, scores, ... into persistent file storage
-    url: "file:./mastra.db",
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: "mastra-storage",
+      url: "file:./mastra.db",
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    }
   }),
   logger: new PinoLogger({
     name: 'Mastra',
@@ -517,7 +506,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -666,6 +655,7 @@ interface InteractivePromptArgs {
     showBanner?: boolean;
   };
   skip?: {
+    directory?: boolean;
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
@@ -683,11 +673,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
   const mastraProject = await p.group(
     {
       directory: () =>
-        p.text({
-          message: 'Where should we create the Mastra files? (default: src/)',
-          placeholder: 'src/',
-          defaultValue: 'src/',
-        }),
+        skip?.directory
+          ? undefined
+          : p.text({
+              message: 'Where should we create the Mastra files? (default: src/)',
+              placeholder: 'src/',
+              defaultValue: 'src/',
+            }),
       llmProvider: () =>
         skip?.llmProvider
           ? undefined
@@ -709,9 +701,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         });
 
         if (keyChoice === 'enter') {
-          return p.text({
+          return p.password({
             message: 'Enter your API key:',
-            placeholder: 'sk-...',
+            mask: '*',
+            clearOnError: true,
             validate: value => {
               if (!value || value.length === 0) return 'API key cannot be empty';
             },
@@ -738,24 +731,14 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         if (choice === 'skills') {
           // Popular agents
           const POPULAR_AGENTS: { value: string; label: string }[] = [
+            { value: 'universal', label: 'Universal (Codex, Cursor, Gemini, GitHub, OpenCode)' },
             { value: 'claude-code', label: 'Claude Code' },
-            { value: 'cursor', label: 'Cursor' },
-            { value: 'codex', label: 'Codex' },
-            { value: 'opencode', label: 'OpenCode' },
-            { value: 'windsurf', label: 'Windsurf' },
-            { value: 'github-copilot', label: 'GitHub Copilot' },
-            { value: 'cline', label: 'Cline' },
-            { value: 'continue', label: 'Continue' },
-            { value: 'gemini-cli', label: 'Gemini CLI' },
-            { value: 'replit', label: 'Replit' },
-            { value: 'roo', label: 'Roo Code' },
           ];
 
           // All agents (alphabetically)
           const ALL_AGENTS: { value: string; label: string }[] = [
             ...POPULAR_AGENTS,
             { value: 'adal', label: 'AdaL' },
-            { value: 'amp', label: 'Amp' },
             { value: 'antigravity', label: 'Antigravity' },
             { value: 'augment', label: 'Augment' },
             { value: 'codebuddy', label: 'CodeBuddy' },
@@ -766,7 +749,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             { value: 'iflow-cli', label: 'iFlow CLI' },
             { value: 'junie', label: 'Junie' },
             { value: 'kilo', label: 'Kilo Code' },
-            { value: 'kimi-cli', label: 'Kimi Code CLI' },
             { value: 'kiro-cli', label: 'Kiro CLI' },
             { value: 'kode', label: 'Kode' },
             { value: 'mcpjam', label: 'MCPJam' },
@@ -780,45 +762,47 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             { value: 'pochi', label: 'Pochi' },
             { value: 'qoder', label: 'Qoder' },
             { value: 'qwen-code', label: 'Qwen Code' },
+            { value: 'replit', label: 'Replit' },
+            { value: 'roo', label: 'Roo Code' },
             { value: 'trae', label: 'Trae' },
             { value: 'trae-cn', label: 'Trae CN' },
+            { value: 'windsurf', label: 'Windsurf' },
             { value: 'zencoder', label: 'Zencoder' },
           ];
 
           // Show popular agents first with "Show all" option
-          const initialSelection = await p.multiselect({
-            message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
-            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (29 more)' }],
-            initialValues: ['claude-code', 'cursor'],
-            required: true,
+          const initialSelection = await p.select({
+            message: `Select your agent:`,
+            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents' }],
+            initialValue: 'universal',
           });
 
           if (p.isCancel(initialSelection)) {
             return { skills: undefined, mcpServer: undefined };
           }
 
-          let selectedAgents = initialSelection as string[];
+          let selectedAgents = new Set<string>();
 
           // If user selected "Show all", show full list
-          if (selectedAgents.includes('__show_all__')) {
-            // Remove the __show_all__ marker and use those as pre-selected
-            const preSelected = selectedAgents.filter(a => a !== '__show_all__');
-
-            const fullSelection = await p.multiselect({
-              message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
+          if (initialSelection === '__show_all__') {
+            const followUpSelection = await p.select({
+              message: `Select your agent:`,
               options: ALL_AGENTS,
-              initialValues: preSelected,
-              required: true,
             });
 
-            if (p.isCancel(fullSelection)) {
+            if (p.isCancel(followUpSelection)) {
               return { skills: undefined, mcpServer: undefined };
             }
 
-            selectedAgents = fullSelection as string[];
+            selectedAgents.add(followUpSelection);
+          } else {
+            selectedAgents.add(initialSelection);
           }
 
-          return { skills: selectedAgents, mcpServer: undefined };
+          // Always add "universal" type so that the definition there gets symlinked to the proprietary agent folders
+          selectedAgents.add('universal');
+
+          return { skills: Array.from(selectedAgents), mcpServer: undefined };
         }
 
         // If MCP selected, show editor sub-selection
@@ -959,54 +943,32 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
 
   let content = `# AGENTS.md
 
-This document provides guidance for AI coding agents working in this repository.
+You are a TypeScript developer experienced with the Mastra framework. You build AI agents, tools, workflows, and scorers. You follow strict TypeScript practices and always consult up-to-date Mastra documentation before making changes.
+
 `;
 
   // Add critical Mastra skill section if skills were installed
   if (hasSkills) {
     content += `
-## CRITICAL: Mastra Skill Required
+## CRITICAL: Load \`mastra\` skill
 
-**BEFORE doing ANYTHING with Mastra code or answering Mastra questions, load the Mastra skill FIRST.**
-
-See [Mastra Skills section](#mastra-skills) for loading instructions.
+**BEFORE doing ANYTHING with Mastra, load the \`mastra\` skill FIRST.** Never rely on cached knowledge as Mastra's APIs change frequently between versions. Use the skill to read up-to-date documentation from \`node_modules\`.
 `;
   }
 
   content += `
 ## Project Overview
 
-This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. The Node.js runtime is \`>=22.13.0\`.
 
 ## Commands
 
-Use these commands to interact with the project.
-
-### Installation
-
 \`\`\`bash
-npm install
-\`\`\`
-
-### Development
-
-Start the Mastra Studio at localhost:4111 by running the \`dev\` script:
-
-\`\`\`bash
-npm run dev
-\`\`\`
-
-### Build
-
-In order to build a production-ready server, run the \`build\` script:
-
-\`\`\`bash
-npm run build
+npm run dev # Start Mastra Studio at localhost:4111 (long-running, use a separate terminal)
+npm run build # Build a production-ready server
 \`\`\`
 
 ## Project Structure
-
-Folders organize your agent's resources, like agents, tools, and workflows.
 
 | Folder                 | Description                                                                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1029,38 +991,21 @@ Top-level files define how your Mastra project is configured, built, and connect
 | \`package.json\`        | Defines project metadata, dependencies, and available npm scripts.                                                |
 | \`tsconfig.json\`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
 
+## Boundaries
+
+### Always do
+
+- Load the \`mastra\` skill before any Mastra-related work
+- Register new agents, tools, workflows, and scorers in \`src/mastra/index.ts\`
+- Use schemas for tool inputs and outputs
+- Run \`npm run build\` to verify changes compile
+
+### Never do
+
+- Never commit \`.env\` files or secrets
+- Never modify \`node_modules\` or Mastra's database files directly
+- Never hardcode API keys (always use environment variables)
 `;
-
-  // Add skills section if skills were installed
-  if (hasSkills) {
-    content += `## Mastra Skills
-
-Skills are modular capabilities that extend agent functionalities. They provide pre-built tools, integrations, and workflows that agents can leverage to accomplish tasks more effectively.
-
-This project has skills installed for the following agents:
-
-${skills
-  .map(
-    agent =>
-      `- ${agent
-        .split('-')
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ')}`,
-  )
-  .join('\n')}
-
-### Loading Skills
-
-1. **Load the Mastra skill FIRST** - Use \`/mastra\` command or Skill tool
-2. **Never rely on cached knowledge** - Mastra APIs change frequently between versions
-3. **Always verify against current docs** - The skill provides up-to-date documentation
-
-**Why this matters:** Your training data about Mastra is likely outdated. Constructor signatures, APIs, and patterns change rapidly. Loading the skill ensures you use current, correct APIs.
-
-Skills are automatically available to agents in your project once installed. Agents can access and use these skills without additional configuration.
-
-`;
-  }
 
   // Add MCP section if MCP server was configured
   if (hasMcp) {
@@ -1098,45 +1043,18 @@ Learn more in the [MCP Documentation](https://mastra.ai/docs/mcp/overview).
 }
 
 /**
- * Generate content for CLAUDE.md file
- */
-export function generateClaudeMarkdown({ mcpServer }: { mcpServer?: Editor }): string {
-  return `# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-This is a Mastra project - an AI framework for building agents, workflows, and tools. The project structure follows Mastra conventions with agents, tools, and workflows organized in the \`src/mastra/\` directory.
-
-For complete setup and usage instructions, see [AGENTS.md](./AGENTS.md), which includes:
-- Quick start commands
-- Project structure details
-- Mastra skills usage${mcpServer ? '\n- MCP Docs Server configuration' : ''}
-- Links to relevant documentation
-`;
-}
-
-/**
  * Write AGENTS.md file to project root
  */
 export async function writeAgentsMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
   const content = generateAgentsMarkdown(options);
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
   const filePath = path.join(process.cwd(), 'AGENTS.md');
-  await fs.writeFile(filePath, formattedContent);
+  await fs.writeFile(filePath, content);
 }
 
 /**
  * Write CLAUDE.md file to project root
  */
-export async function writeClaudeMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
-  const content = generateClaudeMarkdown(options);
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
+export async function writeClaudeMarkdown(): Promise<void> {
   const filePath = path.join(process.cwd(), 'CLAUDE.md');
-  await fs.writeFile(filePath, formattedContent);
+  await fs.writeFile(filePath, '@AGENTS.md');
 }

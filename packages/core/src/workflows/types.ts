@@ -17,7 +17,7 @@ import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
-export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+export type OutputWriter<TChunk = any> = (chunk: TChunk, options?: { messageId?: string }) => Promise<void>;
 
 /**
  * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
@@ -352,6 +352,19 @@ export interface WorkflowRunState {
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    /** The trace ID for this workflow run */
+    traceId?: string;
+    /** The span ID of the workflow run span (for linking on resume) */
+    spanId?: string;
+    /** The parent span ID (if this is a nested workflow) */
+    parentSpanId?: string;
+  };
 }
 
 /**

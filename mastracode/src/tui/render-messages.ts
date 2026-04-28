@@ -4,9 +4,11 @@
  * Pure functions that operate on TUIState — no class dependency.
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
 import { parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
@@ -14,11 +16,12 @@ import { PlanResultComponent } from './components/plan-approval-inline.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { formatToolResult } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { getMarkdownTheme, theme, mastra } from './theme.js';
+import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -40,8 +43,7 @@ export function renderCompletedTasksInline(
     theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
   const container = new Container();
-  container.addChild(new Spacer(1));
-  container.addChild(new Text(headerText, 0, 0));
+  container.addChild(new Text(headerText, BOX_INDENT, 0));
   const MAX_VISIBLE = 4;
   const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
   const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
@@ -50,17 +52,18 @@ export function renderCompletedTasksInline(
   for (const task of visible) {
     const icon = chalk.hex(mastra.green)('✓');
     const text = chalk.hex(mastra.green)(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
+    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   if (remaining > 0) {
     container.addChild(
       new Text(
         theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
-        0,
+        BOX_INDENT,
         0,
       ),
     );
   }
+  container.addChild(new Spacer(1));
 
   if (insertIndex >= 0) {
     state.chatContainer.children.splice(insertIndex, 0, container);
@@ -75,15 +78,15 @@ export function renderCompletedTasksInline(
  */
 export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem[], insertIndex = -1): void {
   const container = new Container();
-  container.addChild(new Spacer(1));
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
-  container.addChild(new Text(theme.fg('accent', `${label} cleared`), 0, 0));
+  container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
   for (const task of clearedTasks) {
     const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
     const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
+    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
+  container.addChild(new Spacer(1));
   if (insertIndex >= 0) {
     state.chatContainer.children.splice(insertIndex, 0, container);
     state.chatContainer.invalidate();
@@ -96,10 +99,77 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
 // addUserMessage
 // =============================================================================
 
+function createReminderComponent(
+  reminderType: string | undefined,
+  options: { message?: string; path?: string; gapText?: string },
+): SystemReminderComponent | TemporalGapComponent {
+  if (reminderType === 'temporal-gap') {
+    return new TemporalGapComponent({
+      message: options.message,
+      gapText: options.gapText,
+    });
+  }
+
+  return new SystemReminderComponent({
+    message: options.message,
+    reminderType,
+    path: options.path,
+  });
+}
+
+function addChildBeforeFollowUps(state: TUIState, child: Component): void {
+  if (state.followUpComponents.length > 0) {
+    const firstFollowUp = state.followUpComponents[0];
+    const idx = state.chatContainer.children.indexOf(firstFollowUp as never);
+    if (idx >= 0) {
+      (state.chatContainer.children as unknown[]).splice(idx, 0, child);
+      state.chatContainer.invalidate();
+      return;
+    }
+  }
+
+  state.chatContainer.addChild(child);
+}
+
+export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
+  if (precedesMessageId) {
+    const anchor = state.messageComponentsById.get(precedesMessageId);
+    if (anchor) {
+      const idx = state.chatContainer.children.indexOf(anchor as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
+        state.chatContainer.invalidate();
+        return;
+      }
+    }
+  }
+
+  addChildBeforeFollowUps(state, child);
+}
+
 /**
  * Add a user message to the chat container.
  */
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
+  const reminderPart = message.content.find(
+    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
+      content.type === 'system_reminder',
+  );
+
+  if (reminderPart) {
+    const reminderComponent = createReminderComponent(reminderPart.reminderType, {
+      message: reminderPart.message,
+      path: reminderPart.path,
+      gapText: reminderPart.gapText,
+    });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
+
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
+    state.ui.requestRender();
+    return;
+  }
+
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)
@@ -109,23 +179,32 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
-  // Check for system reminder tags
-  const systemReminderMatch = displayText.match(/<system-reminder>([\s\S]*?)<\/system-reminder>/);
-  if (systemReminderMatch) {
-    const reminderText = systemReminderMatch[1]!.trim();
-    const reminderComponent = new SystemReminderComponent({
-      message: reminderText,
-    });
+  const exactDisplayText = displayText.trim();
 
-    // System reminders always go at the end (after plan approval)
-    state.chatContainer.addChild(new Spacer(1));
-    state.chatContainer.addChild(reminderComponent);
+  const legacyReminderMatch = exactDisplayText.match(
+    /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
+  );
+  if (legacyReminderMatch?.groups?.body) {
+    const attrs = legacyReminderMatch.groups.attrs ?? '';
+    const reminderType = attrs.match(/\stype="([^"]+)"/)?.[1];
+    const path = attrs.match(/\spath="([^"]+)"/)?.[1];
+    const precedesMessageId = attrs.match(/\sprecedesMessageId="([^"]+)"/)?.[1];
+    const reminderText = legacyReminderMatch.groups.body.trim();
+    const reminderComponent = createReminderComponent(reminderType, {
+      message: reminderText,
+      path,
+      gapText: reminderType === 'temporal-gap' ? reminderText.split(' — ')[0]?.trim() : undefined,
+    });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
+
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, precedesMessageId);
     state.ui.requestRender();
     return;
   }
 
-  // Check for slash command tags
-  const slashCommandMatch = displayText.match(/<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>/);
+  // Check for persisted slash command tags.
+  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
   if (slashCommandMatch) {
     const commandName = slashCommandMatch[1]!;
     const commandContent = slashCommandMatch[2]!.trim();
@@ -139,6 +218,8 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
     const userComponent = new UserMessageComponent(prefix + displayText);
+
+    state.messageComponentsById.set(message.id, userComponent);
 
     // Always append to end — follow-ups should stay at the bottom
     state.chatContainer.addChild(userComponent);
@@ -168,6 +249,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.pendingTools.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
+  state.allSystemReminderComponents = [];
+  state.messageComponentsById.clear();
+  state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during history reconstruction
   let previousTasksAcc: TaskItem[] = [];
@@ -239,6 +323,26 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.chatContainer.addChild(subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
+          }
+
+          // Render ask_user with the proper question component
+          if (content.name === 'ask_user' && toolResult?.type === 'tool_result') {
+            const askArgs = content.args as
+              | { question?: string; options?: Array<{ label: string; description?: string }> }
+              | undefined;
+            const answer =
+              typeof toolResult.result === 'string' ? toolResult.result : formatToolResult(toolResult.result);
+            const cancelled = answer === '(skipped)';
+            if (askArgs?.question) {
+              const askComponent = AskQuestionInlineComponent.fromHistory(
+                askArgs.question,
+                askArgs.options,
+                answer,
+                cancelled,
+              );
+              state.chatContainer.addChild(askComponent);
+              continue;
+            }
           }
 
           // Render the tool call
@@ -368,6 +472,15 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Failed marker
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
+        } else if (content.type === 'om_thread_title_updated') {
+          // Render thread title update marker in history
+          state.chatContainer.addChild(
+            new OMMarkerComponent({
+              type: 'om_thread_title_updated',
+              newTitle: content.newTitle,
+              oldTitle: content.oldTitle,
+            }),
+          );
         }
         // Skip tool_result - it's handled with tool_call above
       }

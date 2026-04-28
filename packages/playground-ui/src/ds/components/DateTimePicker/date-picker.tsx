@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
 import * as React from 'react';
 import { DayPicker } from 'react-day-picker';
+import { cn } from '@/lib/utils';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
@@ -28,10 +28,12 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
             : '[&:has([aria-selected])]:rounded-md',
           'h-8 w-8 p-0 hover:bg-lightGray-7/50 font-normal aria-selected:opacity-100',
         ),
-        day_range_start: 'day-range-start',
-        day_range_end: 'day-range-end',
-        day_selected:
-          '!bg-neutral6/50 !text-surface2 hover:bg-neutral6 rounded-md hover:text-surface2 focus:bg-neutral6 focus:text-surface2',
+        day_range_start: 'day-range-start rounded-l-md',
+        day_range_end: 'day-range-end rounded-r-md',
+        day_selected: cn(
+          'bg-accent1! text-white! hover:bg-accent1/80! focus:bg-accent1/80! focus:text-white!',
+          props.mode !== 'range' && 'rounded-md',
+        ),
         day_today: 'bg-neutral6/10 text-neutral5',
         day_outside:
           'day-outside text-neutral3 opacity-50  aria-selected:bg-surface5/50 aria-selected:text-neutral3 aria-selected:opacity-30',

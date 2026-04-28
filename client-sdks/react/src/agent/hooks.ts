@@ -18,6 +18,8 @@ export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
   initialMessages?: MastraUIMessage[];
+  /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
+  requestContext?: RequestContext;
 }
 
 interface SharedArgs {
@@ -60,11 +62,23 @@ const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string |
   return undefined;
 };
 
-export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProps) => {
+export const useChat = ({
+  agentId,
+  resourceId,
+  initialMessages,
+  requestContext: propsRequestContext,
+}: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
+  const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
+  // Tracks the active streamUntilIdle request so a subsequent stream() call can
+  // abort the previous one. Without this, a still-open prior stream keeps its
+  // background-task pubsub subscription alive and fans events into a second
+  // concurrent UI consumer, producing duplicate bg-task events and duplicate
+  // continuation turns on the server.
+  const _streamAbortRef = useRef<AbortController | null>(null);
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
@@ -81,6 +95,10 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setMessages(formattedMessages);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
   }, [initialMessages]);
+
+  useEffect(() => {
+    _requestContext.current = propsRequestContext;
+  }, [propsRequestContext]);
 
   const generate = async ({
     coreUserMessages,
@@ -104,6 +122,8 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
       maxSteps,
       requireToolApproval,
     } = modelSettings || {};
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -131,7 +151,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       tracingOptions,
@@ -205,20 +225,37 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
       requireToolApproval,
     } = modelSettings || {};
 
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
+
+    // Abort any still-open prior streamUntilIdle so its bg-task pubsub
+    // subscription closes server-side. Otherwise the prior request keeps
+    // listening and duplicates every bg event into both the old and the new
+    // UI consumer.
+    _streamAbortRef.current?.abort();
+    const internalAbort = new AbortController();
+    _streamAbortRef.current = internalAbort;
+
+    // Forward the caller-supplied signal (e.g. from the runtime provider) so
+    // explicit external cancellation still works.
+    if (signal) {
+      if (signal.aborted) internalAbort.abort();
+      else signal.addEventListener('abort', () => internalAbort.abort(), { once: true });
+    }
 
     // Create a new client instance with the abort signal
     // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
-      abortSignal: signal,
+      abortSignal: internalAbort.signal,
     });
 
     const agent = clientWithAbort.getAgent(agentId);
 
     const runId = uuid();
 
-    const response = await agent.stream(coreUserMessages, {
+    const response = await agent.streamUntilIdle(coreUserMessages, {
       runId,
       maxSteps,
       modelSettings: {
@@ -231,7 +268,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
@@ -251,6 +288,11 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
       },
     });
 
+    // Only clear the ref if we're still the active stream — a later stream()
+    // call may have already taken over and aborted us.
+    if (_streamAbortRef.current === internalAbort) {
+      _streamAbortRef.current = null;
+    }
     setIsRunning(false);
   };
 
@@ -266,6 +308,8 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -291,7 +335,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
         topP,
       },
       runId,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
@@ -317,6 +361,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
+    _requestContext.current = undefined;
   };
 
   const approveToolCall = async (toolCallId: string) => {
@@ -330,7 +375,11 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCall({ runId: currentRunId, toolCallId });
+    const response = await agent.approveToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
@@ -354,7 +403,11 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCall({ runId: currentRunId, toolCallId });
+    const response = await agent.declineToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
@@ -380,7 +433,11 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCallGenerate({ runId: currentRunId, toolCallId });
+    const response = await agent.approveToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
@@ -408,7 +465,11 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCallGenerate({ runId: currentRunId, toolCallId });
+    const response = await agent.declineToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
@@ -440,7 +501,10 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveNetworkToolCall({ runId: networkRunId });
+    const response = await agent.approveNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     const transformer = new AISdkNetworkTransformer();
 
@@ -470,7 +534,10 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineNetworkToolCall({ runId: networkRunId });
+    const response = await agent.declineNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     const transformer = new AISdkNetworkTransformer();
 

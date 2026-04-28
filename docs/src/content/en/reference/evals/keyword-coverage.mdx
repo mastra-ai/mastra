@@ -1,12 +1,12 @@
 ---
-title: "Reference: Keyword Coverage Scorer | Evals"
+title: "Reference: Keyword coverage scorer | Evals"
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Keyword Coverage Scorer
+# Keyword coverage scorer
 
 The `createKeywordCoverageScorer()` function evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
@@ -16,7 +16,7 @@ The `createKeywordCoverageScorer()` function doesn't take any options.
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -60,7 +60,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 }
 ```
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates keyword coverage by matching keywords with the following features:
 
