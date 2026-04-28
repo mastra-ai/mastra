@@ -373,7 +373,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
     },
-  ): Promise<{ status: number; error: string } | null> {
+  ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     const authConfig = this.mastra.getServer()?.auth;
 
     // No auth config means no auth required
@@ -409,12 +409,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     });
 
     if (result.action === 'next') {
+      // Pass through any refresh headers (e.g. Set-Cookie from transparent session refresh)
+      if (result.headers) {
+        return { status: 200, error: '', headers: result.headers };
+      }
       return null;
     }
 
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
-    return { status: result.status, error: errorBody?.error ?? 'Access denied' };
+    return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
   }
 
   /**

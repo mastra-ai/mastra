@@ -117,13 +117,13 @@ pnpm install --ignore-workspace
 
 It's important that you use `--ignore-workspace` as otherwise the dependencies won't be installed correctly.
 
-Afterwards you can start the Mastra development server:
+Afterwards, you can start the Mastra development server:
 
 ```shell
 pnpm mastra:dev
 ```
 
-Whenever you make changes to the source code, the `turbo watch` process from step 2 will rebuild the packages. You then can restart the development server to see your changes.
+Whenever you make changes to the source code, the `turbo watch` process from step 2 will rebuild the packages. You can then restart the development server to see your changes.
 
 ## Testing
 

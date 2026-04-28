@@ -1,5 +1,25 @@
 # mastra
 
+## 1.7.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`28caa5b`](https://github.com/mastra-ai/mastra/commit/28caa5b032358545af2589ed90636eccb4dd9d2f), [`7d056b6`](https://github.com/mastra-ai/mastra/commit/7d056b6ecf603cacaa0f663ff1df025ed885b6c1), [`26f1f94`](https://github.com/mastra-ai/mastra/commit/26f1f9490574b864ba1ecedf2c9632e0767a23bd)]:
+  - @mastra/core@1.29.0-alpha.5
+  - @mastra/deployer@1.29.0-alpha.5
+
+## 1.7.0-alpha.4
+
+### Patch Changes
+
+- Migrated the studio's theme handling to the shared `ThemeProvider` from `@mastra/playground-ui`. The settings page now uses a System / Light / Dark dropdown and applies the choice immediately. Existing theme preferences are preserved via a one-time migration; the studio continues to default to dark mode for new users. ([#15838](https://github.com/mastra-ai/mastra/pull/15838))
+
+- Fixed 'Reading environment variables...' message showing before the user selects an env file during deployment. The spinner no longer wraps the interactive env file selection prompt. ([#15802](https://github.com/mastra-ai/mastra/pull/15802))
+
+- Updated dependencies [[`8a71261`](https://github.com/mastra-ai/mastra/commit/8a71261e3954ae617c6f8e25767b951f99438ab2), [`021a60f`](https://github.com/mastra-ai/mastra/commit/021a60f1f3e0135a70ef23c58be7a9b3aaffe6b4)]:
+  - @mastra/core@1.29.0-alpha.4
+  - @mastra/deployer@1.29.0-alpha.4
+
 ## 1.7.0-alpha.3
 
 ### Minor Changes
