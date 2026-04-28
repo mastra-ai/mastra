@@ -1,0 +1,557 @@
+/*
+ * Print stylesheet for the Mastra documentation PDF.
+ * Optimized for readability and a calm, book-like feel.
+ */
+
+:root {
+  --text: #1b1d21;
+  --muted: #5c6270;
+  --border: #e4e6ea;
+  --rule: #d0d4da;
+  --accent: #2d6cdf;
+  --accent-soft: #eef3fb;
+  --code-bg: #f6f7f9;
+  --code-text: #1b1d21;
+  --admon-note-bar: #2d6cdf;
+  --admon-tip-bar: #2e9f6a;
+  --admon-warn-bar: #c47f11;
+  --admon-danger-bar: #c0392b;
+  --admon-info-bar: #5a6270;
+}
+
+@page {
+  size: A4;
+  margin: 22mm 18mm 22mm 18mm;
+}
+
+html,
+body {
+  background: #ffffff;
+  color: var(--text);
+  font-family: 'Charter', 'Iowan Old Style', 'Palatino Linotype', 'Georgia', serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+}
+
+/* ---------- Cover page ---------- */
+
+.cover {
+  /* A4 printable area is roughly 210mm × 297mm, minus ~22/18mm margins.
+     Using a fixed frame slightly smaller keeps everything on one page. */
+  height: 240mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20mm 16mm;
+  box-sizing: border-box;
+  background: #0b0d10;
+  color: #f5f6f8;
+  page-break-after: always;
+  border-radius: 4mm;
+}
+
+.cover-eyebrow {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #a7adb7;
+}
+
+.cover-title {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  font-size: 44pt;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin: 12mm 0 6mm 0;
+  color: #ffffff;
+}
+
+.cover-subtitle {
+  font-family: 'Charter', Georgia, serif;
+  font-style: italic;
+  font-size: 14pt;
+  max-width: 120mm;
+  color: #d6dae1;
+  line-height: 1.4;
+}
+
+.cover-meta {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 9.5pt;
+  color: #a7adb7;
+  border-top: 1px solid #333740;
+  padding-top: 6mm;
+}
+
+.cover-meta strong {
+  color: #f5f6f8;
+  font-weight: 600;
+}
+
+/* ---------- Table of contents ---------- */
+
+.toc {
+  page-break-after: always;
+}
+
+.toc h1 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 5mm;
+  margin: 0 0 6mm 0;
+}
+
+.toc-parts {
+  counter-reset: toc-part;
+}
+
+.toc-part-group {
+  margin-bottom: 6mm;
+}
+
+.toc-part-label {
+  counter-increment: toc-part;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+  border-bottom: 0.5pt solid var(--rule);
+  padding: 2.5mm 0 1.4mm 0;
+  margin-bottom: 2.8mm;
+  break-after: avoid;
+}
+
+.toc-part-label::before {
+  content: counter(toc-part, upper-roman) ' · ';
+  color: var(--muted);
+  margin-right: 2pt;
+  font-weight: 500;
+}
+
+/* Two-column flow for category cards. break-inside on cards keeps each
+   card intact whenever it fits in a column; large cards are allowed to
+   break rather than pushing to the next page and leaving whitespace. */
+.toc-cards {
+  column-count: 2;
+  column-gap: 3.5mm;
+}
+
+.toc-card {
+  border: 0.5pt solid var(--border);
+  border-radius: 2.5pt;
+  padding: 2mm 2.4mm 2.2mm 2.4mm;
+  margin: 0 0 2.2mm 0;
+  background: #ffffff;
+  break-inside: avoid;
+}
+
+.toc-card-loose {
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+  background: transparent;
+}
+
+.toc-card-title {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1.6mm;
+}
+
+.toc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4mm 1.6mm;
+}
+
+.toc-pill {
+  display: inline-block;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 8.5pt;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 0.9mm 2.4mm;
+  background: var(--code-bg);
+  border: 0.4pt solid var(--border);
+  border-radius: 40pt;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ---------- Chapter / section headings ---------- */
+
+.part-header {
+  page-break-before: always;
+  padding-top: 30mm;
+  margin-bottom: 10mm;
+}
+
+.part-header .part-eyebrow {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4mm;
+}
+
+.part-header h1 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 36pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  margin: 0;
+  border: none;
+}
+
+.part-header p.part-description {
+  font-family: 'Charter', Georgia, serif;
+  font-style: italic;
+  font-size: 13pt;
+  color: var(--muted);
+  margin-top: 4mm;
+  max-width: 130mm;
+}
+
+.chapter-header {
+  page-break-before: always;
+  margin: 0 0 6mm 0;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid var(--rule);
+}
+
+.chapter-eyebrow {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 9pt;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2mm;
+}
+
+.chapter-header h2 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 24pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
+  border: none;
+}
+
+.chapter-description {
+  font-family: 'Charter', Georgia, serif;
+  font-style: italic;
+  font-size: 11pt;
+  color: var(--muted);
+  margin-top: 3mm;
+}
+
+/* ---------- Body typography ---------- */
+
+article {
+  margin: 0 0 8mm 0;
+}
+
+article h1 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  font-size: 18pt;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  margin: 10mm 0 4mm 0;
+  page-break-after: avoid;
+}
+
+article h2 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  font-size: 14pt;
+  letter-spacing: -0.003em;
+  line-height: 1.25;
+  margin: 8mm 0 3mm 0;
+  page-break-after: avoid;
+}
+
+article h3 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 600;
+  font-size: 12pt;
+  line-height: 1.3;
+  margin: 6mm 0 2mm 0;
+  page-break-after: avoid;
+}
+
+article h4,
+article h5,
+article h6 {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 600;
+  font-size: 11pt;
+  margin: 5mm 0 2mm 0;
+  page-break-after: avoid;
+}
+
+article p {
+  margin: 0 0 3mm 0;
+  orphans: 3;
+  widows: 3;
+}
+
+article ul,
+article ol {
+  margin: 0 0 3mm 0;
+  padding-left: 6mm;
+}
+
+article li {
+  margin: 0.6mm 0;
+}
+
+article a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 0.3pt solid rgba(45, 108, 223, 0.35);
+}
+
+article hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 6mm 0;
+}
+
+article blockquote {
+  border-left: 2px solid var(--rule);
+  margin: 3mm 0;
+  padding: 0 0 0 4mm;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------- Inline code ---------- */
+
+article code {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9.3pt;
+  background: var(--code-bg);
+  padding: 0.5pt 3pt;
+  border-radius: 3pt;
+  border: 0.5pt solid var(--border);
+  color: var(--code-text);
+}
+
+article a code {
+  color: var(--accent);
+  border-color: rgba(45, 108, 223, 0.25);
+}
+
+/* ---------- Code blocks ---------- */
+
+article pre {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8.8pt;
+  line-height: 1.5;
+  background: var(--code-bg);
+  border: 0.5pt solid var(--border);
+  border-radius: 4pt;
+  padding: 3mm 4mm;
+  margin: 3mm 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  page-break-inside: avoid;
+}
+
+article pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.code-block {
+  margin: 3mm 0;
+  page-break-inside: avoid;
+}
+
+.code-block-title {
+  display: inline-block;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8pt;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 1.2mm 3mm;
+  background: #eef1f4;
+  border: 0.5pt solid var(--border);
+  border-bottom: none;
+  border-top-left-radius: 4pt;
+  border-top-right-radius: 4pt;
+}
+
+.code-block.has-title pre {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* ---------- Tables ---------- */
+
+article table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+  margin: 3mm 0;
+  page-break-inside: avoid;
+}
+
+article th,
+article td {
+  border: 0.5pt solid var(--border);
+  padding: 1.8mm 2.4mm;
+  vertical-align: top;
+  text-align: left;
+}
+
+article th {
+  background: var(--code-bg);
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 600;
+}
+
+/* ---------- Admonitions ---------- */
+
+.admonition {
+  border-left: 3px solid var(--admon-note-bar);
+  background: var(--accent-soft);
+  padding: 3mm 4mm;
+  margin: 3mm 0;
+  border-radius: 0 3pt 3pt 0;
+  page-break-inside: avoid;
+}
+
+.admonition p {
+  margin: 0 0 2mm 0;
+}
+
+.admonition p:last-child {
+  margin-bottom: 0;
+}
+
+.admonition-tip {
+  border-left-color: var(--admon-tip-bar);
+  background: #ecf7f1;
+}
+
+.admonition-warning,
+.admonition-caution {
+  border-left-color: var(--admon-warn-bar);
+  background: #fbf3e7;
+}
+
+.admonition-danger {
+  border-left-color: var(--admon-danger-bar);
+  background: #fbeceb;
+}
+
+.admonition-info {
+  border-left-color: var(--admon-info-bar);
+  background: #f1f2f4;
+}
+
+.admonition strong {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 9.8pt;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ---------- Steps ---------- */
+
+.step-label {
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10.5pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 6mm 0 2mm 0;
+  padding-top: 3mm;
+  border-top: 0.5pt solid var(--rule);
+  page-break-after: avoid;
+}
+
+.step-label:first-of-type {
+  padding-top: 0;
+  border-top: none;
+  margin-top: 3mm;
+}
+
+/* ---------- Highlight.js "github" look, but toned down ---------- */
+
+.hljs {
+  color: #24292e;
+}
+.hljs-comment,
+.hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: #d73a49;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol {
+  color: #032f62;
+}
+.hljs-number,
+.hljs-built_in,
+.hljs-meta {
+  color: #005cc5;
+}
+.hljs-title,
+.hljs-name,
+.hljs-attr,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #6f42c1;
+}
+.hljs-variable,
+.hljs-template-variable {
+  color: #e36209;
+}
+.hljs-tag {
+  color: #22863a;
+}
+.hljs-attribute {
+  color: #005cc5;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
