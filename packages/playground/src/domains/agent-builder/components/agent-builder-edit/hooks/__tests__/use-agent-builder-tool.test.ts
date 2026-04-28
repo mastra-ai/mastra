@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -8,30 +9,56 @@ import type { AgentTool } from '../../../../types/agent-tool';
 import { useAgentBuilderTool } from '../use-agent-builder-tool';
 
 vi.mock('../../../../hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => ({ tools: true, memory: false, workflows: false, agents: true }),
+  useBuilderAgentFeatures: () => ({ tools: true, memory: false, workflows: false, agents: true, skills: true }),
 }));
 
-const features = { tools: true, memory: false, workflows: false, agents: true } as const;
+const features = { tools: true, memory: false, workflows: false, agents: true, skills: true } as const;
 
-const renderBuilderTool = (availableAgentTools: AgentTool[]) => {
+const renderBuilderTool = (
+  availableAgentTools: AgentTool[],
+  options: {
+    features?:
+      | typeof features
+      | { tools: boolean; memory: boolean; workflows: boolean; agents: boolean; skills: boolean };
+    availableSkills?: StoredSkillResponse[];
+  } = {},
+) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = {
     current: null,
   };
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {} },
+      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: {} },
     });
     formRef.current = methods;
     return React.createElement(FormProvider, methods, children);
   };
 
-  const { result } = renderHook(() => useAgentBuilderTool({ features, availableAgentTools }), {
-    wrapper: Wrapper,
-  });
+  const { result } = renderHook(
+    () =>
+      useAgentBuilderTool({
+        features: options.features ?? features,
+        availableAgentTools,
+        availableSkills: options.availableSkills,
+      }),
+    {
+      wrapper: Wrapper,
+    },
+  );
 
   return { tool: result.current, form: () => formRef.current! };
 };
+
+const buildSkill = (id: string): StoredSkillResponse =>
+  ({
+    id,
+    status: 'published',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    name: id,
+    instructions: 'inst',
+  }) as StoredSkillResponse;
 
 describe('useAgentBuilderTool execute routing', () => {
   it('routes tool ids to form.tools and agent ids to form.agents', async () => {
@@ -70,6 +97,36 @@ describe('useAgentBuilderTool execute routing', () => {
 
     expect(form().getValues('tools')).toEqual({});
     expect(form().getValues('agents')).toEqual({});
+  });
+
+  it('routes valid skill ids to form.skills and drops unknown ids', async () => {
+    const availableSkills = [buildSkill('skill-a'), buildSkill('skill-b')];
+    const { tool, form } = renderBuilderTool([], { availableSkills });
+
+    await tool.execute!({
+      name: 'With skills',
+      instructions: 'do things',
+      skills: [
+        { id: 'skill-a', name: 'Skill A' },
+        { id: 'unknown', name: 'Unknown' },
+      ],
+    } as any);
+
+    expect(form().getValues('skills')).toEqual({ 'skill-a': true });
+  });
+
+  it('ignores skills input when the feature is off', async () => {
+    const availableSkills = [buildSkill('skill-a')];
+    const featuresOff = { tools: true, memory: false, workflows: false, agents: true, skills: false };
+    const { tool, form } = renderBuilderTool([], { features: featuresOff, availableSkills });
+
+    await tool.execute!({
+      name: 'With skills',
+      instructions: 'do things',
+      skills: [{ id: 'skill-a', name: 'Skill A' }],
+    } as any);
+
+    expect(form().getValues('skills')).toEqual({});
   });
 
   it('routes workflow ids to form.workflows', async () => {

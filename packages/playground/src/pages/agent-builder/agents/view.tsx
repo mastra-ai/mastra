@@ -1,3 +1,4 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -7,8 +8,8 @@ import {
   AgentChatPanelChat,
   AgentChatPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
-import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
@@ -18,6 +19,7 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -30,13 +32,15 @@ export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
   const features = useBuilderAgentFeatures();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
-  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({ enabled: features.skills });
   const isReady =
     Boolean(id) &&
     !isStoredAgentLoading &&
-    !isToolsPending &&
+    (!features.tools || !isToolsPending) &&
+    (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
     (!features.workflows || !isWorkflowsPending);
 
@@ -49,6 +53,7 @@ export default function AgentBuilderAgentView() {
       toolsData={toolsData}
       agentsData={agentsData}
       workflowsData={workflowsData}
+      storedSkillsResponse={storedSkillsResponse}
     />
   );
 }
@@ -59,9 +64,17 @@ interface PageProps {
   toolsData: ToolsData | undefined;
   agentsData: AgentsData | undefined;
   workflowsData: WorkflowsData | undefined;
+  storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
 }
 
-const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData, workflowsData }: PageProps) => {
+const AgentBuilderAgentViewPage = ({
+  id,
+  storedAgent,
+  toolsData,
+  agentsData,
+  workflowsData,
+  storedSkillsResponse,
+}: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
   });
@@ -74,6 +87,7 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData, wor
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
         workflowsData={workflowsData ?? {}}
+        storedSkillsResponse={storedSkillsResponse}
       />
     </FormProvider>
   );
@@ -91,6 +105,7 @@ interface AgentBuilderAgentViewReadyProps {
   toolsData: ToolsData;
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
+  storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
 }
 
 const AgentBuilderAgentViewReady = ({
@@ -99,6 +114,7 @@ const AgentBuilderAgentViewReady = ({
   toolsData,
   agentsData,
   workflowsData,
+  storedSkillsResponse,
 }: AgentBuilderAgentViewReadyProps) => {
   const navigate = useNavigate();
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
@@ -121,6 +137,11 @@ const AgentBuilderAgentViewReady = ({
 
   const agent = useMemo(() => storedAgentToAgentConfig(storedAgent, id ?? ''), [storedAgent, id]);
 
+  const availableSkills = useMemo<StoredSkillResponse[]>(
+    () => storedSkillsResponse?.skills ?? [],
+    [storedSkillsResponse],
+  );
+
   return (
     <AgentChatPanelProvider agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description}>
       <WorkspaceLayout
@@ -135,9 +156,11 @@ const AgentBuilderAgentViewReady = ({
         }
         chat={<AgentChatPanelChat />}
         configure={
-          <ViewConfigurePanelConnected
+          <ConfigurePanelConnected
+            editable={false}
             agent={agent}
             availableAgentTools={availableAgentTools}
+            availableSkills={availableSkills}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
           />
@@ -153,32 +176,5 @@ const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
     <Button size="sm" variant="default" onClick={onEdit} disabled={isRunning} data-testid="agent-builder-view-edit">
       Edit configuration
     </Button>
-  );
-};
-
-interface ViewConfigurePanelConnectedProps {
-  agent: ReturnType<typeof storedAgentToAgentConfig>;
-  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-const ViewConfigurePanelConnected = ({
-  agent,
-  availableAgentTools,
-  activeDetail,
-  onActiveDetailChange,
-}: ViewConfigurePanelConnectedProps) => {
-  const isRunning = useStreamRunning();
-  return (
-    <AgentConfigurePanel
-      agent={agent}
-      editable={false}
-      isLoading={false}
-      availableAgentTools={availableAgentTools}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
-      disabled={isRunning}
-    />
   );
 };

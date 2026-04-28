@@ -1,12 +1,12 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, Spinner } from '@mastra/playground-ui';
-import { MastraReactProvider } from '@mastra/react';
 import { CheckIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import {
   ConversationPanelChat,
   ConversationPanelProvider,
@@ -23,6 +23,7 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -38,20 +39,29 @@ export default function AgentBuilderAgentEdit() {
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
-  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({
+    enabled: features.skills,
+  });
   const { data: workspacesData } = useWorkspaces();
   const isReady =
     Boolean(id) &&
     (fromStarter || !isStoredAgentLoading) &&
-    !isToolsPending &&
+    (!features.tools || !isToolsPending) &&
+    (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
     (!features.workflows || !isWorkflowsPending);
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
     [workspacesData],
+  );
+
+  const availableSkills = useMemo<StoredSkillResponse[]>(
+    () => storedSkillsResponse?.skills ?? [],
+    [storedSkillsResponse],
   );
 
   const { data: currentUser } = useCurrentUser();
@@ -72,6 +82,7 @@ export default function AgentBuilderAgentEdit() {
       agentsData={agentsData}
       workflowsData={workflowsData}
       availableWorkspaces={availableWorkspaces}
+      availableSkills={availableSkills}
       initialUserMessage={initialUserMessage}
       fromStarter={fromStarter}
     />
@@ -85,6 +96,7 @@ interface PageProps {
   agentsData: AgentsData | undefined;
   workflowsData: WorkflowsData | undefined;
   availableWorkspaces: AvailableWorkspace[];
+  availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
 }
@@ -96,6 +108,7 @@ const AgentBuilderAgentEditPage = ({
   agentsData,
   workflowsData,
   availableWorkspaces,
+  availableSkills,
   initialUserMessage,
   fromStarter,
 }: PageProps) => {
@@ -114,6 +127,7 @@ const AgentBuilderAgentEditPage = ({
         agentsData={agentsData ?? {}}
         workflowsData={workflowsData ?? {}}
         availableWorkspaces={availableWorkspaces}
+        availableSkills={availableSkills}
         initialUserMessage={initialUserMessage}
         fromStarter={fromStarter}
       />
@@ -134,6 +148,7 @@ interface AgentBuilderAgentEditReadyProps {
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
   availableWorkspaces: AvailableWorkspace[];
+  availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
 }
@@ -145,6 +160,7 @@ const AgentBuilderAgentEditReady = ({
   agentsData,
   workflowsData,
   availableWorkspaces,
+  availableSkills,
   initialUserMessage,
   fromStarter,
 }: AgentBuilderAgentEditReadyProps) => {
@@ -167,15 +183,11 @@ const AgentBuilderAgentEditReady = ({
 
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
 
-  const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableAgentTools });
+  const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableAgentTools, availableSkills });
 
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
-    if (mode === 'create') {
-      void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
-    } else {
-      void navigate(`/agent-builder/agents`, { viewTransition: true });
-    }
+    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
   const handleCancel = () => {
@@ -189,6 +201,7 @@ const AgentBuilderAgentEditReady = ({
       features={features}
       availableAgentTools={availableAgentTools}
       availableWorkspaces={availableWorkspaces}
+      availableSkills={availableSkills}
       toolsReady
       agentId={id}
     >
@@ -203,7 +216,9 @@ const AgentBuilderAgentEditReady = ({
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected
+            editable
             availableAgentTools={availableAgentTools}
+            availableSkills={availableSkills}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
           />
@@ -245,29 +260,5 @@ const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps)
         <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
       </Button>
     </>
-  );
-};
-
-interface ConfigurePanelConnectedProps {
-  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
-  activeDetail: ActiveDetail;
-  onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-const ConfigurePanelConnected = ({
-  availableAgentTools,
-  activeDetail,
-  onActiveDetailChange,
-}: ConfigurePanelConnectedProps) => {
-  const isRunning = useStreamRunning();
-  return (
-    <AgentConfigurePanel
-      editable
-      availableAgentTools={availableAgentTools}
-      isLoading={false}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
-      disabled={isRunning}
-    />
   );
 };
