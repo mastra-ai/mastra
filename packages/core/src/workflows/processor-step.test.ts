@@ -808,7 +808,7 @@ describe('createStep with Processor', () => {
       await expect(step.execute({ inputData } as any)).rejects.toThrow('Unexpected error');
     });
 
-    it('should record TripWire details on processor spans', async () => {
+    it('should end TripWire processor spans as blocked outcomes', async () => {
       const end = vi.fn();
       const error = vi.fn();
       const createChildSpan = vi.fn(() => ({ end, error }));
@@ -841,11 +841,11 @@ describe('createStep with Processor', () => {
         } as any),
       ).rejects.toThrow(TripWire);
 
-      expect(error).toHaveBeenCalledWith(
+      expect(error).not.toHaveBeenCalled();
+      expect(end).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.any(TripWire),
-          endSpan: true,
           attributes: {
+            processorOutcome: 'tripwire',
             tripwireAbort: {
               reason: 'PII detected',
               retry: true,

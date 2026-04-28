@@ -53,7 +53,12 @@ const DEFAULT_CLOUD_SIGNAL_FILTERS: Required<NonNullable<CloudExporterConfig['si
       return false;
     }
 
-    if (span.type === SpanType.PROCESSOR_RUN && getProcessorObservability(span) === 'errors-only' && !span.errorInfo) {
+    if (
+      span.type === SpanType.PROCESSOR_RUN &&
+      getProcessorObservability(span) === 'errors-only' &&
+      !span.errorInfo &&
+      getProcessorOutcome(span) !== 'tripwire'
+    ) {
       return false;
     }
 
@@ -72,6 +77,15 @@ function getProcessorObservability(span: AnyExportedSpan): string | undefined {
 
   const attributes = span.attributes as Partial<Record<'processorObservability', unknown>>;
   return typeof attributes.processorObservability === 'string' ? attributes.processorObservability : undefined;
+}
+
+function getProcessorOutcome(span: AnyExportedSpan): string | undefined {
+  if (!span.attributes || typeof span.attributes !== 'object') {
+    return undefined;
+  }
+
+  const attributes = span.attributes as Partial<Record<'processorOutcome', unknown>>;
+  return typeof attributes.processorOutcome === 'string' ? attributes.processorOutcome : undefined;
 }
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {

@@ -14,7 +14,7 @@ import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext } from '../../observability';
+import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
 import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
@@ -738,12 +738,16 @@ function createStepFromProcessor<TProcessorId extends string>(
     ...(processor.observability === 'errors-only' ? { processorObservability: 'errors-only' as const } : {}),
   });
   const getTripWireSpanAttributes = (error: TripWire<unknown>) => ({
+    processorOutcome: 'tripwire' as const,
     tripwireAbort: {
       reason: error.message,
       retry: error.options?.retry,
       metadata: error.options?.metadata,
     },
   });
+  const endTripWireProcessorSpan = (span: Span<SpanType> | undefined, error: TripWire<unknown>) => {
+    span?.end({ attributes: getTripWireSpanAttributes(error) });
+  };
 
   // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
   // but TypeScript type inference has issues with the complex discriminated union types.
@@ -1068,9 +1072,8 @@ function createStepFromProcessor<TProcessorId extends string>(
           processorSpan?.end({ output: buildProcessorSpanOutput(result) });
           return result;
         } catch (error) {
-          // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
-            processorSpan?.error({ error, endSpan: true, attributes: getTripWireSpanAttributes(error) });
+            endTripWireProcessorSpan(processorSpan, error);
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
           }
@@ -1264,9 +1267,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                   delete mutableState[spanKey];
                 }
               } catch (error) {
-                // End span with error and clean up state
                 if (error instanceof TripWire) {
-                  processorSpan?.error({ error, endSpan: true, attributes: getTripWireSpanAttributes(error) });
+                  endTripWireProcessorSpan(processorSpan, error);
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
                 }

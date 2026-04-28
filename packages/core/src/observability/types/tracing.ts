@@ -293,6 +293,8 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor span export policy hint */
   processorObservability?: 'normal' | 'errors-only';
+  /** Processor execution outcome */
+  processorOutcome?: 'tripwire';
   /** Processor index in the agent */
   processorIndex?: number;
   /** MessageList mutations performed by this processor */

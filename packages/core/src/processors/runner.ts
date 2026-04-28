@@ -50,12 +50,19 @@ function getProcessorSpanAttributes(processor: Processor, executor: 'workflow' |
 
 function getTripWireSpanAttributes(error: TripWire<unknown>) {
   return {
+    processorOutcome: 'tripwire' as const,
     tripwireAbort: {
       reason: error.message,
       retry: error.options?.retry,
       metadata: error.options?.metadata,
     },
   };
+}
+
+function endTripWireProcessorSpan(span: Span<SpanType.PROCESSOR_RUN> | undefined, error: TripWire<unknown>) {
+  span?.end({
+    attributes: getTripWireSpanAttributes(error),
+  });
 }
 
 /**
@@ -537,11 +544,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: getTripWireSpanAttributes(error),
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -671,13 +674,8 @@ export class ProcessorRunner {
           }
         } catch (error) {
           if (error instanceof TripWire) {
-            // Error span for trip-wire abort so it shows as ERROR in traces
             const state = processorStates.get(processor.id);
-            state?.span?.error({
-              error,
-              endSpan: true,
-              attributes: getTripWireSpanAttributes(error),
-            });
+            endTripWireProcessorSpan(state?.span, error);
             return {
               part: null,
               blocked: true,
@@ -988,11 +986,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: getTripWireSpanAttributes(error),
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1206,11 +1200,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: getTripWireSpanAttributes(error),
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1435,11 +1425,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (error instanceof TripWire) {
-          processorSpan?.error({
-            error,
-            endSpan: true,
-            attributes: getTripWireSpanAttributes(error),
-          });
+          endTripWireProcessorSpan(processorSpan, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1587,11 +1573,7 @@ export class ProcessorRunner {
         messageList.stopRecording();
 
         if (processorError instanceof TripWire) {
-          processorSpan?.error({
-            error: processorError,
-            endSpan: true,
-            attributes: getTripWireSpanAttributes(processorError),
-          });
+          endTripWireProcessorSpan(processorSpan, processorError);
           throw processorError;
         }
 
