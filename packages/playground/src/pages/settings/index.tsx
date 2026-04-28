@@ -25,19 +25,15 @@ export const StudioSettingsPage = () => {
 
       <PageLayout.MainArea className="grid gap-8 mt-6">
         <section className="rounded-lg border border-border1 bg-surface3 p-4">
-          <div className="flex items-center justify-between gap-4">
+          <div className="space-y-3">
             <h2 className="text-icon6 font-medium">Theme</h2>
-            <div className="ml-auto w-[157px]">
-              <SelectField
-                name="theme"
-                label="Theme mode"
-                labelIsHidden
-                value={theme}
-                onValueChange={value => setTheme(value as Theme)}
-                options={THEME_OPTIONS.map(option => ({ ...option }))}
-                className="w-full"
-              />
-            </div>
+            <SelectField
+              name="theme"
+              label="Theme mode"
+              value={theme}
+              onValueChange={value => setTheme(value as Theme)}
+              options={THEME_OPTIONS.map(option => ({ ...option }))}
+            />
           </div>
         </section>
 

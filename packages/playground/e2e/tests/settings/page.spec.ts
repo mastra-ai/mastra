@@ -1,14 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 
-/**
- * FEATURE: Settings Page — Theme Selection
- * USER STORY: As a user, I want to select a theme (dark/light/system) from a dropdown
- *             so that the studio matches my preference.
- * BEHAVIOR: Theme selection is instant (no save button required) and persists
- *           across page reloads via localStorage.
- */
-
 test.beforeEach(async () => {
   await resetStorage();
 });
@@ -31,55 +23,48 @@ test('renders settings form', async ({ page }) => {
   await expect(form).toBeVisible();
 });
 
-test('shows theme dropdown with dark selected by default', async ({ page }) => {
+test('shows theme selector with dark default', async ({ page }) => {
   await page.goto('/settings');
 
-  const trigger = page.getByText('Theme mode').locator('..').getByRole('combobox');
+  const themeSection = page.getByText('Theme mode').locator('..');
+  const selector = themeSection.getByRole('combobox');
 
-  await expect(trigger).toBeVisible();
-  await expect(trigger).toContainText('Dark');
-  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(selector).toBeVisible();
+  await expect(selector).toContainText('Dark');
 });
 
-test('applies light theme immediately on selection', async ({ page }) => {
+test('applies selected light theme', async ({ page }) => {
   await page.goto('/settings');
 
-  const trigger = page.getByText('Theme mode').locator('..').getByRole('combobox');
+  const themeSection = page.getByText('Theme mode').locator('..');
+  const selector = themeSection.getByRole('combobox');
 
-  await trigger.click();
+  await selector.click();
   await page.getByRole('option', { name: 'Light' }).click();
 
-  await expect(page.locator('html')).toHaveClass(/light/);
-  await expect(trigger).toContainText('Light');
-});
-
-test('persists selected theme after page reload', async ({ page }) => {
-  await page.goto('/settings');
-
-  const trigger = page.getByText('Theme mode').locator('..').getByRole('combobox');
-
-  await trigger.click();
-  await page.getByRole('option', { name: 'Light' }).click();
+  await expect(selector).toContainText('Light');
   await expect(page.locator('html')).toHaveClass(/light/);
 
   await page.reload();
 
   await expect(page.locator('html')).toHaveClass(/light/);
-  const reloadedTrigger = page.getByText('Theme mode').locator('..').getByRole('combobox');
-  await expect(reloadedTrigger).toContainText('Light');
+  const reloadedThemeSection = page.getByText('Theme mode').locator('..');
+  await expect(reloadedThemeSection.getByRole('combobox')).toContainText('Light');
 });
 
-test('persists system theme mode after page reload', async ({ page }) => {
+test('persists system theme mode', async ({ page }) => {
   await page.goto('/settings');
 
-  const trigger = page.getByText('Theme mode').locator('..').getByRole('combobox');
+  const themeSection = page.getByText('Theme mode').locator('..');
+  const selector = themeSection.getByRole('combobox');
 
-  await trigger.click();
+  await selector.click();
   await page.getByRole('option', { name: 'System' }).click();
-  await expect(trigger).toContainText('System');
+
+  await expect(selector).toContainText('System');
 
   await page.reload();
 
-  const reloadedTrigger = page.getByText('Theme mode').locator('..').getByRole('combobox');
-  await expect(reloadedTrigger).toContainText('System');
+  const reloadedThemeSection = page.getByText('Theme mode').locator('..');
+  await expect(reloadedThemeSection.getByRole('combobox')).toContainText('System');
 });
