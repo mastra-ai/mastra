@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.17.2-alpha.0
+
+### Patch Changes
+
+- Fixed Observational Memory duplicate assistant messages when a thread is rerun or an agent continues a long-running loop. ([#15774](https://github.com/mastra-ai/mastra/pull/15774))
+
+- Fixed the recall tool so message browsing uses the current thread by default and explains when it does. ([#15807](https://github.com/mastra-ai/mastra/pull/15807))
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`ec4cb26`](https://github.com/mastra-ai/mastra/commit/ec4cb26919972eb2031fea510f8f013e1d5b7ee2)]:
+  - @mastra/core@1.29.0-alpha.6
+
 ## 1.17.1
 
 ### Patch Changes

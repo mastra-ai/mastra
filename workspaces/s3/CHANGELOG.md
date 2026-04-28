@@ -1,5 +1,42 @@
 # @mastra/s3
 
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- Added AWS credential provider chain support to S3Filesystem and S3BlobStore. You can now pass a `credentials` option with a credential provider function (e.g. `fromNodeProviderChain()`) for auto-refreshing credentials on ECS, Lambda, SSO, or AssumeRole deployments. When all credential options are omitted, the AWS SDK default credential provider chain is used automatically instead of falling back to anonymous access. Static `accessKeyId`/`secretAccessKey` credentials continue to work as before. ([#15437](https://github.com/mastra-ai/mastra/pull/15437))
+
+  **New `credentials` option**
+
+  ```typescript
+  import { S3Filesystem } from '@mastra/s3';
+  import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
+
+  // Auto-refreshing credentials (ECS task role, SSO, etc.)
+  const fs = new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    credentials: fromNodeProviderChain(),
+  });
+  ```
+
+  **SDK default credential chain (no credentials needed)**
+
+  ```typescript
+  // Credentials discovered from environment automatically
+  const fs = new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+  });
+  ```
+
+  Fixes https://github.com/mastra-ai/mastra/issues/14289
+
+### Patch Changes
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`ec4cb26`](https://github.com/mastra-ai/mastra/commit/ec4cb26919972eb2031fea510f8f013e1d5b7ee2)]:
+  - @mastra/core@1.29.0-alpha.6
+
 ## 0.4.1
 
 ### Patch Changes

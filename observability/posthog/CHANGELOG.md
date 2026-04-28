@@ -1,5 +1,14 @@
 # @mastra/posthog
 
+## 1.0.19-alpha.1
+
+### Patch Changes
+
+- Updated `posthog-node` from v4 to v5 to pick up the latest fixes and LLM analytics improvements. Resolves [#15858](https://github.com/mastra-ai/mastra/issues/15858). ([#15867](https://github.com/mastra-ai/mastra/pull/15867))
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`ec4cb26`](https://github.com/mastra-ai/mastra/commit/ec4cb26919972eb2031fea510f8f013e1d5b7ee2)]:
+  - @mastra/core@1.29.0-alpha.6
+
 ## 1.0.19-alpha.0
 
 ### Patch Changes

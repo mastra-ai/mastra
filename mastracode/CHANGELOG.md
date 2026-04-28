@@ -1,5 +1,22 @@
 # mastracode
 
+## 0.16.0-alpha.6
+
+### Patch Changes
+
+- Added a stream error retry processor with OpenAI Responses stream error matching. ([#15760](https://github.com/mastra-ai/mastra/pull/15760))
+
+- Forked subagents now inherit the parent agent's toolsets (so harness-injected tools like `ask_user`, `submit_plan`, and user-configured harness tools remain available inside a fork). The `subagent` tool entry is kept in the inherited toolset with its id, description, and schemas unchanged so the LLM request prefix stays byte-identical to the parent's and the prompt cache continues to hit; recursive forking is blocked at the runtime layer by replacing only the tool's `execute` with a stub that returns a "tool unavailable inside a forked subagent" message. Forked runs allow follow-up steps so the model can recover and answer directly if it accidentally calls that stub. Fork threads are tagged with `metadata.forkedSubagent: true` and `metadata.parentThreadId`, and `Harness.listThreads()` hides them by default so they don't surface in user-facing thread pickers; pass `includeForkedSubagents: true` to opt back in for admin/debug tooling. ([#15695](https://github.com/mastra-ai/mastra/pull/15695))
+
+  Mastra Code now renders forked subagent footers as `subagent fork <parent model id>`, including persisted history reloaded after the live event metadata is gone.
+
+- Updated Mastra Code's built-in OpenAI pack to use GPT-5.5 for plan and build mode, and added GPT-5.5-specific prompt guidance. ([#15759](https://github.com/mastra-ai/mastra/pull/15759))
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`10e1c9a`](https://github.com/mastra-ai/mastra/commit/10e1c9a6a99c14eb055d0f409b603e07af827e68), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`ec4cb26`](https://github.com/mastra-ai/mastra/commit/ec4cb26919972eb2031fea510f8f013e1d5b7ee2), [`8c39f81`](https://github.com/mastra-ai/mastra/commit/8c39f815c7d06f2cd11bb099a72805a20f2ab755)]:
+  - @mastra/core@1.29.0-alpha.6
+  - @mastra/mcp@1.6.0-alpha.0
+  - @mastra/memory@1.17.2-alpha.0
+
 ## 0.16.0-alpha.5
 
 ### Patch Changes

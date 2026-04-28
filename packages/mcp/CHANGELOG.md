@@ -1,5 +1,39 @@
 # @mastra/mcp
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added `jsonSchemaValidator` pass-through option on `MCPClient` server entries and `MCPServer`. Forward this option from `@modelcontextprotocol/sdk` to opt into a non-default validator. Pass `CfWorkerJsonSchemaValidator` from `@modelcontextprotocol/sdk/validation/cfworker` to make tools with `outputSchema` work in Cloudflare Workers / V8 isolates, where the default Ajv validator's `new Function(...)` compile path is blocked. ([#15866](https://github.com/mastra-ai/mastra/pull/15866))
+
+  ```typescript
+  import { MCPClient, MCPServer } from '@mastra/mcp';
+  import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+
+  const mcp = new MCPClient({
+    servers: {
+      upstream: {
+        url: new URL('https://example/mcp'),
+        jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+      },
+    },
+  });
+
+  const server = new MCPServer({
+    name: 'My Server',
+    version: '1.0.0',
+    tools: { ... },
+    jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+  });
+  ```
+
+  Closes #15862.
+
+### Patch Changes
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`ec4cb26`](https://github.com/mastra-ai/mastra/commit/ec4cb26919972eb2031fea510f8f013e1d5b7ee2)]:
+  - @mastra/core@1.29.0-alpha.6
+
 ## 1.5.2
 
 ### Patch Changes

@@ -1,5 +1,29 @@
 # @mastra/core
 
+## 1.29.0-alpha.6
+
+### Minor Changes
+
+- Added forked subagents: a new `forked` flag on `HarnessSubagent` definitions and the built-in `subagent` tool input. When set, the subagent runs on a clone of the parent thread using the parent agent's instructions and tools, preserving prompt-cache prefix while isolating writes from the main conversation. ([#15695](https://github.com/mastra-ai/mastra/pull/15695))
+
+### Patch Changes
+
+- Fixed Studio observability tabs so runtime-injected observability unlocks them. ([#15821](https://github.com/mastra-ai/mastra/pull/15821))
+
+- Added a stream error retry processor with OpenAI Responses stream error matching. ([#15760](https://github.com/mastra-ai/mastra/pull/15760))
+
+- Fix forked subagent fork threads starting with empty history. The parent stream's message saves are debounced through `SaveQueueManager`, so a forked subagent that calls `memory.cloneThread` mid-stream used to clone from an empty store and lose the parent's user + assistant turn. The tool now drains the parent save queue via a new `flushMessages` callback on `AgentToolExecutionContext` before cloning, so forks actually carry the prior conversation. ([#15695](https://github.com/mastra-ai/mastra/pull/15695))
+
+- The internal `<subagent-meta />` tag is no longer appended to subagent tool result content. The tag was previously visible to the parent model in the tool result, which could cause it to be echoed back as literal markup in the parent's assistant text on subsequent turns. Live UIs continue to receive model / duration / tool-call information via the structured `subagent_*` events; history UIs read the persisted `tool_call.args.modelId`. `parseSubagentMeta` is retained so already-persisted threads carrying the legacy tag continue to render cleanly (and the tag is stripped before display in all cases). ([#15695](https://github.com/mastra-ai/mastra/pull/15695))
+
+- Forked subagents now inherit the parent agent's toolsets (so harness-injected tools like `ask_user`, `submit_plan`, and user-configured harness tools remain available inside a fork). The `subagent` tool entry is kept in the inherited toolset with its id, description, and schemas unchanged so the LLM request prefix stays byte-identical to the parent's and the prompt cache continues to hit; recursive forking is blocked at the runtime layer by replacing only the tool's `execute` with a stub that returns a "tool unavailable inside a forked subagent" message. Forked runs allow follow-up steps so the model can recover and answer directly if it accidentally calls that stub. Fork threads are tagged with `metadata.forkedSubagent: true` and `metadata.parentThreadId`, and `Harness.listThreads()` hides them by default so they don't surface in user-facing thread pickers; pass `includeForkedSubagents: true` to opt back in for admin/debug tooling. ([#15695](https://github.com/mastra-ai/mastra/pull/15695))
+
+  Mastra Code now renders forked subagent footers as `subagent fork <parent model id>`, including persisted history reloaded after the live event metadata is gone.
+
+- Added missing A2A vNext error variants for protocol 0.3 handling. ([#15720](https://github.com/mastra-ai/mastra/pull/15720))
+
+- Fixed Observational Memory duplicate assistant messages when a thread is rerun or an agent continues a long-running loop. ([#15774](https://github.com/mastra-ai/mastra/pull/15774))
+
 ## 1.29.0-alpha.5
 
 ### Patch Changes
