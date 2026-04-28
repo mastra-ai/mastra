@@ -68,7 +68,11 @@ export function buildUrl(
   const pathParamNames = new Set<string>();
   const resolvedPath = path.replace(/:([A-Za-z0-9_]+)/g, (_, name: string) => {
     pathParamNames.add(name);
-    return encodeURIComponent(pathParams[name] ?? '');
+    const value = pathParams[name];
+    if (!value) {
+      throw new ApiCliError('MISSING_ARGUMENT', `Missing required argument <${name}>`, { argument: name });
+    }
+    return encodeURIComponent(value);
   });
   const url = new URL(joinUrl(baseUrl, resolvedPath));
 

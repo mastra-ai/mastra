@@ -13,6 +13,7 @@ describe('parseInput', () => {
       expect.objectContaining({
         code: 'MISSING_INPUT',
         message: 'Command requires a single inline JSON input argument',
+        details: { command: 'mastra api agent run' },
       }),
     );
   });

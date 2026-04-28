@@ -14,7 +14,13 @@ export async function getCommandSchema(descriptor: ApiCommandDescriptor, target:
   }
 
   const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs);
-  const route = manifest?.routes?.find(
+  if (!manifest || typeof manifest !== 'object' || !Array.isArray((manifest as { routes?: unknown }).routes)) {
+    throw new ApiCliError('SCHEMA_UNAVAILABLE', 'Target server returned an invalid schema manifest', {
+      reason: 'invalid_manifest',
+    });
+  }
+
+  const route = manifest.routes.find(
     (candidate: any) => candidate.method === descriptor.method && candidate.path === descriptor.path,
   );
 

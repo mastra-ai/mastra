@@ -1,7 +1,6 @@
-import { describe, expect, it } from 'vitest';
-
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API_COMMANDS } from './commands.js';
-import { buildCommandExamples, buildCommandUsage } from './schema.js';
+import { buildCommandExamples, buildCommandUsage, getCommandSchema } from './schema.js';
 
 const commands = (key: keyof typeof API_COMMANDS) =>
   buildCommandExamples(API_COMMANDS[key]).map(example => example.command);
@@ -81,5 +80,24 @@ describe('buildCommandExamples', () => {
     expect(commands('mcpGet')).toEqual(['mastra api mcp get id_123']);
     expect(commands('datasetCreate')).toEqual(['mastra api dataset create \'{"name":"weather-eval"}\'']);
     expect(commands('experimentRun')).toEqual(['mastra api experiment run dataset_123 \'{"name":"baseline"}\'']);
+  });
+});
+
+describe('getCommandSchema', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('fails clearly when the target returns an invalid manifest', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ routes: {} }), { status: 200 })));
+
+    await expect(
+      getCommandSchema(API_COMMANDS.agentRun, { baseUrl: 'https://example.com', headers: {}, timeoutMs: 1000 }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: 'SCHEMA_UNAVAILABLE',
+        details: { reason: 'invalid_manifest' },
+      }),
+    );
   });
 });

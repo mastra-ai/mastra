@@ -85,6 +85,12 @@ describe('buildUrl', () => {
       ),
     ).toBe('https://example.com/api/workflows/wf/resume-async?runId=run&filters=%7B%22passed%22%3Atrue%7D&perPage=50');
   });
+
+  it('fails before making malformed URLs when path params are missing', () => {
+    expect(() => buildUrl('https://example.com', '/agents/:agentId', {}, 'GET')).toThrow(
+      expect.objectContaining({ code: 'MISSING_ARGUMENT', details: { argument: 'agentId' } }),
+    );
+  });
 });
 
 describe('requestApi', () => {

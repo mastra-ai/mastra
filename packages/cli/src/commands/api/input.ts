@@ -8,7 +8,9 @@ export function parseInput(descriptor: ApiCommandDescriptor, input?: string): Re
 
   if (!input) {
     if (descriptor.inputRequired) {
-      throw new ApiCliError('MISSING_INPUT', 'Command requires a single inline JSON input argument');
+      throw new ApiCliError('MISSING_INPUT', 'Command requires a single inline JSON input argument', {
+        command: `mastra api ${descriptor.name}`,
+      });
     }
     return undefined;
   }

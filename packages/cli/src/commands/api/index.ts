@@ -6,6 +6,7 @@ import { ApiCliError, errorEnvelope, toApiCliError } from './errors.js';
 import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input.js';
 import { normalizeData } from './normalizers.js';
 import { normalizeSuccess, writeJson } from './output.js';
+import { normalizeResponse } from './response-normalizer.js';
 import { buildCommandExamples, getCommandSchema } from './schema.js';
 import { resolveTarget } from './target.js';
 import type { ApiGlobalOptions } from './target.js';
@@ -137,7 +138,7 @@ export async function executeDescriptor(
       pathParams,
       input: requestInput,
     });
-    const normalized = normalizeData(descriptor, response);
+    const normalized = normalizeData(descriptor, normalizeResponse(response));
     writeJson(normalizeSuccess(normalized, descriptor.list, descriptor.responseShape), options.pretty);
   } catch (error) {
     const apiError = error instanceof ApiCliError ? error : toApiCliError(error);
