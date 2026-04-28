@@ -6,9 +6,11 @@ packages:
   - "@mastra/memory"
 ---
 
+**Added in:** `@mastra/core@1.28.0`
+
 # Background tasks
 
-Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use `streamUntilIdle()` the agent is re-invoked automatically so the result is processed in the same call.
+Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) the agent is re-invoked automatically so the result is processed in the same call.
 
 ## When to use background tasks
 
@@ -18,7 +20,7 @@ Use background tasks when a tool call may take long enough that the user shouldn
 - Tool calls that hit slow external services, queues, or large data jobs.
 - Workflows triggered from a tool call that may take minutes to complete.
 
-For tool calls that return quickly, foreground execution is simpler — keep using `agent.stream()` and `agent.generate()` directly.
+For tool calls that return quickly, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
 
 :::note
 
@@ -26,18 +28,15 @@ Background tasks require a configured [storage](/docs/memory/storage) backend on
 
 :::
 
-## Enable on the Mastra instance
+## Quickstart
 
 Background tasks are off by default. Enable them by setting `backgroundTasks.enabled` on the Mastra instance:
 
-```typescript title="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts" {6-12}
 import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  agents: {
-    /* ... */
-  },
   storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
   backgroundTasks: {
     enabled: true,
@@ -51,9 +50,9 @@ export const mastra = new Mastra({
 
 The full set of options is listed in the [backgroundTasks configuration reference](/reference/configuration#backgroundtasks).
 
-## Opt a tool into running in the background
+## Run a tool in the background
 
-Enabling the manager doesn't run anything in the background by itself — every tool defaults to foreground execution. You opt a tool in at one of three layers, in priority order:
+Enabling the manager doesn't run anything in the background by itself as every tool defaults to foreground execution. You can run a tool in the background at one of three layers, in priority order:
 
 1. **LLM per-call override**: the model decides it should run in the background and includes a `_background` field in the tool arguments.
 1. **Agent-level config**: the agent declares which of its tools are background-eligible.
@@ -111,7 +110,7 @@ Set `tools: 'all'` to opt in every tool the agent has.
 
 ### LLM per-call override
 
-When a tool is registered on an agent that has background tasks enabled, the model can include a `_background` field in the tool arguments to override the resolved configuration for that specific call:
+When a tool is registered on an agent that has background tasks enabled, the model can include a `_background` field in the tool arguments to override the resolved configuration for that specific call. The model only includes what it wants to override, all fields in `_background` are optional. The override is stripped from the arguments before the tool runs.
 
 ```json
 {
@@ -119,8 +118,6 @@ When a tool is registered on an agent that has background tasks enabled, the mod
   "_background": { "enabled": true, "timeoutMs": 900_000 }
 }
 ```
-
-The override is stripped from the arguments before the tool runs. All fields in `_background` are optional, the model only includes what it wants to override.
 
 ### Resolution order
 
@@ -133,9 +130,9 @@ When a tool call is dispatched, the resolved background config is computed in th
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
-## What appears in background task stream
+## Background tasks related stream chunks
 
-When a tool call dispatches as a background task, the background task stream emits a sequence of chunks:
+When a tool call dispatches as a background task. The agent stream emits `background-task-started` and `background-task-progress`, other `background-task-` chunks are emitted when [`backgroundTaskManager.stream()`](/reference/streaming/background-task-streaming) is used.
 
 | Chunk type | When it fires |
 | - | - |
@@ -147,7 +144,7 @@ When a tool call dispatches as a background task, the background task stream emi
 | `background-task-failed` | The task threw or timed out. |
 | `background-task-cancelled` | The task was cancelled before completing. |
 
-The full payload shapes are documented in the [stream chunk reference](/reference/streaming/ChunkType).
+The full payload shapes are documented in the [background task chunks reference](/reference/streaming/ChunkType#background-task-chunks).
 
 When `agent.streamUntilIdle()` is used, these background task chunks are also included in the stream response.
 
@@ -260,7 +257,7 @@ export const mastra = new Mastra({
 
 ## Related
 
-- [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)
+- [`Agent.streamUntilIdle()` reference](/reference/streaming/agents/streamUntilIdle)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Supervisor agents](./supervisor-agents)
 - [Stream chunk types](/reference/streaming/ChunkType)

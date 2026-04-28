@@ -5,9 +5,11 @@ packages:
   - "@mastra/core"
 ---
 
+**Added in:** `@mastra/core@1.28.0`
+
 # Background task streaming
 
-`mastra.backgroundTaskManager.stream()` returns a `ReadableStream` of [background task](/docs/agents/background-tasks) lifecycle events. Use it to monitor running tasks across the system — for example to drive a status dashboard, surface progress in your own UI, or pipe events into an SSE response.
+`mastra.backgroundTaskManager.stream()` returns a `ReadableStream` of [background task](/docs/agents/background-tasks) lifecycle events. Use it to monitor running tasks across the system, for example to drive a status dashboard, surface progress in your own UI, or pipe events into an SSE response.
 
 The stream emits the same chunk types that appear inside `Agent.streamUntilIdle()` (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`). See [background task chunks](/reference/streaming/ChunkType#background-task-chunks) for the full payload shapes.
 
@@ -84,6 +86,6 @@ These read from storage rather than the pubsub stream, so they're suitable for p
 ## Related
 
 - [Background tasks](/docs/agents/background-tasks)
-- [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)
+- [`Agent.streamUntilIdle()` reference](/reference/streaming/agents/streamUntilIdle)
 - [Background task chunks](/reference/streaming/ChunkType#background-task-chunks)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
