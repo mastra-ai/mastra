@@ -3318,22 +3318,30 @@ export class Agent<
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
             const slugify = await import(`@sindresorhus/slugify`);
-            const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
-              : context?.mastra?.generateId({
-                  idType: 'thread',
-                  source: 'agent',
-                  entityId: agentName,
-                  resourceId,
-                }) || randomUUID();
+            // On resume, reuse the original sub-agent thread/resource IDs that were
+            // saved during the initial suspension. Without this, a fresh threadId is
+            // generated and the specialist's workflow snapshot (keyed by the original
+            // threadId) becomes unreachable, causing the workflow to restart from step 1.
+            const subAgentThreadId =
+              (inputData as any).suspendedSubAgentThreadId ||
+              (inputData.threadId
+                ? `${inputData.threadId}-${randomUUID()}`
+                : context?.mastra?.generateId({
+                    idType: 'thread',
+                    source: 'agent',
+                    entityId: agentName,
+                    resourceId,
+                  }) || randomUUID());
 
-            const subAgentResourceId = inputData.resourceId
-              ? `${inputData.resourceId}-${agentName}`
-              : context?.mastra?.generateId({
-                  idType: 'generic',
-                  source: 'agent',
-                  entityId: agentName,
-                }) || `${slugify.default(this.id)}-${agentName}`;
+            const subAgentResourceId =
+              (inputData as any).suspendedSubAgentResourceId ||
+              (inputData.resourceId
+                ? `${inputData.resourceId}-${agentName}`
+                : context?.mastra?.generateId({
+                    idType: 'generic',
+                    source: 'agent',
+                    entityId: agentName,
+                  }) || `${slugify.default(this.id)}-${agentName}`);
 
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
@@ -3681,6 +3689,8 @@ export class Agent<
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
                     isAgentSuspend: true,
+                    subAgentThreadId,
+                    subAgentResourceId,
                   });
                 }
 
@@ -3831,6 +3841,8 @@ export class Agent<
                     requireToolApproval,
                     runId: streamResult.runId,
                     isAgentSuspend: true,
+                    subAgentThreadId,
+                    subAgentResourceId,
                   });
                 }
 
