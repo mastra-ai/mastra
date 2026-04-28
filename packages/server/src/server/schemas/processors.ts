@@ -101,6 +101,7 @@ export const executeProcessorResponseSchema = z.object({
   success: z.boolean(),
   phase: z.string(),
   messages: z.array(processorMessageSchema).optional(),
+  modelContextMessages: z.array(processorMessageSchema).optional(),
   messageList: z
     .object({
       messages: z.array(processorMessageSchema),

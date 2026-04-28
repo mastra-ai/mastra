@@ -277,7 +277,7 @@ processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInpu
 
 #### `ProcessInputResult`
 
-The method can return one of three types:
+The method can return one of these types:
 
 <PropertiesTable
   content={[
@@ -296,8 +296,24 @@ The method can return one of three types:
     type: 'object',
     description: 'Object with both transformed messages and modified system messages.',
   },
+  {
+    name: '{ modelContextMessages }',
+    type: 'object',
+    description:
+      'Prompt-only messages for the next model call. These messages do not mutate canonical messages or persist to memory. Cannot be used with messages.',
+  },
+  {
+    name: '{ modelContextMessages, systemMessages }',
+    type: 'object',
+    description:
+      'Prompt-only messages plus system prompt changes for the next model call. The prompt-only messages are not saved to memory. The system messages affect the model prompt, not canonical memory.',
+  },
 ]}
 />
+
+When one processor returns `modelContextMessages`, prompt-only mode begins. Later input processors receive that prompt-only list as `messages` and through `messageList`. Canonical messages remain unchanged.
+
+In prompt-only mode, return `messages` from a later processor to keep transforming the prompt-only list. Do not include system-role messages in `modelContextMessages`. Use `systemMessages` for system prompt changes.
 
 ---
 
@@ -471,7 +487,14 @@ The object form can return any combination of these properties:
   {
     name: 'messages',
     type: 'MastraDBMessage[]',
-    description: 'Replace all messages. Cannot be used with messageList.',
+    description: 'Replace all messages. Cannot be used with messageList or modelContextMessages.',
+    isOptional: true,
+  },
+  {
+    name: 'modelContextMessages',
+    type: 'MastraDBMessage[]',
+    description:
+      'Prompt-only messages for the next model call. These messages do not mutate canonical messages or persist to memory. Cannot be used with messages.',
     isOptional: true,
   },
   {

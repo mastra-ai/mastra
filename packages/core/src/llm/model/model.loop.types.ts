@@ -8,7 +8,7 @@ import type {
   UIMessage,
 } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { MessageList } from '../../agent';
+import type { MastraDBMessage, MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
 import type { ObservabilityContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
@@ -42,6 +42,7 @@ export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
   threadId?: string;
   returnScorerData?: boolean;
   messageList: MessageList;
+  modelContextMessages?: MastraDBMessage[];
 } & ObservabilityContext &
   Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
 

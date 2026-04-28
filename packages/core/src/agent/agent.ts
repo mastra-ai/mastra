@@ -2723,6 +2723,7 @@ export class Agent<
     processorStates?: Map<string, ProcessorState>;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
+    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2731,6 +2732,7 @@ export class Agent<
     };
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+    let modelContextMessages: MastraDBMessage[] | undefined;
 
     if (
       inputProcessorOverrides?.length ||
@@ -2747,7 +2749,12 @@ export class Agent<
         processorStates,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
+        ({ messageList, modelContextMessages } = await runner.runInputProcessors(
+          messageList,
+          observabilityContext,
+          requestContext,
+          0,
+        ));
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2778,6 +2785,7 @@ export class Agent<
 
     return {
       messageList,
+      modelContextMessages,
       tripwire,
     };
   }
@@ -2793,10 +2801,12 @@ export class Agent<
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
+      modelContextMessages?: MastraDBMessage[];
       processorStates?: Map<string, ProcessorState>;
     },
   ): Promise<{
     messageList: MessageList;
+    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2804,10 +2814,11 @@ export class Agent<
       processorId?: string;
     };
   }> {
-    const { requestContext, messageList, stepNumber = 0, processorStates, ...rest } = args;
+    const { requestContext, messageList, stepNumber = 0, modelContextMessages, processorStates, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+    let nextModelContextMessages = modelContextMessages;
 
     if (this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
@@ -2817,7 +2828,7 @@ export class Agent<
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
-        await runner.runProcessInputStep({
+        const inputStepResult = await runner.runProcessInputStep({
           messageList,
           stepNumber,
           steps: [],
@@ -2826,8 +2837,10 @@ export class Agent<
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
+          modelContextMessages: nextModelContextMessages,
           retryCount: 0,
         });
+        nextModelContextMessages = inputStepResult.modelContextMessages;
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2858,6 +2871,7 @@ export class Agent<
 
     return {
       messageList,
+      modelContextMessages: nextModelContextMessages,
       tripwire,
     };
   }

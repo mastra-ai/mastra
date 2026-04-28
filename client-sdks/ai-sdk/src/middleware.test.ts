@@ -17,12 +17,33 @@ import type {
   ProcessOutputResultArgs,
   ProcessOutputStreamArgs,
 } from '@mastra/core/processors';
+import { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
-import { ObservationalMemory } from '@mastra/memory/processors';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createProcessorMiddleware, withMastra } from './middleware';
+
+function createDbMessage(text: string, role: 'user' | 'assistant' | 'system' = 'user'): MastraDBMessage {
+  return {
+    id: `${role}-${text}`,
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+    createdAt: new Date(0),
+    threadId: 'test-thread',
+  };
+}
+
+function getDbMessageText(message: MastraDBMessage): string {
+  return (
+    (typeof message.content.content === 'string' ? message.content.content : undefined) ??
+    message.content.parts?.map(part => ('text' in part && typeof part.text === 'string' ? part.text : '')).join('') ??
+    ''
+  );
+}
 
 // Helper to create a mock model with a specific response
 function createMockModel(response: string = 'Test response') {
@@ -121,6 +142,202 @@ describe('withMastra middleware', () => {
 
       expect(processedInputs).toContain('Hello world');
       expect(result.text).toBe('Test response');
+    });
+
+    it('should use modelContextMessages for the model prompt only', async () => {
+      let promptSeenByModel = '';
+      const promptOnlyMessage = createDbMessage('prompt-only input');
+      const captureModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          promptSeenByModel = JSON.stringify(prompt);
+          return {
+            content: [{ type: 'text', text: 'OK' }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const processor: InputProcessor = {
+        id: 'prompt-only',
+        async processInput() {
+          return { modelContextMessages: [promptOnlyMessage] };
+        },
+      };
+
+      const model = withMastra(captureModel, {
+        inputProcessors: [processor],
+      });
+
+      const result = await generateText({
+        model,
+        prompt: 'canonical input',
+      });
+
+      expect(result.text).toBe('OK');
+      expect(promptSeenByModel).toContain('prompt-only input');
+      expect(promptSeenByModel).not.toContain('canonical input');
+    });
+
+    it('should reject input processor results that include both messages and modelContextMessages keys', async () => {
+      const promptOnlyMessage = createDbMessage('prompt-only input');
+      const processor: InputProcessor = {
+        id: 'invalid-present-keys',
+        async processInput() {
+          return {
+            messages: undefined,
+            modelContextMessages: [promptOnlyMessage],
+          } as never;
+        },
+      };
+
+      const model = withMastra(createMockModel('OK'), {
+        inputProcessors: [processor],
+      });
+
+      await expect(
+        generateText({
+          model,
+          prompt: 'canonical input',
+        }),
+      ).rejects.toThrow('returned both messages and modelContextMessages');
+    });
+
+    it('should keep prompt-only messages out of output processor canonical messages', async () => {
+      const promptOnlyMessage = createDbMessage('prompt-only input');
+      let messagesSeenByOutputProcessor: MastraDBMessage[] = [];
+
+      const inputProcessor: InputProcessor = {
+        id: 'prompt-only',
+        async processInput() {
+          return { modelContextMessages: [promptOnlyMessage] };
+        },
+      };
+      const outputProcessor: OutputProcessor = {
+        id: 'output-capture',
+        async processOutputResult(args) {
+          messagesSeenByOutputProcessor = args.messages;
+          return args.messageList;
+        },
+      };
+
+      const model = withMastra(createMockModel('OK'), {
+        inputProcessors: [inputProcessor],
+        outputProcessors: [outputProcessor],
+      });
+
+      await generateText({
+        model,
+        prompt: 'canonical input',
+      });
+
+      const outputTexts = messagesSeenByOutputProcessor.map(getDbMessageText);
+      expect(outputTexts).toContain('canonical input');
+      expect(outputTexts).not.toContain('prompt-only input');
+    });
+
+    it('should reject messageList mutation while returning prompt-only model context', async () => {
+      const promptOnlyMessage = createDbMessage('prompt-only input');
+
+      const inputProcessor: InputProcessor = {
+        id: 'invalid-prompt-only-mutation',
+        async processInput({ messageList }) {
+          messageList.add([createDbMessage('canonical mutation')], 'input');
+          return { modelContextMessages: [promptOnlyMessage] };
+        },
+      };
+
+      const model = withMastra(createMockModel('OK'), {
+        inputProcessors: [inputProcessor],
+      });
+
+      await expect(
+        generateText({
+          model,
+          prompt: 'canonical input',
+        }),
+      ).rejects.toThrow('mutated messageList and returned modelContextMessages');
+    });
+
+    it('should reject messageList mutation after prompt-only mode starts', async () => {
+      const promptOnlyMessage = createDbMessage('prompt-only input');
+
+      const promptOnlyProcessor: InputProcessor = {
+        id: 'prompt-only',
+        async processInput() {
+          return { modelContextMessages: [promptOnlyMessage] };
+        },
+      };
+      const mutatingProcessor: InputProcessor = {
+        id: 'invalid-canonical-mutation',
+        async processInput({ messageList }) {
+          messageList.add([createDbMessage('canonical mutation')], 'input');
+          return undefined;
+        },
+      };
+
+      const model = withMastra(createMockModel('OK'), {
+        inputProcessors: [promptOnlyProcessor, mutatingProcessor],
+      });
+
+      await expect(
+        generateText({
+          model,
+          prompt: 'canonical input',
+        }),
+      ).rejects.toThrow('mutated messageList after prompt-only model context was set');
+    });
+
+    it('should ignore system-role modelContextMessages and keep canonical system prompts', async () => {
+      let promptSeenByModel = '';
+      const promptOnlySystemMessage = createDbMessage('prompt-only system', 'system');
+      let messagesSeenByOutputProcessor: MastraDBMessage[] = [];
+      const captureModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          promptSeenByModel = JSON.stringify(prompt);
+          return {
+            content: [{ type: 'text', text: 'OK' }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const inputProcessor: InputProcessor = {
+        id: 'prompt-only-system',
+        async processInput() {
+          return { modelContextMessages: [promptOnlySystemMessage, createDbMessage('prompt-only input')] };
+        },
+      };
+      const outputProcessor: OutputProcessor = {
+        id: 'output-capture',
+        async processOutputResult(args) {
+          messagesSeenByOutputProcessor = args.messages;
+          return args.messageList;
+        },
+      };
+
+      const model = withMastra(captureModel, {
+        inputProcessors: [inputProcessor],
+        outputProcessors: [outputProcessor],
+      });
+
+      await generateText({
+        model,
+        system: 'canonical system',
+        prompt: 'canonical input',
+      });
+
+      expect(promptSeenByModel).toContain('canonical system');
+      expect(promptSeenByModel).not.toContain('prompt-only system');
+
+      const outputTexts = messagesSeenByOutputProcessor.map(getDbMessageText);
+      expect(outputTexts).toContain('canonical input');
+      expect(outputTexts).not.toContain('prompt-only system');
     });
 
     it('should accept LanguageModelV3 models', async () => {
@@ -819,12 +1036,8 @@ describe('withMastra middleware', () => {
       expect(texts).toContain('The answer is 42.');
     });
 
-    it('should save messages via observational memory after streaming completes', async () => {
-      const observationalMemory = new ObservationalMemory({
-        storage: memoryStore,
-        observation: { messageTokens: 100000, model: 'test-model', bufferTokens: false },
-        reflection: { observationTokens: 200000, model: 'test-model' },
-      });
+    it('should save messages via MessageHistory after streaming completes', async () => {
+      const messageHistory = new MessageHistory({ storage: memoryStore });
 
       const model = withMastra(createMockModel(), {
         memory: {
@@ -833,8 +1046,7 @@ describe('withMastra middleware', () => {
           resourceId,
           lastMessages: false,
         },
-        inputProcessors: [observationalMemory],
-        outputProcessors: [observationalMemory],
+        outputProcessors: [messageHistory],
       });
 
       const { messages: initialMessages } = await memoryStore.listMessages({ threadId });

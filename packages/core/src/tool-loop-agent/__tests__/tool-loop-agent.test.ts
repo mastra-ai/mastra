@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockLanguageModelV3, convertArrayToReadableStreamV3 } from '../../agent/__tests__/mock-model';
 import { Agent } from '../../agent/agent';
+import { MessageList } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { Mastra } from '../../mastra';
 import { toolLoopAgentToMastraAgent, isToolLoopAgentLike, getSettings } from '../index';
 import { ToolLoopAgentProcessor } from '../tool-loop-processor';
@@ -48,6 +51,19 @@ function createCapturingMockModel(onCapture?: (options: any) => void) {
       };
     },
   });
+}
+
+function createDbMessage(id: string, text: string): MastraDBMessage {
+  return {
+    id,
+    role: 'user',
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+    createdAt: new Date(0),
+    threadId: 'test-thread',
+  };
 }
 
 /**
@@ -729,6 +745,45 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       // Note: The steps array is populated after each step completes.
       // Due to workflow state management, step data may not be available immediately
       // on the next iteration in all scenarios. This is a known limitation.
+    });
+
+    it('should pass prepareCall prompt-only message overrides to prepareStep', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      let prepareStepMessages: Array<unknown> = [];
+
+      const agentLike = {
+        version: 'agent-v1',
+        settings: {
+          id: 'test-agent',
+          model: MODEL,
+          prepareCall: () => ({
+            modelContextMessages: [promptOnlyMessage],
+          }),
+          prepareStep: ({ messages }: { messages: Array<unknown> }) => {
+            prepareStepMessages = messages;
+            return {};
+          },
+        },
+      };
+      const processor = new ToolLoopAgentProcessor(agentLike);
+
+      await processor.processInputStep({
+        messages: [canonicalMessage],
+        messageList: new MessageList().add([canonicalMessage], 'input'),
+        stepNumber: 0,
+        steps: [],
+        systemMessages: [],
+        state: {},
+        abort: (reason?: string): never => {
+          throw new Error(reason ?? 'aborted');
+        },
+        model: createCapturingMockModel() as unknown as MastraLanguageModel,
+        retryCount: 0,
+      });
+
+      expect(prepareStepMessages).toHaveLength(1);
+      expect((prepareStepMessages[0] as MastraDBMessage).id).toBe('prompt-only');
     });
 
     it('should receive model override from prepareCall in prepareStep', async () => {

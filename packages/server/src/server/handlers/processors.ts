@@ -332,11 +332,15 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           // Extract output from workflow result
           const output = result.result;
           let outputMessages = messages;
+          let modelContextMessages;
 
           if (output && typeof output === 'object') {
-            if ('messages' in output && Array.isArray(output.messages)) {
+            if ('modelContextMessages' in output && Array.isArray(output.modelContextMessages)) {
+              modelContextMessages = output.modelContextMessages;
+            }
+            if (!modelContextMessages && 'messages' in output && Array.isArray(output.messages)) {
               outputMessages = output.messages;
-            } else if ('messageList' in output && output.messageList instanceof MessageList) {
+            } else if (!modelContextMessages && 'messageList' in output && output.messageList instanceof MessageList) {
               outputMessages = output.messageList.get.all.db();
             }
           }
@@ -345,6 +349,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             success: true,
             phase,
             messages: outputMessages,
+            modelContextMessages,
             messageList: {
               messages: outputMessages,
             },
@@ -461,6 +466,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
         // Process the result
         let outputMessages = messages;
+        let modelContextMessages;
         if (result) {
           if (Array.isArray(result)) {
             outputMessages = result;
@@ -470,12 +476,16 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           } else if (result.messages) {
             outputMessages = result.messages;
           }
+          if (result.modelContextMessages) {
+            modelContextMessages = result.modelContextMessages;
+          }
         }
 
         return {
           success: true,
           phase,
           messages: outputMessages,
+          modelContextMessages,
           messageList: {
             messages: outputMessages,
           },

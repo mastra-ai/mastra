@@ -84,13 +84,27 @@ export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends Pr
   messageList: MessageList;
 }
 
+type ProcessInputSystemMessages = {
+  /** Replace all system messages with these. */
+  systemMessages?: CoreMessageV4[];
+};
+
 /**
- * Return type for processInput that includes modified system messages
+ * Return type for processInput that can modify canonical messages, prompt-only model input, and/or system messages.
  */
-export interface ProcessInputResultWithSystemMessages {
-  messages: MastraDBMessage[];
-  systemMessages: CoreMessageV4[];
-}
+export type ProcessInputResultObject = ProcessInputSystemMessages &
+  (
+    | {
+        /** Replace canonical messages. */
+        messages?: MastraDBMessage[];
+        modelContextMessages?: never;
+      }
+    | {
+        messages?: never;
+        /** Replace the model prompt messages for the next model call without mutating canonical messages. */
+        modelContextMessages?: MastraDBMessage[];
+      }
+  );
 
 /**
  * Return type for message-based processor methods
@@ -102,7 +116,7 @@ export type ProcessorMessageResult = Promise<MessageList | MastraDBMessage[]> | 
 /**
  * Possible return types from processInput
  */
-export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
+export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultObject;
 
 /**
  * Arguments for processInput method
@@ -192,6 +206,7 @@ export type RunProcessInputStepArgs = Omit<
 > & {
   messageId?: string;
   rotateResponseMessageId?: () => string;
+  modelContextMessages?: MastraDBMessage[];
   retryCount?: number;
 };
 
@@ -201,7 +216,17 @@ export type RunProcessInputStepArgs = Omit<
  * Note: structuredOutput.schema is typed as StandardSchemaWithJSON (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
-export type ProcessInputStepResult = {
+type ProcessInputStepMessageResult =
+  | {
+      messages?: MastraDBMessage[];
+      modelContextMessages?: never;
+    }
+  | {
+      messages?: never;
+      modelContextMessages?: MastraDBMessage[];
+    };
+
+export type ProcessInputStepResult = ProcessInputStepMessageResult & {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Override the active assistant response message ID for this step */
   messageId?: string;
@@ -209,8 +234,6 @@ export type ProcessInputStepResult = {
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
   activeTools?: string[];
-
-  messages?: MastraDBMessage[];
   messageList?: MessageList;
   /** Replace all system messages with these */
   systemMessages?: CoreMessageV4[];
