@@ -9,8 +9,7 @@ export interface ThemeStorageAdapter {
   subscribe(listener: (next: Theme | null) => void): () => void;
 }
 
-const isTheme = (value: unknown): value is Theme =>
-  value === 'dark' || value === 'light' || value === 'system';
+const isTheme = (value: unknown): value is Theme => value === 'dark' || value === 'light' || value === 'system';
 
 const readLegacyZustand = (storage: Storage): Theme | undefined => {
   try {

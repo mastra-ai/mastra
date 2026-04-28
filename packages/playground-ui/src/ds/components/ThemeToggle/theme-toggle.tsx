@@ -44,9 +44,7 @@ export const ThemeToggle = ({
   const { theme, setTheme } = useTheme();
   const current = value ?? theme;
   const commit = onChange ?? setTheme;
-  const effectiveCurrent = options.some(option => option.value === current)
-    ? current
-    : (options[0]?.value ?? 'system');
+  const effectiveCurrent = options.some(option => option.value === current) ? current : (options[0]?.value ?? 'system');
 
   const handleChange = (next: string) => {
     const match = options.find(opt => opt.value === next);
