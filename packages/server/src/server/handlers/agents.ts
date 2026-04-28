@@ -2244,14 +2244,11 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
         model,
       });
 
-      // Pass the seeded request context (Phase 7) so the inline agent's runtime model
-      // resolution still sees the Agent Builder model policy.
       const result = await systemPromptAgent.generate(
         `We need to improve the system prompt.
 Current: ${instructions}
 ${comment ? `User feedback: ${comment}` : ''}`,
         {
-          requestContext,
           structuredOutput: {
             schema: enhanceInstructionsResponseSchema,
           },

@@ -29,7 +29,3 @@ export {
 export { builderToModelPolicy, isBuilderModelPolicyActive, type BuilderModelPolicyInputs } from './policy';
 
 export { ModelNotAllowedError, MODEL_NOT_ALLOWED_CODE, isModelNotAllowedError } from './errors';
-
-// Re-export the reserved request-context key for runtime defense (Phase 7).
-// Owning module is `../../request-context` to avoid an upward dep from request-context to agent-builder.
-export { MASTRA_BUILDER_MODEL_POLICY_KEY } from '../../request-context';
