@@ -116,7 +116,12 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
         },
       ];
     case 'memorySearch':
-      return [{ description: 'Search long-term memory', command: `${command} '{"query":"caching strategy"}'` }];
+      return [
+        {
+          description: 'Search long-term memory',
+          command: `${command} '{"agentId":"weather-agent","resourceId":"user_123","searchQuery":"caching strategy","limit":10}'`,
+        },
+      ];
     case 'memoryCurrentGet':
       return [
         {
@@ -129,6 +134,28 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
         {
           description: 'Update current working memory',
           command: `${command} '{"threadId":"thread_abc123","agentId":"code-reviewer","workingMemory":"Remember the user prefers concise responses."}'`,
+        },
+      ];
+    case 'memoryStatus':
+      return [
+        {
+          description: 'Get memory status for an agent',
+          command: `${command} '{"agentId":"weather-agent"}'`,
+        },
+        {
+          description: 'Get memory status for an agent, resource, and thread',
+          command: `${command} '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123"}'`,
+        },
+      ];
+    case 'logList':
+      return [
+        {
+          description: 'List recent logs',
+          command,
+        },
+        {
+          description: 'List info logs with pagination',
+          command: `${command} '{"level":"info","page":0,"perPage":50}'`,
         },
       ];
     case 'threadCreate':

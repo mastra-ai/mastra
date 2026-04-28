@@ -124,7 +124,12 @@ const API_COMMAND_SPECS = defineCommandSpecs({
     inputRequired: true,
     pathParamsFromInput: ['threadId'],
   },
-  memoryStatus: { route: 'GET /memory/status', description: 'Get memory system status', acceptsInput: true },
+  memoryStatus: {
+    route: 'GET /memory/status',
+    description: 'Get memory system status',
+    acceptsInput: true,
+    inputRequired: true,
+  },
   traceList: {
     route: 'GET /observability/traces',
     description: 'List observability traces',
@@ -132,7 +137,12 @@ const API_COMMAND_SPECS = defineCommandSpecs({
     list: true,
   },
   traceGet: { route: 'GET /observability/traces/:traceId', description: 'Get trace details' },
-  logList: { route: 'GET /logs', description: 'List runtime logs', acceptsInput: true, list: true },
+  logList: {
+    route: 'GET /observability/logs',
+    description: 'List runtime logs',
+    acceptsInput: true,
+    list: true,
+  },
   scoreCreate: { route: 'POST /scores', description: 'Create a score', inputRequired: true },
   scoreList: { route: 'GET /scores', description: 'List scores', acceptsInput: true, list: true },
   scoreGet: { route: 'GET /scores/:scoreId', description: 'Get score details' },

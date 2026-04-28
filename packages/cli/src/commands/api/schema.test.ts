@@ -38,11 +38,48 @@ describe('buildCommandExamples', () => {
     ]);
   });
 
+  it('uses the server query shape for memory search examples', () => {
+    expect(buildCommandExamples(API_COMMANDS.memorySearch)).toEqual([
+      {
+        description: 'Search long-term memory',
+        command:
+          'mastra api memory search \'{"agentId":"weather-agent","resourceId":"user_123","searchQuery":"caching strategy","limit":10}\'',
+      },
+    ]);
+  });
+
   it('includes JSON identity path params in required GET input examples', () => {
     expect(buildCommandExamples(API_COMMANDS.memoryCurrentGet)).toEqual([
       {
         description: 'Read current working memory',
         command: 'mastra api memory current get \'{"threadId":"thread_abc123","agentId":"code-reviewer"}\'',
+      },
+    ]);
+  });
+
+  it('includes memory status examples for required agentId and optional resource/thread scope', () => {
+    expect(buildCommandExamples(API_COMMANDS.memoryStatus)).toEqual([
+      {
+        description: 'Get memory status for an agent',
+        command: 'mastra api memory status \'{"agentId":"weather-agent"}\'',
+      },
+      {
+        description: 'Get memory status for an agent, resource, and thread',
+        command:
+          'mastra api memory status \'{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123"}\'',
+      },
+    ]);
+  });
+
+  it('includes log list examples for the observability logs route', () => {
+    expect(buildCommandExamples(API_COMMANDS.logList)).toEqual([
+      {
+        description: 'List recent logs',
+        command: 'mastra api log list',
+      },
+      {
+        description: 'List info logs with pagination',
+        command: 'mastra api log list \'{"level":"info","page":0,"perPage":50}\'',
       },
     ]);
   });

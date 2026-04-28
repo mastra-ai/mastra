@@ -43,4 +43,22 @@ describe('API_COMMANDS', () => {
       inputRequired: true,
     });
   });
+
+  it('requires JSON input for memory status because agentId is a required query parameter', () => {
+    expect(API_COMMANDS.memoryStatus).toMatchObject({
+      path: '/memory/status',
+      acceptsInput: true,
+      inputRequired: true,
+    });
+  });
+
+  it('uses the observability logs route for log list', () => {
+    expect(API_COMMANDS.logList).toMatchObject({
+      path: '/observability/logs',
+      acceptsInput: true,
+      inputRequired: false,
+      list: true,
+      responseShape: { kind: 'object-property', listProperty: 'logs', paginationProperty: 'pagination' },
+    });
+  });
 });

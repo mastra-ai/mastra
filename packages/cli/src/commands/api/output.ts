@@ -29,7 +29,8 @@ function extractList(data: unknown, responseShape?: ApiResponseShape): { items: 
   if (data && typeof data === 'object') {
     const record = data as Record<string, unknown>;
     const items = findArray(record, responseShape) ?? [];
-    const pageRecord = (record.page ?? record.pagination) as Record<string, unknown> | undefined;
+    const nestedPage = record.page ?? record.pagination;
+    const pageRecord = nestedPage && typeof nestedPage === 'object' ? (nestedPage as Record<string, unknown>) : record;
     return {
       items,
       page: normalizePage(pageRecord, items.length),

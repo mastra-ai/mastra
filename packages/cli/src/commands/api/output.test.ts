@@ -64,6 +64,18 @@ describe('normalizeSuccess', () => {
     });
   });
 
+  it('preserves top-level pagination fields for log list responses', () => {
+    expect(
+      normalizeSuccess({ logs: [], total: 0, page: 0, perPage: false, hasMore: false }, true, {
+        kind: 'object-property',
+        listProperty: 'logs',
+      }),
+    ).toEqual({
+      data: [],
+      page: { total: 0, page: 0, perPage: false, hasMore: false },
+    });
+  });
+
   it('uses the first array property and preserves server pagination', () => {
     expect(
       normalizeSuccess(
