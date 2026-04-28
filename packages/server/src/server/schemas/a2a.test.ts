@@ -51,6 +51,15 @@ describe('a2a schemas', () => {
       agentExecutionBodySchema.safeParse({
         jsonrpc: '2.0',
         id: 'req-4',
+        method: 'tasks/pushNotificationConfig/get',
+        params: { id: 'task-1', pushNotificationConfigId: 'push-1' },
+      }).success,
+    ).toBe(true);
+
+    expect(
+      agentExecutionBodySchema.safeParse({
+        jsonrpc: '2.0',
+        id: 'req-5',
         method: 'tasks/pushNotificationConfig/list',
         params: { id: 'task-1' },
       }).success,
@@ -59,7 +68,7 @@ describe('a2a schemas', () => {
     expect(
       agentExecutionBodySchema.safeParse({
         jsonrpc: '2.0',
-        id: 'req-5',
+        id: 'req-6',
         method: 'tasks/pushNotificationConfig/delete',
         params: { id: 'task-1', pushNotificationConfigId: 'push-1' },
       }).success,
@@ -68,7 +77,7 @@ describe('a2a schemas', () => {
     expect(
       agentExecutionBodySchema.safeParse({
         jsonrpc: '2.0',
-        id: 'req-6',
+        id: 'req-7',
         method: 'agent/getAuthenticatedExtendedCard',
       }).success,
     ).toBe(true);

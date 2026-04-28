@@ -57,7 +57,7 @@ function createAgentCardDefaults(): Pick<
   | 'defaultOutputModes'
 > {
   return {
-    protocolVersion: '0.3',
+    protocolVersion: '0.3.0',
     additionalInterfaces: [],
     supportsAuthenticatedExtendedCard: false,
     security: [],
@@ -421,22 +421,24 @@ export async function* handleTaskResubscribe({
   taskStore,
   agentId,
   taskId,
+  abortSignal,
 }: {
   requestId: number | string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
+  abortSignal?: AbortSignal;
 }) {
-  let task = await taskStore.load({ agentId, taskId });
+  let snapshot = taskStore.loadWithVersion({ agentId, taskId });
 
-  if (!task) {
+  if (!snapshot) {
     throw MastraA2AError.taskNotFound(taskId);
   }
 
   const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
-  let currentVersion = taskStore.getVersion({ agentId, taskId });
 
   while (true) {
+    const { task, version } = snapshot;
     const isFinal = finalStates.includes(task.status.state);
 
     yield createSuccessResponse(requestId, {
@@ -454,11 +456,11 @@ export async function* handleTaskResubscribe({
     const nextUpdate = await taskStore.waitForNextUpdate({
       agentId,
       taskId,
-      afterVersion: currentVersion,
+      afterVersion: version,
+      signal: abortSignal,
     });
 
-    task = nextUpdate.task;
-    currentVersion = nextUpdate.version;
+    snapshot = nextUpdate;
   }
 }
 
@@ -591,6 +593,7 @@ export async function getAgentExecutionHandler({
   params,
   taskStore,
   logger,
+  abortSignal,
 }: Context & {
   requestId: number | string;
   requestContext: RequestContext;
@@ -609,6 +612,7 @@ export async function getAgentExecutionHandler({
   params?: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown>;
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
+  abortSignal?: AbortSignal;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -630,7 +634,7 @@ export async function getAgentExecutionHandler({
         });
         return result;
       }
-      case 'message/stream':
+      case 'message/stream': {
         const result = await handleMessageStream({
           requestId,
           taskStore,
@@ -640,6 +644,7 @@ export async function getAgentExecutionHandler({
           requestContext,
         });
         return result;
+      }
 
       case 'tasks/get': {
         const result = await handleTaskGet({
@@ -667,6 +672,7 @@ export async function getAgentExecutionHandler({
           taskStore,
           agentId,
           taskId: taskId || 'No task ID provided',
+          abortSignal,
         });
       case 'tasks/pushNotificationConfig/set':
       case 'tasks/pushNotificationConfig/get':
@@ -728,7 +734,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
+  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, ...bodyParams }) => {
     const { id: requestId, method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
     const result = await getAgentExecutionHandler({
@@ -739,6 +745,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       method,
       params,
       taskStore: taskStore!,
+      abortSignal,
     });
 
     if (method === 'message/stream' || method === 'tasks/resubscribe') {

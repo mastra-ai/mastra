@@ -98,7 +98,7 @@ describe('A2A Handler', () => {
           ],
           "description": "test instructions",
           "name": "test-agent",
-          "protocolVersion": "0.3",
+          "protocolVersion": "0.3.0",
           "provider": {
             "organization": "Mastra",
             "url": "https://mastra.ai",
@@ -1518,6 +1518,59 @@ describe('A2A Handler', () => {
 
       const done = await result.next();
       expect(done.done).toBe(true);
+    });
+
+    it('unregisters resubscribe listeners when the abort signal is triggered', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const abortController = new AbortController();
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        abortSignal: abortController.signal,
+      });
+
+      const first = await result.next();
+      expect(first.value).toMatchObject({
+        result: {
+          final: false,
+          kind: 'status-update',
+          taskId: 'task-1',
+        },
+      });
+
+      const pendingNext = result.next();
+      expect(((mockTaskStore as any).listeners.get('test-agent-task-1') as Set<unknown> | undefined)?.size).toBe(1);
+
+      abortController.abort();
+
+      await expect(pendingNext).rejects.toMatchObject({ name: 'AbortError' });
+      expect(((mockTaskStore as any).listeners.get('test-agent-task-1') as Set<unknown> | undefined)?.size).toBe(
+        undefined,
+      );
     });
   });
 
