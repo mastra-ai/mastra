@@ -1,0 +1,194 @@
+# =============================================================================
+# CODEOWNERS — mastra-ai/mastra
+# =============================================================================
+#
+# Ownership assignments derived from 6-month git history analysis.
+# Each path requires approval from at least one listed owner.
+#
+# GitHub docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Maintainers:
+#   @abhiaiyer91   — Abhi Aiyer      (core framework, tools, mastra hub)
+#   @NikAiyer      — Nik Aiyer       (core agent/loop/workspace, server, stores)
+#   @DanielSLew    — Daniel Lew      (core agent/storage/processors, server, editor)
+#   @wardpeet      — Ward Peeters    (core tools/llm/stream, deployer, MCP, evals)
+#   @TylerBarnes   — Tyler Barnes    (memory, mastracode, harness, processors)
+#   @LekoArts      — Lennart         (CLI, docs, e2e tests, create-mastra)
+#   @mfrachet      — Marvin Frachet  (playground UI, studio)
+#   @epinzur       — Eric Pinzur     (observability, core telemetry)
+#   @CalebBarnes   — Caleb Barnes    (core workspace, loop, stream)
+#   @roaminro      — Roamin          (observability, server, docs)
+#   @taofeeq-deru  — Taofeeq Oluderu (workflows, core stream)
+#   @graysonhicks  — Grayson Hicks   (core stream, playground, MCP)
+#   @rphansen91    — Ryan Hansen     (auth, ee, core server)
+#   @intojhanurag  — Anurag Ojha     (core observability, server, workspaces)
+#   @greglobinski  — Greg Lobinski   (playground UI)
+#   @rase-         — Tony Kovanen    (workflows)
+#   @TheIsrael1    — Ehindero Israel (client SDKs, a2a)
+#   @bookercodes   — Alex Booker     (docs, templates)
+
+# =============================================================================
+# DEFAULT — fallback for anything not matched below
+# =============================================================================
+*                                   @abhiaiyer91 @wardpeet @DanielSLew
+
+# =============================================================================
+# ROOT CONFIG & CI
+# =============================================================================
+/.github/                           @abhiaiyer91 @LekoArts @wardpeet
+turbo.json                          @abhiaiyer91 @wardpeet @LekoArts
+pnpm-workspace.yaml                 @abhiaiyer91 @wardpeet
+pnpm-lock.yaml                      @abhiaiyer91 @wardpeet
+package.json                        @abhiaiyer91 @wardpeet
+tsconfig*.json                      @abhiaiyer91 @wardpeet
+vitest.config*.ts                   @abhiaiyer91 @wardpeet
+renovate.json                       @wardpeet @LekoArts
+
+# =============================================================================
+# PACKAGES — CORE (granular ownership)
+# =============================================================================
+
+# Core: agent orchestration
+/packages/core/src/agent/           @NikAiyer @DanielSLew @wardpeet
+/packages/core/src/tool-loop-agent/ @NikAiyer @CalebBarnes @wardpeet
+
+# Core: tool loop & execution
+/packages/core/src/loop/            @NikAiyer @CalebBarnes @wardpeet
+/packages/core/src/run/             @NikAiyer @CalebBarnes
+
+# Core: workflow engine
+/packages/core/src/workflows/       @taofeeq-deru @abhiaiyer91 @NikAiyer
+
+# Core: tools & tool providers
+/packages/core/src/tools/           @wardpeet @abhiaiyer91 @epinzur
+/packages/core/src/tool-provider/   @wardpeet @abhiaiyer91
+
+# Core: memory interfaces
+/packages/core/src/memory/          @TylerBarnes @abhiaiyer91 @DanielSLew
+
+# Core: harness (TUI/web bridge)
+/packages/core/src/harness/         @TylerBarnes @abhiaiyer91
+
+# Core: processors & middleware
+/packages/core/src/processors/      @DanielSLew @TylerBarnes @wardpeet
+/packages/core/src/processor-provider/ @DanielSLew @TylerBarnes
+
+# Core: storage backends
+/packages/core/src/storage/         @DanielSLew @NikAiyer @epinzur
+
+# Core: mastra hub (DI & config)
+/packages/core/src/mastra/          @abhiaiyer91 @DanielSLew @epinzur
+
+# Core: LLM provider integration
+/packages/core/src/llm/             @wardpeet @epinzur @DanielSLew
+
+# Core: streaming
+/packages/core/src/stream/          @wardpeet @taofeeq-deru @graysonhicks
+
+# Core: MCP
+/packages/core/src/mcp/             @DanielSLew @wardpeet
+
+# Core: workspace & filesystem sandbox
+/packages/core/src/workspace/       @CalebBarnes @NikAiyer
+
+# Core: observability & telemetry
+/packages/core/src/observability/   @epinzur @intojhanurag @roaminro
+
+# Core: server routes
+/packages/core/src/server/          @rphansen91 @intojhanurag @NikAiyer
+
+# Core: voice
+/packages/core/src/voice/           @wardpeet @abhiaiyer91
+
+# Core: browser
+/packages/core/src/browser/         @NikAiyer
+
+# Core: A2A protocol
+/packages/core/src/a2a/             @TheIsrael1
+
+# Core: auth
+/packages/core/src/auth/            @rphansen91 @DanielSLew
+
+# Core: bundler & deployer interfaces
+/packages/core/src/bundler/         @LekoArts @wardpeet
+/packages/core/src/deployer/        @LekoArts @wardpeet
+
+# Core: events, channels, DI, error, cache, schema, hooks, relevance, datasets, evals, features
+/packages/core/src/events/          @wardpeet @taofeeq-deru
+/packages/core/src/channels/        @abhiaiyer91 @wardpeet
+/packages/core/src/di/              @abhiaiyer91 @DanielSLew
+/packages/core/src/error/           @NikAiyer @abhiaiyer91
+/packages/core/src/cache/           @abhiaiyer91
+/packages/core/src/schema/          @wardpeet @abhiaiyer91
+/packages/core/src/hooks/           @abhiaiyer91
+/packages/core/src/datasets/        @wardpeet @abhiaiyer91
+/packages/core/src/evals/           @wardpeet @abhiaiyer91
+/packages/core/src/features/        @abhiaiyer91
+
+# Core: types, utils, integration, logger, request-context, test-utils
+/packages/core/src/types/           @abhiaiyer91 @wardpeet
+/packages/core/src/_types/          @abhiaiyer91 @wardpeet
+/packages/core/src/utils/           @abhiaiyer91 @wardpeet
+/packages/core/src/integration/     @abhiaiyer91
+/packages/core/src/logger/          @abhiaiyer91 @wardpeet
+/packages/core/src/request-context/ @abhiaiyer91
+/packages/core/src/test-utils/      @abhiaiyer91 @wardpeet
+/packages/core/src/vector/          @wardpeet @DanielSLew @abhiaiyer91
+/packages/core/src/tts/             @wardpeet @abhiaiyer91
+
+# =============================================================================
+# PACKAGES — TOP-LEVEL
+# =============================================================================
+/packages/memory/                   @TylerBarnes @abhiaiyer91 @NikAiyer
+/packages/rag/                      @wardpeet @abhiaiyer91
+/packages/cli/                      @LekoArts @abhiaiyer91 @wardpeet
+/packages/playground-ui/            @mfrachet @greglobinski @DanielSLew
+/packages/playground/               @mfrachet @greglobinski @DanielSLew
+/packages/deployer/                 @wardpeet @NikAiyer @abhiaiyer91
+/packages/server/                   @DanielSLew @NikAiyer @abhiaiyer91
+/packages/mcp/                      @wardpeet @abhiaiyer91 @graysonhicks
+/packages/evals/                    @wardpeet @abhiaiyer91
+/packages/editor/                   @DanielSLew @mfrachet
+/packages/create-mastra/            @LekoArts @wardpeet
+/packages/auth/                     @wardpeet @LekoArts
+/packages/codemod/                  @LekoArts @wardpeet
+/packages/schema-compat/            @wardpeet @NikAiyer @DanielSLew
+/packages/loggers/                  @wardpeet @abhiaiyer91
+/packages/fastembed/                @wardpeet @LekoArts
+/packages/agent-builder/            @wardpeet @abhiaiyer91
+/packages/mcp-docs-server/          @wardpeet @abhiaiyer91
+/packages/mcp-registry-registry/    @wardpeet @abhiaiyer91
+
+# Internal/private packages
+/packages/_changeset-cli/           @LekoArts @wardpeet
+/packages/_config/                  @abhiaiyer91 @wardpeet
+/packages/_external-types/          @abhiaiyer91 @wardpeet
+/packages/_internal-core/           @abhiaiyer91 @wardpeet
+/packages/_llm-recorder/            @wardpeet @abhiaiyer91
+/packages/_test-utils/              @abhiaiyer91 @wardpeet
+/packages/_types-builder/           @abhiaiyer91 @wardpeet
+/packages/_vendored/                @abhiaiyer91 @wardpeet
+
+# =============================================================================
+# TOP-LEVEL DIRECTORIES
+# =============================================================================
+/client-sdks/                       @TheIsrael1 @DanielSLew @NikAiyer
+/deployers/                         @wardpeet @abhiaiyer91 @LekoArts
+/stores/                            @NikAiyer @DanielSLew @abhiaiyer91
+/voice/                             @wardpeet @abhiaiyer91
+/auth/                              @rphansen91 @wardpeet @LekoArts
+/browser/                           @NikAiyer
+/workflows/                         @taofeeq-deru @rase- @wardpeet
+/workspaces/                        @NikAiyer @CalebBarnes @intojhanurag
+/observability/                     @epinzur @roaminro @intojhanurag
+/pubsub/                            @wardpeet @abhiaiyer91
+/server-adapters/                   @NikAiyer @wardpeet @roaminro
+/mastracode/                        @TylerBarnes @abhiaiyer91 @NikAiyer
+/docs/                              @LekoArts @abhiaiyer91 @roaminro
+/e2e-tests/                         @wardpeet @LekoArts @abhiaiyer91
+/ee/                                @rphansen91
+/scripts/                           @wardpeet @LekoArts
+/examples/                          @abhiaiyer91 @DanielSLew @LekoArts
+/explorations/                      @abhiaiyer91 @NikAiyer
+/templates/                         @LekoArts @bookercodes @abhiaiyer91
+/patches/                           @wardpeet @abhiaiyer91
