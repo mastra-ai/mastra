@@ -562,7 +562,7 @@ describe('PromptInjectionDetector', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
-    it('should not abort on non-tripwire errors during processing', async () => {
+    it('should abort on non-tripwire errors during processing', async () => {
       const model = setupMockModel(createMockDetectionResult(false));
       const detector = new PromptInjectionDetector({
         model,
@@ -579,7 +579,7 @@ describe('PromptInjectionDetector', () => {
         await detector.processInput({ messages: [invalidMessage], abort: mockAbort as any });
       }).rejects.toThrow();
 
-      expect(mockAbort).not.toHaveBeenCalled();
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Prompt injection detection failed:'));
     });
   });
 

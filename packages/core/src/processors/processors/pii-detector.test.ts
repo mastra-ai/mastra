@@ -677,7 +677,7 @@ describe('PIIDetector', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
-    it('should not abort on non-tripwire errors during processing', async () => {
+    it('should abort on non-tripwire errors during processing', async () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({
         model,
@@ -694,7 +694,7 @@ describe('PIIDetector', () => {
         await detector.processInput({ messages: [invalidMessage], abort: mockAbort as any });
       }).rejects.toThrow();
 
-      expect(mockAbort).not.toHaveBeenCalled();
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('PII detection failed:'));
     });
   });
 

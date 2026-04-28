@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
@@ -240,8 +241,8 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
           processedMessages.push(message);
         }
       } catch (error) {
-        // Re-throw abort errors, but fail open for other errors
-        if (error instanceof Error && error.message.includes('System prompt detected:')) {
+        // Re-throw tripwire errors, but fail open for other errors
+        if (error instanceof TripWire) {
           throw error;
         }
         // Fail open - allow message through if detection fails

@@ -386,6 +386,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
         const blockMessage = `Non-target language detected: ${alertMessage}`;
         console.info(`[LanguageDetector] Blocking: ${blockMessage}`);
         abort(blockMessage);
+        return null;
 
       case 'translate':
         if (result.translated_text) {
