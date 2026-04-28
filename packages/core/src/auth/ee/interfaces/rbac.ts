@@ -155,6 +155,23 @@ export interface IRBACProvider<TUser = unknown> {
    * @returns True if user has at least one permission
    */
   hasAnyPermission(user: TUser, permissions: string[]): Promise<boolean>;
+
+  /**
+   * Get all available roles in the system.
+   * Used by the "View as role" feature to list roles an admin can impersonate.
+   *
+   * @returns Array of role descriptors
+   */
+  getAvailableRoles?(): Promise<{ id: string; name: string }[]>;
+
+  /**
+   * Get the resolved permissions for a specific role.
+   * Used by the "View as role" feature to override client-side permissions.
+   *
+   * @param roleId - Role ID to resolve permissions for
+   * @returns Array of permission strings
+   */
+  getPermissionsForRole?(roleId: string): Promise<string[]>;
 }
 
 /**
