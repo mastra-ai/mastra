@@ -55,6 +55,67 @@ describe('MessageList', () => {
     expect(getStoredShape(actual)).toEqual(getExpectedStoredShape(expected));
   };
 
+  describe('legacy message fields', () => {
+    it('should expose derived legacy fields as non-enumerable getters for new messages', () => {
+      const list = new MessageList().add({ role: 'user', content: 'Hello from Core!' }, 'input');
+
+      const message = list.get.all.db()[0];
+      expect(message.content.content).toBe('Hello from Core!');
+      expect(Object.keys(message.content)).not.toContain('content');
+      expect(Object.getOwnPropertyDescriptor(message.content, 'content')?.enumerable).toBe(false);
+    });
+
+    it('should preserve concrete legacy fields when they already exist on stored messages', () => {
+      const message: MastraDBMessage = {
+        id: 'legacy-message',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'derived text' }],
+          content: 'concrete text',
+          reasoning: 'concrete reasoning',
+          annotations: [
+            { type: 'annotation', value: 'preserved' },
+          ] as unknown as MastraDBMessage['content']['annotations'],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'legacyTool',
+              args: { concrete: true },
+              result: 'concrete result',
+            },
+          ],
+          experimental_attachments: [
+            {
+              contentType: 'text/plain',
+              url: 'https://example.com/file.txt',
+            },
+          ],
+        },
+      };
+
+      const list = new MessageList().add(message, 'memory');
+      const storedMessage = list.get.all.storage()[0];
+
+      expect(storedMessage.content.content).toBe('concrete text');
+      expect(storedMessage.content.reasoning).toBe('concrete reasoning');
+      expect(storedMessage.content.annotations).toEqual(message.content.annotations);
+      expect(storedMessage.content.toolInvocations).toEqual(message.content.toolInvocations);
+      expect(storedMessage.content.experimental_attachments).toEqual(message.content.experimental_attachments);
+      expect(Object.keys(storedMessage.content)).toEqual([
+        'format',
+        'parts',
+        'content',
+        'reasoning',
+        'annotations',
+        'toolInvocations',
+        'experimental_attachments',
+      ]);
+    });
+  });
+
   describe('Response message tracking', () => {
     it('should track all response messages including tool calls and results', () => {
       const messageList = new MessageList();
@@ -403,9 +464,16 @@ describe('MessageList', () => {
       ] satisfies VercelUIMessage[]);
     });
 
-    it('should preserve tool args when restoring messages from database with toolInvocations', () => {
-      // This test simulates messages being restored from the database where
-      // toolInvocations might have empty args but parts have the correct args
+    it('should preserve concrete legacy toolInvocations when restoring messages from database', () => {
+      const legacyToolInvocations: NonNullable<MastraDBMessage['content']['toolInvocations']> = [
+        {
+          state: 'result',
+          toolCallId: 'call-123',
+          toolName: 'searchTool',
+          args: {},
+          result: { results: ['result1', 'result2'] },
+        },
+      ];
       const dbMessage: MastraDBMessage = {
         id: 'db-msg-1',
         role: 'assistant',
@@ -421,20 +489,12 @@ describe('MessageList', () => {
                 state: 'result',
                 toolCallId: 'call-123',
                 toolName: 'searchTool',
-                args: { query: 'mastra framework' }, // Args are here in parts
+                args: { query: 'mastra framework' },
                 result: { results: ['result1', 'result2'] },
               },
             },
           ],
-          toolInvocations: [
-            {
-              state: 'result',
-              toolCallId: 'call-123',
-              toolName: 'searchTool',
-              args: {}, // But args might be empty in toolInvocations
-              result: { results: ['result1', 'result2'] },
-            },
-          ],
+          toolInvocations: legacyToolInvocations,
         },
       };
 
@@ -458,21 +518,11 @@ describe('MessageList', () => {
         },
       ]);
 
-      // Check toolInvocations array has correct args (should be fixed by hydration)
-      expect(v2Messages[0].content.toolInvocations).toEqual([
-        {
-          state: 'result',
-          toolCallId: 'call-123',
-          toolName: 'searchTool',
-          args: { query: 'mastra framework' },
-          result: { results: ['result1', 'result2'] },
-        },
-      ]);
+      expect(v2Messages[0].content.toolInvocations).toEqual(legacyToolInvocations);
 
-      // Check UI messages preserve args
       const uiMessages = list.get.all.ui();
       expect(uiMessages).toHaveLength(1);
-      expect(uiMessages[0].toolInvocations![0].args).toEqual({ query: 'mastra framework' });
+      expect(uiMessages[0].toolInvocations![0].args).toEqual({});
     });
 
     it('should preserve tool args when tool-result arrives in a separate message', () => {

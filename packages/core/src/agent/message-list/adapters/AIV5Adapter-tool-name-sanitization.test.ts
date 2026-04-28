@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { getLegacyToolInvocations } from '../utils/legacy-fields';
 import { AIV5Adapter } from './AIV5Adapter';
 
 describe('AIV5Adapter tool-name sanitization', () => {
@@ -26,6 +27,44 @@ describe('AIV5Adapter tool-name sanitization', () => {
     }
 
     expect(dbMessage.content.toolInvocations?.[0]?.toolName).toBe('unknown_tool');
+  });
+
+  it('updates matching model tool-call parts without mutating shared invocations', () => {
+    const dbMessage = AIV5Adapter.fromModelMessage({
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: 'weather',
+          input: { city: 'SF' },
+        },
+        {
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          toolName: 'weather',
+          output: { temp: 65 },
+        },
+      ],
+    });
+
+    const toolParts = dbMessage.content.parts?.filter(
+      (part): part is Extract<(typeof dbMessage.content.parts)[number], { type: 'tool-invocation' }> =>
+        part.type === 'tool-invocation',
+    );
+
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0].toolInvocation).toEqual({
+      state: 'result',
+      toolCallId: 'call-1',
+      toolName: 'weather',
+      args: { city: 'SF' },
+      result: { temp: 65 },
+    });
+    const descriptor = Object.getOwnPropertyDescriptor(dbMessage.content, 'toolInvocations');
+    expect(descriptor).toBeDefined();
+    expect(descriptor?.enumerable).toBe(false);
+    expect(getLegacyToolInvocations(dbMessage.content)?.[0]).toEqual(toolParts[0].toolInvocation);
   });
 
   it('sanitizes invalid tool names from model tool-result parts without matching calls', () => {

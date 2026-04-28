@@ -633,16 +633,25 @@ export class AIV5Adapter {
             p.toolInvocation.toolCallId === toolResultPart.toolCallId,
         );
 
-        const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
-          matchingCall.state = 'result';
-          matchingCall.result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? toolResultPart.output.value
-              : toolResultPart.output;
-        };
+        const getResultOutput = (toolResultPart: AIV5Type.ToolResultPart): unknown =>
+          typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
+            ? toolResultPart.output.value
+            : toolResultPart.output;
+
+        const toResultInvocation = (
+          toolResultPart: AIV5Type.ToolResultPart,
+          matchingCall: Extract<
+            MastraDBMessage['content']['parts'][number],
+            { type: 'tool-invocation' }
+          >['toolInvocation'],
+        ) => ({
+          ...matchingCall,
+          state: 'result' as const,
+          result: getResultOutput(toolResultPart),
+        });
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
-          updateMatchingCallInvocationResult(toolResultPart, matchingV2Part.toolInvocation);
+          matchingV2Part.toolInvocation = toResultInvocation(toolResultPart, matchingV2Part.toolInvocation);
           if (toolResultPart.providerOptions) {
             matchingV2Part.providerMetadata = toolResultPart.providerOptions;
             matchingV2Part.createdAt = getMastraCreatedAt(toolResultPart.providerOptions) ?? matchingV2Part.createdAt;
@@ -654,10 +663,10 @@ export class AIV5Adapter {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
               args: {},
-              state: 'call',
+              result: getResultOutput(toolResultPart),
+              state: 'result',
             },
           };
-          updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
           if (toolResultPart.providerOptions) {
             toolInvocationPart.providerMetadata = toolResultPart.providerOptions;
             toolInvocationPart.createdAt = getMastraCreatedAt(toolResultPart.providerOptions);

@@ -265,6 +265,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
           processBlock();
 
+          // Recover legacy-only tool invocations from older rows whose parts never carried tool-invocation parts.
           if (legacyOnlyToolInvocations.length > 0) {
             const maxStep = legacyOnlyToolInvocations.reduce((max, toolInvocation) => {
               return Math.max(max, toolInvocation.step ?? 0);

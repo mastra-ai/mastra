@@ -29,11 +29,25 @@ function cloneContentWithoutLegacyFields(
   const descriptors = Object.getOwnPropertyDescriptors(content);
 
   for (const field of legacyFieldNames) {
-    delete descriptors[field];
+    if (descriptors[field] && !('value' in descriptors[field])) {
+      delete descriptors[field];
+    }
   }
 
   Object.defineProperties(strippedContent, descriptors);
   return strippedContent;
+}
+
+function getConcreteLegacyField<T>(
+  content: MastraMessageContentV2,
+  field: (typeof legacyFieldNames)[number],
+): T | undefined {
+  const descriptor = Object.getOwnPropertyDescriptor(content, field);
+  if (descriptor && 'value' in descriptor) {
+    return descriptor.value as T | undefined;
+  }
+
+  return undefined;
 }
 
 function clonePart(part: MastraMessagePart): MastraMessagePart {
@@ -213,42 +227,40 @@ function updatePartsFromLegacyFields(content?: MastraMessageContentV2WithLegacyF
 }
 
 export function getLegacyContent(content: MastraMessageContentV2): MastraLegacyMessageContent | undefined {
-  const parts = getParts(content);
-  const descriptor = Object.getOwnPropertyDescriptor(content, 'content');
-  if (
-    descriptor &&
-    'value' in descriptor &&
-    descriptor.value !== undefined &&
-    getPartsFromValue(content).length === 0
-  ) {
-    return descriptor.value;
-  }
+  const concreteContent = getConcreteLegacyField<MastraLegacyMessageContent>(content, 'content');
+  if (concreteContent !== undefined) return concreteContent;
 
-  return getContentFromParts(parts);
+  return getContentFromParts(getParts(content));
 }
 
 export function getLegacyReasoning(content: MastraMessageContentV2): MastraLegacyReasoning | undefined {
+  const concreteReasoning = getConcreteLegacyField<MastraLegacyReasoning>(content, 'reasoning');
+  if (concreteReasoning !== undefined) return concreteReasoning;
+
   return getReasoningFromParts(getParts(content));
 }
 
 export function getLegacyExperimentalAttachments(
   content: MastraMessageContentV2,
 ): MastraLegacyMessageAttachments | undefined {
-  const descriptor = Object.getOwnPropertyDescriptor(content, 'experimental_attachments');
-  if (descriptor && 'value' in descriptor && descriptor.value !== undefined) return descriptor.value;
+  const concreteAttachments = getConcreteLegacyField<MastraLegacyMessageAttachments>(
+    content,
+    'experimental_attachments',
+  );
+  if (concreteAttachments !== undefined) return concreteAttachments;
 
   return getExperimentalAttachmentsFromParts(getParts(content));
 }
 
 export function getLegacyToolInvocations(content: MastraMessageContentV2): MastraLegacyToolInvocations | undefined {
-  const descriptor = Object.getOwnPropertyDescriptor(content, 'toolInvocations');
-  if (descriptor && 'value' in descriptor && descriptor.value !== undefined) return descriptor.value;
+  const concreteToolInvocations = getConcreteLegacyField<MastraLegacyToolInvocations>(content, 'toolInvocations');
+  if (concreteToolInvocations !== undefined) return concreteToolInvocations;
 
   return getToolInvocationsFromParts(getParts(content));
 }
 
-export function getLegacyAnnotations(_content: MastraMessageContentV2): MastraLegacyMessageAnnotations | undefined {
-  return undefined;
+export function getLegacyAnnotations(content: MastraMessageContentV2): MastraLegacyMessageAnnotations | undefined {
+  return getConcreteLegacyField<MastraLegacyMessageAnnotations>(content, 'annotations');
 }
 
 export function getLegacyContentForStorage(
