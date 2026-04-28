@@ -292,13 +292,11 @@ function partitionListTracesFilters(filters: Record<string, unknown>): {
 
 /**
  * Build an EXISTS subquery that asserts the trace contains at least one span
- * matching the given membership predicate. Date range from the prefilter is
- * passed in so the subquery stays pruned.
+ * matching the given membership predicate.
  */
 function buildMembershipExists(
   rootAlias: string,
   membership: Record<string, unknown>,
-  dateRange: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } | undefined,
 ): { clauses: string[]; params: unknown[] } {
   const clauses: string[] = [];
   const params: unknown[] = [];
@@ -314,17 +312,6 @@ function buildMembershipExists(
       parts.push(clause.replace(/^WHERE\s+/i, ''));
       subParams.push(...whereParams);
     }
-    // Apply date window so the EXISTS is pruned to the same span of events
-    // that the root prefilter considers.
-    if (dateRange?.start) {
-      parts.push(`m.timestamp ${dateRange.startExclusive ? '>' : '>='} ?`);
-      subParams.push(dateRange.start);
-    }
-    if (dateRange?.end) {
-      parts.push(`m.timestamp ${dateRange.endExclusive ? '<' : '<='} ?`);
-      subParams.push(dateRange.end);
-    }
-
     clauses.push(`EXISTS (SELECT 1 FROM span_events m WHERE ${parts.join(' AND ')})`);
     params.push(...subParams);
   }
@@ -611,15 +598,8 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   const prefilterParts = [`eventType = 'start'`, `parentSpanId IS NULL`];
   if (rootClause) prefilterParts.push(rootClause.replace(/^WHERE\s+/i, ''));
 
-  const membershipDateRange = root.timestamp as
-    | { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }
-    | undefined;
   const outerAlias = 'outer_root';
-  const { clauses: membershipClauses, params: membershipParams } = buildMembershipExists(
-    outerAlias,
-    membership,
-    membershipDateRange,
-  );
+  const { clauses: membershipClauses, params: membershipParams } = buildMembershipExists(outerAlias, membership);
   prefilterParts.push(...membershipClauses);
   const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
   const prefilterParams = [...rootParams, ...membershipParams];

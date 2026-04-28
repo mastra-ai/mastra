@@ -382,7 +382,7 @@ describe('ObservabilityStorageDuckDB', () => {
             output: null,
             error: null,
             startedAt: new Date('2026-01-03T00:00:00Z'),
-            endedAt: new Date('2026-01-03T00:00:02Z'),
+            endedAt: new Date('2026-01-03T00:10:00Z'),
           },
           {
             traceId: 'trace-nested',
@@ -412,8 +412,8 @@ describe('ObservabilityStorageDuckDB', () => {
             input: null,
             output: null,
             error: null,
-            startedAt: new Date('2026-01-03T00:00:00Z'),
-            endedAt: new Date('2026-01-03T00:00:01Z'),
+            startedAt: new Date('2026-01-03T00:05:00Z'),
+            endedAt: new Date('2026-01-03T00:05:01Z'),
           },
           {
             traceId: 'trace-nested-unrelated',
@@ -455,6 +455,11 @@ describe('ObservabilityStorageDuckDB', () => {
 
       const byNestedThread = await storage.listTraces({ filters: { threadId: 'thread-x' } });
       expect(byNestedThread.spans.map(s => s.traceId)).toEqual(['trace-nested']);
+
+      const byNestedThreadWithRootWindow = await storage.listTraces({
+        filters: { threadId: 'thread-x', startedAt: { end: new Date('2026-01-03T00:01:00Z') } },
+      });
+      expect(byNestedThreadWithRootWindow.spans.map(s => s.traceId)).toEqual(['trace-nested']);
 
       const byNestedTag = await storage.listTraces({ filters: { tags: ['beta'] } });
       expect(byNestedTag.spans.map(s => s.traceId)).toEqual(['trace-nested']);
