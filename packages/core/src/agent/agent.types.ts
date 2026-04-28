@@ -142,6 +142,14 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /** Aggregate token usage from the sub-agent's execution */
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
   };
   /** Duration of the delegation in milliseconds */
   duration: number;

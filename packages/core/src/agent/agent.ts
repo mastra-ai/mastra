@@ -3691,7 +3691,7 @@ export class Agent<
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
-                result = { text: generateResult.text };
+                result = { text: generateResult.text, usage: generateResult.usage };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
@@ -3837,11 +3837,13 @@ export class Agent<
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
+                const subAgentUsage = await streamResult.usage;
                 result = {
                   text: processedText,
                   subAgentThreadId,
                   subAgentResourceId,
                   subAgentToolResults,
+                  usage: subAgentUsage,
                 };
               } else {
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
@@ -3868,6 +3870,10 @@ export class Agent<
 
                 result = { text: fullText };
               }
+
+              // Enrich result with usage from the generate path.
+              // The stream paths accumulate text only; usage is already
+              // included on the generate paths above.
 
               // Call onDelegationComplete hook if provided
               if (delegation?.onDelegationComplete) {
