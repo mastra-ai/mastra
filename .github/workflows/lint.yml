@@ -2,8 +2,9 @@ name: Quality assurance
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
     branches: [main, 0.x]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -20,6 +21,7 @@ jobs:
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
       has_examples: ${{ steps.filter.outputs.has_examples }}
+      run_full_suite: ${{ steps.full.outputs.run_full_suite }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -29,6 +31,13 @@ jobs:
       - name: Check for code changes
         id: filter
         run: |
+          # On workflow_dispatch there is no PR context — assume everything changed.
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "has_code=true" >> $GITHUB_OUTPUT
+            echo "has_examples=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           ALL=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
 
           CODE=$(echo "$ALL" | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
@@ -44,6 +53,31 @@ jobs:
           else
             echo "has_examples=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Determine if full suite should run
+        id: full
+        env:
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          # Run the full lint suite on:
+          # - manual workflow_dispatch
+          # - the dane-ai-mastra bot's "version packages" PR (final gate before publish)
+          # - any PR with the "ci:full" label
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run_full_suite=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [[ "$PR_USER" == "dane-ai-mastra"* ]] && [[ "$PR_TITLE" == "chore: version packages"* ]]; then
+            echo "run_full_suite=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if echo "$LABELS" | grep -q '"ci:full"'; then
+            echo "run_full_suite=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "run_full_suite=false" >> $GITHUB_OUTPUT
 
   lint:
     name: Lint
@@ -75,7 +109,9 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    # Heavy: full repo build + bundle test. Only run on the alpha "version packages"
+    # PR, on PRs labeled "ci:full", or on manual dispatch. Day-to-day PRs skip this.
+    if: needs.changes.outputs.run_full_suite == 'true' && needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -149,10 +185,13 @@ jobs:
 
   peerdeps-check:
     name: Validate peer dependencies
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    # Heavy: runs `changeset version` then validates peer deps. Only run on the
+    # alpha "version packages" PR (where peerdep drift actually matters before
+    # publish), on PRs labeled "ci:full", or on manual dispatch.
+    if: needs.changes.outputs.run_full_suite == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read
 
