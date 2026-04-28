@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_ROLES, matchesPermission, resolvePermissions } from './roles';
 
 describe('matchesPermission', () => {
-  describe('legacy stored:* backwards compatibility', () => {
+  describe('compound stored:* expansion', () => {
     const storedFamilies = [
       'stored-agents',
       'stored-mcp-clients',
@@ -87,12 +87,10 @@ describe('matchesPermission', () => {
       expect(matchesPermission('stored-agents:share:agent-1', 'stored-agents:share:agent-2')).toBe(false);
     });
 
-    it('legacy stored:* does not match stored-agents:share (share is not in LEGACY_RESOURCE_EXPANSIONS scope)', () => {
-      // The legacy alias intentionally only covers actions that existed before the split.
-      // share is a new action; granting old `stored:*` should not silently grant share.
-      // Note: stored:* IS expanded to stored-agents:* via LEGACY_RESOURCE_EXPANSIONS, which
-      // matches share via the resource wildcard. This test documents the current behavior.
-      // If share-via-legacy-wildcard becomes a concern, tighten LEGACY_RESOURCE_EXPANSIONS.
+    it('granted stored:* matches stored-agents:share via compound expansion + resource wildcard', () => {
+      // stored:* expands to stored-agents:* (et al.) via RESOURCE_EXPANSIONS, and the
+      // resource wildcard then matches the share action. This test documents the current
+      // behavior; if share-via-compound-wildcard becomes a concern, tighten RESOURCE_EXPANSIONS.
       expect(matchesPermission('stored:*', 'stored-agents:share')).toBe(true);
     });
   });

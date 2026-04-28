@@ -62,20 +62,18 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * Legacy permission patterns kept for backward compatibility.
- * These were released in @mastra/core 1.11.0 – 1.27.0 before `stored` was
- * split into per-family resources (stored-agents, stored-skills, ...).
+ * Compound permission patterns that expand across the per-family stored resources.
  *
- * Emitted in PERMISSION_PATTERNS with `@deprecated` TSDoc so existing role
- * configs keep type-checking. Runtime matching in matchesPermission expands
- * `stored:<action>` to each `stored-<family>:<action>`.
+ * Emitted in PERMISSION_PATTERNS so role configs can grant the broad form. Runtime
+ * matching in matchesPermission expands `stored:<action>` to each
+ * `stored-<family>:<action>`.
  */
-const LEGACY_PATTERNS: Record<string, string> = {
+const COMPOUND_PATTERNS: Record<string, string> = {
   'stored:*':
-    'Full access to all stored-* resources (use stored-agents:*, stored-skills:*, stored-prompt-blocks:*, stored-mcp-clients:*, stored-scorers:*, stored-workspaces:*)',
-  'stored:read': 'View stored-* resources (use stored-<family>:read instead)',
-  'stored:write': 'Create and modify stored-* resources (use stored-<family>:write instead)',
-  'stored:delete': 'Delete stored-* resources (use stored-<family>:delete instead)',
+    'Full access to all stored-* resources (stored-agents, stored-skills, stored-prompt-blocks, stored-mcp-clients, stored-scorers, stored-workspaces)',
+  'stored:read': 'View any stored-* resource',
+  'stored:write': 'Create and modify any stored-* resource',
+  'stored:delete': 'Delete any stored-* resource',
 };
 
 /**
@@ -170,14 +168,11 @@ export function generatePermissionFileContent(data: PermissionData): string {
     })
     .join(',\n');
 
-  // Legacy patterns: kept for backward compatibility with pre-split releases.
+  // Compound patterns: broad shorthand entries that expand across per-family resources at match time.
   // Skip any that collide with a current pattern (none today, but guard against regressions).
-  const legacyEntries = Object.entries(LEGACY_PATTERNS)
+  const compoundEntries = Object.entries(COMPOUND_PATTERNS)
     .filter(([pattern]) => !allPatterns.includes(pattern))
-    .map(
-      ([pattern, desc]) =>
-        `  /**\n   * ${desc}\n   * @deprecated Use the per-family stored-* resource instead. Will be removed in the next major release.\n   */\n  '${pattern}': '${pattern}'`,
-    )
+    .map(([pattern, desc]) => `  /** ${desc} */\n  '${pattern}': '${pattern}'`)
     .join(',\n');
 
   return `/**
@@ -223,7 +218,7 @@ export type Action = (typeof ACTIONS)[number];
  * Use \`keyof typeof PERMISSION_PATTERNS\` or the \`PermissionPattern\` type.
  */
 export const PERMISSION_PATTERNS = {
-${patternEntries},${legacyEntries ? `\n${legacyEntries},` : ''}
+${patternEntries},${compoundEntries ? `\n${compoundEntries},` : ''}
 } as const;
 
 /**

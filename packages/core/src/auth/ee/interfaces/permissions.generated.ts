@@ -283,25 +283,13 @@ export const PERMISSION_PATTERNS = {
   'workspaces:read': 'workspaces:read',
   /** Create and modify workspaces */
   'workspaces:write': 'workspaces:write',
-  /**
-   * Full access to all stored-* resources (use stored-agents:*, stored-skills:*, stored-prompt-blocks:*, stored-mcp-clients:*, stored-scorers:*, stored-workspaces:*)
-   * @deprecated Use the per-family stored-* resource instead. Will be removed in the next major release.
-   */
+  /** Full access to all stored-* resources (stored-agents, stored-skills, stored-prompt-blocks, stored-mcp-clients, stored-scorers, stored-workspaces) */
   'stored:*': 'stored:*',
-  /**
-   * View stored-* resources (use stored-<family>:read instead)
-   * @deprecated Use the per-family stored-* resource instead. Will be removed in the next major release.
-   */
+  /** View any stored-* resource */
   'stored:read': 'stored:read',
-  /**
-   * Create and modify stored-* resources (use stored-<family>:write instead)
-   * @deprecated Use the per-family stored-* resource instead. Will be removed in the next major release.
-   */
+  /** Create and modify any stored-* resource */
   'stored:write': 'stored:write',
-  /**
-   * Delete stored-* resources (use stored-<family>:delete instead)
-   * @deprecated Use the per-family stored-* resource instead. Will be removed in the next major release.
-   */
+  /** Delete any stored-* resource */
   'stored:delete': 'stored:delete',
 } as const;
 

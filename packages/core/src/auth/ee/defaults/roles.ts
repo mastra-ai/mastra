@@ -108,11 +108,11 @@ export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = 
 }
 
 /**
- * @deprecated Legacy resource keys that were split into per-family resources.
+ * Compound resource keys that expand to a set of per-family resources.
  * A granted `stored:<action>` is treated as matching any `stored-<family>:<action>`
- * (and `stored:*` matches any `stored-<family>:*`). Remove in the next major.
+ * (and `stored:*` matches any `stored-<family>:*`).
  */
-const LEGACY_RESOURCE_EXPANSIONS: Record<string, readonly string[]> = {
+const RESOURCE_EXPANSIONS: Record<string, readonly string[]> = {
   stored: [
     'stored-agents',
     'stored-mcp-clients',
@@ -149,10 +149,10 @@ export function matchesPermission(userPermission: string, requiredPermission: st
   const grantedParts = userPermission.split(':');
   const requiredParts = requiredPermission.split(':');
 
-  // Legacy alias: expand granted `stored:<action>` into its current per-family equivalents.
-  // Only applies when the required permission targets one of the split families.
-  const legacyFamilies = LEGACY_RESOURCE_EXPANSIONS[grantedParts[0] ?? ''];
-  if (legacyFamilies && legacyFamilies.includes(requiredParts[0] ?? '')) {
+  // Compound resource alias: expand granted `stored:<action>` into its per-family equivalents.
+  // Only applies when the required permission targets one of the expanded families.
+  const expandedFamilies = RESOURCE_EXPANSIONS[grantedParts[0] ?? ''];
+  if (expandedFamilies && expandedFamilies.includes(requiredParts[0] ?? '')) {
     const aliased = [requiredParts[0], ...grantedParts.slice(1)].join(':');
     return matchesPermission(aliased, requiredPermission);
   }
