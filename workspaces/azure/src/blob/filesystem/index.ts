@@ -37,6 +37,7 @@ export interface AzureBlobMountConfig extends FilesystemMountConfig {
   connectionString?: string;
   useDefaultCredential?: boolean;
   endpoint?: string;
+  prefix?: string;
   readOnly?: boolean;
 }
 
@@ -230,6 +231,10 @@ export class AzureBlobFilesystem extends MastraFilesystem {
 
     if (this.endpoint) {
       config.endpoint = this.endpoint;
+    }
+
+    if (this.prefix) {
+      config.prefix = this.prefix;
     }
 
     if (this.readOnly) {
