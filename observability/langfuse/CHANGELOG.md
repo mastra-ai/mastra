@@ -1,5 +1,14 @@
 # @mastra/langfuse
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`c04417b`](https://github.com/mastra-ai/mastra/commit/c04417ba0a2e4ded66da4352331ef29cd4bd1d79), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51), [`ba6b0c5`](https://github.com/mastra-ai/mastra/commit/ba6b0c51bfce358554fd33c7f2bcd5593633f2ff), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51)]:
+  - @mastra/core@1.29.0-alpha.3
+  - @mastra/observability@1.10.1-alpha.0
+  - @mastra/otel-exporter@1.0.18-alpha.0
+
 ## 1.2.0
 
 ### Minor Changes

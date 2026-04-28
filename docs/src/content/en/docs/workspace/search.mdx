@@ -152,7 +152,7 @@ Configure `autoIndexPaths` to automatically index files when the workspace initi
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
-  autoIndexPaths: ['/docs', '/support/faq'],
+  autoIndexPaths: ['docs', 'support/faq'],
 })
 
 await workspace.init()
@@ -167,7 +167,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
   // highlight-next-line
-  autoIndexPaths: ['/docs/**/*.md', '/support/**/*.txt'],
+  autoIndexPaths: ['docs/**/*.md', 'support/**/*.txt'],
 })
 ```
 

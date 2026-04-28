@@ -7,6 +7,7 @@ import type { ChunkType } from '../../stream/types';
 // Capture the outputWriter passed to createAgenticLoopWorkflow so we can
 // invoke it directly in tests without spinning up a real agentic loop.
 let capturedOutputWriter: ((chunk: ChunkType, options?: { messageId?: string }) => Promise<void>) | undefined;
+let capturedCreateRunArgs: any;
 
 vi.mock('./agentic-loop', () => ({
   createAgenticLoopWorkflow: (params: any) => {
@@ -15,29 +16,32 @@ vi.mock('./agentic-loop', () => ({
     return {
       __registerMastra: vi.fn(),
       deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
-      createRun: vi.fn().mockResolvedValue({
-        start: vi.fn().mockImplementation(async () => {
-          // Simulate the agentic loop emitting a data-* chunk
-          await capturedOutputWriter!(
-            {
-              type: 'data-moderation',
-              data: { flagged: true },
-              runId: 'run-1',
-              from: ChunkFrom.AGENT,
-            } as ChunkType,
-            { messageId: 'rotated-msg' },
-          );
+      createRun: vi.fn().mockImplementation(async (args: any) => {
+        capturedCreateRunArgs = args;
+        return {
+          start: vi.fn().mockImplementation(async () => {
+            // Simulate the agentic loop emitting a data-* chunk
+            await capturedOutputWriter!(
+              {
+                type: 'data-moderation',
+                data: { flagged: true },
+                runId: 'run-1',
+                from: ChunkFrom.AGENT,
+              } as ChunkType,
+              { messageId: 'rotated-msg' },
+            );
 
-          return {
-            status: 'success',
-            result: {
-              output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-              stepResult: { reason: 'stop', warnings: [], isContinued: false },
-              metadata: {},
-              messages: { nonUser: [], all: [] },
-            },
-          };
-        }),
+            return {
+              status: 'success',
+              result: {
+                output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+                stepResult: { reason: 'stop', warnings: [], isContinued: false },
+                metadata: {},
+                messages: { nonUser: [], all: [] },
+              },
+            };
+          }),
+        };
       }),
     };
   },
@@ -90,5 +94,31 @@ describe('workflowLoopStream', () => {
     const dataChunk = chunks.find(c => c.type === 'data-moderation');
     expect(dataChunk).toBeDefined();
     expect(messageList.get.response.db().map(message => message.id)).toEqual(['rotated-msg']);
+  });
+
+  it('should forward resourceId from _internal to createRun()', async () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    const stream = workflowLoopStream({
+      messageId: 'msg-2',
+      runId: 'run-2',
+      startTimestamp: Date.now(),
+      agentId: 'test-agent',
+      messageList,
+      models: [{ model: {} as any, toolChoice: undefined }],
+      _internal: { resourceId: 'user-abc-123' },
+      streamState: { serialize: () => ({}), deserialize: () => {} },
+      methodType: 'stream',
+    });
+
+    // Consume the stream to trigger createRun
+    const reader = stream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    expect(capturedCreateRunArgs).toBeDefined();
+    expect(capturedCreateRunArgs.resourceId).toBe('user-abc-123');
   });
 });
