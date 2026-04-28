@@ -698,7 +698,7 @@
     "test": "npm run test:unit"
   },
   "dependencies": {
-    "@a2a-js/sdk": "~0.2.5",
+    "@a2a-js/sdk": "~0.3.13",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.23",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.23",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.1",
