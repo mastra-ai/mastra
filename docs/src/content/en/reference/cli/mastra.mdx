@@ -645,10 +645,11 @@ Run an agent with chat messages:
 mastra api agent run weather-agent '{"messages":[{"role":"user","content":"What is the weather in London?"}]}'
 ```
 
-Execute a tool:
+Execute a tool with raw tool input. The CLI sends the input as the route `data` field. You can also pass an explicit `{"data":{...}}` wrapper.
 
 ```bash
 mastra api tool execute get-weather '{"location":"San Francisco"}'
+mastra api tool execute get-weather '{"data":{"location":"San Francisco"}}'
 ```
 
 Search long-term memory:
@@ -657,7 +658,7 @@ Search long-term memory:
 mastra api memory search '{"agentId":"weather-agent","resourceId":"user_123","searchQuery":"caching strategy","limit":10}'
 ```
 
-Read and update current working memory:
+Read and update current working memory. Updates require working memory to be enabled for the memory instance.
 
 ```bash
 mastra api memory current get '{"threadId":"thread_abc123","agentId":"code-reviewer"}'
@@ -686,6 +687,12 @@ Create, list, and get observability scores:
 mastra api score create '{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'
 mastra api score list '{"runId":"run_123","page":0,"perPage":50}'
 mastra api score get score_123
+```
+
+Resume a workflow run only when the run is suspended:
+
+```bash
+mastra api workflow run resume weather-workflow run_123 '{"resumeData":{"approved":true}}'
 ```
 
 ### Supported commands
@@ -717,7 +724,7 @@ mastra api score get score_123
 - `mastra api memory search <input>`
 - `mastra api memory current get <input>`
 - `mastra api memory current update <input>`
-- `mastra api memory status [input]`
+- `mastra api memory status <input>`
 - `mastra api trace list [input]`
 - `mastra api trace get <traceId>`
 - `mastra api log list [input]`
