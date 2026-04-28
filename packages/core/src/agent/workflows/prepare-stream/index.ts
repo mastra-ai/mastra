@@ -9,6 +9,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import { createWorkflow } from '../../../workflows';
+import type { AnyWorkflow } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -105,7 +106,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     isResume: !!resumeContext,
   });
 
-  const streamStep = createStreamStep({
+  const streamStep = createStreamStep<OUTPUT>({
     capabilities,
     runId,
     returnScorerData,
@@ -127,7 +128,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     skipBgTaskWait,
   });
 
-  const mapResultsStep = createMapResultsStep({
+  const mapResultsStep = createMapResultsStep<OUTPUT>({
     capabilities,
     options,
     resourceId,
@@ -142,7 +143,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     saveQueueManager,
   });
 
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
@@ -156,6 +157,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   })
     .parallel([prepareToolsStep, prepareMemoryStep])
     .map(mapResultsStep)
-    .then(streamStep)
-    .commit();
+    .then(streamStep);
+
+  // Cast via AnyWorkflow to bypass commit()'s compile-time output-schema check.
+  // The step chain here is built dynamically; the runtime outputSchema is correct.
+  return (workflow as AnyWorkflow).commit() as typeof workflow;
 }

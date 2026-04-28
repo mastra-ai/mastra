@@ -132,7 +132,9 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        return typedInputData.output.toolCalls || [];
+        // Cast to any[] because TypedToolCall<Tools> is a complex conditional type that
+        // the map overload cannot infer precisely enough for the downstream foreach step.
+        return (typedInputData.output.toolCalls || []) as any[];
       },
       { id: 'map-tool-calls' },
     )

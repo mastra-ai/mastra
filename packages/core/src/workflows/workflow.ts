@@ -53,6 +53,7 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
   ConditionFunction,
   ExecuteFunction,
+  ExecuteFunctionParams,
   InnerOutput,
   LoopConditionFunction,
   Step,
@@ -1520,7 +1521,7 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  (wf as any).commit();
   return wf;
 }
 
@@ -1800,7 +1801,35 @@ export class Workflow<
     });
   }
 
+  map<TMapOutput>(
+    mappingConfig: (
+      params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+    ) => Promise<TMapOutput | InnerOutput> | TMapOutput,
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TMapOutput, TRequestContext>;
   map(
+    mappingConfig: {
+      [k: string]:
+        | {
+            step:
+              | Step<string, any, any, any, any, any, TEngineType, any>
+              | Step<string, any, any, any, any, any, TEngineType, any>[];
+            path: string;
+          }
+        | { value: any; schema: PublicSchema<any> }
+        | {
+            initData: Workflow<TEngineType, any, any, any, any, any, any>;
+            path: string;
+          }
+        | {
+            requestContextPath: string;
+            schema: PublicSchema<any>;
+          }
+        | DynamicMapping<TPrevSchema, any>;
+    },
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext>;
+  map<TMapOutput>(
     mappingConfig:
       | {
           [k: string]:
@@ -1821,7 +1850,9 @@ export class Workflow<
               }
             | DynamicMapping<TPrevSchema, any>;
         }
-      | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+      | ((
+          params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+        ) => Promise<TMapOutput | InnerOutput> | TMapOutput),
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Create an implicit step that handles the mapping
@@ -1853,7 +1884,7 @@ export class Workflow<
         TState,
         TInput,
         TOutput,
-        any,
+        TMapOutput,
         TRequestContext
       >;
     }
@@ -2207,7 +2238,7 @@ export class Workflow<
    * This method should be called after all steps have been added to the workflow
    * @returns A built workflow instance ready for execution
    */
-  commit() {
+  commit(..._: [TPrevSchema] extends [TOutput] ? [] : [never]) {
     this.executionGraph = this.buildExecutionGraph();
     this.committed = true;
     return this as unknown as Workflow<

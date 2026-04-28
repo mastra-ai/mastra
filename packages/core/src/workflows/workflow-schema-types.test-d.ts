@@ -326,5 +326,239 @@ describe('Workflow schema type inference', () => {
       // @ts-expect-error - step input schema is incompatible with workflow input
       workflow.then(step);
     });
+
+    it('should reject commit when a final map output does not satisfy the workflow output schema', () => {
+      const inputSchema = z.object({ query: z.string() });
+      const outputSchema = z.object({
+        summary: z.string(),
+        items: z.array(z.string()),
+      });
+
+      const workflow = createWorkflow({
+        id: 'typed-map-output-workflow',
+        inputSchema,
+        outputSchema,
+      }).map(async () => 123);
+
+      // @ts-expect-error - final map output must satisfy the workflow output schema
+      workflow.commit();
+    });
+
+    it('should reject commit when map output is a supertype of the workflow output schema', () => {
+      const inputSchema = z.object({ query: z.string() });
+      const outputSchema = z.object({
+        summary: z.string(),
+        items: z.array(z.string()),
+      });
+
+      const workflow = createWorkflow({
+        id: 'supertype-map-output-workflow',
+        inputSchema,
+        outputSchema,
+      }).map(async ({ inputData }) => ({
+        summary: inputData.query,
+      }));
+
+      // @ts-expect-error - map output is missing 'items', a supertype of the output schema
+      workflow.commit();
+    });
+
+    it('should allow a map output that satisfies the workflow output schema', () => {
+      const inputSchema = z.object({ query: z.string() });
+      const outputSchema = z.object({
+        summary: z.string(),
+        items: z.array(z.string()),
+      });
+
+      const workflow = createWorkflow({
+        id: 'valid-typed-map-output-workflow',
+        inputSchema,
+        outputSchema,
+      })
+        .map(async ({ inputData }) => ({
+          summary: inputData.query,
+          items: [inputData.query],
+        }))
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should reject commit when a final .then() step output does not satisfy the workflow output schema', () => {
+      const step = createStep({
+        id: 'wrong-output-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ count: z.number() }),
+        execute: async () => ({ count: 42 }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'then-mismatch-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({
+          summary: z.string(),
+          items: z.array(z.string()),
+        }),
+      }).then(step);
+
+      // @ts-expect-error - step output { count: number } does not satisfy workflow output { summary: string, items: string[] }
+      workflow.commit();
+    });
+
+    it('should allow commit when a final .then() step output satisfies the workflow output schema', () => {
+      const step = createStep({
+        id: 'matching-output-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({
+          summary: z.string(),
+          items: z.array(z.string()),
+        }),
+        execute: async ({ inputData }) => ({
+          summary: inputData.query,
+          items: [inputData.query],
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'then-match-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({
+          summary: z.string(),
+          items: z.array(z.string()),
+        }),
+      })
+        .then(step)
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should allow commit when outputSchema is z.any() regardless of last step output', () => {
+      const step = createStep({
+        id: 'any-output-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ count: z.number() }),
+        execute: async () => ({ count: 42 }),
+      });
+
+      // outputSchema is z.any() — commit should always succeed regardless of last step output
+      const workflow = createWorkflow({
+        id: 'any-output-schema-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.any(),
+      })
+        .then(step)
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should reject commit after object-style map when outputSchema does not match', () => {
+      const step = createStep({
+        id: 'some-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async () => ({ value: 1 }),
+      });
+
+      // Object-style map({ key: { step, path } }) does not bypass outputSchema validation.
+      // `as any` is required here: the map overload's mappingConfig is a wide union of several
+      // variant shapes, and TS cannot narrow a plain object literal to the correct variant
+      // without an explicit cast.
+      const workflow = createWorkflow({
+        id: 'object-map-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.string(), items: z.array(z.string()) }),
+      })
+        .then(step)
+        .map({ summary: { step, path: 'value' } } as any)
+        // @ts-expect-error object-style map output does not satisfy outputSchema
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+  });
+
+  describe('.map() type inference', () => {
+    it('should infer return type of function-based .map and propagate to next .then()', () => {
+      const step = createStep({
+        id: 'needs-count',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: String(inputData.count) }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'map-workflow',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(async () => ({ count: 42 }))
+        .then(step);
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should error when .map output does not match next step input', () => {
+      const step = createStep({
+        id: 'needs-count',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: String(inputData.count) }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'invalid-map-workflow',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      }).map(async () => 123);
+
+      // @ts-expect-error - map returns number, step expects { count: number }
+      workflow.then(step);
+    });
+
+    it('should work with sync function callbacks', () => {
+      const step = createStep({
+        id: 'sync-needs-count',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: String(inputData.count) }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'sync-map-workflow',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(() => ({ count: 42 }))
+        .then(step);
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+  });
+
+  describe('.commit() output validation', () => {
+    it('should error when final step output does not match outputSchema', () => {
+      const workflow = createWorkflow({
+        id: 'invalid-commit-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.string(), items: z.array(z.string()) }),
+      }).map(async () => 123);
+
+      // @ts-expect-error - map returns number, outputSchema expects { summary, items }
+      workflow.commit();
+    });
+
+    it('should allow commit when final output matches outputSchema', () => {
+      const workflow = createWorkflow({
+        id: 'valid-commit-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(async () => ({ result: 'done' }))
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
   });
 });
