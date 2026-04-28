@@ -291,6 +291,46 @@ export function assertWriteAccess(args: {
 }
 
 /**
+ * Asserts the caller has share access to the record. Throws 404 if not.
+ *
+ * Share access controls who can change a record's audience/visibility
+ * (e.g. flipping `private` ↔ `public`). It is intentionally separate from
+ * `write`: a caller with only `<resource>:write` MUST NOT be able to flip
+ * visibility — that would let any editor expose private records.
+ *
+ * Share access is granted when:
+ * - The record has no owner (legacy), OR
+ * - The caller owns the record (creators can share their own records), OR
+ * - The caller has admin bypass (`*`, `<resource>:*`, `<resource>:admin`), OR
+ * - The caller holds `<resource>:share` / `<resource>:share:<resourceId>`
+ *   (or any pattern that matches it, e.g. `*:share`).
+ *
+ * `visibility: 'public'` does NOT grant share access — being readable doesn't
+ * imply the right to change who else can read.
+ */
+export function assertShareAccess(args: {
+  requestContext: RequestContext;
+  resource: string;
+  resourceId?: string;
+  record: OwnedRecord;
+}): void {
+  const { requestContext, resource, resourceId, record } = args;
+  const owner = record.authorId ?? null;
+
+  if (owner === null) return;
+  if (hasAdminBypass(requestContext, resource)) return;
+
+  const callerAuthorId = getCallerAuthorId(requestContext);
+  if (callerAuthorId && callerAuthorId === owner) return;
+
+  if (hasScopedPermission({ requestContext, resource, action: 'share', resourceId })) {
+    return;
+  }
+
+  throw new HTTPException(404, { message: 'Not found' });
+}
+
+/**
  * Alias for `assertWriteAccess` with `action: 'edit'`. Prefer `assertWriteAccess`
  * in new code so the action is explicit.
  */
