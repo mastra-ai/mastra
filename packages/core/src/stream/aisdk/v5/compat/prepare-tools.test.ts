@@ -1,5 +1,6 @@
 import { jsonSchema } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
 import { prepareToolsAndToolChoice } from './prepare-tools';
@@ -552,6 +553,103 @@ describe('prepareToolsAndToolChoice', () => {
       expect(result.tools![0]).toMatchObject({
         type: 'provider-defined', // v2 uses 'provider-defined'
       });
+    });
+  });
+
+  // Reproduces the /stream crash seen in the playground agent-builder:
+  //   {"error":"Cannot read properties of undefined (reading 'jsonSchema')"}
+  //
+  // Wire shape: client-side processClientTools() converts Zod inputSchema
+  // via zodToJsonSchema() and ships a plain JSON Schema object to the server.
+  // Zod v4 emits `$schema: "https://json-schema.org/draft/2020-12/schema"`
+  // (note: https), which falls through prepare-tools.ts:160 (only matches
+  // http://json-schema.org/...) and through the StandardSchemaWithJSON branch,
+  // landing on `asSchema(sdkTool.inputSchema).jsonSchema` (line 172). For a
+  // plain JSON Schema object asSchema() can return undefined, and the access
+  // throws — but the outer try/catch (line 222) swallows it, the tool is
+  // silently dropped, and downstream code crashes when reading .jsonSchema
+  // on the missing tool.
+  describe('clientTools serialized as plain JSON Schema (agent-builder repro)', () => {
+    // Mirror buildAgentBuilderToolSchema() shape from
+    // packages/agent-builder/src/playground/use-agent-builder-tool.ts
+    const buildAgentBuilderInputSchema = () =>
+      z.object({
+        name: z.string().describe('agent name'),
+        description: z.string().optional(),
+        instructions: z.string(),
+        tools: z.array(z.string()).optional(),
+        workspaceId: z.string().optional(),
+      });
+
+    it('produces the same wire shape that processClientTools sends to /stream', () => {
+      const wireInputSchema = zodToJsonSchema(buildAgentBuilderInputSchema());
+
+      // Zod v4's zodToJsonSchema emits the 2020-12 draft URL, which is the
+      // exact reason the http://-only check in prepare-tools.ts misses it.
+      expect(wireInputSchema).toMatchObject({ type: 'object' });
+      expect(wireInputSchema.$schema).toMatch(/^https:\/\/json-schema\.org\//);
+    });
+
+    it('reproduces /stream crash: clientTools with plain JSON Schema inputSchema (agent-builder)', () => {
+      // Build the tool the way agent-builder does, then serialize the schemas
+      // the way client-js processClientTools() serializes them on the wire.
+      const agentBuilderTool = createTool({
+        id: 'agentBuilderTool',
+        description: 'Create or edit an agent',
+        inputSchema: buildAgentBuilderInputSchema(),
+        outputSchema: z.object({ success: z.boolean() }),
+        execute: async () => ({ success: true }),
+      });
+
+      const wireTool = {
+        ...agentBuilderTool,
+        inputSchema: zodToJsonSchema(agentBuilderTool.inputSchema as any),
+        outputSchema: zodToJsonSchema(agentBuilderTool.outputSchema as any),
+      };
+
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result = prepareToolsAndToolChoice({
+        tools: { agentBuilderTool: wireTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      // Bug: prepare-tools' try/catch swallows the TypeError thrown when
+      // `asSchema(sdkTool.inputSchema).jsonSchema` is read. The tool then
+      // silently disappears and the failure surfaces later as
+      // "Cannot read properties of undefined (reading 'jsonSchema')".
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'agentBuilderTool',
+      });
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('reproduces the same crash for outputSchema-only client tools', () => {
+      const wireTool = {
+        id: 'outputOnly',
+        description: 'tool with only an outputSchema serialized as plain JSON Schema',
+        outputSchema: zodToJsonSchema(z.object({ ok: z.boolean() })),
+      };
+
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result = prepareToolsAndToolChoice({
+        tools: { outputOnly: wireTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      expect(result.tools).toHaveLength(1);
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });
