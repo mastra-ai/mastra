@@ -9,7 +9,7 @@ packages:
 
 `streamUntilIdle()` streams an agent's response and keeps the stream open until every background task dispatched during the run completes. When a task finishes, its result is written to memory and the agentic loop re-enters automatically so the LLM can react to it. The stream closes once no tasks are running and no completions are queued.
 
-Use it when the agent dispatches background tasks (typically long-running tools or sub-agents) and you want a single stream that spans the initial response **plus** every continuation triggered by a task completion. For foreground-only runs or if you prefer to manage the continuation manually (manually prompt agent to process the result), use [`Agent.stream()`](./stream).
+Use it when the agent dispatches background tasks (typically long-running tools or subagents) and you want a single stream that spans the initial response **plus** every continuation triggered by a task completion. For foreground-only runs or if you prefer to manage the continuation manually (manually prompt agent to process the result), use [`Agent.stream()`](./stream).
 
 ## Usage example
 

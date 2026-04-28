@@ -1,6 +1,6 @@
 ---
 title: "Background tasks | Agents"
-description: Learn how to dispatch long-running tool calls in the background, keep the stream open until they complete, and orchestrate sub-agents asynchronously.
+description: Learn how to dispatch long-running tool calls in the background, keep the stream open until they complete, and orchestrate subagents asynchronously.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -14,7 +14,7 @@ Background tasks let an agent dispatch a long-running tool call without blocking
 
 Use background tasks when a tool call may take long enough that the user shouldn't wait for it before seeing a response. Common cases:
 
-- Sub-agent delegations that themselves run multi-step research or writing.
+- Subagent delegations that themselves run multi-step research or writing.
 - Tool calls that hit slow external services, queues, or large data jobs.
 - Workflows triggered from a tool call that may take minutes to complete.
 
@@ -133,9 +133,9 @@ When a tool call is dispatched, the resolved background config is computed in th
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
-## What appears in the stream
+## What appears in background task stream
 
-When a tool call dispatches as a background task, the stream emits a sequence of background task chunks alongside the usual tool-call chunks:
+When a tool call dispatches as a background task, the background task stream emits a sequence of chunks:
 
 | Chunk type | When it fires |
 | - | - |
@@ -147,9 +147,11 @@ When a tool call dispatches as a background task, the stream emits a sequence of
 | `background-task-failed` | The task threw or timed out. |
 | `background-task-cancelled` | The task was cancelled before completing. |
 
-Each chunk's payload includes `taskId`, `toolName`, and `toolCallId` so you can correlate it with the originating tool call. The full payload shapes are documented in the [stream chunk reference](/reference/streaming/ChunkType).
+The full payload shapes are documented in the [stream chunk reference](/reference/streaming/ChunkType).
 
-## Keep the stream open with `streamUntilIdle()`
+When `agent.streamUntilIdle()` is used, these background task chunks are also included in the stream response.
+
+## Keep the agent stream open with `streamUntilIdle()`
 
 `agent.stream()` returns once the LLM emits a final response even if a background task is still running. Use `agent.streamUntilIdle()` when you want the stream to stay open until every dispatched background task has completed and the LLM has had a chance to respond to the result:
 
@@ -179,9 +181,9 @@ Visit [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) f
 
 `streamUntilIdle()` returns a `MastraModelOutput` that looks like the one from `stream()`, but only `fullStream` spans the initial turn **and** any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
 
-## Sub-agents in the background
+## Subagents in the background
 
-Sub-agent invocations are dispatched as tool calls under the hood, so the same background configuration applies. The recommended pattern is to opt each sub-agent in on the supervisor, it's clearer and lets you tune `timeoutMs` per sub-agent in one place:
+Subagent invocations are dispatched as tool calls under the hood, so the same background configuration applies. The recommended pattern is to opt each subagent in on the supervisor, it's clearer and lets you tune `timeoutMs` per subagent in one place:
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 import { Agent } from '@mastra/core/agent'
@@ -206,11 +208,11 @@ const stream = await supervisor.streamUntilIdle('Research AI in education and wr
 })
 ```
 
-### Inheriting from the sub-agent
+### Inheriting from the subagent
 
-If a sub-agent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `backgroundTasks.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire sub-agent invocation as a background task. The supervisor inherits the sub-agent's intent: the sub-agent itself becomes the background task, and its inner tools run in the foreground inside the sub-agent's loop.
+If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `backgroundTasks.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and its inner tools run in the foreground inside the subagent's loop.
 
-The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the sub-agent's own `backgroundTasks` config.
+The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the subagent's own `backgroundTasks` config.
 
 ```typescript title="src/mastra/agents/researcher.ts"
 const researchAgent = new Agent({
@@ -229,9 +231,9 @@ const researchAgent = new Agent({
 })
 ```
 
-When this `researchAgent` is delegated to from a supervisor that has no `backgroundTasks.tools` entry for it, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
+When this `researchAgent` is delegated to from a supervisor that has no backgroundTask configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
 
-Use this pattern when you want a sub-agent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
+Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
 
 ## Lifecycle callbacks
 

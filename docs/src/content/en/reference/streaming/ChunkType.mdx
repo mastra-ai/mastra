@@ -1173,7 +1173,7 @@ Contains output from workflow step execution, used primarily for usage tracking 
 
 ## Background task chunks
 
-Emitted when a tool call is dispatched as a [background task](/docs/agents/background-tasks). All payloads include `taskId`, `toolName`, and `toolCallId` so they can be correlated with the originating tool call.
+Emitted when a tool call is dispatched as a [background task](/docs/agents/background-tasks) and `streamUntilIdle()` is used.
 
 ### background-task-started
 
