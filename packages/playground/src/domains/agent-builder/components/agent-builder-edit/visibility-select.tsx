@@ -1,25 +1,24 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
-import { BookOpenIcon, LockIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Globe, LockIcon } from 'lucide-react';
+import { useFormContext, useWatch } from 'react-hook-form';
+import type { AgentBuilderEditFormValues } from '../../schemas';
 
-export type Visibility = 'private' | 'shared';
+export type Visibility = 'private' | 'public';
 
 export interface VisibilitySelectProps {
-  defaultValue?: Visibility;
-  onChange?: (value: Visibility) => void;
   disabled?: boolean;
 }
 
-export function VisibilitySelect({ defaultValue = 'private', onChange, disabled = false }: VisibilitySelectProps) {
-  const [value, setValue] = useState<Visibility>(defaultValue);
+export function VisibilitySelect({ disabled = false }: VisibilitySelectProps) {
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const value = useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private';
 
   return (
     <Select
       value={value}
       disabled={disabled}
       onValueChange={next => {
-        setValue(next as Visibility);
-        onChange?.(next as Visibility);
+        formMethods.setValue('visibility', next as Visibility, { shouldDirty: true });
       }}
     >
       <SelectTrigger size="sm" aria-label="Visibility" data-testid="agent-builder-visibility-trigger">
@@ -32,10 +31,10 @@ export function VisibilitySelect({ defaultValue = 'private', onChange, disabled 
             Private
           </span>
         </SelectItem>
-        <SelectItem value="shared">
+        <SelectItem value="public">
           <span className="flex items-center gap-2">
-            <BookOpenIcon className="h-3.5 w-3.5" />
-            Shared in Library
+            <Globe className="h-3.5 w-3.5" />
+            Public
           </span>
         </SelectItem>
       </SelectContent>
