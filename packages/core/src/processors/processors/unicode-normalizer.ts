@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '../../agent/message-list';
+import { addLegacyGettersToMessage } from '../../agent/message-list';
 import type { Processor } from '../index';
 
 export interface UnicodeNormalizerOptions {
@@ -43,25 +44,24 @@ export class UnicodeNormalizer implements Processor<'unicode-normalizer'> {
 
   processInput(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }): MastraDBMessage[] {
     try {
-      return args.messages.map(message => ({
-        ...message,
-        content: {
-          ...message.content,
-          parts: message.content.parts?.map(part => {
-            if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
-              return {
-                ...part,
-                text: this.normalizeText(part.text),
-              };
-            }
-            return part;
-          }),
-          content:
-            typeof message.content.content === 'string'
-              ? this.normalizeText(message.content.content)
-              : message.content.content,
-        },
-      }));
+      return args.messages.map(message =>
+        addLegacyGettersToMessage({
+          ...message,
+          content: {
+            ...message.content,
+            ...(message.content.content !== undefined ? { content: this.normalizeText(message.content.content) } : {}),
+            parts: message.content.parts?.map(part => {
+              if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
+                return {
+                  ...part,
+                  text: this.normalizeText(part.text),
+                };
+              }
+              return part;
+            }),
+          },
+        }),
+      );
     } catch {
       // do nothing, this isn't a critical processor
       return args.messages;

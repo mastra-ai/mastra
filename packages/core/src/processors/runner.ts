@@ -1,6 +1,6 @@
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
-import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { getLegacyContent, MessageList, messagesAreEqual } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
@@ -903,10 +903,7 @@ export class ProcessorRunner {
 
             // Add any new system messages from the messages array
             for (const sysMsg of newSystemMessages) {
-              const systemText =
-                (sysMsg.content.content as string | undefined) ??
-                sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
+              const systemText = getLegacyContent(sysMsg.content) ?? '';
               messageList.addSystem(systemText);
             }
 
@@ -937,10 +934,7 @@ export class ProcessorRunner {
 
             // Add system messages using addSystem
             for (const sysMsg of systemMessages) {
-              const systemText =
-                (sysMsg.content.content as string | undefined) ??
-                sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
+              const systemText = getLegacyContent(sysMsg.content) ?? '';
               messageList.addSystem(systemText);
             }
 
@@ -1407,10 +1401,7 @@ export class ProcessorRunner {
           for (const message of result) {
             messageList.removeByIds([message.id]);
             if (message.role === 'system') {
-              const systemText =
-                (message.content.content as string | undefined) ??
-                message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
+              const systemText = getLegacyContent(message.content) ?? '';
               messageList.addSystem(systemText);
             } else {
               messageList.add(message, check.getSource(message) || 'response');
@@ -1635,10 +1626,7 @@ export class ProcessorRunner {
     for (const message of messages) {
       messageList.removeByIds([message.id]);
       if (message.role === 'system') {
-        const systemText =
-          (message.content.content as string | undefined) ??
-          message.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-          '';
+        const systemText = getLegacyContent(message.content) ?? '';
         messageList.addSystem(systemText);
       } else {
         messageList.add(message, check.getSource(message) || defaultSource);

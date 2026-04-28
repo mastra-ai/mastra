@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -386,7 +386,16 @@ export class StoreMemoryRedis extends MemoryStorage {
             multi.zRem(getThreadMessagesKey(existingThreadId), message.id);
           }
 
-          multi.set(key, JSON.stringify(message));
+          multi.set(
+            key,
+            JSON.stringify({
+              ...message,
+              content:
+                typeof message.content === 'string'
+                  ? message.content
+                  : getLegacyContentForStorage(message.content, { mergeLegacyFields: false }),
+            }),
+          );
           multi.set(getMessageIndexKey(message.id), message.threadId!);
           multi.zAdd(getThreadMessagesKey(message.threadId!), { score, value: message.id });
         }
@@ -932,7 +941,7 @@ export class StoreMemoryRedis extends MemoryStorage {
 
         if (fieldsToUpdate.content) {
           const existingContent = existingMessage.content as MastraMessageContentV2;
-          const newContent = {
+          const newContent = getLegacyContentForStorage({
             ...existingContent,
             ...fieldsToUpdate.content,
             ...(existingContent?.metadata && fieldsToUpdate.content.metadata
@@ -943,7 +952,7 @@ export class StoreMemoryRedis extends MemoryStorage {
                   },
                 }
               : {}),
-          };
+          })!;
           updatedMessage.content = newContent;
         }
 

@@ -7,8 +7,14 @@ export type { AIV5ResponseMessage, AIV6ResponseMessage, MessageInput, MessageLis
 // Re-export types from state/types (canonical source)
 export type {
   MastraDBMessage,
+  MastraLegacyMessageAnnotations,
+  MastraLegacyMessageAttachments,
+  MastraLegacyMessageContent,
+  MastraLegacyReasoning,
+  MastraLegacyToolInvocations,
   MastraMessageV1,
   MastraMessageContentV2,
+  MastraMessageContentV2WithLegacyFields,
   MastraMessagePart,
   MastraToolApproval,
   MastraToolInvocation,
@@ -24,6 +30,22 @@ export type { AIV6Type, AIV5Type, AIV4Type, CoreMessageV4, UIMessageV4 } from '.
 
 // Utility exports
 export { convertMessages } from './utils/convert-messages';
+export {
+  addLegacyGettersToMessage,
+  addLegacyGettersToMessages,
+  addLegacyGettersToContent,
+  getLegacyAnnotations,
+  getConcreteLegacyField,
+  getLegacyContent,
+  getLegacyContentForStorage,
+  getLegacyExperimentalAttachments,
+  getLegacyReasoning,
+  getLegacyToolInvocations,
+  stripLegacyMessageFields,
+  stripLegacyMessageFieldsPreservingInstance,
+  stripLegacyMessageFieldsInPlace,
+  stripLegacyMessagesFields,
+} from './utils/legacy-fields';
 export type { OutputFormat } from './utils/convert-messages';
 
 // Conversion exports

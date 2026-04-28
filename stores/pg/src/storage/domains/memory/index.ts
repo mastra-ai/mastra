@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -1210,7 +1210,9 @@ export class MemoryPG extends MemoryStorage {
             [
               message.id,
               message.threadId,
-              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+              typeof message.content === 'string'
+                ? message.content
+                : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
               message.createdAt || new Date(),
               message.createdAt || new Date(),
               message.role,
@@ -1324,7 +1326,7 @@ export class MemoryPG extends MemoryStorage {
         const updatableFields = { ...fieldsToUpdate };
 
         if (updatableFields.content) {
-          const newContent = {
+          const newContent = getLegacyContentForStorage({
             ...existingMessage.content,
             ...updatableFields.content,
             ...(existingMessage.content?.metadata && updatableFields.content.metadata
@@ -1335,7 +1337,7 @@ export class MemoryPG extends MemoryStorage {
                   },
                 }
               : {}),
-          };
+          })!;
           setClauses.push(`content = $${paramIndex++}`);
           values.push(newContent);
           delete updatableFields.content;

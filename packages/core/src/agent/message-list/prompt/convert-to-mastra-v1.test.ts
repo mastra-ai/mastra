@@ -5,6 +5,85 @@ import { MessageList } from '../../message-list';
 import { convertToV1Messages } from './convert-to-mastra-v1';
 
 describe('convertToV1Messages', () => {
+  it('should keep user text parts as array when legacy content is derived', () => {
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'msg-user-derived-content',
+        role: 'user',
+        createdAt: new Date('2024-01-01'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Calculate 15 times 4, then remember the result',
+            },
+          ],
+        },
+      },
+    ];
+
+    const v1Messages = convertToV1Messages(messages);
+
+    expect(v1Messages).toHaveLength(1);
+    expect(v1Messages[0].content).toEqual([
+      {
+        type: 'text',
+        text: 'Calculate 15 times 4, then remember the result',
+      },
+    ]);
+  });
+
+  it('should preserve derived content shape for consecutive user messages', () => {
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'msg-user-original',
+        role: 'user',
+        createdAt: new Date('2024-01-01'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Calculate 15 times 4, then remember the result',
+            },
+          ],
+        },
+      },
+      {
+        id: 'msg-user-subagent',
+        role: 'user',
+        createdAt: new Date('2024-01-01'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Calculate 15 times 4.',
+            },
+          ],
+        },
+      },
+    ];
+
+    const v1Messages = convertToV1Messages(messages);
+
+    expect(v1Messages).toHaveLength(2);
+    expect(v1Messages[0].content).toEqual([
+      {
+        type: 'text',
+        text: 'Calculate 15 times 4, then remember the result',
+      },
+    ]);
+    expect(v1Messages[1].content).toBe('Calculate 15 times 4.');
+  });
+
   it('should preserve toolInvocations when text follows tool invocations (reproduces issue #6087)', () => {
     // This reproduces the exact issue from GitHub issue #6087
     // When an assistant message has tool invocations followed by text,

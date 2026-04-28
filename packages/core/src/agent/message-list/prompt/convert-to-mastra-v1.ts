@@ -5,7 +5,15 @@
 import type { AssistantContent, ToolResultPart } from '@internal/ai-sdk-v4';
 import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraDBMessage } from '../../message-list';
+import {
+  getConcreteLegacyField,
+  getLegacyContent,
+  getLegacyExperimentalAttachments,
+  getLegacyToolInvocations,
+} from '../utils/legacy-fields';
 import { attachmentsToParts } from './attachments-to-parts';
+
+type DerivedUserTextContent = Extract<MastraMessageV1['content'], Array<unknown>>;
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
   // Track how many times each ID has been used to create unique IDs for split messages
@@ -57,12 +65,16 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
 export function convertToV1Messages(messages: Array<MastraDBMessage>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
+  let previousDerivedUserTextContent: DerivedUserTextContent | undefined;
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
+    const concreteContent = getConcreteLegacyField<string>(message.content, 'content');
+    const content = concreteContent ?? getLegacyContent(message.content);
+    const inputAttachments = getLegacyExperimentalAttachments(message.content) ?? [];
+    const { parts: inputParts } = message.content;
     const { role } = message;
 
     const fields = {
@@ -87,6 +99,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
     switch (role) {
       case 'user': {
+        const useStringContent = concreteContent !== undefined || previousDerivedUserTextContent?.length === 1;
         if (parts == null) {
           const userContent = experimental_attachments
             ? [{ type: 'text', text: content || '' }, ...attachmentsToParts(experimental_attachments)]
@@ -109,27 +122,41 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           const userContent = experimental_attachments
             ? [...textParts, ...attachmentsToParts(experimental_attachments)]
             : textParts;
+          const outputContent: MastraMessageV1['content'] =
+            useStringContent && userContent.length === textParts.length ? content || '' : userContent;
+
           pushOrCombine({
             role: 'user',
             ...fields,
             type: 'text',
-            content:
-              Array.isArray(userContent) &&
-              userContent.length === 1 &&
-              userContent[0]?.type === `text` &&
-              typeof content !== `undefined`
-                ? content
-                : userContent,
+            content: outputContent,
           });
+
+          previousDerivedUserTextContent =
+            !useStringContent && Array.isArray(userContent) && userContent.every(part => part.type === 'text')
+              ? userContent
+              : undefined;
         }
         break;
       }
 
       case 'assistant': {
+        previousDerivedUserTextContent = undefined;
         if (message.content.parts != null) {
           let currentStep = 0;
           let blockHasToolInvocations = false;
           let block: MastraMessageContentV2['parts'] = [];
+          const toolInvocations = getLegacyToolInvocations(message.content);
+          const partsToolCallIds = new Set(
+            message.content.parts
+              .filter(
+                (part): part is Extract<MastraMessageContentV2['parts'][number], { type: 'tool-invocation' }> =>
+                  part.type === 'tool-invocation',
+              )
+              .map(part => part.toolInvocation.toolCallId),
+          );
+          const legacyOnlyToolInvocations =
+            toolInvocations?.filter(toolInvocation => !partsToolCallIds.has(toolInvocation.toolCallId)) ?? [];
 
           function processBlock() {
             const content: AssistantContent = [];
@@ -251,73 +278,50 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
           processBlock();
 
-          // Check if there are toolInvocations that weren't processed from parts
-          const toolInvocations = message.content.toolInvocations;
-          if (toolInvocations && toolInvocations.length > 0) {
-            // Find tool invocations that weren't already processed from parts
-            const processedToolCallIds = new Set<string>();
-            for (const part of message.content.parts) {
-              if (part.type === 'tool-invocation' && part.toolInvocation.toolCallId) {
-                processedToolCallIds.add(part.toolInvocation.toolCallId);
-              }
-            }
+          // Recover legacy-only tool invocations from older rows whose parts never carried tool-invocation parts.
+          if (legacyOnlyToolInvocations.length > 0) {
+            const maxStep = legacyOnlyToolInvocations.reduce((max, toolInvocation) => {
+              return Math.max(max, toolInvocation.step ?? 0);
+            }, 0);
 
-            const unprocessedToolInvocations = toolInvocations.filter(
-              ti => !processedToolCallIds.has(ti.toolCallId) && ti.toolName !== 'updateWorkingMemory',
-            );
+            for (let i = 0; i <= maxStep; i++) {
+              const stepInvocations = legacyOnlyToolInvocations.filter(
+                toolInvocation => (toolInvocation.step ?? 0) === i && toolInvocation.toolName !== 'updateWorkingMemory',
+              );
 
-            if (unprocessedToolInvocations.length > 0) {
-              // Group by step, handling undefined steps
-              const invocationsByStep = new Map<number, typeof unprocessedToolInvocations>();
-
-              for (const inv of unprocessedToolInvocations) {
-                const step = inv.step ?? 0;
-                if (!invocationsByStep.has(step)) {
-                  invocationsByStep.set(step, []);
-                }
-                invocationsByStep.get(step)!.push(inv);
+              if (stepInvocations.length === 0) {
+                continue;
               }
 
-              // Process each step
-              const sortedSteps = Array.from(invocationsByStep.keys()).sort((a, b) => a - b);
+              pushOrCombine({
+                role: 'assistant',
+                ...fields,
+                type: 'tool-call',
+                content: stepInvocations.map(({ toolCallId, toolName, args }) => ({
+                  type: 'tool-call' as const,
+                  toolCallId,
+                  toolName,
+                  args,
+                })),
+              });
 
-              for (const step of sortedSteps) {
-                const stepInvocations = invocationsByStep.get(step)!;
+              const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
 
-                // Create tool-call message for all invocations (calls and results)
+              if (invocationsWithResults.length > 0) {
                 pushOrCombine({
-                  role: 'assistant',
+                  role: 'tool',
                   ...fields,
-                  type: 'tool-call',
-                  content: [
-                    ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
-                      type: 'tool-call' as const,
+                  type: 'tool-result',
+                  content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                    const { toolCallId, toolName, result } = toolInvocation;
+                    return {
+                      type: 'tool-result',
                       toolCallId,
                       toolName,
-                      args,
-                    })),
-                  ],
+                      result,
+                    };
+                  }),
                 });
-
-                // Only create tool-result message if there are actual results
-                const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
-
-                if (invocationsWithResults.length > 0) {
-                  pushOrCombine({
-                    role: 'tool',
-                    ...fields,
-                    type: 'tool-result',
-                    content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
-                      const { toolCallId, toolName, result } = toolInvocation;
-                      return {
-                        type: 'tool-result',
-                        toolCallId,
-                        toolName,
-                        result,
-                      };
-                    }),
-                  });
-                }
               }
             }
           }
@@ -325,7 +329,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           break;
         }
 
-        const toolInvocations = message.content.toolInvocations;
+        const toolInvocations = getLegacyToolInvocations(message.content);
 
         if (toolInvocations == null || toolInvocations.length === 0) {
           pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
@@ -351,7 +355,9 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             ...fields,
             type: 'tool-call',
             content: [
-              ...(isLastMessage && content && i === 0 ? [{ type: 'text' as const, text: content }] : []),
+              ...(isLastMessage && typeof content === 'string' && i === 0
+                ? [{ type: 'text' as const, text: content }]
+                : []),
               ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
                 type: 'tool-call' as const,
                 toolCallId,

@@ -2,7 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
-import { MessageList } from '@mastra/core/agent';
+import { addLegacyGettersToMessage, getLegacyContent, MessageList, stripLegacyMessageFields } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
@@ -935,7 +935,7 @@ ${workingMemory}`;
         generateMessageId: () => this.generateId(),
       })
         .add(updatedMessages, 'memory')
-        .get.all.db();
+        .get.all.storage();
 
       const memoryStore = await this.getMemoryStore();
       const result = await memoryStore.saveMessages({
@@ -957,12 +957,9 @@ ${workingMemory}`;
           updatedMessages.map(async message => {
             let textForEmbedding: string | null = null;
 
-            if (
-              message.content.content &&
-              typeof message.content.content === 'string' &&
-              message.content.content.trim() !== ''
-            ) {
-              textForEmbedding = message.content.content;
+            const content = getLegacyContent(message.content);
+            if (content && content.trim() !== '') {
+              textForEmbedding = content;
             } else if (message.content.parts && message.content.parts.length > 0) {
               // Extract text from all text parts, concatenate
               const joined = message.content.parts
@@ -1046,10 +1043,6 @@ ${workingMemory}`;
       newMessage.content = { ...message.content };
     }
 
-    if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-      newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
-    }
-
     if (Array.isArray(newMessage.content?.parts)) {
       newMessage.content.parts = newMessage.content.parts
         .filter(part => {
@@ -1072,8 +1065,7 @@ ${workingMemory}`;
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
       if (newMessage.content.parts.length === 0) {
-        const hasContentText =
-          typeof newMessage.content.content === 'string' && newMessage.content.content.trim().length > 0;
+        const hasContentText = (getLegacyContent(newMessage.content)?.trim().length ?? 0) > 0;
 
         if (!hasContentText) {
           return null;
@@ -1081,7 +1073,7 @@ ${workingMemory}`;
       }
     }
 
-    return newMessage;
+    return addLegacyGettersToMessage(stripLegacyMessageFields(newMessage));
   }
 
   protected parseWorkingMemory(text: string): string | null {
@@ -1375,7 +1367,7 @@ ${workingMemory}`;
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.saveMessages({ messages });
+    await memoryStore.saveMessages({ messages: messages.map(stripLegacyMessageFields) });
   }
 
   /**
@@ -1826,12 +1818,9 @@ Notes:
       messages.map(async message => {
         let textForEmbedding: string | null = null;
 
-        if (
-          message.content.content &&
-          typeof message.content.content === 'string' &&
-          message.content.content.trim() !== ''
-        ) {
-          textForEmbedding = message.content.content;
+        const content = getLegacyContent(message.content);
+        if (content && content.trim() !== '') {
+          textForEmbedding = content;
         } else if (message.content.parts && message.content.parts.length > 0) {
           const joined = message.content.parts
             .filter((part: any) => part.type === 'text')
@@ -1963,13 +1952,9 @@ Notes:
             const content = message.content;
 
             if (content) {
-              if (
-                'content' in content &&
-                content.content &&
-                typeof content.content === 'string' &&
-                content.content.trim() !== ''
-              ) {
-                textForEmbedding = content.content;
+              const legacyContent = getLegacyContent(content as MastraDBMessage['content']);
+              if (legacyContent && legacyContent.trim() !== '') {
+                textForEmbedding = legacyContent;
               } else if (
                 'parts' in content &&
                 content.parts &&
@@ -2418,12 +2403,9 @@ Notes:
       messages.map(async message => {
         let textForEmbedding: string | null = null;
 
-        if (
-          message.content?.content &&
-          typeof message.content.content === 'string' &&
-          message.content.content.trim() !== ''
-        ) {
-          textForEmbedding = message.content.content;
+        const content = getLegacyContent(message.content);
+        if (content && content.trim() !== '') {
+          textForEmbedding = content;
         } else if (message.content?.parts && message.content.parts.length > 0) {
           // Extract text from all text parts, concatenate
           const joined = message.content.parts

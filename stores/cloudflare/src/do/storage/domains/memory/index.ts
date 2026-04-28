@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -553,7 +553,10 @@ export class MemoryStorageDO extends MemoryStorage {
         return {
           id: message.id,
           thread_id: message.threadId!,
-          content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+          content:
+            typeof message.content === 'string'
+              ? message.content
+              : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
           createdAt: createdAt.toISOString(),
           role: message.role,
           type: message.type || 'v2',
@@ -1004,14 +1007,14 @@ export class MemoryStorageDO extends MemoryStorage {
         let mergedContent = existing.content;
         if (update.content) {
           if (typeof mergedContent === 'object' && mergedContent !== null) {
-            mergedContent = {
+            mergedContent = getLegacyContentForStorage({
               ...mergedContent,
               ...update.content,
               metadata: {
                 ...mergedContent.metadata,
                 ...update.content.metadata,
               },
-            };
+            })!;
           } else {
             mergedContent = update.content;
           }

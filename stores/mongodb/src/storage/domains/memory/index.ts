@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -637,7 +637,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
               $set: {
                 id: message.id,
                 thread_id: message.threadId!,
-                content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
+                content:
+                  typeof message.content === 'object'
+                    ? JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false }))
+                    : message.content,
                 role: message.role,
                 type: message.type || 'v2',
                 resourceId: message.resourceId,
@@ -714,7 +717,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Special handling for content field to merge instead of overwrite
       if (updatableFields.content) {
-        const newContent = {
+        const newContent = getLegacyContentForStorage({
           ...existingMessage.content,
           ...updatableFields.content,
           // Deep merge metadata if it exists on both
@@ -726,7 +729,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                 },
               }
             : {}),
-        };
+        })!;
         updateDoc.content = JSON.stringify(newContent);
         delete updatableFields.content;
       }

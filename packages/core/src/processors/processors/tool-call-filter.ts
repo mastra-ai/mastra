@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '../../agent/message-list';
+import { getLegacyContent, stripLegacyMessageFields } from '../../agent/message-list';
 import type { RequestContext } from '../../request-context';
 
 import type { Processor } from '../index';
@@ -93,21 +94,13 @@ export class ToolCallFilter implements Processor {
             return null;
           }
 
-          // Return message with filtered parts
-          // Also filter toolInvocations if present
-          const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
-          const updatedContent: any = {
-            ...contentWithoutToolInvocations,
-            parts: nonToolParts,
-          };
-
-          // Don't include toolInvocations since we're excluding all tools
-          // (already excluded by destructuring above)
-
-          return {
+          return stripLegacyMessageFields({
             ...message,
-            content: updatedContent,
-          };
+            content: {
+              ...message.content,
+              parts: nonToolParts,
+            },
+          });
         })
         .filter((message): message is MastraDBMessage => message !== null);
       return result;
@@ -181,39 +174,25 @@ export class ToolCallFilter implements Processor {
             return null;
           }
 
-          // Return message with filtered parts
-          // Also filter toolInvocations if present
-          const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
-          const updatedContent: any = {
-            ...contentWithoutToolInvocations,
+          const updatedContent = {
+            ...message.content,
             parts: filteredParts,
           };
-
-          // Filter toolInvocations array if it exists
-          if ('toolInvocations' in message.content && Array.isArray((message.content as any).toolInvocations)) {
-            const filteredToolInvocations = (message.content as any).toolInvocations.filter(
-              (inv: any) => !this.exclude.includes(inv.toolName),
-            );
-            if (filteredToolInvocations.length > 0) {
-              updatedContent.toolInvocations = filteredToolInvocations;
-            }
-            // If no tool invocations remain, don't include the field (already excluded by destructuring)
-          }
 
           // Check if message has no parts and no text content
           // Note: For V2 messages, parts is the source of truth, not toolInvocations
           const hasNoToolParts = filteredParts.length === 0;
-          const hasNoTextContent = !updatedContent.content || updatedContent.content.trim() === '';
+          const hasNoTextContent = !(getLegacyContent(updatedContent)?.trim() ?? '');
 
           // Only remove the message if it has no parts at all and no text content
           if (hasNoToolParts && hasNoTextContent) {
             return null;
           }
 
-          return {
+          return stripLegacyMessageFields({
             ...message,
             content: updatedContent,
-          };
+          });
         })
         .filter((message): message is MastraDBMessage => message !== null);
 

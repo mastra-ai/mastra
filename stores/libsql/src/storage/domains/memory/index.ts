@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Client, InValue } from '@libsql/client';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
-import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
@@ -644,7 +644,9 @@ export class MemoryLibSQL extends MemoryStorage {
           args: [
             message.id,
             message.threadId!,
-            typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
+            typeof message.content === 'object'
+              ? JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false }))
+              : message.content,
             message.role,
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
@@ -740,7 +742,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Special handling for the 'content' field to merge instead of overwrite
       if (updatableFields.content) {
-        const newContent = {
+        const newContent = getLegacyContentForStorage({
           ...existingMessage.content,
           ...updatableFields.content,
           // Deep merge metadata if it exists on both
@@ -752,7 +754,7 @@ export class MemoryLibSQL extends MemoryStorage {
                 },
               }
             : {}),
-        };
+        })!;
         setClauses.push(`${parseSqlIdentifier('content', 'column name')} = ?`);
         args.push(JSON.stringify(newContent));
         delete updatableFields.content;

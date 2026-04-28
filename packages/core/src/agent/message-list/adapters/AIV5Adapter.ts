@@ -5,6 +5,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
+import {
+  addLegacyGettersToMessage,
+  getLegacyContent,
+  getLegacyExperimentalAttachments,
+  getLegacyReasoning,
+  getLegacyToolInvocations,
+} from '../utils/legacy-fields';
 import { sanitizeToolName } from '../utils/tool-name';
 
 /**
@@ -113,8 +120,9 @@ export class AIV5Adapter {
 
     // 1. Handle tool invocations (only if not already in parts array)
     const hasToolInvocationParts = dbMsg.content.parts?.some(p => p.type === 'tool-invocation');
-    if (dbMsg.content.toolInvocations && !hasToolInvocationParts) {
-      for (const invocation of dbMsg.content.toolInvocations) {
+    const legacyToolInvocations = getLegacyToolInvocations(dbMsg.content);
+    if (legacyToolInvocations && !hasToolInvocationParts) {
+      for (const invocation of legacyToolInvocations) {
         if (invocation.state === 'result') {
           parts.push({
             type: `tool-${invocation.toolName}`,
@@ -139,17 +147,19 @@ export class AIV5Adapter {
     const hasFileInParts = dbMsg.content.parts?.some(p => p.type === 'file');
 
     // 3. Handle reasoning (AIV4 reasoning is a string) - only if not in parts
-    if (dbMsg.content.reasoning && !hasReasoningInParts) {
+    const legacyReasoning = getLegacyReasoning(dbMsg.content);
+    if (legacyReasoning && !hasReasoningInParts) {
       parts.push({
         type: 'reasoning',
-        text: dbMsg.content.reasoning,
+        text: legacyReasoning,
       });
     }
 
     // 4. Handle files (experimental_attachments) - only if not in parts
     const attachmentUrls = new Set<string>();
-    if (dbMsg.content.experimental_attachments && !hasFileInParts) {
-      for (const attachment of dbMsg.content.experimental_attachments) {
+    const legacyAttachments = getLegacyExperimentalAttachments(dbMsg.content);
+    if (legacyAttachments && !hasFileInParts) {
+      for (const attachment of legacyAttachments) {
         attachmentUrls.add(attachment.url);
         parts.push({
           type: 'file',
@@ -301,8 +311,9 @@ export class AIV5Adapter {
     }
 
     // 6. Handle text content (fallback if no parts)
-    if (dbMsg.content.content && !hasNonToolReasoningParts) {
-      parts.push({ type: 'text', text: dbMsg.content.content });
+    const legacyContent = getLegacyContent(dbMsg.content);
+    if (legacyContent && !hasNonToolReasoningParts) {
+      parts.push({ type: 'text', text: legacyContent });
     }
 
     const existingToolStateDataPartIds = new Set(
@@ -404,58 +415,6 @@ export class AIV5Adapter {
     delete cleanMetadata.threadId;
     delete cleanMetadata.resourceId;
 
-    // Process parts to build V2 content
-    const toolInvocationParts = parts.filter(p => AIV5.isToolUIPart(p));
-    const reasoningParts = parts.filter(p => p.type === 'reasoning');
-    const fileParts = parts.filter(p => p.type === 'file');
-    const textParts = parts.filter(p => p.type === 'text');
-
-    // Build tool invocations array
-    let toolInvocations: MastraDBMessage['content']['toolInvocations'] = undefined;
-    if (toolInvocationParts.length > 0) {
-      toolInvocations = toolInvocationParts.map(p => {
-        const toolName = getToolName(p);
-        if (p.state === 'output-available') {
-          return {
-            args: p.input,
-            result:
-              typeof p.output === 'object' && p.output && 'value' in p.output
-                ? (p.output as { value: unknown }).value
-                : p.output,
-            toolCallId: p.toolCallId,
-            toolName,
-            state: 'result',
-          } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
-        }
-        return {
-          args: p.input,
-          toolCallId: p.toolCallId,
-          toolName,
-          state: 'call',
-        } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
-      });
-    }
-
-    // Build reasoning string (AIV4 reasoning is a string, not an array)
-    let reasoning: MastraDBMessage['content']['reasoning'] = undefined;
-    if (reasoningParts.length > 0) {
-      reasoning = reasoningParts.map(p => p.text).join('\n');
-    }
-
-    // Build experimental_attachments from file parts
-    let experimental_attachments: MastraDBMessage['content']['experimental_attachments'] = undefined;
-    if (fileParts.length > 0) {
-      experimental_attachments = fileParts.map(p => ({
-        url: p.url || '',
-        contentType: p.mediaType,
-      }));
-    }
-
-    // Build content from text parts (AIV4 content is a string)
-    let content: MastraDBMessage['content']['content'] = undefined;
-    if (textParts.length > 0) {
-      content = textParts.map(p => p.text).join('');
-    }
     // Build V2-compatible parts array
     const v2Parts = parts
       .map(p => {
@@ -567,7 +526,7 @@ export class AIV5Adapter {
     // Filter out empty text parts to prevent Anthropic API errors
     const filteredV2Parts = filterEmptyTextParts(v2Parts as MastraMessagePart[]);
 
-    return {
+    return addLegacyGettersToMessage({
       id: uiMsg.id,
       role: uiMsg.role,
       createdAt,
@@ -576,13 +535,9 @@ export class AIV5Adapter {
       content: {
         format: 2,
         parts: filteredV2Parts as MastraMessageContentV2['parts'],
-        toolInvocations,
-        reasoning,
-        experimental_attachments,
-        content,
         metadata: Object.keys(cleanMetadata).length > 0 ? cleanMetadata : undefined,
       },
-    };
+    });
   }
 
   /**
@@ -640,9 +595,6 @@ export class AIV5Adapter {
       : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
 
     const mastraDBParts: MastraMessageContentV2['parts'] = [];
-    const toolInvocations: NonNullable<MastraDBMessage['content']['toolInvocations']> = [];
-    const reasoningParts: string[] = [];
-    const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
 
     for (const part of content) {
       if (part.type === 'text') {
@@ -671,15 +623,8 @@ export class AIV5Adapter {
           toolInvocationPart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(toolInvocationPart);
-        toolInvocations.push({
-          toolCallId: toolCallPart.toolCallId,
-          toolName: sanitizeToolName(toolCallPart.toolName),
-          args: toolCallPart.input,
-          state: 'call',
-        });
       } else if (part.type === 'tool-result') {
         const toolResultPart = part;
-        const matchingCall = toolInvocations.find(inv => inv.toolCallId === toolResultPart.toolCallId);
 
         const matchingV2Part = mastraDBParts.find(
           (p): p is Extract<MastraDBMessage['content']['parts'][number], { type: 'tool-invocation' }> =>
@@ -688,29 +633,25 @@ export class AIV5Adapter {
             p.toolInvocation.toolCallId === toolResultPart.toolCallId,
         );
 
-        const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
-          matchingCall.state = 'result';
-          matchingCall.result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? toolResultPart.output.value
-              : toolResultPart.output;
-        };
+        const getResultOutput = (toolResultPart: AIV5Type.ToolResultPart): unknown =>
+          typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
+            ? toolResultPart.output.value
+            : toolResultPart.output;
 
-        if (matchingCall) {
-          updateMatchingCallInvocationResult(toolResultPart, matchingCall);
-        } else {
-          const call: any = {
-            state: 'call',
-            toolCallId: toolResultPart.toolCallId,
-            toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
-          };
-          updateMatchingCallInvocationResult(toolResultPart, call);
-          toolInvocations.push(call);
-        }
+        const toResultInvocation = (
+          toolResultPart: AIV5Type.ToolResultPart,
+          matchingCall: Extract<
+            MastraDBMessage['content']['parts'][number],
+            { type: 'tool-invocation' }
+          >['toolInvocation'],
+        ) => ({
+          ...matchingCall,
+          state: 'result' as const,
+          result: getResultOutput(toolResultPart),
+        });
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
-          updateMatchingCallInvocationResult(toolResultPart, matchingV2Part.toolInvocation);
+          matchingV2Part.toolInvocation = toResultInvocation(toolResultPart, matchingV2Part.toolInvocation);
           if (toolResultPart.providerOptions) {
             matchingV2Part.providerMetadata = toolResultPart.providerOptions;
             matchingV2Part.createdAt = getMastraCreatedAt(toolResultPart.providerOptions) ?? matchingV2Part.createdAt;
@@ -722,10 +663,10 @@ export class AIV5Adapter {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
               args: {},
-              state: 'call',
+              result: getResultOutput(toolResultPart),
+              state: 'result',
             },
           };
-          updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
           if (toolResultPart.providerOptions) {
             toolInvocationPart.providerMetadata = toolResultPart.providerOptions;
             toolInvocationPart.createdAt = getMastraCreatedAt(toolResultPart.providerOptions);
@@ -743,7 +684,6 @@ export class AIV5Adapter {
           v2ReasoningPart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(v2ReasoningPart);
-        reasoningParts.push(part.text);
       } else if (part.type === 'image') {
         const imagePart = part;
         const mimeType = imagePart.mediaType || 'image/jpeg';
@@ -759,10 +699,6 @@ export class AIV5Adapter {
           imageFilePart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(imageFilePart);
-        experimental_attachments.push({
-          url: imageData,
-          contentType: mimeType,
-        });
       } else if (part.type === 'file') {
         const filePart = part;
         const mimeType = filePart.mediaType || 'application/octet-stream';
@@ -781,21 +717,11 @@ export class AIV5Adapter {
           (v2FilePart as Record<string, unknown>).filename = (filePart as { filename?: string }).filename;
         }
         mastraDBParts.push(v2FilePart);
-        experimental_attachments.push({
-          url: fileData,
-          contentType: mimeType,
-        });
       }
     }
 
     // Filter out empty text parts to prevent Anthropic API errors
     const filteredMastraDBParts = filterEmptyTextParts(mastraDBParts);
-
-    // Build V2 content string
-    const contentString = filteredMastraDBParts
-      .filter(p => p.type === 'text')
-      .map(p => p.text)
-      .join('\n');
 
     // Preserve metadata from the input message if present
     const metadata: Record<string, unknown> =
@@ -816,10 +742,6 @@ export class AIV5Adapter {
       content: {
         format: 2,
         parts: filteredMastraDBParts,
-        toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
-        reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
-        experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
-        content: contentString || undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       },
     };
@@ -828,6 +750,6 @@ export class AIV5Adapter {
       message.content.providerMetadata = modelMsg.providerOptions;
     }
 
-    return message;
+    return addLegacyGettersToMessage(message);
   }
 }

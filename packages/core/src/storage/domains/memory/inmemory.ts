@@ -1,4 +1,5 @@
 import { MessageList } from '../../../agent/message-list';
+import { addLegacyGettersToMessages } from '../../../agent/message-list/utils/legacy-fields';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
@@ -282,7 +283,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     return {
-      messages,
+      messages: addLegacyGettersToMessages(messages),
       total: totalThreadMessages,
       page,
       perPage: perPageForResponse,

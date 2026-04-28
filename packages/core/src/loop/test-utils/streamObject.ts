@@ -562,7 +562,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: expect.any(String),
                 content: {
-                  content: '{"content": "Hello, world!"}',
                   format: 2,
                   metadata: {
                     modelId: 'mock-model-id',
@@ -881,7 +880,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "dbMessages": [
                   {
                     "content": {
-                      "content": "{ "content": "Hello, world!" }",
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
@@ -986,7 +984,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "dbMessages": [
                       {
                         "content": {
-                          "content": "{ "content": "Hello, world!" }",
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
@@ -1204,7 +1201,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "dbMessages": [
                   {
                     "content": {
-                      "content": "{ "invalid": "Hello, world!" }",
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
@@ -1299,7 +1295,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "dbMessages": [
                       {
                         "content": {
-                          "content": "{ "invalid": "Hello, world!" }",
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
@@ -1511,7 +1506,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "dbMessages": [
                   {
                     "content": {
-                      "content": "{ "invalid": "Hello, world!" }",
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
@@ -1606,7 +1600,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "dbMessages": [
                       {
                         "content": {
-                          "content": "{ "invalid": "Hello, world!" }",
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",

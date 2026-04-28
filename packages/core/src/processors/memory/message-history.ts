@@ -1,5 +1,6 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
+import { stripLegacyMessageFields } from '../../agent/message-list/utils/legacy-fields';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
@@ -180,13 +181,11 @@ export class MessageHistory implements Processor {
           newMessage.content = { ...m.content };
         }
 
-        // Strip working memory tags from string content
-        if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-          newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
-        }
-
-        if (Array.isArray(newMessage.content?.parts)) {
-          newMessage.content.parts = newMessage.content.parts
+        const originalContent =
+          m.content && typeof m.content === 'object' && !Array.isArray(m.content) ? m.content : undefined;
+        const originalParts = originalContent?.parts;
+        if (Array.isArray(originalParts)) {
+          const filteredParts = originalParts
             .map(p => {
               // Filter out streaming tool calls (partial-call is an intermediate state during streaming)
               if (p.type === `tool-invocation` && p.toolInvocation.state === `partial-call`) {
@@ -209,12 +208,16 @@ export class MessageHistory implements Processor {
             .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
           // If all parts were filtered out, skip the whole message
-          if (newMessage.content.parts.length === 0) {
+          if (filteredParts.length === 0) {
             return null;
+          }
+
+          if (newMessage.content && typeof newMessage.content === 'object' && !Array.isArray(newMessage.content)) {
+            newMessage.content.parts = filteredParts;
           }
         }
 
-        return newMessage;
+        return stripLegacyMessageFields(newMessage);
       })
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
   }

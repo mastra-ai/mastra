@@ -3,6 +3,7 @@ import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
 
 import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
+import { getLegacyToolInvocations } from './legacy-fields';
 
 /**
  * Tool result with input field (Anthropic requirement)
@@ -184,9 +185,9 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       }
     }
 
-    // Also check toolInvocations array (AIV4 format)
-    if (msg.content.toolInvocations) {
-      const toolInvocation = msg.content.toolInvocations.find(inv => inv.toolCallId === toolCallId);
+    const toolInvocations = getLegacyToolInvocations(msg.content);
+    if (toolInvocations) {
+      const toolInvocation = toolInvocations.find(inv => inv.toolCallId === toolCallId);
 
       if (toolInvocation) {
         return toolInvocation.args || {};

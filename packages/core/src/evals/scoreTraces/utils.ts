@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '../../agent';
+import { getLegacyContent } from '../../agent';
 import { SpanType } from '../../observability';
 import type { SpanRecord, TraceRecord } from '../../storage';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
@@ -280,7 +281,7 @@ export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
   const systemMessages = extractSystemMessages(primaryLLMSpan);
 
   // Extract remembered messages from LLM span (excluding current input)
-  const currentInputContent = inputMessages[0]?.content.content || '';
+  const currentInputContent = inputMessages[0] ? (getLegacyContent(inputMessages[0].content) ?? '') : '';
   const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
 
   const input = {
