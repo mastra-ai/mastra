@@ -43,4 +43,12 @@ describe('normalizeData', () => {
       steps: [{ status: 'suspended' }, { status: 'failed' }],
     });
   });
+
+  it('exposes tool input schema from common server response fields', () => {
+    expect(normalizeData(API_COMMANDS.toolGet, { id: 'weather', parameters: { type: 'object' } })).toEqual({
+      id: 'weather',
+      inputSchema: { type: 'object' },
+      parameters: { type: 'object' },
+    });
+  });
 });
