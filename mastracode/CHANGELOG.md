@@ -1,5 +1,31 @@
 # mastracode
 
+## 0.16.0-alpha.3
+
+### Minor Changes
+
+- Added evals system for MastraCode with live scorers that run automatically during sessions. ([#15642](https://github.com/mastra-ai/mastra/pull/15642))
+
+  **Live scorers** grade outcomes and efficiency:
+  - **Outcome scorer** — checks build/test pass status, tool error rates, stuck loops, regressions, and autonomy
+  - **Efficiency scorer** — measures redundancy, turn count, retry efficiency, and read-before-edit patterns
+
+  **New TUI command:**
+  - `/feedback` — submit thumbs up/down and comments on traces, routed through the observability event bus so feedback reaches cloud exporters even when DuckDB is locked. Feedback is attributed to the user's git display name.
+
+  **Automatic error feedback** — non-retryable stream errors automatically emit a thumbs-down feedback event with the error message, enabling error tracking in the cloud dashboard without manual intervention.
+
+  **New TUI command:**
+  - `/observability` — configure per-resource cloud observability project ID and access token. Credentials are stored securely in `auth.json` (0600 permissions) and project IDs in `settings.json`. No environment variables required.
+
+  **Enriched span metadata** — agent run spans now capture model configuration, agent settings, OM settings, and project context for filtering and analysis in the cloud dashboard.
+
+### Patch Changes
+
+- Updated dependencies [[`c04417b`](https://github.com/mastra-ai/mastra/commit/c04417ba0a2e4ded66da4352331ef29cd4bd1d79), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51), [`ba6b0c5`](https://github.com/mastra-ai/mastra/commit/ba6b0c51bfce358554fd33c7f2bcd5593633f2ff), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51)]:
+  - @mastra/core@1.29.0-alpha.3
+  - @mastra/observability@1.10.1-alpha.0
+
 ## 0.15.3-alpha.2
 
 ### Patch Changes

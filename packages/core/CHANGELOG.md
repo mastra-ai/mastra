@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.29.0-alpha.3
+
+### Minor Changes
+
+- Added `prepareRun` and `filterRun` utilities for scorer input preparation, allowing scorers to filter and transform agent messages before scoring. Scorers can now declare a `prepareRun` hook or use the `filterRun` builder to select specific message part types and tool names before scoring runs. ([#15642](https://github.com/mastra-ai/mastra/pull/15642))
+
+  Added `getCurrentTraceId()` to Harness, which captures the observability trace ID from agent stream responses. This allows callers to correlate feedback and other annotations to the correct trace.
+
+### Patch Changes
+
+- Fixed `AgentChannels.consumeAgentStream` silently dropping `tripwire` chunks, which left channel users (Slack, Discord) with no response when a `strategy: "block"` processor fired. The chunk is now handled: when `retry` is `false`/unset the block reason is posted to the channel (prefixed with the `processorId` when present); when `retry` is `true` the chunk is skipped so the agent's retried output can flow through normally. ([#15692](https://github.com/mastra-ai/mastra/pull/15692))
+
+- fix(tools): preserve args for programmatic tool calls when merging synthetic tool-call ([#15227](https://github.com/mastra-ai/mastra/pull/15227))
+
+  Fixes an issue where programmatic tool calls (PTC) received empty `{}` arguments during streaming.
+
+  When a synthetic tool-call was created with empty args, the real tool-call event (containing actual args) was ignored. This change ensures that args from the real tool-call are merged into the synthetic one when missing.
+
 ## 1.29.0-alpha.2
 
 ### Patch Changes
