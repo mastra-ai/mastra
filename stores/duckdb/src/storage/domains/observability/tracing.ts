@@ -280,8 +280,10 @@ function partitionListTracesFilters(filters: Record<string, unknown>): {
       continue;
     }
 
-    // Everything else (status, tags, metadata, scope, labels, ...) runs after
-    // span reconstruction.
+    // Membership keys (incl. `tags`) are handled via EXISTS subquery against
+    // `span_events` — see MEMBERSHIP_FILTER_KEYS / buildMembershipExists.
+    // Everything that lands here (status, metadata, scope, labels, ...) runs
+    // after span reconstruction.
     postAgg[key] = value;
   }
 
@@ -306,7 +308,9 @@ function buildMembershipExists(
 
     const { clause, params: whereParams } = buildWhereClause({ [key]: value });
     if (clause) {
-      // Unqualified column refs inside the subquery resolve to span_events (aliased m).
+      // Unqualified column refs inside the subquery resolve to the inner
+      // span_events alias `m`; the correlation back to the outer row uses
+      // `${rootAlias}.traceId`.
       parts.push(clause.replace(/^WHERE\s+/i, ''));
       subParams.push(...whereParams);
     }
@@ -610,8 +614,9 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   const membershipDateRange = root.timestamp as
     | { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }
     | undefined;
+  const outerAlias = 'outer_root';
   const { clauses: membershipClauses, params: membershipParams } = buildMembershipExists(
-    'span_events',
+    outerAlias,
     membership,
     membershipDateRange,
   );
@@ -640,7 +645,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
 
     const countSql = `
       SELECT COUNT(*) as total
-      FROM span_events
+      FROM span_events AS ${outerAlias}
       ${prefilterWhere}
     `;
     const countResult = await db.query<{ total: number }>(countSql, prefilterParams);
@@ -649,7 +654,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
     const pageSql = `
       WITH page_roots AS (
         SELECT traceId, spanId
-        FROM span_events
+        FROM span_events AS ${outerAlias}
         ${prefilterWhere}
         ${prefilterOrderBy}
         LIMIT ? OFFSET ?
@@ -679,7 +684,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   const cteSql = `
     WITH candidate_roots AS (
       SELECT traceId, spanId
-      FROM span_events
+      FROM span_events AS ${outerAlias}
       ${prefilterWhere}
     ),
     root_spans AS (

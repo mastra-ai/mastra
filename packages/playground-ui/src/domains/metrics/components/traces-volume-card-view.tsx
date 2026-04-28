@@ -20,12 +20,23 @@ function VolumeBars({
     <HorizontalBars
       data={data.map(d => {
         const errorHref = errorHrefs?.(d);
-        const hasErrorHref = !!errorHref;
+        const rowHref = rowHrefs?.(d);
+        // HorizontalBars ignores per-segment `hrefs` whenever a row-level
+        // `href` is set (to avoid nested anchors). When we want the Errors
+        // segment to drill somewhere different from the rest of the row,
+        // drop the row-level link and split navigation across segments
+        // instead so each target is reachable.
+        if (errorHref) {
+          return {
+            name: d.name,
+            values: [d.completed, d.errors],
+            hrefs: [rowHref, errorHref],
+          };
+        }
         return {
           name: d.name,
           values: [d.completed, d.errors],
-          href: rowHrefs?.(d),
-          ...(hasErrorHref ? { hrefs: [undefined, errorHref] } : {}),
+          href: rowHref,
         };
       })}
       segments={[

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
@@ -72,6 +72,20 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
           ? 'tools'
           : 'agents';
   const [activeTab, setActiveTab] = useState<LatencyTab>(initialTab);
+  // Resync to a non-empty tab when async data finishes loading. Without this,
+  // a card that mounts before data arrives stays stuck on `agents` even when
+  // only workflow/tool data exists.
+  useEffect(() => {
+    if (!data) return;
+    const tabHasData = {
+      agents: data.agentData.length > 0,
+      workflows: data.workflowData.length > 0,
+      tools: data.toolData.length > 0,
+    } as const;
+    if (!tabHasData[activeTab] && tabHasData[initialTab]) {
+      setActiveTab(initialTab);
+    }
+  }, [data, activeTab, initialTab]);
   const renderedActions = typeof actions === 'function' ? actions(activeTab) : actions;
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
   const p50Values = data
