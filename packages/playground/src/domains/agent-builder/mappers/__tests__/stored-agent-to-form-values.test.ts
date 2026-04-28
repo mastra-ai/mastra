@@ -14,6 +14,8 @@ describe('storedAgentToFormValues', () => {
       agents: {},
       workflows: {},
       workspaceId: undefined,
+      visibility: 'private',
+      avatarUrl: undefined,
     };
 
     expect(fromNull).toEqual(expected);
@@ -40,6 +42,8 @@ describe('storedAgentToFormValues', () => {
       agents: { 'agent-x': true },
       workflows: { 'wf-1': true },
       workspaceId: 'ws-1',
+      visibility: 'private',
+      avatarUrl: undefined,
     });
   });
 

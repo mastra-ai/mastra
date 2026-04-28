@@ -1,9 +1,17 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
-import { AgentIcon, EmptyState } from '@mastra/playground-ui';
+import { Avatar, AgentIcon, EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 import { useLinkComponent } from '@/lib/framework';
+
+function getAvatarUrl(agent: StoredAgentResponse): string | undefined {
+  const meta = agent.metadata;
+  if (meta && typeof meta === 'object' && 'avatarUrl' in meta) {
+    return meta.avatarUrl as string | undefined;
+  }
+  return undefined;
+}
 
 function getModelLabel(model: StoredAgentResponse['model']): string {
   if (model && typeof model === 'object' && !Array.isArray(model) && 'provider' in model && 'name' in model) {
@@ -70,9 +78,13 @@ export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
           href={`/agent-builder/agents/${agent.id}/view`}
           className="px-6 py-5 flex items-center gap-4 hover:bg-surface3 transition-colors"
         >
-          <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
-            <AgentIcon className="h-5 w-5" />
-          </div>
+          {getAvatarUrl(agent) ? (
+            <Avatar name={agent.name ?? ''} src={getAvatarUrl(agent)} size="sm" />
+          ) : (
+            <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
+              <AgentIcon className="h-5 w-5" />
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
             <div className="flex items-center gap-2 mt-0.5">

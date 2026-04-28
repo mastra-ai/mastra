@@ -49,6 +49,10 @@ vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
   useWorkflows: () => ({ data: {}, isPending: false }),
 }));
 
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'current-user' } }),
+}));
+
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel', () => ({
   AgentChatPanel: () => <div data-testid="stub-chat-panel" />,
 }));

@@ -1,10 +1,11 @@
-import { Avatar, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Avatar, cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
 import { ChevronRight, FileText, Globe, Lock, Plus, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
+import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
 import { InstructionsDetail } from './details/instructions-detail';
 import { ToolsDetail } from './details/tools-detail';
 import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
@@ -76,6 +77,7 @@ function EditableConfigurePanel({
   const draftDescription = formMethods.watch('description') ?? '';
   const draftInstructions = formMethods.watch('instructions') ?? '';
   const draftVisibility = formMethods.watch('visibility') ?? 'private';
+  const draftAvatarUrl = formMethods.watch('avatarUrl');
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
   const setDraftDescription = (value: string) => formMethods.setValue('description', value);
@@ -89,9 +91,17 @@ function EditableConfigurePanel({
   };
   const closeDetail = () => onActiveDetailChange(null);
 
-  // Avatar upload remains a noop in editable mode (preserved from prior behavior).
-  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     e.target.value = '';
+    if (!file) return;
+
+    try {
+      const { dataUrl } = await downscaleImageToDataUrl(file);
+      formMethods.setValue('avatarUrl', dataUrl, { shouldDirty: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to process avatar image');
+    }
   };
 
   const instructionsDescription = formatInstructionsPreview(draftInstructions);
@@ -107,28 +117,49 @@ function EditableConfigurePanel({
         <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
           <div className="flex flex-col gap-3 px-6">
             <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
-                aria-label="Upload avatar"
-                data-testid="agent-configure-avatar-trigger"
-              >
-                <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                  {(draftName[0] ?? 'A').toUpperCase()}
-                </span>
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Plus className="h-5 w-5 text-neutral5" />
-                </span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarFile}
-                className="hidden"
-                data-testid="agent-configure-avatar-input"
-              />
+              {features.avatarUpload ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
+                    aria-label="Upload avatar"
+                    data-testid="agent-configure-avatar-trigger"
+                  >
+                    {draftAvatarUrl ? (
+                      <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
+                        {(draftName[0] ?? 'A').toUpperCase()}
+                      </span>
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Plus className="h-5 w-5 text-neutral5" />
+                    </span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarFile}
+                    className="hidden"
+                    data-testid="agent-configure-avatar-input"
+                  />
+                </>
+              ) : (
+                <div
+                  className="h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 flex items-center justify-center"
+                  data-testid="agent-configure-avatar-display"
+                >
+                  {draftAvatarUrl ? (
+                    <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
+                      {(draftName[0] ?? 'A').toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <TextFieldBlock
                   name="agent-name"

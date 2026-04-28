@@ -135,7 +135,14 @@ const AgentBuilderAgentViewReady = ({
           </Button>
         ) : undefined
       }
-      chat={<AgentChatPanel agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description} />}
+      chat={
+        <AgentChatPanel
+          agentId={id}
+          agentName={storedAgent?.name}
+          agentDescription={storedAgent?.description}
+          agentAvatarUrl={agent?.avatarUrl}
+        />
+      }
       configure={
         <AgentConfigurePanel
           agent={agent}

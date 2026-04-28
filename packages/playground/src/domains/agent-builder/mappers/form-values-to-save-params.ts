@@ -11,6 +11,7 @@ export interface SaveParams {
   workflows: Record<string, StoredAgentToolConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
   visibility: 'private' | 'public';
+  metadata: Record<string, unknown> | undefined;
 }
 
 function buildEnabledRecord(
@@ -59,6 +60,8 @@ export function formValuesToSaveParams(
 
   const description = values.description?.trim() ? values.description.trim() : undefined;
 
+  const metadata: Record<string, unknown> | undefined = values.avatarUrl ? { avatarUrl: values.avatarUrl } : undefined;
+
   return {
     name: values.name,
     description,
@@ -68,5 +71,6 @@ export function formValuesToSaveParams(
     workflows: emptyToUndefined(workflows),
     workspace,
     visibility: values.visibility ?? 'private',
+    metadata,
   };
 }

@@ -55,6 +55,10 @@ vi.mock('@/domains/workspace/hooks', () => ({
   useWorkspaces: () => ({ data: { workspaces: [] } }),
 }));
 
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'current-user' } }),
+}));
+
 // Heavy panels not under test — replace with dumb stubs.
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/conversation-panel', () => ({
   ConversationPanel: () => <div data-testid="stub-conversation-panel" />,

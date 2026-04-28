@@ -18,7 +18,17 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage,
-  editor: new MastraEditor(),
+  editor: new MastraEditor({
+    builder: {
+      enabled: true,
+      features: {
+        agent: {
+          tools: true,
+          avatarUpload: true,
+        },
+      },
+    },
+  }),
   mcpServers: {
     simpleMcpServer,
   },

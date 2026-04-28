@@ -13,9 +13,10 @@ interface AgentChatPanelProps {
   agentId: string;
   agentName?: string;
   agentDescription?: string;
+  agentAvatarUrl?: string;
 }
 
-export const AgentChatPanel = ({ agentId, agentName, agentDescription }: AgentChatPanelProps) => {
+export const AgentChatPanel = ({ agentId, agentName, agentDescription, agentAvatarUrl }: AgentChatPanelProps) => {
   const { data, isLoading: isConversationLoading } = useAgentMessages({
     agentId,
     threadId: agentId,
@@ -54,7 +55,7 @@ export const AgentChatPanel = ({ agentId, agentName, agentDescription }: AgentCh
             data-testid="agent-builder-agent-chat-empty-state"
           >
             <div className="starter-chip" style={{ animationDelay: '0ms' }}>
-              <Avatar name={agentName ?? 'Agent'} size="lg" />
+              <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
               <Txt variant="ui-md" className="text-neutral6 font-medium">

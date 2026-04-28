@@ -28,6 +28,7 @@ import {
   resolveAuthorFilter,
 } from './authorship';
 import { handleError } from './error';
+import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
 
@@ -240,6 +241,9 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
       const visibility = bodyVisibility ?? (authorId ? 'private' : 'public');
 
+      // Reject oversized avatar images before writing to storage.
+      validateMetadataAvatarUrl(metadata);
+
       const input = {
         id,
         authorId,
@@ -370,6 +374,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         action: 'edit',
         record: existing,
       });
+
+      // Reject oversized avatar images before writing to storage.
+      validateMetadataAvatarUrl(metadata);
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation

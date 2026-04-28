@@ -67,18 +67,22 @@ describe('AgentConfigurePanel feature gating', () => {
     cleanup();
   });
 
-  it('renders only Name, Instructions, and the avatar when both feature flags are off', () => {
+  it('renders only Name, Instructions, and the avatar display when all feature flags are off', () => {
     mockUseBuilderAgentFeatures.mockReturnValue({
       tools: false,
       skills: false,
       memory: false,
       workflows: false,
       agents: false,
+      avatarUpload: false,
     });
 
     renderPanel();
 
-    expect(screen.getByTestId('agent-configure-avatar-trigger')).toBeTruthy();
+    // Avatar upload trigger should NOT be present (feature flag off)
+    expect(screen.queryByTestId('agent-configure-avatar-trigger')).toBeNull();
+    // Avatar display (non-interactive) should be present
+    expect(screen.getByTestId('agent-configure-avatar-display')).toBeTruthy();
     expect(screen.getByTestId('agent-configure-name')).toBeTruthy();
     expect(screen.getByTestId('agent-preview-edit-system-prompt')).toBeTruthy();
     expect(screen.queryByTestId('agent-preview-tools-button')).toBeNull();
@@ -86,6 +90,22 @@ describe('AgentConfigurePanel feature gating', () => {
     expect(screen.queryByTestId('agent-preview-channels-button')).toBeNull();
     expect(screen.queryByTestId('agent-preview-model-trigger')).toBeNull();
     expect(screen.queryByTestId('agent-configure-save')).toBeNull();
+  });
+
+  it('renders the avatar upload trigger when avatarUpload feature flag is on', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: true,
+    });
+
+    renderPanel();
+
+    expect(screen.getByTestId('agent-configure-avatar-trigger')).toBeTruthy();
+    expect(screen.queryByTestId('agent-configure-avatar-display')).toBeNull();
   });
 
   it('renders Tools row only when features.tools is true', () => {

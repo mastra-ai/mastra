@@ -544,6 +544,47 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).message).toBe('Agent with id existing-agent already exists');
       }
     });
+
+    it('should accept metadata with a small avatarUrl', async () => {
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const avatarUrl = `data:image/png;base64,${tinyPng}`;
+
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: 'avatar-agent',
+        name: 'Avatar Agent',
+        instructions: 'Test',
+        model: { name: 'gpt-4', provider: 'openai' },
+        metadata: { avatarUrl },
+      });
+
+      expect(result).toMatchObject({ id: 'avatar-agent' });
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          metadata: { avatarUrl },
+        }),
+      });
+    });
+
+    it('should reject metadata with an oversized avatarUrl (413)', async () => {
+      const big = Buffer.alloc(600 * 1024, 0).toString('base64');
+      const avatarUrl = `data:image/png;base64,${big}`;
+
+      try {
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          id: 'big-avatar-agent',
+          name: 'Big Avatar Agent',
+          instructions: 'Test',
+          model: { name: 'gpt-4', provider: 'openai' },
+          metadata: { avatarUrl },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(413);
+      }
+    });
   });
 
   describe('UPDATE_STORED_AGENT_ROUTE', () => {
@@ -665,6 +706,76 @@ describe('Stored Agents Handlers', () => {
           semanticRecall: false,
         },
       });
+    });
+
+    it('should accept metadata with a small avatarUrl on update', async () => {
+      mockAgentsData.set('avatar-update-test', {
+        id: 'avatar-update-test',
+        name: 'Avatar Update Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-avatar-update-1',
+      });
+
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const avatarUrl = `data:image/png;base64,${tinyPng}`;
+
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'avatar-update-test',
+        metadata: { avatarUrl },
+      });
+
+      expect(result).toMatchObject({ id: 'avatar-update-test' });
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: { avatarUrl },
+        }),
+      );
+    });
+
+    it('should reject metadata with an oversized avatarUrl on update (413)', async () => {
+      mockAgentsData.set('avatar-update-big', {
+        id: 'avatar-update-big',
+        name: 'Big Avatar Update Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-avatar-update-big-1',
+      });
+
+      const big = Buffer.alloc(600 * 1024, 0).toString('base64');
+      const avatarUrl = `data:image/png;base64,${big}`;
+
+      try {
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'avatar-update-big',
+          metadata: { avatarUrl },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(413);
+      }
+    });
+
+    it('should reject metadata with a malformed avatarUrl on update (400)', async () => {
+      mockAgentsData.set('avatar-update-bad', {
+        id: 'avatar-update-bad',
+        name: 'Bad Avatar Update Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-avatar-update-bad-1',
+      });
+
+      try {
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'avatar-update-bad',
+          metadata: { avatarUrl: 'not-a-data-url' },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(400);
+      }
     });
   });
 
@@ -921,6 +1032,27 @@ describe('Stored Agents Handlers', () => {
         id: 'other-agent',
         name: 'Admin Updated',
       });
+    });
+
+    it('should throw when non-owner tries to update avatar via metadata', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+        activeVersionId: 'v-other-1',
+      });
+
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-b'),
+          storedAgentId: 'other-agent',
+          metadata: { avatarUrl: `data:image/png;base64,${tinyPng}` },
+        }),
+      ).rejects.toThrow(HTTPException);
     });
   });
 
