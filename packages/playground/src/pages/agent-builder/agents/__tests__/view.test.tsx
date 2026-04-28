@@ -23,6 +23,10 @@ vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
   useAvailableAgentTools: () => [],
 }));
 
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+}));
+
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: () => ({
     data: {
@@ -51,6 +55,16 @@ vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
 
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel', () => ({
   AgentChatPanel: () => <div data-testid="stub-chat-panel" />,
+  AgentChatPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AgentChatPanelChat: () => <div data-testid="stub-chat-panel" />,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+  StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+  useStreamRunning: () => false,
+  useStreamMessages: () => [],
+  useStreamSend: () => () => {},
 }));
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
   AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,

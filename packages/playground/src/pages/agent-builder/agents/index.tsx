@@ -19,8 +19,8 @@ import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-builder-list/agent-builder-list';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
 type AgentScope = 'mine' | 'all';

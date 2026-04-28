@@ -31,6 +31,10 @@ vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
   useAvailableAgentTools: () => [],
 }));
 
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+}));
+
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message', () => ({
   useStarterUserMessage: () => undefined,
 }));
@@ -58,6 +62,16 @@ vi.mock('@/domains/workspace/hooks', () => ({
 // Heavy panels not under test — replace with dumb stubs.
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/conversation-panel', () => ({
   ConversationPanel: () => <div data-testid="stub-conversation-panel" />,
+  ConversationPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+  StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+  useStreamRunning: () => false,
+  useStreamMessages: () => [],
+  useStreamSend: () => () => {},
 }));
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
   AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,

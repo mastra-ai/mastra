@@ -3,9 +3,13 @@ import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentChatPanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
+import {
+  AgentChatPanelChat,
+  AgentChatPanelProvider,
+} from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
@@ -118,34 +122,63 @@ const AgentBuilderAgentViewReady = ({
   const agent = useMemo(() => storedAgentToAgentConfig(storedAgent, id ?? ''), [storedAgent, id]);
 
   return (
-    <WorkspaceLayout
+    <AgentChatPanelProvider agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description}>
+      <WorkspaceLayout
+        isLoading={false}
+        mode="test"
+        defaultExpanded={false}
+        detailOpen={activeDetail !== null}
+        primaryAction={
+          isOwner ? (
+            <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
+          ) : undefined
+        }
+        chat={<AgentChatPanelChat />}
+        configure={
+          <ViewConfigurePanelConnected
+            agent={agent}
+            availableAgentTools={availableAgentTools}
+            activeDetail={activeDetail}
+            onActiveDetailChange={setActiveDetail}
+          />
+        }
+      />
+    </AgentChatPanelProvider>
+  );
+};
+
+const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
+  const isRunning = useStreamRunning();
+  return (
+    <Button size="sm" variant="default" onClick={onEdit} disabled={isRunning} data-testid="agent-builder-view-edit">
+      Edit configuration
+    </Button>
+  );
+};
+
+interface ViewConfigurePanelConnectedProps {
+  agent: ReturnType<typeof storedAgentToAgentConfig>;
+  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
+  activeDetail: ActiveDetail;
+  onActiveDetailChange: (next: ActiveDetail) => void;
+}
+
+const ViewConfigurePanelConnected = ({
+  agent,
+  availableAgentTools,
+  activeDetail,
+  onActiveDetailChange,
+}: ViewConfigurePanelConnectedProps) => {
+  const isRunning = useStreamRunning();
+  return (
+    <AgentConfigurePanel
+      agent={agent}
+      editable={false}
       isLoading={false}
-      mode="test"
-      defaultExpanded={false}
-      detailOpen={activeDetail !== null}
-      primaryAction={
-        isOwner ? (
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
-            data-testid="agent-builder-view-edit"
-          >
-            Edit configuration
-          </Button>
-        ) : undefined
-      }
-      chat={<AgentChatPanel agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description} />}
-      configure={
-        <AgentConfigurePanel
-          agent={agent}
-          editable={false}
-          isLoading={false}
-          availableAgentTools={availableAgentTools}
-          activeDetail={activeDetail}
-          onActiveDetailChange={setActiveDetail}
-        />
-      }
+      availableAgentTools={availableAgentTools}
+      activeDetail={activeDetail}
+      onActiveDetailChange={onActiveDetailChange}
+      disabled={isRunning}
     />
   );
 };
