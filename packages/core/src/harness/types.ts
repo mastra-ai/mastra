@@ -406,6 +406,13 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+}
+
+/** Creates a zero-initialized TokenUsage object. */
+export function emptyTokenUsage(): TokenUsage {
+  return { promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0 };
 }
 
 // =============================================================================
@@ -623,7 +630,7 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    tokenUsage: emptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,

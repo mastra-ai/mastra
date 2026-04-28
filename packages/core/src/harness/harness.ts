@@ -15,7 +15,7 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import { defaultDisplayState, defaultOMProgressState, emptyTokenUsage } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -33,6 +33,7 @@ import type {
   ModelAuthStatus,
   PermissionPolicy,
   PermissionRules,
+  TokenUsage,
   ToolCategory,
 } from './types';
 
@@ -100,11 +101,7 @@ export class Harness<TState = {}> {
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
-  private tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number } = {
-    promptTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0,
-  };
+  private tokenUsage: TokenUsage = emptyTokenUsage();
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
@@ -723,7 +720,7 @@ export class Harness<TState = {}> {
       void this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
     }
 
-    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.tokenUsage = emptyTokenUsage();
     this.emit({ type: 'thread_created', thread });
 
     return thread;
@@ -762,7 +759,7 @@ export class Harness<TState = {}> {
         // Lock release failed; proceed with state cleanup regardless
       }
       this.currentThreadId = null;
-      this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      this.tokenUsage = emptyTokenUsage();
     }
 
     this.emit({ type: 'thread_deleted', threadId });
@@ -836,7 +833,7 @@ export class Harness<TState = {}> {
 
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
-    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.tokenUsage = emptyTokenUsage();
     this.emit({ type: 'thread_created', thread: clonedThread });
 
     return clonedThread;
@@ -933,7 +930,7 @@ export class Harness<TState = {}> {
 
   private async loadThreadMetadata(): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) {
-      this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      this.tokenUsage = emptyTokenUsage();
       return;
     }
 
@@ -948,9 +945,11 @@ export class Harness<TState = {}> {
           promptTokens: savedUsage.promptTokens ?? 0,
           completionTokens: savedUsage.completionTokens ?? 0,
           totalTokens: savedUsage.totalTokens ?? 0,
+          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
         };
       } else {
-        this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        this.tokenUsage = emptyTokenUsage();
       }
 
       const meta = thread?.metadata as Record<string, unknown> | undefined;
@@ -1016,7 +1015,7 @@ export class Harness<TState = {}> {
         }
       }
     } catch {
-      this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      this.tokenUsage = emptyTokenUsage();
     }
   }
 
@@ -1945,13 +1944,28 @@ export class Harness<TState = {}> {
             const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
             const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
+            const cachedInputTokens = (usage as { cachedInputTokens?: number }).cachedInputTokens ?? 0;
+            const cacheCreationInputTokens =
+              (usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens ?? 0;
 
             this.tokenUsage.promptTokens += promptTokens;
             this.tokenUsage.completionTokens += completionTokens;
             this.tokenUsage.totalTokens += totalTokens;
+            this.tokenUsage.cachedInputTokens = (this.tokenUsage.cachedInputTokens ?? 0) + cachedInputTokens;
+            this.tokenUsage.cacheCreationInputTokens =
+              (this.tokenUsage.cacheCreationInputTokens ?? 0) + cacheCreationInputTokens;
 
             this.persistTokenUsage().catch(() => {});
-            this.emit({ type: 'usage_update', usage: { promptTokens, completionTokens, totalTokens } });
+            this.emit({
+              type: 'usage_update',
+              usage: {
+                promptTokens,
+                completionTokens,
+                totalTokens,
+                cachedInputTokens,
+                cacheCreationInputTokens,
+              },
+            });
           }
           break;
         }
@@ -2904,11 +2918,7 @@ export class Harness<TState = {}> {
 
       // ── Token usage ────────────────────────────────────────────────────
       case 'usage_update':
-        ds.tokenUsage = {
-          promptTokens: this.tokenUsage.promptTokens,
-          completionTokens: this.tokenUsage.completionTokens,
-          totalTokens: this.tokenUsage.totalTokens,
-        };
+        ds.tokenUsage = { ...this.tokenUsage };
         break;
 
       // ── Tasks ──────────────────────────────────────────────────────────
@@ -2925,13 +2935,13 @@ export class Harness<TState = {}> {
 
       case 'thread_created':
         this.resetThreadDisplayState();
-        ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        ds.tokenUsage = emptyTokenUsage();
         break;
 
       case 'thread_deleted':
         if (!this.currentThreadId) {
           this.resetThreadDisplayState();
-          ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+          ds.tokenUsage = emptyTokenUsage();
         }
         break;
 
@@ -3068,7 +3078,7 @@ export class Harness<TState = {}> {
   // Token Usage
   // ===========================================================================
 
-  getTokenUsage(): { promptTokens: number; completionTokens: number; totalTokens: number } {
+  getTokenUsage(): TokenUsage {
     return { ...this.tokenUsage };
   }
 
