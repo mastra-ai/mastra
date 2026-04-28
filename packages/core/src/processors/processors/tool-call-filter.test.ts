@@ -1110,7 +1110,7 @@ describe('ToolCallFilter', () => {
   });
 
   describe('integration: multi-step agent loop with ToolCallFilter', () => {
-    it('should filter tool call/result parts from step 1 before step 2 while preserving text', async () => {
+    it('should filter older tool calls while preserving the most recent step', async () => {
       const { loop } = await import('../../loop/loop');
       const { stepCountIs } = await import('@internal/ai-sdk-v5');
       const { convertArrayToReadableStream, mockValues, mockId } = await import('@internal/ai-sdk-v5/test');
@@ -1125,7 +1125,7 @@ describe('ToolCallFilter', () => {
         {
           id: 'msg-user',
           role: 'user',
-          content: [{ type: 'text', text: 'What is the weather in NYC?' }],
+          content: [{ type: 'text', text: 'Check weather in NYC then book a flight there' }],
         },
         'input',
       );
@@ -1143,7 +1143,7 @@ describe('ToolCallFilter', () => {
 
                 switch (responseCount++) {
                   case 0:
-                    // Step 1: LLM calls the weather tool
+                    // Step 0: LLM calls the weather tool
                     return {
                       stream: convertArrayToReadableStream([
                         {
@@ -1167,7 +1167,7 @@ describe('ToolCallFilter', () => {
                       ]),
                     };
                   case 1:
-                    // Step 2: LLM responds with text
+                    // Step 1: LLM calls the booking tool
                     return {
                       stream: convertArrayToReadableStream([
                         {
@@ -1176,8 +1176,32 @@ describe('ToolCallFilter', () => {
                           modelId: 'mock-model-id',
                           timestamp: new Date(1000),
                         },
+                        {
+                          type: 'tool-call',
+                          id: 'call-booking-1',
+                          toolCallId: 'call-booking-1',
+                          toolName: 'booking',
+                          input: '{ "destination": "NYC" }',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                        },
+                      ]),
+                    };
+                  case 2:
+                    // Step 2: LLM responds with text
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'resp-2',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(2000),
+                        },
                         { type: 'text-start', id: 'text-1' },
-                        { type: 'text-delta', id: 'text-1', delta: 'The weather in NYC is sunny.' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Weather checked and flight booked!' },
                         { type: 'text-end', id: 'text-1' },
                         {
                           type: 'finish',
@@ -1199,11 +1223,15 @@ describe('ToolCallFilter', () => {
             inputSchema: z.object({ city: z.string() }),
             execute: async ({ city }: { city: string }) => `Sunny, 72°F in ${city}`,
           },
+          booking: {
+            inputSchema: z.object({ destination: z.string() }),
+            execute: async ({ destination }: { destination: string }) => `Flight booked to ${destination}`,
+          },
         },
         messageList,
-        stopWhen: stepCountIs(3),
+        stopWhen: stepCountIs(4),
         _internal: {
-          now: mockValues(0, 100, 500, 600, 1000),
+          now: mockValues(0, 100, 200, 500, 600, 700, 1000, 1100, 1200),
           generateId: mockId({ prefix: 'id' }),
         },
         agentId: 'test-agent',
@@ -1211,33 +1239,43 @@ describe('ToolCallFilter', () => {
 
       await result.consumeStream();
 
-      // Should have had 2 LLM calls (step 1: tool call, step 2: text response)
-      expect(stepInputs).toHaveLength(2);
+      // Should have had 3 LLM calls
+      expect(stepInputs).toHaveLength(3);
 
-      // Step 1 prompt: should contain the user message
-      const step1Prompt = stepInputs[0] as any[];
-      const step1UserMsg = step1Prompt.find((m: any) => m.role === 'user');
-      expect(step1UserMsg).toBeDefined();
-      expect(step1UserMsg.content.some((p: any) => p.type === 'text' && p.text.includes('NYC'))).toBe(true);
+      // Step 0 prompt: should contain only the user message
+      const step0Prompt = stepInputs[0] as any[];
+      const step0UserMsg = step0Prompt.find((m: any) => m.role === 'user');
+      expect(step0UserMsg).toBeDefined();
+      expect(step0UserMsg.content.some((p: any) => p.type === 'text' && p.text.includes('NYC'))).toBe(true);
 
-      // Step 2 prompt: ToolCallFilter should have removed tool-call and tool-result parts
-      const step2Prompt = stepInputs[1] as any[];
+      // Step 1 prompt: should still have step 0's tool results (only 1 step-start,
+      // so processInputStep preserves the most recent step's results)
+      const step1Prompt = stepInputs[1] as any[];
+      const step1ToolMsgs = step1Prompt.filter((m: any) => m.role === 'tool');
+      expect(step1ToolMsgs.length).toBeGreaterThan(0);
 
-      // The user text message should still be present (non-tool context preserved)
+      // Step 2 prompt: with 2+ step-starts, older tool calls (weather) should
+      // be filtered while the most recent step's tool results (booking) are preserved
+      const step2Prompt = stepInputs[2] as any[];
+
+      // User text message should still be present
       const step2UserMsg = step2Prompt.find((m: any) => m.role === 'user');
       expect(step2UserMsg).toBeDefined();
       expect(step2UserMsg.content.some((p: any) => p.type === 'text' && p.text.includes('NYC'))).toBe(true);
 
-      // There should be NO assistant message with tool-call parts
-      const assistantMsgs = step2Prompt.filter((m: any) => m.role === 'assistant');
-      for (const msg of assistantMsgs) {
-        const hasToolCall = msg.content?.some((p: any) => p.type === 'tool-call');
-        expect(hasToolCall).toBeFalsy();
-      }
+      // Step 0's weather tool calls should be filtered
+      const weatherToolMsgs = step2Prompt.filter(
+        (m: any) =>
+          m.role === 'tool' && m.content?.some((p: any) => p.type === 'tool-result' && p.toolName === 'weather'),
+      );
+      expect(weatherToolMsgs).toHaveLength(0);
 
-      // There should be NO tool role messages (tool results)
-      const toolMsgs = step2Prompt.filter((m: any) => m.role === 'tool');
-      expect(toolMsgs).toHaveLength(0);
+      // Step 1's booking tool results should still be present (most recent step)
+      const bookingToolMsgs = step2Prompt.filter(
+        (m: any) =>
+          m.role === 'tool' && m.content?.some((p: any) => p.type === 'tool-result' && p.toolName === 'booking'),
+      );
+      expect(bookingToolMsgs.length).toBeGreaterThan(0);
     });
   });
 });

@@ -58,9 +58,94 @@ export class ToolCallFilter implements Processor {
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
-    const { messageList } = args;
+    const { messageList, stepNumber } = args;
+    if (stepNumber === 0) return {};
+
     const messages = messageList.get.all.db();
-    return { messages: this.filterMessages(messages) };
+
+    // Collect step-start positions (message index + part index) so we can
+    // distinguish tool calls from the most recent step vs older steps.
+    // In the real agent loop all tool-invocation parts live in the same
+    // assistant message separated by step-start parts.
+    const stepStarts = this.collectStepStartPositions(messages);
+
+    if (stepStarts.length === 0) {
+      // No step boundaries (e.g. messages loaded from memory without
+      // step-start markers). Filter all tool calls.
+      return { messages: this.filterMessages(messages) };
+    }
+
+    if (stepStarts.length < 2) {
+      // Only 1 step-start → only 1 previous step whose tool results the
+      // LLM still needs to formulate its response. Don't filter.
+      return {};
+    }
+
+    // 2+ step-starts: filter tool calls from parts before the
+    // second-to-last step-start while preserving the most recent step's
+    // tool results.
+    const boundary = stepStarts[stepStarts.length - 2]!;
+    return { messages: this.filterToolCallsBeforeBoundary(messages, boundary) };
+  }
+
+  private collectStepStartPositions(messages: MastraDBMessage[]): Array<{ msgIdx: number; partIdx: number }> {
+    const positions: Array<{ msgIdx: number; partIdx: number }> = [];
+    for (let m = 0; m < messages.length; m++) {
+      const msg = messages[m]!;
+      if (typeof msg.content === 'string' || !msg.content?.parts) continue;
+      for (let p = 0; p < msg.content.parts.length; p++) {
+        if ((msg.content.parts[p] as any).type === 'step-start') {
+          positions.push({ msgIdx: m, partIdx: p });
+        }
+      }
+    }
+    return positions;
+  }
+
+  /**
+   * Filter tool-invocation parts that appear before the given boundary
+   * position while keeping parts at or after the boundary intact.
+   */
+  private filterToolCallsBeforeBoundary(
+    messages: MastraDBMessage[],
+    boundary: { msgIdx: number; partIdx: number },
+  ): MastraDBMessage[] {
+    return messages
+      .map((msg, msgIdx) => {
+        if (typeof msg.content === 'string' || !msg.content?.parts) return msg;
+        if (!this.hasToolInvocations(msg)) return msg;
+
+        // Message entirely after boundary — keep as-is
+        if (msgIdx > boundary.msgIdx) return msg;
+
+        // Message entirely before boundary — filter using existing logic
+        if (msgIdx < boundary.msgIdx) {
+          const filtered = this.filterMessages([msg]);
+          return filtered.length > 0 ? filtered[0]! : null;
+        }
+
+        // Message contains the boundary — filter parts before it only
+        const filteredParts = msg.content.parts.filter((part: any, partIdx: number) => {
+          if (partIdx >= boundary.partIdx) return true;
+          if (part.type !== 'tool-invocation') return true;
+
+          if (this.exclude === 'all') return false;
+          if (Array.isArray(this.exclude)) {
+            const invocation = (part as unknown as V2ToolInvocationPart).toolInvocation;
+            return !this.exclude.includes(invocation.toolName);
+          }
+          return true;
+        });
+
+        if (filteredParts.length === 0) return null;
+
+        const { toolInvocations: _ti, ...contentWithoutToolInvocations } = msg.content as any;
+        return {
+          ...msg,
+          content: { ...contentWithoutToolInvocations, parts: filteredParts },
+        };
+      })
+      .filter((m): m is MastraDBMessage => m !== null);
   }
 
   private filterMessages(messages: MastraDBMessage[]): MastraDBMessage[] {
