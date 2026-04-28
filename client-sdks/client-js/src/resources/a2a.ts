@@ -1,20 +1,55 @@
+import { MastraA2AError } from '@mastra/core/a2a';
 import type {
   AgentCard,
   CancelTaskResponse,
   DeleteTaskPushNotificationConfigParams,
   DeleteTaskPushNotificationConfigResponse,
+  GetAuthenticatedExtendedCardResponse,
+  GetTaskPushNotificationConfigParams,
+  GetTaskPushNotificationConfigResponse,
   GetTaskResponse,
+  JSONRPCErrorResponse,
+  JSONRPCResponse,
   ListTaskPushNotificationConfigParams,
   ListTaskPushNotificationConfigResponse,
+  Message,
   MessageSendParams,
   SendMessageResponse,
   SetTaskPushNotificationConfigResponse,
+  Task,
+  TaskArtifactUpdateEvent,
   TaskIdParams,
   TaskPushNotificationConfig,
   TaskQueryParams,
+  TaskStatusUpdateEvent,
 } from '@mastra/core/a2a';
 import type { ClientOptions } from '../types';
+import { MastraClientError as MastraClientErrorClass } from '../types';
+import { processA2AStream } from '../utils/process-a2a-stream';
 import { BaseResource } from './base';
+
+export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+export type SendMessageResult = Message | Task;
+
+function createA2AJsonRpcError(response: JSONRPCErrorResponse): Error {
+  const error = response.error;
+  const message = error?.message ?? 'Unknown A2A JSON-RPC error';
+  return typeof error?.code === 'number'
+    ? new MastraA2AError(error.code, message, error.data)
+    : new MastraClientErrorClass(200, 'OK', `A2A JSON-RPC error - ${message}`, error);
+}
+
+function unwrapA2AResult<TResult>(response: JSONRPCResponse): TResult {
+  if ('error' in response && response.error) {
+    throw createA2AJsonRpcError(response as JSONRPCErrorResponse);
+  }
+
+  if ('result' in response) {
+    return response.result as TResult;
+  }
+
+  throw new MastraClientErrorClass(200, 'OK', 'A2A JSON-RPC response did not include a result', response);
+}
 
 /**
  * Class for interacting with an agent via the A2A protocol
@@ -28,19 +63,43 @@ export class A2A extends BaseResource {
   }
 
   /**
-   * Get the agent card with metadata about the agent
+   * Get the agent card with metadata about the agent.
    * @returns Promise containing the agent card information
    */
-  async getCard(): Promise<AgentCard> {
+  async getAgentCard(): Promise<AgentCard> {
     return this.request(`/.well-known/${this.agentId}/agent-card.json`);
   }
 
   /**
-   * Send a message to the agent and gets a message or task response
+   * @deprecated Use getAgentCard() instead.
+   */
+  async getCard(): Promise<AgentCard> {
+    return this.getAgentCard();
+  }
+
+  /**
+   * Get the authenticated extended agent card.
+   * @returns Promise containing the authenticated extended agent card
+   */
+  async getExtendedAgentCard(): Promise<AgentCard> {
+    const response = await this.request<GetAuthenticatedExtendedCardResponse>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'agent/getAuthenticatedExtendedCard',
+      },
+    });
+
+    return unwrapA2AResult<AgentCard>(response);
+  }
+
+  /**
+   * Send a message to the agent and get a message or task response.
    * @param params - Parameters for the task
    * @returns Promise containing the response
    */
-  async sendMessage(params: MessageSendParams): Promise<SendMessageResponse> {
+  async sendMessage(params: MessageSendParams): Promise<SendMessageResult> {
     const response = await this.request<SendMessageResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
@@ -51,16 +110,16 @@ export class A2A extends BaseResource {
       },
     });
 
-    return response;
+    return unwrapA2AResult<SendMessageResult>(response);
   }
 
   /**
-   * Sends a message to an agent to initiate/continue a task and subscribes
+   * Sends a message to an agent to initiate or continue a task and subscribes
    * the client to real-time updates for that task via Server-Sent Events (SSE).
    * @param params - Parameters for the task
-   * @returns The raw streaming response for the caller to consume as SSE
+   * @returns An async generator of typed A2A stream events
    */
-  async sendStreamingMessage(params: MessageSendParams): Promise<Response> {
+  async *sendMessageStream(params: MessageSendParams): AsyncGenerator<A2AStreamEventData, void, undefined> {
     const response = await this.request<Response>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
@@ -72,15 +131,26 @@ export class A2A extends BaseResource {
       stream: true,
     });
 
-    return response;
+    if (!response.body) {
+      return;
+    }
+
+    yield* processA2AStream(response.body);
   }
 
   /**
-   * Get the status and result of a task
+   * @deprecated Use sendMessageStream() instead.
+   */
+  sendStreamingMessage(params: MessageSendParams): AsyncGenerator<A2AStreamEventData, void, undefined> {
+    return this.sendMessageStream(params);
+  }
+
+  /**
+   * Get the status and result of a task.
    * @param params - Parameters for querying the task
    * @returns Promise containing the task response
    */
-  async getTask(params: TaskQueryParams): Promise<GetTaskResponse> {
+  async getTask(params: TaskQueryParams): Promise<Task> {
     const response = await this.request<GetTaskResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
@@ -91,16 +161,16 @@ export class A2A extends BaseResource {
       },
     });
 
-    return response;
+    return unwrapA2AResult<Task>(response);
   }
 
   /**
-   * Cancel a running task
+   * Cancel a running task.
    * @param params - Parameters identifying the task to cancel
    * @returns Promise containing the task response
    */
-  async cancelTask(params: TaskIdParams): Promise<CancelTaskResponse> {
-    return this.request<CancelTaskResponse>(`/a2a/${this.agentId}`, {
+  async cancelTask(params: TaskIdParams): Promise<Task> {
+    const response = await this.request<CancelTaskResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -109,15 +179,17 @@ export class A2A extends BaseResource {
         params,
       },
     });
+
+    return unwrapA2AResult<Task>(response);
   }
 
   /**
-   * Resume a task stream for an existing task
+   * Resume a task stream for an existing task.
    * @param params - Parameters identifying the task to resubscribe to
-   * @returns The raw streaming response for the caller to consume as SSE
+   * @returns An async generator of typed A2A stream events
    */
-  async resubscribeTask(params: TaskIdParams): Promise<Response> {
-    return this.request<Response>(`/a2a/${this.agentId}`, {
+  async *resubscribeTask(params: TaskIdParams): AsyncGenerator<A2AStreamEventData, void, undefined> {
+    const response = await this.request<Response>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -127,17 +199,21 @@ export class A2A extends BaseResource {
       },
       stream: true,
     });
+
+    if (!response.body) {
+      return;
+    }
+
+    yield* processA2AStream(response.body);
   }
 
   /**
-   * Set push notification config for a task
+   * Set push notification config for a task.
    * @param params - Push notification configuration for the task
-   * @returns Promise containing the JSON-RPC response
+   * @returns Promise containing the push notification configuration
    */
-  async setTaskPushNotificationConfig(
-    params: TaskPushNotificationConfig,
-  ): Promise<SetTaskPushNotificationConfigResponse> {
-    return this.request<SetTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+  async setTaskPushNotificationConfig(params: TaskPushNotificationConfig): Promise<TaskPushNotificationConfig> {
+    const response = await this.request<SetTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -146,17 +222,40 @@ export class A2A extends BaseResource {
         params,
       },
     });
+
+    return unwrapA2AResult<TaskPushNotificationConfig>(response);
   }
 
   /**
-   * List push notification configs for a task
+   * Get push notification config for a task.
    * @param params - Parameters identifying the task
-   * @returns Promise containing the JSON-RPC response
+   * @returns Promise containing the push notification configuration
+   */
+  async getTaskPushNotificationConfig(
+    params: GetTaskPushNotificationConfigParams,
+  ): Promise<TaskPushNotificationConfig> {
+    const response = await this.request<GetTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'tasks/pushNotificationConfig/get',
+        params,
+      },
+    });
+
+    return unwrapA2AResult<TaskPushNotificationConfig>(response);
+  }
+
+  /**
+   * List push notification configs for a task.
+   * @param params - Parameters identifying the task
+   * @returns Promise containing the push notification configurations
    */
   async listTaskPushNotificationConfig(
     params: ListTaskPushNotificationConfigParams,
-  ): Promise<ListTaskPushNotificationConfigResponse> {
-    return this.request<ListTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+  ): Promise<TaskPushNotificationConfig[]> {
+    const response = await this.request<ListTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -165,17 +264,17 @@ export class A2A extends BaseResource {
         params,
       },
     });
+
+    return unwrapA2AResult<TaskPushNotificationConfig[]>(response);
   }
 
   /**
-   * Delete a push notification config for a task
+   * Delete a push notification config for a task.
    * @param params - Parameters identifying the config to delete
-   * @returns Promise containing the JSON-RPC response
+   * @returns Promise that resolves when the config is deleted
    */
-  async deleteTaskPushNotificationConfig(
-    params: DeleteTaskPushNotificationConfigParams,
-  ): Promise<DeleteTaskPushNotificationConfigResponse> {
-    return this.request<DeleteTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+  async deleteTaskPushNotificationConfig(params: DeleteTaskPushNotificationConfigParams): Promise<void> {
+    const response = await this.request<DeleteTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -184,5 +283,7 @@ export class A2A extends BaseResource {
         params,
       },
     });
+
+    unwrapA2AResult<unknown>(response);
   }
 }
