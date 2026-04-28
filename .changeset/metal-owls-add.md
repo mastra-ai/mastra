@@ -2,4 +2,4 @@
 '@mastra/auth-workos': minor
 ---
 
-Added `getAvailableRoles()` and `getPermissionsForRole()` to WorkOS RBAC provider, enabling admin role preview in Studio.
+WorkOS RBAC provider now supports the "Preview as role" feature in Studio — admins can see which roles are available and what permissions each role grants.

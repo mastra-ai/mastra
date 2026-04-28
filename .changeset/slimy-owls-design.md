@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Added `availableRoles` to auth capabilities for admin users. RBAC providers can now expose the list of roles they define, and admins can query permissions for any role via the capabilities API.
+Admins can now preview the Studio as any non-admin role. The auth capabilities API returns available roles so the UI can offer a "Preview as role" menu.
