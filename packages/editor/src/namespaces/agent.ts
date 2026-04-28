@@ -1141,6 +1141,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       newName?: string;
       metadata?: Record<string, unknown>;
       authorId?: string;
+      visibility?: 'private' | 'public';
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType> {
@@ -1250,6 +1251,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,
       authorId: options.authorId,
+      visibility: options.visibility,
     };
 
     const adapter = await this.getStorageAdapter();

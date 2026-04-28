@@ -62,6 +62,13 @@ export class SkillsLibSQL extends SkillsStorage {
       schema: SKILL_VERSIONS_SCHEMA,
     });
 
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_SKILLS,
+      schema: SKILLS_SCHEMA,
+      ifNotExists: ['visibility'],
+    });
+
     // Unique constraint on (skillId, versionNumber) to prevent duplicate versions from concurrent updates
     await this.#client.execute(
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_versions_skill_version ON "${TABLE_SKILL_VERSIONS}" ("skillId", "versionNumber")`,
@@ -103,6 +110,8 @@ export class SkillsLibSQL extends SkillsStorage {
     try {
       const now = new Date();
 
+      const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
+
       // Insert thin skill record (no metadata on entity table)
       await this.#db.insert({
         tableName: TABLE_SKILLS,
@@ -111,13 +120,14 @@ export class SkillsLibSQL extends SkillsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: skill.authorId ?? null,
+          visibility: visibility ?? null,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
         },
       });
 
       // Extract config fields for version 1
-      const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+      const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
       const versionId = crypto.randomUUID();
       try {
         await this.createVersion({
@@ -169,7 +179,7 @@ export class SkillsLibSQL extends SkillsStorage {
         });
       }
 
-      const { authorId, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
 
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
       const hasConfigUpdate = configFieldNames.some(field => field in configFields);
@@ -180,6 +190,7 @@ export class SkillsLibSQL extends SkillsStorage {
       };
 
       if (authorId !== undefined) updateData.authorId = authorId;
+      if (visibility !== undefined) updateData.visibility = visibility;
       if (activeVersionId !== undefined) {
         updateData.activeVersionId = activeVersionId;
         if (status === undefined) {
@@ -285,7 +296,7 @@ export class SkillsLibSQL extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
@@ -294,6 +305,11 @@ export class SkillsLibSQL extends SkillsStorage {
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push('visibility = ?');
+        queryParams.push(visibility);
       }
 
       // Note: metadata filter is ignored for skills since the entity table doesn't have a metadata column.
@@ -588,6 +604,7 @@ export class SkillsLibSQL extends SkillsStorage {
       status: (row.status as StorageSkillType['status']) ?? 'draft',
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
+      visibility: (row.visibility as StorageSkillType['visibility']) ?? undefined,
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };

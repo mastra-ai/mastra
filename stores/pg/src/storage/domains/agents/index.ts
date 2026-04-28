@@ -98,7 +98,7 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
-      ifNotExists: ['status', 'authorId'],
+      ifNotExists: ['status', 'authorId', 'visibility'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
@@ -285,14 +285,28 @@ export class AgentsPG extends AgentsStorage {
   }
 
   /**
-   * Removes stale draft agent records that have no activeVersionId.
+   * Removes stale draft agent records that have no versions at all.
    * These are left behind when createAgent partially fails (inserts thin record
    * but fails to create the version due to schema mismatch).
+   *
+   * A legitimate draft (never published) will have rows in the versions table,
+   * so we must only delete records with zero associated versions.
    */
   async #cleanupStaleDrafts(): Promise<void> {
     try {
-      const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND \"activeVersionId\" IS NULL`);
+      const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      const versionsTable = getTableName({
+        indexName: TABLE_AGENT_VERSIONS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      await this.#db.client.none(
+        `DELETE FROM ${agentsTable} a
+         WHERE a.status = 'draft'
+           AND a."activeVersionId" IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM ${versionsTable} v WHERE v."agentId" = a.id
+           )`,
+      );
     } catch {
       // Non-critical cleanup, ignore errors
     }
@@ -355,6 +369,7 @@ export class AgentsPG extends AgentsStorage {
       status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
@@ -393,17 +408,21 @@ export class AgentsPG extends AgentsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
+      // Default visibility to 'private' for owned agents; leave null for unowned/legacy rows
+      const visibility = agent.visibility ?? (agent.authorId ? 'private' : null);
+
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
       await this.#db.client.none(
         `INSERT INTO ${agentsTable} (
-          id, status, "authorId", metadata,
+          id, status, "authorId", visibility, metadata,
           "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           agent.id,
           'draft',
           agent.authorId ?? null,
+          visibility,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
           null, // activeVersionId starts as null
           nowIso,
@@ -414,7 +433,7 @@ export class AgentsPG extends AgentsStorage {
       );
 
       // 2. Extract config fields from the flat input
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+      const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
       const versionId = crypto.randomUUID();
@@ -433,6 +452,7 @@ export class AgentsPG extends AgentsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: agent.authorId,
+        visibility: visibility ?? undefined,
         metadata: agent.metadata,
         createdAt: now,
         updatedAt: now,
@@ -479,7 +499,7 @@ export class AgentsPG extends AgentsStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status } = updates;
+      const { authorId, activeVersionId, metadata, status, visibility } = updates;
 
       // Update metadata fields on the agent record
       const setClauses: string[] = [];
@@ -500,6 +520,11 @@ export class AgentsPG extends AgentsStorage {
       if (status !== undefined) {
         setClauses.push(`status = $${paramIndex++}`);
         values.push(status);
+      }
+
+      if (visibility !== undefined) {
+        setClauses.push(`visibility = $${paramIndex++}`);
+        values.push(visibility);
       }
 
       if (metadata !== undefined) {
@@ -574,7 +599,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status, visibility } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -608,6 +633,11 @@ export class AgentsPG extends AgentsStorage {
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push(`visibility = $${paramIdx++}`);
+        queryParams.push(visibility);
       }
 
       if (metadata && Object.keys(metadata).length > 0) {

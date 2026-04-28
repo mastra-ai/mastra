@@ -485,6 +485,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
+      create: vi.fn().mockImplementation(async (input: any) => {
+        // Delegate to storage directly, mirroring what editor.agent.create does
+        const agents = await mastra.getStorage()!.getStore('agents');
+        return agents!.create({ agent: input });
+      }),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
         name: 'Test Agent (Clone)',

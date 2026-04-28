@@ -1,5 +1,5 @@
 import { Avatar, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, Plus, Wrench } from 'lucide-react';
+import { ChevronRight, FileText, Globe, Lock, Plus, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -7,6 +7,7 @@ import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { InstructionsDetail } from './details/instructions-detail';
 import { ToolsDetail } from './details/tools-detail';
+import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 
 export interface AgentConfig {
   id: string;
@@ -14,6 +15,8 @@ export interface AgentConfig {
   description?: string;
   avatarUrl?: string;
   systemPrompt: string;
+  visibility?: 'private' | 'public';
+  authorId?: string | null;
 }
 
 export type ActiveDetail = 'instructions' | 'tools' | null;
@@ -85,6 +88,7 @@ function EditableConfigurePanel({
   const draftName = formMethods.watch('name') ?? '';
   const draftDescription = formMethods.watch('description') ?? '';
   const draftInstructions = formMethods.watch('instructions') ?? '';
+  const draftVisibility = formMethods.watch('visibility') ?? 'private';
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
   const setDraftDescription = (value: string) => formMethods.setValue('description', value);
@@ -160,6 +164,11 @@ function EditableConfigurePanel({
               disabled={disabled}
               testId="agent-configure-description"
             />
+
+            <VisibilitySegmentedControl
+              value={draftVisibility}
+              onChange={next => formMethods.setValue('visibility', next)}
+            />
           </div>
 
           <ConfigRows
@@ -230,6 +239,7 @@ function ReadOnlyConfigurePanel({
                 {agent.description}
               </Txt>
             )}
+            <VisibilityBadge visibility={agent.visibility} authorId={agent.authorId} />
           </div>
 
           <ConfigRows
@@ -410,6 +420,48 @@ const ConfigRow = ({
     />
   </button>
 );
+
+function VisibilitySegmentedControl({
+  value,
+  onChange,
+}: {
+  value: 'private' | 'public';
+  onChange: (next: 'private' | 'public') => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Txt as="label" variant="ui-xs" className="text-neutral3">
+        Visibility
+      </Txt>
+      <div className="inline-flex rounded-lg border border-border1 bg-surface1 p-0.5" data-testid="visibility-toggle">
+        <button
+          type="button"
+          onClick={() => onChange('private')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
+            value === 'private' ? 'bg-surface3 text-neutral6 shadow-sm' : 'text-neutral3 hover:text-neutral5',
+          )}
+          data-testid="visibility-toggle-private"
+        >
+          <Lock className="h-3 w-3" />
+          Private
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange('public')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
+            value === 'public' ? 'bg-surface3 text-neutral6 shadow-sm' : 'text-neutral3 hover:text-neutral5',
+          )}
+          data-testid="visibility-toggle-public"
+        >
+          <Globe className="h-3 w-3" />
+          Public
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const AgentConfigurePanelSkeleton = () => (
   <div

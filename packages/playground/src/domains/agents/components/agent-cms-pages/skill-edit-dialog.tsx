@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, Input, SideDialog, Txt } from '@mastra/playground-ui';
+import { Button, cn, Input, SideDialog, Txt } from '@mastra/playground-ui';
+import { Globe, Lock } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useCreateSkill } from '../../hooks/use-create-skill';
@@ -18,6 +19,7 @@ export interface SkillEditDialogProps {
 export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: SkillEditDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [visibility, setVisibility] = useState<'private' | 'public'>('private');
   const [workspaceId, setWorkspaceId] = useState('');
   const [files, setFiles] = useState<InMemoryFileNode[]>([]);
   const prevNameRef = useRef('');
@@ -32,6 +34,7 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
     if (isOpen) {
       setName('');
       setDescription('');
+      setVisibility('private');
       setWorkspaceId(workspaceOptions.length === 1 ? workspaceOptions[0].value : '');
       setFiles([]);
       prevNameRef.current = '';
@@ -59,12 +62,13 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
     const result = await createSkill.mutateAsync({
       name,
       description,
+      visibility,
       workspaceId,
       files,
     });
     onSkillCreated(result, workspaceId);
     onClose();
-  }, [name, description, workspaceId, files, createSkill, onSkillCreated, onClose]);
+  }, [name, description, visibility, workspaceId, files, createSkill, onSkillCreated, onClose]);
 
   return (
     <SideDialog
@@ -114,6 +118,42 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
               disabled={readOnly}
             />
           </div>
+
+          {!readOnly && (
+            <div className="flex flex-col gap-1.5">
+              <Txt as="label" variant="ui-xs" className="text-neutral3">
+                Visibility
+              </Txt>
+              <div className="inline-flex rounded-lg border border-border1 bg-surface1 p-0.5 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setVisibility('private')}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
+                    visibility === 'private'
+                      ? 'bg-surface3 text-neutral6 shadow-sm'
+                      : 'text-neutral3 hover:text-neutral5',
+                  )}
+                >
+                  <Lock className="h-3 w-3" />
+                  Private
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibility('public')}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
+                    visibility === 'public'
+                      ? 'bg-surface3 text-neutral6 shadow-sm'
+                      : 'text-neutral3 hover:text-neutral5',
+                  )}
+                >
+                  <Globe className="h-3 w-3" />
+                  Public
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="h-full border border-border1 rounded-lg overflow-hidden">

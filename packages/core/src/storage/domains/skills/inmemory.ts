@@ -51,11 +51,13 @@ export class InMemorySkillsStorage extends SkillsStorage {
     }
 
     const now = new Date();
+    const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
     const newConfig: StorageSkillType = {
       id: skill.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: skill.authorId,
+      visibility,
       createdAt: now,
       updatedAt: now,
     };
@@ -63,7 +65,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     this.db.skills.set(skill.id, newConfig);
 
     // Extract config fields from the flat input (everything except record fields)
-    const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+    const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
 
     // Create version 1 from the config
     const versionId = randomUUID();
@@ -95,7 +97,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, status, ...configFields } = updates;
+    const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [
@@ -119,6 +121,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     const updatedConfig: StorageSkillType = {
       ...existingConfig,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status: status as StorageSkillType['status'] }),
       updatedAt: new Date(),
@@ -191,7 +194,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -213,6 +216,11 @@ export class InMemorySkillsStorage extends SkillsStorage {
     // Filter by authorId if provided
     if (authorId !== undefined) {
       configs = configs.filter(config => config.authorId === authorId);
+    }
+
+    // Filter by visibility if provided
+    if (visibility !== undefined) {
+      configs = configs.filter(config => config.visibility === visibility);
     }
 
     // Filter by metadata if provided (AND logic) — skills don't have metadata on the record,

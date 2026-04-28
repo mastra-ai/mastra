@@ -10,6 +10,7 @@ export interface SaveParams {
   agents: Record<string, StoredAgentToolConfig> | undefined;
   workflows: Record<string, StoredAgentToolConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
+  visibility: 'private' | 'public';
 }
 
 function buildEnabledRecord(
@@ -66,5 +67,6 @@ export function formValuesToSaveParams(
     agents: emptyToUndefined(agents),
     workflows: emptyToUndefined(workflows),
     workspace,
+    visibility: values.visibility ?? 'private',
   };
 }

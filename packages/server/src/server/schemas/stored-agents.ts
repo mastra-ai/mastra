@@ -41,6 +41,7 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
     .default('published')
     .describe('Filter agents by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter agents by author identifier'),
+  visibility: z.enum(['public']).optional().describe('Filter to only public agents'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });
 
@@ -291,11 +292,15 @@ const snapshotConfigSchema = z.object({
 });
 
 /**
- * Agent metadata fields (authorId, metadata) that live on the thin agent record.
+ * Agent metadata fields (authorId, metadata, visibility) that live on the thin agent record.
  */
 const agentMetadataSchema = z.object({
   authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+  visibility: z
+    .enum(['private', 'public'])
+    .optional()
+    .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
 });
 
 /**
@@ -308,6 +313,10 @@ export const createStoredAgentBodySchema = z
     id: z.string().optional().describe('Unique identifier for the agent. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+    visibility: z
+      .enum(['private', 'public'])
+      .optional()
+      .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
   })
   .merge(snapshotConfigSchema);
 
@@ -352,6 +361,7 @@ export const storedAgentSchema = z.object({
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  visibility: z.enum(['private', 'public']).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   // Version snapshot config fields (resolved from active version)
@@ -440,6 +450,7 @@ export const updateStoredAgentResponseSchema = z.union([
     activeVersionId: z.string().optional(),
     authorId: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    visibility: z.enum(['private', 'public']).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   }),

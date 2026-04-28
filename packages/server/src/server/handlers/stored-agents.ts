@@ -20,6 +20,13 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
+import {
+  assertReadAccess,
+  assertWriteAccess,
+  getCallerAuthorId,
+  matchesAuthorFilter,
+  resolveAuthorFilter,
+} from './authorship';
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -62,7 +69,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
+  handler: async ({ mastra, requestContext, page, perPage, orderBy, status, authorId, visibility, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -75,16 +82,35 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Resolve the visibility scope for this caller. Non-owner queries for
+      // another author return only that author's public rows; default lists
+      // return the caller's rows plus legacy unowned records.
+      const filter = resolveAuthorFilter({
+        requestContext,
+        resource: 'agents',
+        queryAuthorId: authorId,
+        queryVisibility: visibility === 'public' ? 'public' : undefined,
+      });
+
       const result = await agentsStore.listResolved({
         page,
         perPage,
         orderBy,
         status,
-        authorId,
+        authorId: filter.kind === 'exact' ? filter.authorId : undefined,
         metadata,
       });
 
-      return result;
+      // Post-filter to enforce ownership + visibility rules across all backends.
+      // Storage adapters can only do an equality filter on authorId, so we apply
+      // the ownedOrPublic / publicOnly logic here.
+      // Note: `total` is left as the storage-reported count to keep pagination
+      // math working. For `unrestricted` / `exact` filters nothing is removed.
+      // For `ownedOrPublic` / `publicOnly`, downstream UIs should treat the
+      // filter as a view over the caller's scope — an approximation is OK.
+      const agents = result.agents.filter(record => matchesAuthorFilter(record, filter));
+
+      return { ...result, agents };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
@@ -106,7 +132,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
     'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId, status }) => {
+  handler: async ({ mastra, requestContext, storedAgentId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -124,6 +150,10 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+
+      // Throws 404 if the caller isn't the owner, admin, `agents:read[:<id>]`
+      // holder, and the record isn't public/legacy-unowned.
+      assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
 
       return agent;
     } catch (error) {
@@ -154,9 +184,10 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
   requiresAuth: true,
   handler: async ({
     mastra,
+    requestContext,
     id: providedId,
-    authorId,
     metadata,
+    visibility: bodyVisibility,
     name,
     description,
     instructions,
@@ -203,9 +234,16 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
+      // Force authorId from the authenticated caller; ignore any body-provided value.
+      // Default visibility: 'private' when there's an owner, 'public' when unowned
+      // (no auth / no user context). Unowned resources should always be public.
+      const authorId = getCallerAuthorId(requestContext) ?? undefined;
+      const visibility = bodyVisibility ?? (authorId ? 'private' : 'public');
+
       const input = {
         id,
         authorId,
+        visibility,
         metadata,
         name,
         description,
@@ -278,10 +316,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   requiresAuth: true,
   handler: async ({
     mastra,
+    requestContext,
     storedAgentId,
     // Metadata-level fields
     authorId,
     metadata,
+    visibility,
     // Config fields (snapshot-level)
     name,
     description,
@@ -322,6 +362,15 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
+      // Throws 404 if the caller isn't the owner, admin, or `agents:edit[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'agents',
+        resourceId: storedAgentId,
+        action: 'edit',
+        record: existing,
+      });
+
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
@@ -329,6 +378,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         id: storedAgentId,
         authorId,
         metadata,
+        visibility,
         name,
         description,
         instructions,
@@ -424,7 +474,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId }) => {
+  handler: async ({ mastra, requestContext, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -442,6 +492,15 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+
+      // Throws 404 if the caller isn't the owner, admin, or `agents:delete[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'agents',
+        resourceId: storedAgentId,
+        action: 'delete',
+        record: existing,
+      });
 
       await agentsStore.delete(storedAgentId);
 

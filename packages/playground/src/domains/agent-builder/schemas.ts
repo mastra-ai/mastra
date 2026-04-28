@@ -8,6 +8,7 @@ export const AgentBuilderEditFormSchema = z.object({
   agents: z.record(z.string(), z.boolean()).optional(),
   workflows: z.record(z.string(), z.boolean()).optional(),
   workspaceId: z.string().optional(),
+  visibility: z.enum(['private', 'public']).default('private').optional(),
 });
 
 export type AgentBuilderEditFormValues = z.infer<typeof AgentBuilderEditFormSchema>;

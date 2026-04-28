@@ -439,6 +439,15 @@ export interface StorageAgentSnapshotType {
  * Thin agent record type containing only metadata fields.
  * All configuration lives in version snapshots (StorageAgentSnapshotType).
  */
+/**
+ * Visibility of a stored agent.
+ * - `private`: only the owner (or admins) can read the record.
+ * - `public`: any authenticated caller with `agents:read` can read the record.
+ */
+export type StorageVisibility = 'private' | 'public';
+
+export const STORAGE_VISIBILITY_VALUES = ['private', 'public'] as const satisfies readonly StorageVisibility[];
+
 export interface StorageAgentType {
   /** Unique, immutable identifier */
   id: string;
@@ -448,6 +457,12 @@ export interface StorageAgentType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Visibility of the stored agent. `private` limits access to the owner / admins;
+   * `public` allows any authenticated caller with `agents:read` to read.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   createdAt: Date;
@@ -473,6 +488,8 @@ export type StorageCreateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent (defaults to 'private' when an authorId is set) */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
 } & StorageAgentSnapshotType;
@@ -487,6 +504,8 @@ export type StorageUpdateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
@@ -515,6 +534,10 @@ export type StorageListAgentsInput = {
    * Only agents with matching authorId will be returned.
    */
   authorId?: string;
+  /**
+   * Filter agents by visibility (exact match).
+   */
+  visibility?: StorageVisibility;
   /**
    * Filter agents by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
@@ -1863,6 +1886,11 @@ export interface StorageSkillType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Access control: 'private' = only owner/admins, 'public' = anyone.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageVisibility;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1885,6 +1913,8 @@ export type StorageCreateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Access control visibility */
+  visibility?: StorageVisibility;
 } & StorageSkillSnapshotType;
 
 /**
@@ -1895,6 +1925,8 @@ export type StorageUpdateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Access control visibility */
+  visibility?: StorageVisibility;
   /** FK to skill_versions.id - the currently active version */
   activeVersionId?: string;
   /** Skill status */
@@ -1917,6 +1949,10 @@ export type StorageListSkillsInput = {
    * Filter skills by author identifier.
    */
   authorId?: string;
+  /**
+   * Filter skills by visibility (exact match).
+   */
+  visibility?: StorageVisibility;
   /**
    * Filter skills by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
