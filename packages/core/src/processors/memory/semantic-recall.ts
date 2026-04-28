@@ -1,7 +1,8 @@
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
-import { getLegacyContent, MessageList } from '../../agent';
+import { getConcreteLegacyField, getLegacyContent, MessageList } from '../../agent/message-list';
+import type { MastraMessageContentV2, MastraMessagePart } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
@@ -13,6 +14,24 @@ import { globalEmbeddingCache } from './embedding-cache';
 
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
+
+function getTextContentFromParts(parts?: MastraMessagePart[]): string | undefined {
+  if (!Array.isArray(parts)) return undefined;
+
+  const textContent = parts
+    .filter((part): part is Extract<MastraMessagePart, { type: 'text' }> => part.type === 'text' && !!part.text)
+    .map(part => part.text)
+    .join(' ');
+
+  return textContent || undefined;
+}
+
+function getTextContentForEmbedding(content: MastraMessageContentV2): string | undefined {
+  const concreteContent = getConcreteLegacyField<string>(content, 'content');
+  if (concreteContent) return concreteContent;
+
+  return getTextContentFromParts(content.parts) ?? getLegacyContent(content);
+}
 
 export interface SemanticRecallOptions {
   /**
@@ -310,20 +329,8 @@ export class SemanticRecall implements Processor {
           continue;
         }
 
-        const content = getLegacyContent(msg.content);
+        const content = getTextContentForEmbedding(msg.content);
         if (content) return content;
-
-        const textParts: string[] = [];
-        msg.content.parts?.forEach((part: any) => {
-          if (part.type === 'text' && part.text) {
-            textParts.push(part.text);
-          }
-        });
-        const textContent = textParts.join(' ');
-
-        if (textContent) {
-          return textContent;
-        }
       }
     }
     return null;
@@ -618,18 +625,7 @@ export class SemanticRecall implements Processor {
     }
 
     if (typeof message.content === 'object' && message.content !== null) {
-      const { content, parts } = message.content as { content?: string; parts?: any[] };
-
-      if (content) {
-        return content;
-      }
-
-      if (Array.isArray(parts)) {
-        return parts
-          .filter(part => part.type === 'text')
-          .map(part => part.text || '')
-          .join('\n');
-      }
+      return getTextContentForEmbedding(message.content) ?? '';
     }
 
     return '';
