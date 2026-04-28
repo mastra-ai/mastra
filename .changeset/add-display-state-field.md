@@ -2,8 +2,4 @@
 "@mastra/core": minor
 ---
 
-Add `yourNewField` to HarnessDisplayState.
-
-- Adds new boolean field to display state
-- Initializes default value in `defaultDisplayState`
-- Updates tests to validate the new field
+Extend `HarnessDisplayState` with a new `yourNewField` property to support additional state needed for channels integration.
