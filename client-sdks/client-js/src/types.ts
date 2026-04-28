@@ -1620,6 +1620,7 @@ export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  observabilityEnabled: boolean;
   storageType?: string;
   observabilityStorageType?: string;
   observabilityRuntimeStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
