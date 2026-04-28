@@ -299,6 +299,40 @@ describe('Workflow schema type inference', () => {
       });
     });
 
+    it('should infer state output type when workflow stateSchema uses .default()', () => {
+      const stateSchema = z.object({
+        idx: z.number().default(0),
+        value: z.string(),
+      });
+
+      const step = createStep({
+        id: 'state-loop-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema,
+        execute: async ({ state }) => {
+          expectTypeOf(state.idx).toEqualTypeOf<number>();
+          expectTypeOf(state.value).toEqualTypeOf<string>();
+          return { value: state.value };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'state-default-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema,
+      });
+
+      const chained = workflow.dowhile(step, async ({ state }) => {
+        expectTypeOf(state.idx).toEqualTypeOf<number>();
+        expectTypeOf(state.value).toEqualTypeOf<string>();
+        return state.idx < 10;
+      });
+
+      expectTypeOf(chained).not.toBeNever();
+    });
+
     it('should still reject steps with incompatible input schemas', () => {
       const workflowSchema = z.object({
         name: z.string(),

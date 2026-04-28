@@ -562,7 +562,7 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
-type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = TSchema extends { _output: infer Output }
+export type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = TSchema extends { _output: infer Output }
   ? Output
   : InferPublicSchema<TSchema>;
 
@@ -596,7 +596,7 @@ export type StepParams<
   scorers?: DynamicArgument<MastraScorers>;
   metadata?: StepMetadata;
   execute: ExecuteFunction<
-    TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+    TStateSchema extends PublicSchema<any> ? InferParsedPublicSchema<TStateSchema> : unknown,
     InferParsedPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
     TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
@@ -795,7 +795,7 @@ export type WorkflowConfig<
   description?: string | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
-  stateSchema?: PublicSchema<TState>;
+  stateSchema?: PublicSchema<TState, any>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema when the workflow starts.
