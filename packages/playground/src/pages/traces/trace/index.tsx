@@ -22,6 +22,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list';
+import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
@@ -34,7 +36,7 @@ export default function TracePage() {
 
   const spanIdParam = searchParams.get('spanId') || undefined;
   const tabParam = searchParams.get('tab');
-  const initialSpanTab: SpanTab = tabParam === 'scoring' ? 'scoring' : tabParam === 'details' ? 'details' : 'details';
+  const initialSpanTab: SpanTab = tabParam === 'scoring' ? 'scoring' : tabParam === 'feedback' ? 'feedback' : 'details';
   const scoreIdParam = searchParams.get('scoreId') || undefined;
 
   const [featuredSpanId, setFeaturedSpanId] = useState<string | null>(spanIdParam ?? null);
@@ -58,6 +60,13 @@ export default function TracePage() {
     traceId,
     spanId: featuredSpanId ?? undefined,
     page: spanScoresPage,
+  });
+
+  const [feedbackPage, setFeedbackPage] = useState(0);
+  useEffect(() => setFeedbackPage(0), [traceId, featuredSpanId]);
+  const { data: feedbackData, isLoading: isLoadingFeedback } = useTraceFeedback({
+    traceId,
+    page: feedbackPage,
   });
 
   useEffect(() => {
@@ -266,6 +275,14 @@ export default function TracePage() {
               onNext={handleNextSpan}
               activeTab={spanTab}
               onTabChange={handleSpanTabChange}
+              feedbackTabBadge={feedbackData?.pagination?.total ?? undefined}
+              feedbackTabSlot={() => (
+                <SpanFeedbackList
+                  feedbackData={feedbackData}
+                  onPageChange={setFeedbackPage}
+                  isLoadingFeedbackData={isLoadingFeedback}
+                />
+              )}
               scoringTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoringTabSlot={({ span, traceId: tid, spanId: sid }) => (
                 <div className="grid gap-6">

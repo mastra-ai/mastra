@@ -143,7 +143,13 @@ export function useTraceUrlState(
   const spanIdParam = searchParams.get(SPAN_ID_PARAM) || undefined;
   const tabParam = searchParams.get(TAB_PARAM);
   const spanTabParam: SpanTab | undefined =
-    tabParam === 'scoring' ? 'scoring' : tabParam === 'details' ? 'details' : undefined;
+    tabParam === 'scoring'
+      ? 'scoring'
+      : tabParam === 'feedback'
+        ? 'feedback'
+        : tabParam === 'details'
+          ? 'details'
+          : undefined;
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
   const selectedEntityOption = useMemo(

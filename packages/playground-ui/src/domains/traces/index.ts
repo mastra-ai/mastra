@@ -6,4 +6,4 @@ export type { UISpan, UISpanStyle, TraceDatePreset, EntityOptions } from './type
 export { CONTEXT_FIELD_IDS } from './types';
 
 /** Tab identifier for SpanDataPanelView. */
-export type SpanTab = 'details' | 'scoring';
+export type SpanTab = 'details' | 'scoring' | 'feedback';
