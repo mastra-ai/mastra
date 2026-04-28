@@ -10,6 +10,7 @@ describe('storedAgentToAgentConfig', () => {
       systemPrompt: '',
       authorId: undefined,
       visibility: 'private',
+      avatarUrl: undefined,
     });
     expect(storedAgentToAgentConfig(undefined, 'fallback-id')).toEqual({
       id: 'fallback-id',
@@ -18,6 +19,7 @@ describe('storedAgentToAgentConfig', () => {
       systemPrompt: '',
       authorId: undefined,
       visibility: 'private',
+      avatarUrl: undefined,
     });
   });
 
@@ -39,6 +41,7 @@ describe('storedAgentToAgentConfig', () => {
       systemPrompt: 'Be helpful',
       authorId: undefined,
       visibility: 'private',
+      avatarUrl: undefined,
     });
   });
 

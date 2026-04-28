@@ -35,10 +35,6 @@ vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
   useAvailableAgentTools: () => [],
 }));
 
-vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
-}));
-
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message', () => ({
   useStarterUserMessage: () => undefined,
 }));
@@ -61,6 +57,10 @@ vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
 
 vi.mock('@/domains/workspace/hooks', () => ({
   useWorkspaces: () => ({ data: { workspaces: [] } }),
+}));
+
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'current-user' } }),
 }));
 
 // Heavy panels not under test — replace with dumb stubs.
@@ -156,13 +156,13 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
 
-    it('Save still navigates to the agents list after a successful save', async () => {
+    it('Save navigates to the view page after a successful save', async () => {
       const { getByTestId } = renderAt();
       fireEvent.click(getByTestId('agent-builder-edit-save'));
 
       await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(navigateMock).toHaveBeenCalled());
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
   });
 
