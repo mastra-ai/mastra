@@ -432,9 +432,9 @@ describe('MCP Registry Handlers', () => {
       expect(check).toHaveBeenCalledWith(
         { id: 'user-1' },
         {
-          resource: { type: 'tool', id: 'server1:tool1' },
+          resource: { type: 'tool', id: JSON.stringify(['server1', 'tool1']) },
           permission: 'tools:execute',
-          context: { resourceId: 'server1:tool1', requestContext },
+          context: { resourceId: JSON.stringify(['server1', 'tool1']), requestContext },
         },
       );
     });

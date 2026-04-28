@@ -28,9 +28,13 @@ export async function initWorkOS(): Promise<AuthResult> {
     },
   });
 
+  const organizationId = process.env.WORKOS_ORGANIZATION_ID;
+  if (!organizationId) {
+    throw new Error('WORKOS_ORGANIZATION_ID is required to enable WorkOS FGA');
+  }
+
   const fgaProvider = new MastraFGAWorkos({
-    // Scope FGA checks to Ryan's Organization
-    organizationId: 'org_01KJAYPVYBVZA7YMZ7EKX6JXQ1',
+    organizationId,
     resourceMapping: {
       // Per-resource filtering: agent ID maps directly to WorkOS resource external ID
       agent: { fgaResourceType: 'agent' },

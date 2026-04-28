@@ -18,10 +18,10 @@ import { WorkOS } from '@workos-inc/node';
 
 const apiKey = process.env.WORKOS_API_KEY!;
 const orgId = process.env.MASTRA_ORGANIZATION_ID!;
-const membershipId = process.env.WORKOS_MEMBERSHIP_ID || 'om_01KJBA2EPHH6QTYN703HMMBWEJ';
+const membershipId = process.env.WORKOS_MEMBERSHIP_ID;
 
-if (!apiKey || !orgId) {
-  console.error('Missing required env vars: WORKOS_API_KEY, MASTRA_ORGANIZATION_ID');
+if (!apiKey || !orgId || !membershipId) {
+  console.error('Missing required env vars: WORKOS_API_KEY, MASTRA_ORGANIZATION_ID, WORKOS_MEMBERSHIP_ID');
   process.exit(1);
 }
 

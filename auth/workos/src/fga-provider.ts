@@ -164,7 +164,17 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
         parentResourceTypeSlug: parentResource.typeSlug,
       });
 
-      return resources.filter(resource => accessibleIds.has(resource.id));
+      return resources.filter(resource => {
+        const mappedId = this.resolveResourceId(
+          user,
+          resourceType,
+          resource.id,
+          'resourceId' in resource && typeof resource.resourceId === 'string'
+            ? { resourceId: resource.resourceId }
+            : undefined,
+        );
+        return !!mappedId && accessibleIds.has(mappedId);
+      });
     }
 
     const checks = await Promise.all(

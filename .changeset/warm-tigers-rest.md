@@ -1,5 +1,5 @@
 ---
-'@mastra/server': patch
+'@mastra/server': minor
 ---
 
 Added Fine-Grained Authorization (FGA) enforcement across server handlers and memory APIs:

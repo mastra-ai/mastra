@@ -1169,7 +1169,10 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
         return { workingMemory: null, source: 'thread' as const, workingMemoryTemplate: null, threadExists: false };
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
-      if (thread) {
+      const config = memory.getMergedThreadConfig(memoryConfig || {});
+      const source: 'thread' | 'resource' =
+        config.workingMemory?.scope !== 'thread' && effectiveResourceId ? 'resource' : 'thread';
+      if (thread || source === 'resource') {
         await enforceThreadAccess({
           mastra,
           requestContext,
@@ -1189,9 +1192,6 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
         resourceId: effectiveResourceId,
         memoryConfig,
       });
-      const config = memory.getMergedThreadConfig(memoryConfig || {});
-      const source: 'thread' | 'resource' =
-        config.workingMemory?.scope !== 'thread' && effectiveResourceId ? 'resource' : 'thread';
       return { workingMemory, source, workingMemoryTemplate, threadExists };
     } catch (error) {
       return handleError(error, 'Error getting working memory');

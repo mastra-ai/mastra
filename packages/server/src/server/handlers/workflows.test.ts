@@ -234,6 +234,18 @@ describe('vNext Workflow Handlers', () => {
       expect(workflow.allSteps).toBeDefined();
       expect(workflow.stepCount).toBeUndefined();
     });
+
+    it('should return no workflows when FGA is configured and no user is present', async () => {
+      const filterAccessible = vi.fn();
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      });
+
+      expect(result).toEqual({});
+      expect(filterAccessible).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET_WORKFLOW_BY_ID_ROUTE', () => {

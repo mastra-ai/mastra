@@ -289,14 +289,14 @@ describe('MastraFGAWorkos', () => {
   describe('filterAccessible()', () => {
     it('should filter resources with a single listResourcesForMembership call when a parent mapping is configured', async () => {
       mockAuthorization.listResourcesForMembership.mockResolvedValue({
-        data: [{ externalId: 'a-1' }, { externalId: 'a-3' }],
+        data: [{ externalId: 'team-1' }],
         listMetadata: {},
       });
 
       const resources = [{ id: 'a-1' }, { id: 'a-2' }, { id: 'a-3' }];
       const result = await fga.filterAccessible(testUser, resources, 'agent', 'agents:read');
 
-      expect(result).toEqual([{ id: 'a-1' }, { id: 'a-3' }]);
+      expect(result).toEqual(resources);
       expect(mockAuthorization.listResourcesForMembership).toHaveBeenCalledWith(
         expect.objectContaining({
           organizationMembershipId: 'om-123',
@@ -306,6 +306,28 @@ describe('MastraFGAWorkos', () => {
         }),
       );
       expect(mockAuthorization.check).not.toHaveBeenCalled();
+    });
+
+    it('should compare batched results against mapped resource IDs', async () => {
+      mockAuthorization.listResourcesForMembership.mockResolvedValue({
+        data: [{ externalId: 'team-1:a-1' }],
+        listMetadata: {},
+      });
+      const mappedFga = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        resourceMapping: {
+          agent: {
+            fgaResourceType: 'team-agent',
+            deriveId: ({ user, resourceId }: any) => (resourceId ? `${user.teamId}:${resourceId}` : user.teamId),
+          },
+        },
+      });
+
+      const resources = [{ id: 'a-1' }, { id: 'a-2' }];
+      const result = await mappedFga.filterAccessible(testUser, resources, 'agent', 'agents:read');
+
+      expect(result).toEqual([{ id: 'a-1' }]);
     });
 
     it('should fall back to per-resource checks when no parent mapping is configured', async () => {

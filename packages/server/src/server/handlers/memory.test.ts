@@ -263,6 +263,35 @@ describe('Memory Handlers', () => {
         threadExists: false,
       });
     });
+
+    it('should enforce FGA for resource-scoped working memory when the thread does not exist', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+      const require = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      const user = { id: 'user-1' };
+      ctx.requestContext.set('user', user);
+
+      await GET_WORKING_MEMORY_ROUTE.handler({
+        ...ctx,
+        agentId: 'test-agent',
+        threadId: 'new-thread',
+        resourceId: 'test-resource',
+        memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+      });
+
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'new-thread' },
+        permission: 'memory:read',
+        context: expect.objectContaining({
+          resourceId: 'test-resource',
+        }),
+      });
+    });
   });
 
   describe('listThreadsHandler', () => {

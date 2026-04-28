@@ -705,6 +705,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const fgaError = await checkRouteFGA(this.mastra, route, ctx.state.requestContext, {
         ...params.urlParams,
         ...params.queryParams,
+        ...(typeof params.body === 'object' ? params.body : {}),
       });
       if (fgaError) {
         ctx.status = fgaError.status;

@@ -21,6 +21,9 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 // Route Definitions (createRoute pattern for server adapters)
 // ============================================================================
 
+const createMCPToolResourceId = ({ serverId, toolId }: Record<string, unknown>) =>
+  JSON.stringify([String(serverId), String(toolId)]);
+
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
   method: 'GET',
   path: '/mcp/v0/servers',
@@ -145,7 +148,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
   requiresAuth: true,
-  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
+  handler: async ({ mastra, serverId, requestContext }: ServerContext & { serverId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -160,7 +163,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot list tools in this way.` });
     }
 
-    return server.getToolListInfo();
+    return await server.getToolListInfo(requestContext);
   },
 });
 
@@ -176,7 +179,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   requiresAuth: true,
   fga: {
     resourceType: 'tool',
-    resourceId: ({ serverId, toolId }) => `${String(serverId)}:${String(toolId)}`,
+    resourceId: createMCPToolResourceId,
     permission: MastraFGAPermissions.TOOLS_READ,
   },
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
@@ -216,7 +219,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   requiresAuth: true,
   fga: {
     resourceType: 'tool',
-    resourceId: ({ serverId, toolId }) => `${String(serverId)}:${String(toolId)}`,
+    resourceId: createMCPToolResourceId,
     permission: MastraFGAPermissions.TOOLS_EXECUTE,
   },
   handler: async ({

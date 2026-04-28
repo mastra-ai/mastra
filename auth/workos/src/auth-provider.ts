@@ -211,6 +211,7 @@ export class MastraAuthWorkos
                   memberships,
                 },
                 jwtUser,
+                { trustOrganizationClaims: this.trustJwtClaims },
               );
             }
 
@@ -220,6 +221,7 @@ export class MastraAuthWorkos
                 workosId: user.id,
               },
               jwtUser,
+              { trustOrganizationClaims: this.trustJwtClaims },
             );
           } catch {
             if (this.trustJwtClaims && jwtUser?.id && jwtUser?.workosId) {
@@ -418,19 +420,32 @@ export class MastraAuthWorkos
     };
   }
 
-  private mergeJwtPayloadUser(user: WorkOSUser, jwtUser: WorkOSUser | null): WorkOSUser {
+  private mergeJwtPayloadUser(
+    user: WorkOSUser,
+    jwtUser: WorkOSUser | null,
+    options?: { trustOrganizationClaims?: boolean },
+  ): WorkOSUser {
     if (!jwtUser) {
       return user;
+    }
+
+    const trustOrganizationClaims = options?.trustOrganizationClaims ?? true;
+    const jwtMetadata = { ...(jwtUser.metadata ?? {}) };
+    if (!trustOrganizationClaims) {
+      delete jwtMetadata.organizationId;
+      delete jwtMetadata.organizationMembershipId;
     }
 
     return {
       ...jwtUser,
       ...user,
-      organizationId: jwtUser.organizationId ?? user.organizationId,
-      organizationMembershipId: jwtUser.organizationMembershipId ?? user.organizationMembershipId,
+      organizationId: trustOrganizationClaims ? (jwtUser.organizationId ?? user.organizationId) : user.organizationId,
+      organizationMembershipId: trustOrganizationClaims
+        ? (jwtUser.organizationMembershipId ?? user.organizationMembershipId)
+        : user.organizationMembershipId,
       memberships: user.memberships ?? jwtUser.memberships,
       metadata: {
-        ...(jwtUser.metadata ?? {}),
+        ...jwtMetadata,
         ...(user.metadata ?? {}),
       },
     };

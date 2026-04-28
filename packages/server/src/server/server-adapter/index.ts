@@ -835,16 +835,29 @@ export async function checkRouteFGA(
   if (!fgaProvider) return null;
 
   const user = requestContext?.get('user');
-  if (!user) return null;
+  if (!user) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: authenticated user is required',
+    };
+  }
 
   const resourceId =
     typeof fgaConfig.resourceId === 'function'
       ? fgaConfig.resourceId(params, { requestContext })
       : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
   const permission = fgaConfig.permission || `${fgaConfig.resourceType}:read`;
+  if (!fgaConfig.resourceType || !resourceId) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is incomplete',
+    };
+  }
 
   const authorized = await fgaProvider.check(user, {
-    resource: { type: fgaConfig.resourceType, id: resourceId || '*' },
+    resource: { type: fgaConfig.resourceType, id: resourceId },
     permission,
     context: { resourceId, requestContext },
   });
@@ -853,7 +866,7 @@ export async function checkRouteFGA(
     return {
       status: 403,
       error: 'Forbidden',
-      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId || '*'}`,
+      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
     };
   }
 

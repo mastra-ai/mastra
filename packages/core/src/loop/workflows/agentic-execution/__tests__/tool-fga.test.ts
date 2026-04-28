@@ -3,22 +3,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { FGADeniedError } from '../../../../auth/ee/fga-check';
+import { checkFGA, FGADeniedError } from '../../../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../../../auth/ee/interfaces/fga';
-
-vi.mock('../../../../auth/ee/fga-check', async importOriginal => {
-  const original = (await importOriginal()) as any;
-  return {
-    ...original,
-    checkFGA: vi.fn(async (options: any) => {
-      if (!options.fgaProvider) return;
-      await options.fgaProvider.require(options.user, {
-        resource: options.resource,
-        permission: options.permission,
-      });
-    }),
-  };
-});
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
   return {
@@ -39,13 +25,6 @@ describe('Tool execution FGA checks', () => {
 
   it('should call FGA check with correct params when provider is configured', async () => {
     const fgaProvider = createMockFGAProvider(true);
-    const _mastra = {
-      getServer: () => ({ fga: fgaProvider }),
-    } as any;
-
-    // Import dynamically after mock setup
-    const { checkFGA } = await import('../../../../auth/ee/fga-check');
-
     await checkFGA({
       fgaProvider,
       user: { id: 'user-1' },
@@ -65,8 +44,6 @@ describe('Tool execution FGA checks', () => {
   it('should throw FGADeniedError when FGA check fails', async () => {
     const fgaProvider = createMockFGAProvider(false);
 
-    const { checkFGA } = await import('../../../../auth/ee/fga-check');
-
     await expect(
       checkFGA({
         fgaProvider,
@@ -78,9 +55,6 @@ describe('Tool execution FGA checks', () => {
   });
 
   it('should be a no-op when no FGA provider configured', async () => {
-    const { checkFGA } = await import('../../../../auth/ee/fga-check');
-
-    // Should not throw
     await checkFGA({
       fgaProvider: undefined,
       user: { id: 'user-1' },

@@ -185,7 +185,7 @@ describe('MastraAuthWorkos', () => {
       expect(verifyJwks).toHaveBeenCalledWith(mockToken, 'https://mock-jwks-url');
     });
 
-    it('should merge configured JWT claims onto a fetched WorkOS user', async () => {
+    it('should not merge configured JWT organization claims onto a fetched WorkOS user by default', async () => {
       mockWithAuth.mockResolvedValueOnce({
         auth: { user: null },
       });
@@ -211,9 +211,9 @@ describe('MastraAuthWorkos', () => {
       expect(result).toMatchObject({
         id: 'user123',
         workosId: 'user123',
-        organizationId: 'org_123',
-        organizationMembershipId: 'om_123',
       });
+      expect(result?.organizationId).toBeUndefined();
+      expect(result?.organizationMembershipId).toBeUndefined();
     });
 
     it('should trust configured JWT claims for service tokens when getUser lookup does not apply', async () => {

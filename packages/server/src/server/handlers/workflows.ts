@@ -112,7 +112,10 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       // Filter workflows by FGA if configured
       const fgaProvider = mastra.getServer?.()?.fga;
       const user = requestContext?.get('user');
-      if (fgaProvider && user) {
+      if (fgaProvider) {
+        if (!user) {
+          return {};
+        }
         const workflowList = Object.entries(_workflows).map(([id, w]) => ({ id, ...w }));
         const accessible = await fgaProvider.filterAccessible(
           user,

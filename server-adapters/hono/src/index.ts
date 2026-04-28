@@ -533,6 +533,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const fgaError = await checkRouteFGA(this.mastra, route, c.get('requestContext'), {
           ...params.urlParams,
           ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
         });
         if (fgaError) {
           return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);

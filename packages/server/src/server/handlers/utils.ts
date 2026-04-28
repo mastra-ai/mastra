@@ -125,9 +125,14 @@ export async function enforceThreadAccess({
 }): Promise<void> {
   await validateThreadOwnership(thread, effectiveResourceId);
 
+  const fgaProvider = mastra?.getServer?.()?.fga;
+  if (!fgaProvider) {
+    return;
+  }
+
   const user = requestContext?.get('user');
   if (!user || typeof user !== 'object' || typeof (user as { id?: unknown }).id !== 'string') {
-    return;
+    throw new HTTPException(403, { message: 'FGA authorization denied: authenticated user id is required' });
   }
 
   await MastraMemory.checkThreadFGA({

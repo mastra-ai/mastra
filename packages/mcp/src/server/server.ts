@@ -450,9 +450,11 @@ export class MCPServer extends MCPServerBase {
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    serverInstance.setRequestHandler(ListToolsRequestSchema, async () => {
+    serverInstance.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
+      const proxiedContext = this.createProxiedRequestContext(extra);
+      const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
-        tools: Object.values(this.convertedTools).map(tool => {
+        tools: tools.map(([, tool]) => {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
@@ -1917,16 +1919,46 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  public getToolListInfo(): {
-    tools: Array<{
-      name: string;
-      description?: string;
-      inputSchema: any;
-      outputSchema?: any;
-      toolType?: MCPToolType;
-      _meta?: Record<string, unknown>;
-    }>;
-  } {
+  public getToolListInfo(requestContext?: RequestContext):
+    | {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }
+    | Promise<{
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (fgaProvider && requestContext) {
+      return this.getAuthorizedConvertedToolEntries(requestContext).then(tools => ({
+        tools: tools.map(([toolId, tool]) => ({
+          id: toolId,
+          name: tool.id || toolId,
+          description: tool.description,
+          inputSchema: this.convertSchema(tool.parameters),
+          outputSchema: this.convertSchema(tool.parameters),
+          toolType: tool.mcp?.toolType,
+          _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
+        })),
+      }));
+    }
+
+    if (fgaProvider && !requestContext) {
+      return { tools: [] };
+    }
+
     this.logger.debug('Getting tool list', { server: this.name });
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
@@ -1985,14 +2017,59 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  private createProxiedRequestContext(extra?: unknown): RequestContext {
+    const proxiedContext = new RequestContext();
+    if (extra && typeof extra === 'object') {
+      Object.entries(extra as Record<string, unknown>).forEach(([key, value]) => {
+        proxiedContext.set(key, value);
+      });
+    }
+    return proxiedContext;
+  }
+
+  private async getAuthorizedConvertedToolEntries(
+    requestContext: RequestContext,
+  ): Promise<Array<[string, (typeof this.convertedTools)[string]]>> {
+    const entries = Object.entries(this.convertedTools);
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return entries;
+    }
+
+    const user = requestContext.get('user');
+    if (!user) {
+      return [];
+    }
+
+    const accessible = await Promise.all(
+      entries.map(async ([toolId, tool]) => {
+        try {
+          await this.enforceToolExecutionFGA(toolId, requestContext);
+          return [toolId, tool] as [string, (typeof this.convertedTools)[string]];
+        } catch (error) {
+          if (error instanceof Error && error.name === 'FGADeniedError') {
+            return null;
+          }
+          throw error;
+        }
+      }),
+    );
+
+    return accessible.filter((entry): entry is [string, (typeof this.convertedTools)[string]] => entry !== null);
+  }
+
   private async enforceToolExecutionFGA(toolId: string, requestContext?: RequestContext): Promise<void> {
     const fgaProvider = this.mastra?.getServer?.()?.fga;
-    const user = requestContext?.get('user');
-    if (!fgaProvider || !user) {
+    if (!fgaProvider) {
       return;
     }
 
-    const { checkFGA, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const { checkFGA, FGADeniedError, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const user = requestContext?.get('user');
+    if (!user) {
+      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: toolId }, MastraFGAPermissions.TOOLS_EXECUTE);
+    }
+
     await checkFGA({
       fgaProvider,
       user,

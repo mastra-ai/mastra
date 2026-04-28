@@ -561,15 +561,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolFgaProvider = mastra?.getServer?.()?.fga;
         if (toolFgaProvider) {
           const fgaUser = requestContext?.get('user');
-          if (fgaUser) {
-            const { checkFGA } = await import('../../../auth/ee/fga-check');
-            await checkFGA({
-              fgaProvider: toolFgaProvider,
-              user: fgaUser,
-              resource: { type: 'tool', id: inputData.toolName },
-              permission: MastraFGAPermissions.TOOLS_EXECUTE,
-            });
+          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
+          if (!fgaUser) {
+            throw new FGADeniedError(
+              { id: 'unknown' },
+              { type: 'tool', id: inputData.toolName },
+              MastraFGAPermissions.TOOLS_EXECUTE,
+            );
           }
+          await checkFGA({
+            fgaProvider: toolFgaProvider,
+            user: fgaUser,
+            resource: { type: 'tool', id: inputData.toolName },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          });
         }
 
         const llmBgOverrides =
