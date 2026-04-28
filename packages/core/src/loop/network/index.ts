@@ -61,16 +61,18 @@ function isObservationalMemoryEnabled(config: unknown): boolean {
   return (config as { enabled?: boolean }).enabled !== false;
 }
 
-function getObservationalMemoryConfig(memory: Awaited<ReturnType<Agent['getMemory']>>, memoryConfig: unknown) {
-  if (!memory || typeof memory.getMergedThreadConfig !== 'function') {
-    return undefined;
-  }
-
-  return memory.getMergedThreadConfig(memoryConfig || {})?.observationalMemory;
-}
-
 function assertNetworkSupportsMemory(memory: Awaited<ReturnType<Agent['getMemory']>>, memoryConfig: unknown) {
-  if (isObservationalMemoryEnabled(getObservationalMemoryConfig(memory, memoryConfig))) {
+  const configuredObservationalMemory =
+    typeof memory?.getConfig === 'function' ? memory.getConfig().observationalMemory : undefined;
+  const runtimeObservationalMemory =
+    memoryConfig && typeof memoryConfig === 'object' && 'observationalMemory' in memoryConfig
+      ? (memoryConfig as { observationalMemory?: unknown }).observationalMemory
+      : undefined;
+
+  if (
+    isObservationalMemoryEnabled(runtimeObservationalMemory) ||
+    (runtimeObservationalMemory === undefined && isObservationalMemoryEnabled(configuredObservationalMemory))
+  ) {
     throw new MastraError({
       id: 'AGENT_NETWORK_OBSERVATIONAL_MEMORY_UNSUPPORTED',
       domain: ErrorDomain.AGENT_NETWORK,
