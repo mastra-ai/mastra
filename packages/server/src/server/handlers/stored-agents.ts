@@ -27,7 +27,9 @@ import {
   matchesAuthorFilter,
   resolveAuthorFilter,
 } from './authorship';
+import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
+import { prepareStarsEnrichment, stripStarFields } from './stars-enrichment';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
 
@@ -69,7 +71,18 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, page, perPage, orderBy, status, authorId, visibility, metadata }) => {
+  handler: async ({
+    mastra,
+    requestContext,
+    page,
+    perPage,
+    orderBy,
+    status,
+    authorId,
+    visibility,
+    metadata,
+    starredOnly,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -92,6 +105,44 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         queryVisibility: visibility === 'public' ? 'public' : undefined,
       });
 
+      const callerId = getCallerAuthorId(requestContext);
+      const starsEnabled = await isBuilderFeatureEnabled(mastra, 'stars');
+      const honoredStarredOnly = starsEnabled && starredOnly === true;
+      const pinStarredFor = starsEnabled && callerId ? callerId : undefined;
+
+      // `?starredOnly=true`: fetch caller's starred IDs, then refilter + recompute total.
+      if (honoredStarredOnly) {
+        const effectivePerPage: number = perPage ?? 100;
+        if (!callerId) {
+          return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
+        }
+        const starsStore = await storage.getStore('stars');
+        if (!starsStore) {
+          throw new HTTPException(500, { message: 'Stars storage domain is not available' });
+        }
+        const starredIds = await starsStore.listStarredIds({ userId: callerId, entityType: 'agent' });
+        if (starredIds.length === 0) {
+          return { agents: [], total: 0, page, perPage: effectivePerPage, hasMore: false };
+        }
+        const allMatching = await agentsStore.listResolved({
+          perPage: false,
+          orderBy,
+          status,
+          authorId: filter.kind === 'exact' ? filter.authorId : undefined,
+          metadata,
+          entityIds: starredIds,
+          pinStarredFor,
+        });
+        const visible = allMatching.agents.filter(record => matchesAuthorFilter(record, filter));
+        const total = visible.length;
+        const startIdx = effectivePerPage === 0 ? 0 : page * effectivePerPage;
+        const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
+        const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
+        const annotated = sliced.map(record => ({ ...record, isStarred: true }));
+        const hasMore = effectivePerPage > 0 && endIdx < total;
+        return { agents: annotated, total, page, perPage: effectivePerPage, hasMore };
+      }
+
       const result = await agentsStore.listResolved({
         page,
         perPage,
@@ -99,6 +150,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         status,
         authorId: filter.kind === 'exact' ? filter.authorId : undefined,
         metadata,
+        pinStarredFor,
       });
 
       // Post-filter to enforce ownership + visibility rules across all backends.
@@ -108,9 +160,23 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // math working. For `unrestricted` / `exact` filters nothing is removed.
       // For `ownedOrPublic` / `publicOnly`, downstream UIs should treat the
       // filter as a view over the caller's scope — an approximation is OK.
-      const agents = result.agents.filter(record => matchesAuthorFilter(record, filter));
+      const visibleAgents = result.agents.filter(record => matchesAuthorFilter(record, filter));
 
-      return { ...result, agents };
+      if (!starsEnabled) {
+        return { ...result, agents: visibleAgents.map(stripStarFields) };
+      }
+
+      const enrichment = await prepareStarsEnrichment(
+        mastra,
+        requestContext,
+        'agent',
+        visibleAgents.map(a => a.id),
+      );
+      const annotated = enrichment
+        ? visibleAgents.map(record => ({ ...record, isStarred: enrichment.starredIds.has(record.id) }))
+        : visibleAgents;
+
+      return { ...result, agents: annotated };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
@@ -155,7 +221,11 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: agent });
 
-      return agent;
+      const enrichment = await prepareStarsEnrichment(mastra, requestContext, 'agent', [agent.id]);
+      if (enrichment) {
+        return { ...agent, isStarred: enrichment.starredIds.has(agent.id) };
+      }
+      return stripStarFields(agent);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -274,9 +344,22 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         await agentsStore.create({ agent: input });
       }
 
-      // Return the resolved agent (thin record + version config)
-      // Use draft status since newly created entities start as drafts
-      const resolved = await agentsStore.getByIdResolved(id, { status: 'draft' });
+      // Publish the initial version so the agent is immediately usable.
+      // Without this, the thin record stays as status='draft' with activeVersionId=null,
+      // which makes the agent unreachable via status='published' resolution.
+      const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
+      const initialVersion = versions[0];
+      if (initialVersion) {
+        await agentsStore.update({
+          id,
+          activeVersionId: initialVersion.id,
+          status: 'published',
+        });
+        editor?.agent.clearCache(id);
+      }
+
+      // Return the resolved agent (thin record + version config) using the newly published version
+      const resolved = await agentsStore.getByIdResolved(id, { status: 'published' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
@@ -503,6 +586,17 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       });
 
       await agentsStore.delete(storedAgentId);
+
+      // Cascade: drop any star rows referencing this agent so they don't
+      // resurrect if the same id is reused. Failure must not abort the delete.
+      try {
+        const starsStore = await storage.getStore('stars');
+        await starsStore?.deleteStarsForEntity({ entityType: 'agent', entityId: storedAgentId });
+      } catch (cascadeError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to cascade-delete stars for agent', { storedAgentId, error: cascadeError });
+      }
 
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);

@@ -8,6 +8,7 @@ import type {
   MCPServersStorage,
   WorkspacesStorage,
   SkillsStorage,
+  StarsStorage,
   ScoresStorage,
   WorkflowsStorage,
   MemoryStorage,
@@ -33,6 +34,7 @@ export type StorageDomains = {
   mcpServers?: MCPServersStorage;
   workspaces?: WorkspacesStorage;
   skills?: SkillsStorage;
+  stars?: StarsStorage;
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
 };
@@ -50,6 +52,7 @@ export const EDITOR_DOMAINS = [
   'mcpServers',
   'workspaces',
   'skills',
+  'stars',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
@@ -286,6 +289,7 @@ export class MastraCompositeStore extends MastraBase {
         mcpServers: resolve('mcpServers'),
         workspaces: resolve('workspaces'),
         skills: resolve('skills'),
+        stars: resolve('stars'),
         blobs: resolve('blobs'),
         backgroundTasks: resolve('backgroundTasks'),
       } as StorageDomains;
@@ -374,6 +378,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.skills) {
       initTasks.push(this.stores.skills.init());
+    }
+
+    if (this.stores?.stars) {
+      initTasks.push(this.stores.stars.init());
     }
 
     if (this.stores?.blobs) {

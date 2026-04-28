@@ -8,6 +8,7 @@ import { createAgentsTests } from './domains/agents';
 import { createDatasetsTests } from './domains/datasets';
 import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
+import { createStarsTests } from './domains/stars';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -91,5 +92,6 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createDatasetsTests({ storage });
     createExperimentsTests({ storage });
     createBackgroundTasksTests({ storage });
+    createStarsTests({ storage });
   });
 }

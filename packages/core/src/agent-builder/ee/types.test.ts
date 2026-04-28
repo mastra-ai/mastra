@@ -20,6 +20,7 @@ describe('AgentBuilderOptions', () => {
           skills: true,
           memory: false,
           variables: true,
+          stars: true,
         },
       },
       configuration: {
@@ -45,8 +46,19 @@ describe('AgentFeatures', () => {
       skills: true,
       memory: true,
       variables: true,
+      stars: true,
     };
     expect(features.tools).toBe(true);
+    expect(features.stars).toBe(true);
+  });
+
+  it('stars accepts true | false | undefined', () => {
+    const enabled: AgentFeatures = { stars: true };
+    const disabled: AgentFeatures = { stars: false };
+    const omitted: AgentFeatures = {};
+    expect(enabled.stars).toBe(true);
+    expect(disabled.stars).toBe(false);
+    expect(omitted.stars).toBeUndefined();
   });
 });
 
