@@ -17,7 +17,10 @@ type State = {
 
 export class AgenticRunState {
   #state: State;
+  readonly provider: string;
+
   constructor({ _internal, model }: { _internal: StreamInternal; model: MastraLanguageModel }) {
+    this.provider = model.provider;
     this.#state = {
       responseMetadata: {
         id: _internal?.generateId?.(),

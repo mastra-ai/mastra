@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { JSONValue } from '../stream';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
 // ---------------------------------------------------------------------------
@@ -19,6 +20,8 @@ import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './in
 export interface CompatRule {
   /** Human-readable identifier for logging/debugging. */
   name: string;
+  /** Optional provider prefixes this rule applies to, e.g. `openai` or `anthropic`. */
+  providers?: string[];
   /** Regexes matched against the error message and response body. */
   errorPatterns: RegExp[];
   /** Mutate messages to resolve the incompatibility. Return `true` if changes were made. */
@@ -51,6 +54,81 @@ function matchesRule(error: unknown, rule: CompatRule): boolean {
   }
 
   return false;
+}
+
+function matchesProvider(provider: string | undefined, rule: CompatRule): boolean {
+  if (!rule.providers?.length) return true;
+  if (!provider) return false;
+
+  return rule.providers.some(ruleProvider => provider === ruleProvider || provider.startsWith(`${ruleProvider}.`));
+}
+
+type CompatToolResultOutput =
+  | { type: 'text'; value: string }
+  | { type: 'json'; value: JSONValue }
+  | { type: 'error-text'; value: string }
+  | { type: 'error-json'; value: JSONValue }
+  | { type: 'content'; value: JSONValue[] };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function stringifyOutput(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value == null) return '';
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function isValidToolResultOutput(value: unknown): value is CompatToolResultOutput {
+  if (!isRecord(value) || typeof value.type !== 'string' || !('value' in value)) return false;
+
+  switch (value.type) {
+    case 'text':
+    case 'error-text':
+      return typeof value.value === 'string';
+    case 'json':
+    case 'error-json':
+      return value.value !== undefined;
+    case 'content':
+      return Array.isArray(value.value);
+    default:
+      return false;
+  }
+}
+
+function toJSONValue(value: unknown): JSONValue {
+  if (value === undefined) return null;
+
+  try {
+    return JSON.parse(JSON.stringify(value)) as JSONValue;
+  } catch {
+    return stringifyOutput(value);
+  }
+}
+
+function normalizeToolResultOutput(modelOutput: unknown, result: unknown): CompatToolResultOutput {
+  if (isValidToolResultOutput(modelOutput)) return modelOutput;
+
+  if (isRecord(modelOutput) && typeof modelOutput.type === 'string') {
+    switch (modelOutput.type) {
+      case 'text':
+      case 'error-text':
+        return { type: modelOutput.type, value: stringifyOutput(result) };
+      case 'json':
+      case 'error-json':
+        return { type: modelOutput.type, value: toJSONValue(result) };
+      case 'content':
+        return { type: 'json', value: toJSONValue(result) };
+    }
+  }
+
+  return typeof result === 'string' ? { type: 'text', value: result } : { type: 'json', value: toJSONValue(result) };
 }
 
 // ---------------------------------------------------------------------------
@@ -126,12 +204,48 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
+  providers: ['anthropic'],
   errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
   fix(messages) {
     const idMap = buildToolIdMap(messages);
     if (idMap.size === 0) return false;
     rewriteToolIds(messages, idMap);
     return true;
+  },
+};
+
+export const openaiMissingToolResultOutput: CompatRule = {
+  name: 'openai-missing-tool-result-output',
+  providers: ['openai'],
+  errorPatterns: [/Missing required parameter:\s*['"]?input\[\d+\]\.output['"]?/i],
+  fix(messages) {
+    let changed = false;
+
+    for (const msg of messages) {
+      if (!msg.content?.parts) continue;
+
+      for (const part of msg.content.parts) {
+        if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+
+        const mastraMetadata = part.providerMetadata?.mastra;
+        const metadataRecord = isRecord(mastraMetadata) ? mastraMetadata : {};
+        const modelOutput = metadataRecord.modelOutput;
+        const normalizedOutput = normalizeToolResultOutput(modelOutput, part.toolInvocation.result);
+
+        if (modelOutput === normalizedOutput) continue;
+
+        part.providerMetadata = {
+          ...part.providerMetadata,
+          mastra: {
+            ...metadataRecord,
+            modelOutput: normalizedOutput,
+          },
+        };
+        changed = true;
+      }
+    }
+
+    return changed;
   },
 };
 
@@ -143,7 +257,7 @@ export const anthropicToolIdFormat: CompatRule = {
  * All built-in compat rules. Extend by passing additional rules to the
  * `ProviderHistoryCompat` constructor.
  */
-export const DEFAULT_COMPAT_RULES: CompatRule[] = [anthropicToolIdFormat];
+export const DEFAULT_COMPAT_RULES: CompatRule[] = [anthropicToolIdFormat, openaiMissingToolResultOutput];
 
 // ---------------------------------------------------------------------------
 // Processor
@@ -181,6 +295,7 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
   async processAPIError({
     error,
     messageList,
+    provider,
     retryCount,
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (retryCount > 0) return;
@@ -188,6 +303,8 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     const messages = messageList.get.all.db();
 
     for (const rule of this.rules) {
+      if (!matchesProvider(provider, rule)) continue;
+
       if (matchesRule(error, rule)) {
         const changed = rule.fix(messages);
         if (changed) {
