@@ -20,6 +20,12 @@ Think of it as the agent's active thoughts or scratchpad – the key information
 
 This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
 
+:::warning
+
+`workingMemory.version: 'vnext'` is deprecated and will be removed in a future major release. Use the default stable working memory mode, or [build a custom processor](#custom-incremental-updates) when you need incremental updates.
+
+:::
+
 Working memory can persist at two different scopes:
 
 - **Resource-scoped** (default): Memory persists across all conversation threads for the same user
@@ -394,6 +400,122 @@ await memory.updateWorkingMemory({
   workingMemory: 'Updated memory content...',
 })
 ```
+
+## Custom incremental updates
+
+Use a custom processor when an agent needs to update a large Markdown working memory template without calling the built-in `updateWorkingMemory` tool during the response. This pattern keeps working memory available for context, then updates it after the model finishes.
+
+The following example demonstrates the core pattern:
+
+1. Keep working memory in read-only mode for the main response.
+1. Run an output processor after the response completes.
+1. Load the current working memory with `memory.getWorkingMemory()`.
+1. Generate or compute a focused change.
+1. Write the full updated value with `memory.updateWorkingMemory()`.
+
+```typescript title="src/mastra/processors/incremental-working-memory.ts"
+import type { MastraDBMessage, MemoryRequestContext } from '@mastra/core/memory'
+import type { Processor, ProcessOutputResultArgs } from '@mastra/core/processors'
+import type { Memory } from '@mastra/memory'
+
+type IncrementalWorkingMemoryOptions = {
+  memory: Memory
+  buildNextMemory: (args: {
+    currentMemory: string
+    messages: MastraDBMessage[]
+    responseText: string
+  }) => Promise<string>
+}
+
+export class IncrementalWorkingMemoryProcessor implements Processor {
+  id = 'incremental-working-memory'
+
+  constructor(private options: IncrementalWorkingMemoryOptions) {}
+
+  async processOutputResult({ messages, result, requestContext }: ProcessOutputResultArgs) {
+    const memoryContext = requestContext?.get<'MastraMemory', MemoryRequestContext>('MastraMemory')
+    const threadId = memoryContext?.thread?.id
+    const resourceId = memoryContext?.resourceId
+
+    if (!threadId || !resourceId) {
+      return messages
+    }
+
+    const currentMemory =
+      (await this.options.memory.getWorkingMemory({
+        threadId,
+        resourceId,
+      })) ?? ''
+
+    const nextMemory = await this.options.buildNextMemory({
+      currentMemory,
+      messages,
+      responseText: result.text,
+    })
+
+    if (nextMemory === currentMemory) {
+      return messages
+    }
+
+    await this.options.memory.updateWorkingMemory({
+      threadId,
+      resourceId,
+      workingMemory: nextMemory,
+    })
+
+    return messages
+  }
+}
+```
+
+Attach the processor to the agent and make built-in working memory read-only for the main response:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { IncrementalWorkingMemoryProcessor } from '../processors/incremental-working-memory'
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'resource',
+      template: `# User Profile
+- Name:
+- Preferences:
+- Current goal:
+`,
+    },
+  },
+})
+
+export const supportAgent = new Agent({
+  name: 'support-agent',
+  instructions: 'Answer the user first. Keep working memory concise.',
+  model: 'openai/gpt-5-mini',
+  memory,
+  outputProcessors: [
+    new IncrementalWorkingMemoryProcessor({
+      memory,
+      buildNextMemory: async ({ currentMemory }) => {
+        return currentMemory
+      },
+    }),
+  ],
+})
+
+await supportAgent.generate('My name is Sam.', {
+  memory: {
+    thread: 'thread-123',
+    resource: 'user-456',
+    options: {
+      readOnly: true,
+    },
+  },
+})
+```
+
+In production, replace `buildNextMemory` with a separate model call, deterministic merge logic, or another background job. Add validation before writing, such as schema checks, maximum diff size, stale-write detection, and a fallback that skips the update if the generated memory is unsafe.
 
 ## Read-only working memory
 

@@ -20,6 +20,9 @@ export interface WorkingMemoryConfig {
    * @default 'resource'
    */
   scope?: 'thread' | 'resource';
+  /**
+   * @deprecated Working memory vnext will be removed in a future major release. Use stable working memory instead.
+   */
   useVNext?: boolean;
   /**
    * When true, working memory is read-only - the data is provided as context
@@ -68,6 +71,9 @@ export class WorkingMemory implements Processor {
       storage: MemoryStorage;
       template?: WorkingMemoryTemplate;
       scope?: 'thread' | 'resource';
+      /**
+       * @deprecated Working memory vnext will be removed in a future major release. Use stable working memory instead.
+       */
       useVNext?: boolean;
       readOnly?: boolean;
       templateProvider?: {

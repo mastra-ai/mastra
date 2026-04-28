@@ -2416,4 +2416,78 @@ describe('Memory', () => {
       expect(childSpan.error).not.toHaveBeenCalled();
     });
   });
+
+  describe("working memory version: 'vnext' deprecation warning", () => {
+    beforeEach(() => {
+      globalThis.__mastraWarnedWorkingMemoryVNextDeprecation = false;
+    });
+
+    it('warns only in mastra dev and only once per process', () => {
+      const originalMastraDev = process.env.MASTRA_DEV;
+      process.env.MASTRA_DEV = 'true';
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      try {
+        const memory = new Memory({
+          storage: new InMemoryStore(),
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              template: '# User Information',
+              version: 'vnext',
+            },
+          },
+        });
+
+        memory.listTools();
+        memory.listTools();
+
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          "Working memory `version: 'vnext'` is deprecated and will be removed in a future major release. Use the default stable working memory mode or build a custom processor for incremental updates.",
+        );
+      } finally {
+        warnSpy.mockRestore();
+        globalThis.__mastraWarnedWorkingMemoryVNextDeprecation = false;
+        if (originalMastraDev === undefined) {
+          delete process.env.MASTRA_DEV;
+        } else {
+          process.env.MASTRA_DEV = originalMastraDev;
+        }
+      }
+    });
+
+    it('does not warn outside mastra dev', () => {
+      const originalMastraDev = process.env.MASTRA_DEV;
+      delete process.env.MASTRA_DEV;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      try {
+        const memory = new Memory({
+          storage: new InMemoryStore(),
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              template: '# User Information',
+              version: 'vnext',
+            },
+          },
+        });
+
+        memory.listTools();
+
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+        globalThis.__mastraWarnedWorkingMemoryVNextDeprecation = false;
+        if (originalMastraDev === undefined) {
+          delete process.env.MASTRA_DEV;
+        } else {
+          process.env.MASTRA_DEV = originalMastraDev;
+        }
+      }
+    });
+  });
 });

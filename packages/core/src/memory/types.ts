@@ -188,6 +188,9 @@ type BaseWorkingMemory = {
 type TemplateWorkingMemory = BaseWorkingMemory & {
   template: string;
   schema?: never;
+  /**
+   * @deprecated `version: 'vnext'` will be removed in a future major release. Use the default `stable` mode.
+   */
   version?: 'stable' | 'vnext';
 };
 

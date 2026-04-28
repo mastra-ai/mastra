@@ -48,6 +48,11 @@ export class DevLogger {
     console.info(`${prefix} ${pc.yellow(message)}`);
   }
 
+  deprecated(message: string): void {
+    const prefix = this.formatPrefix('⚠ deprecated', pc.yellow);
+    console.info(`${prefix} ${pc.yellow(message)}`);
+  }
+
   error(message: string): void {
     const prefix = this.formatPrefix('✗', pc.red);
     console.info(`${prefix} ${pc.red(message)}`);
