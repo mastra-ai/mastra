@@ -347,7 +347,6 @@ export class AgentChannels {
   private initPromise: Promise<void> | null = null;
   private agent!: Agent<any, any, any, any>;
   private logger?: IMastraLogger;
-  private mastra?: Mastra;
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
   private userName: string;
@@ -417,16 +416,7 @@ export class AgentChannels {
   }
 
   /**
-   * Store Mastra reference for lazy initialization.
-   * Called by Mastra.addAgent so handleWebhookEvent can initialize on first use.
-   * @internal
-   */
-  __setMastra(mastra: Mastra): void {
-    this.mastra = mastra;
-  }
-
-  /**
-   * Register an adapter dynamically, typically from a MastraChannel like SlackChannel.
+   * Register an adapter dynamically.
    * When `managesRoutes` is true, AgentChannels will NOT create webhook routes for this platform
    * (the MastraChannel handles routing and calls handleWebhookEvent directly).
    * @internal
@@ -437,14 +427,8 @@ export class AgentChannels {
     config?: ChannelAdapterConfig,
     options?: { managesRoutes?: boolean },
   ): void {
-    // Skip if already registered
     if (this.adapters[platform]) {
       return;
-    }
-    // If Chat SDK is already initialized, we need to reinitialize with the new adapter
-    if (this.chat) {
-      this.chat = null;
-      this.initPromise = null;
     }
     this.adapters[platform] = adapter;
     this.adapterConfigs[platform] = config ?? { adapter };
@@ -481,7 +465,6 @@ export class AgentChannels {
    * Called by Mastra.addAgent after the server is ready.
    */
   async initialize(mastra: Mastra): Promise<void> {
-    this.mastra = mastra;
     if (this.chat) return;
     if (this.initPromise) {
       return this.initPromise;
@@ -806,11 +789,6 @@ export class AgentChannels {
     // Ensure initialization is complete
     if (this.initPromise) {
       await this.initPromise;
-    }
-
-    // If chat was reset (e.g., new adapter registered), re-initialize
-    if (!this.chat && this.mastra) {
-      await this.initialize(this.mastra);
     }
 
     const sdkInstance = this.chat;

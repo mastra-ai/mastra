@@ -126,6 +126,7 @@ export interface Config<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TChannels extends Record<string, MastraChannel> = Record<string, MastraChannel>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -315,7 +316,7 @@ export interface Config<
    * });
    * ```
    */
-  channels?: Record<string, MastraChannel>;
+  channels?: TChannels;
 }
 
 /**
@@ -365,6 +366,7 @@ export class Mastra<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TChannels extends Record<string, MastraChannel> = Record<string, MastraChannel>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -396,7 +398,7 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
-  #channels?: Record<string, MastraChannel>;
+  #channels?: TChannels;
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -484,6 +486,14 @@ export class Mastra<
    */
   public getPlatformChannels(): Record<string, MastraChannel> | undefined {
     return this.#channels;
+  }
+
+  /**
+   * Shorthand getter for platform channels.
+   * Usage: `mastra.channels.slack.connect(agentId)`
+   */
+  public get channels(): TChannels {
+    return (this.#channels ?? {}) as TChannels;
   }
 
   /**
@@ -650,7 +660,19 @@ export class Mastra<
    * ```
    */
   constructor(
-    config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
+    config?: Config<
+      TAgents,
+      TWorkflows,
+      TVectors,
+      TTTS,
+      TLogger,
+      TMCPServers,
+      TScorers,
+      TTools,
+      TProcessors,
+      TMemory,
+      TChannels
+    >,
   ) {
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
     // can correlate logs to the active span. Must happen before any agent runs.
@@ -1291,8 +1313,9 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      // Store mastra reference so handleWebhookEvent can lazily initialize
-      agentChannelsInstance.__setMastra(this);
+      // Initialize Chat SDK for manual adapter configurations
+      // (Platform-managed channels initialize their own AgentChannels)
+      void agentChannelsInstance.initialize(this);
     }
   }
 

@@ -1,5 +1,7 @@
+import type { ChannelsStorage } from '@mastra/core/storage';
 import type { Mastra } from '@mastra/core/mastra';
 import type { Handler } from 'hono';
+import type { SlackInstallation } from './schemas';
 
 // =============================================================================
 // Routes
@@ -59,9 +61,11 @@ export interface SlackChannelConfig {
   onTokenRotation?: (tokens: { configToken: string; refreshToken: string }) => Promise<void>;
 
   /**
-   * Custom storage for installations (default: in-memory).
+   * Custom storage for installations.
+   * Defaults to using Mastra's ChannelsStorage from the global storage.
+   * Falls back to InMemoryChannelsStorage if no global storage is configured.
    */
-  storage?: SlackStorage;
+  storage?: ChannelsStorage;
 
   /**
    * Path to redirect to after OAuth completion.
@@ -222,79 +226,6 @@ export interface SlackBlock {
 }
 
 // =============================================================================
-// Installation
-// =============================================================================
-
-export interface SlackInstallation {
-  /** Unique installation ID */
-  id: string;
-
-  /** The Mastra agent ID */
-  agentId: string;
-
-  /** Slack app ID */
-  appId: string;
-
-  /** Unique webhook ID for routing */
-  webhookId: string;
-
-  /** App client ID (for OAuth) */
-  clientId: string;
-
-  /** App client secret (for OAuth) */
-  clientSecret: string;
-
-  /** Signing secret for request verification */
-  signingSecret: string;
-
-  /** Workspace/team ID */
-  teamId: string;
-
-  /** Workspace name */
-  teamName?: string;
-
-  /** Bot OAuth token */
-  botToken: string;
-
-  /** Bot user ID in Slack */
-  botUserId: string;
-
-  /** When the app was installed */
-  installedAt: Date;
-
-  /** Hash of the agent config + baseUrl (for change detection) */
-  configHash: string;
-}
-
-export interface PendingInstallation {
-  /** Unique ID (used as OAuth state) */
-  id: string;
-
-  /** The Mastra agent ID */
-  agentId: string;
-
-  /** Slack app ID */
-  appId: string;
-
-  /** Webhook ID for event routing */
-  webhookId: string;
-
-  /** App credentials */
-  clientId: string;
-  clientSecret: string;
-  signingSecret: string;
-
-  /** OAuth authorization URL - user visits this to install the bot */
-  authorizationUrl: string;
-
-  /** Hash of the agent config + baseUrl (for change detection) */
-  configHash: string;
-
-  /** Created timestamp */
-  createdAt: Date;
-}
-
-// =============================================================================
 // Manifest API Types
 // =============================================================================
 
@@ -310,6 +241,11 @@ export interface SlackAppManifest {
     long_description?: string;
   };
   features?: {
+    app_home?: {
+      home_tab_enabled?: boolean;
+      messages_tab_enabled?: boolean;
+      messages_tab_read_only_enabled?: boolean;
+    };
     bot_user?: {
       display_name: string;
       always_online?: boolean;
@@ -354,39 +290,6 @@ export interface SlackAppCredentials {
   clientSecret: string;
   signingSecret: string;
   oauthAuthorizeUrl?: string;
-}
-
-// =============================================================================
-// Storage
-// =============================================================================
-
-/**
- * Stored config tokens (rotated periodically by Slack).
- */
-export interface StoredConfigTokens {
-  configToken: string;
-  refreshToken: string;
-  updatedAt: Date;
-}
-
-export interface SlackStorage {
-  // Config token persistence (for auto-rotation)
-  saveConfigTokens(tokens: StoredConfigTokens): Promise<void>;
-  getConfigTokens(): Promise<StoredConfigTokens | null>;
-
-  // Installations
-  saveInstallation(installation: SlackInstallation): Promise<void>;
-  getInstallation(agentId: string): Promise<SlackInstallation | null>;
-  getInstallationByWebhookId(webhookId: string): Promise<SlackInstallation | null>;
-  listInstallations(): Promise<SlackInstallation[]>;
-  deleteInstallation(id: string): Promise<void>;
-
-  // Pending installations (OAuth in progress)
-  savePendingInstallation(pending: PendingInstallation): Promise<void>;
-  getPendingInstallation(id: string): Promise<PendingInstallation | null>;
-  getPendingInstallationByAgentId(agentId: string): Promise<PendingInstallation | null>;
-  listPendingInstallations(): Promise<PendingInstallation[]>;
-  deletePendingInstallation(id: string): Promise<void>;
 }
 
 // =============================================================================

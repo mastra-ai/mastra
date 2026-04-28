@@ -1,25 +1,24 @@
 import * as crypto from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
 import { type MastraChannel, AgentChannels } from '@mastra/core/channels';
-import type { ChannelsStorage } from '@mastra/core/storage';
+import { type ChannelsStorage, type ChannelInstallation, InMemoryChannelsStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
 import { buildManifest } from './manifest';
-import { InMemorySlackStorage } from './storage';
-import { MastraSlackStorageAdapter } from './mastra-storage-adapter';
-import type {
-  SlackChannelConfig,
-  SlackStorage,
-  SlackInstallation,
-  SlashCommandConfig,
-  SlackRoute,
-  SlackAgentConfig,
-  PendingInstallation,
-  StoredConfigTokens,
-} from './types';
+import {
+  SlackInstallationDataSchema,
+  SlackPendingDataSchema,
+  SlackConfigDataSchema,
+  type SlackInstallation,
+  type SlackPendingInstallation,
+  type SlackConfigTokens,
+} from './schemas';
+import type { SlackChannelConfig, SlashCommandConfig, SlackRoute, SlackAgentConfig } from './types';
+
+const PLATFORM = 'slack';
 
 /**
  * Create a hash of the agent config for change detection.
@@ -70,7 +69,7 @@ function hashConfig(config: SlackAgentConfig, baseUrl: string, resolvedAppName: 
 export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   readonly id = 'slack';
   readonly #channelConfig: SlackChannelConfig;
-  #storage!: SlackStorage;
+  #storage!: ChannelsStorage;
   #storageResolved = false;
   readonly #manifestClient: SlackManifestClient;
 
@@ -104,8 +103,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       refreshToken: config.refreshToken,
       onTokenRotation: async (tokens) => {
         // Persist rotated tokens to storage (encrypted)
-        const storage = await this.#getStorage();
-        await storage.saveConfigTokens(
+        await this.#saveConfigTokens(
           this.#encryptConfigTokens({
             configToken: tokens.configToken,
             refreshToken: tokens.refreshToken,
@@ -199,7 +197,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   /**
    * Encrypt secrets in a pending installation before storage.
    */
-  #encryptPendingInstallation(pending: PendingInstallation): PendingInstallation {
+  #encryptPendingInstallation(pending: SlackPendingInstallation): SlackPendingInstallation {
     const key = this.#getEncryptionKey();
     if (!key) return pending;
 
@@ -213,7 +211,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   /**
    * Decrypt secrets from a pending installation after loading.
    */
-  #decryptPendingInstallation(pending: PendingInstallation): PendingInstallation {
+  #decryptPendingInstallation(pending: SlackPendingInstallation): SlackPendingInstallation {
     const key = this.#getEncryptionKey();
     if (!key) return pending;
 
@@ -265,7 +263,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   /**
    * Encrypt config tokens before storage.
    */
-  #encryptConfigTokens(tokens: StoredConfigTokens): StoredConfigTokens {
+  #encryptConfigTokens(tokens: SlackConfigTokens): SlackConfigTokens {
     const key = this.#getEncryptionKey();
     if (!key) return tokens;
 
@@ -279,7 +277,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   /**
    * Decrypt config tokens after loading.
    */
-  #decryptConfigTokens(tokens: StoredConfigTokens): StoredConfigTokens {
+  #decryptConfigTokens(tokens: SlackConfigTokens): SlackConfigTokens {
     const key = this.#getEncryptionKey();
     if (!key) return tokens;
 
@@ -294,16 +292,9 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
    * Get storage, resolving to Mastra's channels storage if available.
    * This is called lazily to ensure we use persistent storage when Mastra is attached.
    */
-  async #getStorage(): Promise<SlackStorage> {
+  async #getStorage(): Promise<ChannelsStorage> {
     // Already resolved
     if (this.#storageResolved) {
-      return this.#storage;
-    }
-
-    // User provided custom storage - use it
-    if (this.#channelConfig.storage) {
-      this.#storage = this.#channelConfig.storage;
-      this.#storageResolved = true;
       return this.#storage;
     }
 
@@ -317,7 +308,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
 
           const channelsStorage = (await store.getStore('channels')) as ChannelsStorage | undefined;
           if (channelsStorage) {
-            this.#storage = new MastraSlackStorageAdapter(channelsStorage);
+            this.#storage = channelsStorage;
             this.#storageResolved = true;
             return this.#storage;
           }
@@ -330,11 +321,188 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
     // Fall back to in-memory
     if (!this.#storage) {
       console.warn('[Slack] No persistent storage available, using in-memory (data will not persist across restarts)');
-      this.#storage = new InMemorySlackStorage();
+      this.#storage = new InMemoryChannelsStorage();
     }
     this.#storageResolved = true;
     return this.#storage;
   }
+
+  // ===========================================================================
+  // Storage Helpers - Parse/serialize between ChannelInstallation and typed Slack data
+  // ===========================================================================
+
+  /**
+   * Parse a ChannelInstallation record into a typed SlackInstallation.
+   */
+  #parseInstallation(record: ChannelInstallation): SlackInstallation {
+    const data = SlackInstallationDataSchema.parse(record.data);
+    return {
+      id: record.id,
+      agentId: record.agentId,
+      webhookId: record.webhookId ?? '',
+      configHash: record.configHash ?? '',
+      installedAt: record.createdAt,
+      ...data,
+    };
+  }
+
+  /**
+   * Parse a ChannelInstallation record (status='pending') into a typed SlackPendingInstallation.
+   */
+  #parsePendingInstallation(record: ChannelInstallation): SlackPendingInstallation {
+    const data = SlackPendingDataSchema.parse(record.data);
+    return {
+      id: record.id,
+      agentId: record.agentId,
+      webhookId: record.webhookId ?? '',
+      configHash: record.configHash ?? '',
+      createdAt: record.createdAt,
+      ...data,
+    };
+  }
+
+  /**
+   * Get an active installation for an agent.
+   */
+  async #getInstallation(agentId: string): Promise<SlackInstallation | null> {
+    const storage = await this.#getStorage();
+    const record = await storage.getInstallationByAgent(PLATFORM, agentId);
+    if (!record || record.status !== 'active') return null;
+    return this.#parseInstallation(record);
+  }
+
+  /**
+   * Get an installation by webhook ID.
+   */
+  async #getInstallationByWebhookId(webhookId: string): Promise<SlackInstallation | null> {
+    const storage = await this.#getStorage();
+    const record = await storage.getInstallationByWebhookId(webhookId);
+    if (!record || record.platform !== PLATFORM || record.status !== 'active') return null;
+    return this.#parseInstallation(record);
+  }
+
+  /**
+   * Save an active installation.
+   */
+  async #saveInstallation(installation: SlackInstallation): Promise<void> {
+    const storage = await this.#getStorage();
+    await storage.saveInstallation({
+      id: installation.id,
+      platform: PLATFORM,
+      agentId: installation.agentId,
+      status: 'active',
+      webhookId: installation.webhookId,
+      configHash: installation.configHash,
+      data: {
+        appId: installation.appId,
+        clientId: installation.clientId,
+        clientSecret: installation.clientSecret,
+        signingSecret: installation.signingSecret,
+        teamId: installation.teamId,
+        teamName: installation.teamName,
+        botToken: installation.botToken,
+        botUserId: installation.botUserId,
+      },
+      createdAt: installation.installedAt,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * List all active installations.
+   */
+  async #listInstallations(): Promise<SlackInstallation[]> {
+    const storage = await this.#getStorage();
+    const records = await storage.listInstallations(PLATFORM);
+    return records
+      .filter((r) => r.status === 'active')
+      .map((r) => this.#parseInstallation(r));
+  }
+
+  /**
+   * Get a pending installation for an agent.
+   */
+  async #getPendingInstallation(agentId: string): Promise<SlackPendingInstallation | null> {
+    const storage = await this.#getStorage();
+    const record = await storage.getInstallationByAgent(PLATFORM, agentId);
+    if (!record || record.status !== 'pending') return null;
+    return this.#parsePendingInstallation(record);
+  }
+
+  /**
+   * Get a pending installation by ID (used for OAuth state lookup).
+   */
+  async #getPendingInstallationById(id: string): Promise<SlackPendingInstallation | null> {
+    const storage = await this.#getStorage();
+    const record = await storage.getInstallation(id);
+    if (!record || record.status !== 'pending') return null;
+    return this.#parsePendingInstallation(record);
+  }
+
+  /**
+   * Save a pending installation.
+   */
+  async #savePendingInstallation(pending: SlackPendingInstallation): Promise<void> {
+    const storage = await this.#getStorage();
+    await storage.saveInstallation({
+      id: pending.id,
+      platform: PLATFORM,
+      agentId: pending.agentId,
+      status: 'pending',
+      webhookId: pending.webhookId,
+      configHash: pending.configHash,
+      data: {
+        appId: pending.appId,
+        clientId: pending.clientId,
+        clientSecret: pending.clientSecret,
+        signingSecret: pending.signingSecret,
+        authorizationUrl: pending.authorizationUrl,
+      },
+      createdAt: pending.createdAt,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Save config tokens.
+   */
+  async #saveConfigTokens(tokens: SlackConfigTokens): Promise<void> {
+    const storage = await this.#getStorage();
+    await storage.saveConfig({
+      platform: PLATFORM,
+      data: {
+        configToken: tokens.configToken,
+        refreshToken: tokens.refreshToken,
+      },
+      updatedAt: tokens.updatedAt,
+    });
+  }
+
+  /**
+   * Get config tokens.
+   */
+  async #getConfigTokens(): Promise<SlackConfigTokens | null> {
+    const storage = await this.#getStorage();
+    const config = await storage.getConfig(PLATFORM);
+    if (!config) return null;
+    const data = SlackConfigDataSchema.parse(config.data);
+    return {
+      ...data,
+      updatedAt: config.updatedAt,
+    };
+  }
+
+  /**
+   * Delete an installation by ID.
+   */
+  async #deleteInstallation(id: string): Promise<void> {
+    const storage = await this.#getStorage();
+    await storage.deleteInstallation(id);
+  }
+
+  // ===========================================================================
+  // Base URL
+  // ===========================================================================
 
   /**
    * Get the base URL for webhook callbacks.
@@ -398,11 +566,8 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
     }
     this.#initialized = true;
 
-    // Resolve storage (uses Mastra's persistent storage if available)
-    const storage = await this.#getStorage();
-
     // Load stored tokens if available (these are fresher than .env tokens)
-    const storedTokensEncrypted = await storage.getConfigTokens();
+    const storedTokensEncrypted = await this.#getConfigTokens();
     if (storedTokensEncrypted) {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);
@@ -426,7 +591,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
         const currentHash = hashConfig(config, baseUrl, resolvedAppName);
 
         // Check if already installed
-        const installationEncrypted = await storage.getInstallation(agentId);
+        const installationEncrypted = await this.#getInstallation(agentId);
         if (installationEncrypted) {
           const installation = this.#decryptInstallation(installationEncrypted);
           // Check if config changed - need to update manifest
@@ -434,7 +599,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
             console.log(`[Slack] Config changed for "${agentId}", updating manifest...`);
             await this.#updateAppManifest(installation, config, baseUrl);
             installation.configHash = currentHash;
-            await storage.saveInstallation(this.#encryptInstallation(installation));
+            await this.#saveInstallation(this.#encryptInstallation(installation));
           }
           // Activate adapter
           await this.#activateAdapter(installation);
@@ -443,8 +608,9 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
         }
 
         // Check if there's already a pending installation
-        const existingPending = await storage.getPendingInstallationByAgentId(agentId);
-        if (existingPending) {
+        const existingPendingEncrypted = await this.#getPendingInstallation(agentId);
+        if (existingPendingEncrypted) {
+          const existingPending = this.#decryptPendingInstallation(existingPendingEncrypted);
           // If config/baseUrl changed, need to recreate the app
           if (existingPending.configHash !== currentHash) {
             console.log(`[Slack] Config changed for pending "${agentId}", recreating app...`);
@@ -453,7 +619,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
             } catch {
               // App may not exist anymore, ignore
             }
-            await storage.deletePendingInstallation(existingPending.id);
+            await this.#deleteInstallation(existingPending.id);
           } else {
             // Reuse existing pending installation
             console.log(`[Slack] Agent "${agentId}" - Install to workspace by clicking this link:`);
@@ -479,6 +645,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
 
   /**
    * Activate a SlackAdapter for an installation.
+   * Creates and injects AgentChannels into the Agent if needed.
    */
   async #activateAdapter(installation: SlackInstallation): Promise<void> {
     const adapter = createSlackAdapter({
@@ -495,16 +662,35 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       this.#slashCommands.set(installation.webhookId, this.#normalizeCommands(config.slashCommands));
     }
 
-    // Register adapter with AgentChannels so Chat SDK can handle messages
+    // Create/get AgentChannels and register the adapter
     const agent = this.#mastra?.getAgentById(installation.agentId);
-    const agentChannels = agent?.agentChannels;
-    if (agentChannels) {
-      agentChannels.__registerAdapter('slack', adapter, { adapter }, { managesRoutes: true });
-      // Trigger Chat SDK initialization now that adapter is registered
-      if (this.#mastra) {
-        await agentChannels.initialize(this.#mastra);
-      }
+    if (agent && this.#mastra) {
+      const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
+      await agentChannels.initialize(this.#mastra);
     }
+  }
+
+  /**
+   * Get or create AgentChannels for an agent.
+   * SlackChannel owns the AgentChannels lifecycle for platform-managed agents.
+   */
+  #getOrCreateAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
+    let agentChannels = agent.agentChannels as AgentChannels | null;
+    
+    if (!agentChannels) {
+      // Create AgentChannels with Slack adapter
+      agentChannels = new AgentChannels({
+        adapters: { slack: adapter },
+        userName: agent.name,
+      });
+      // Inject into the agent
+      agent.setAgentChannels(agentChannels);
+    } else if (!agentChannels.hasAdapter('slack')) {
+      // AgentChannels exists but doesn't have slack adapter
+      agentChannels.__registerAdapter('slack', adapter, { adapter }, { managesRoutes: true });
+    }
+    
+    return agentChannels;
   }
 
   /**
@@ -707,8 +893,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       configHash,
       createdAt: new Date(),
     });
-    const storage = await this.#getStorage();
-    await storage.savePendingInstallation(pendingInstallation);
+    await this.#savePendingInstallation(pendingInstallation);
 
     // Store slash command configs for this webhook
     if (normalizedCommands.length) {
@@ -730,11 +915,11 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       throw new Error('Slack manifest client not configured.');
     }
 
-    const storage = await this.#getStorage();
-    const installation = await storage.getInstallation(agentId);
-    if (!installation) {
+    const installationEncrypted = await this.#getInstallation(agentId);
+    if (!installationEncrypted) {
       throw new Error(`No Slack installation found for agent "${agentId}"`);
     }
+    const installation = this.#decryptInstallation(installationEncrypted);
 
     // Delete the app from Slack
     await this.#manifestClient.deleteApp(installation.appId);
@@ -743,7 +928,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
     this.#adapters.delete(installation.id);
 
     // Remove from storage
-    await storage.deleteInstallation(installation.id);
+    await this.#deleteInstallation(installation.id);
 
     // Clean up command handlers
     this.#slashCommands.delete(installation.webhookId);
@@ -753,17 +938,16 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
    * Get the Slack installation for an agent.
    */
   async getInstallation(agentId: string): Promise<SlackInstallation | null> {
-    const storage = await this.#getStorage();
-    const installation = await storage.getInstallation(agentId);
-    return installation ? this.#decryptInstallation(installation) : null;
+    const installationEncrypted = await this.#getInstallation(agentId);
+    return installationEncrypted ? this.#decryptInstallation(installationEncrypted) : null;
   }
 
   /**
    * List all Slack installations.
    */
   async listInstallations(): Promise<SlackInstallation[]> {
-    const storage = await this.#getStorage();
-    return storage.listInstallations();
+    const installations = await this.#listInstallations();
+    return installations.map((i) => this.#decryptInstallation(i));
   }
 
   /**
@@ -839,8 +1023,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       return c.json({ error: 'Missing code or state parameter' }, 400);
     }
 
-    const storage = await this.#getStorage();
-    const pendingEncrypted = await storage.getPendingInstallation(state);
+    const pendingEncrypted = await this.#getPendingInstallationById(state);
     if (!pendingEncrypted) {
       return c.json({ error: 'Invalid or expired installation state' }, 400);
     }
@@ -896,9 +1079,9 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       };
 
       const encryptedInstallation = this.#encryptInstallation(installation);
-      console.log(`[Slack] Saving installation to storage (type: ${storage.constructor.name})...`);
+      console.log(`[Slack] Saving installation...`);
       console.log(`[Slack] Installation ID: ${encryptedInstallation.id}, agentId: ${encryptedInstallation.agentId}`);
-      await storage.saveInstallation(encryptedInstallation);
+      await this.#saveInstallation(encryptedInstallation);
       console.log(`[Slack] Installation saved (status: active)`);
 
       // Create SlackAdapter for this installation
@@ -933,8 +1116,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       return c.json({ error: 'Missing webhookId' }, 400);
     }
 
-    const storage = await this.#getStorage();
-    const installationEncrypted = await storage.getInstallationByWebhookId(webhookId);
+    const installationEncrypted = await this.#getInstallationByWebhookId(webhookId);
     if (!installationEncrypted) {
       return c.json({ error: 'Unknown webhook' }, 404);
     }
@@ -975,15 +1157,21 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       return c.json({ ok: true });
     }
 
-    const agentChannels = agent.agentChannels;
-    if (!agentChannels) {
-      // Agent doesn't have channels configured, fall back to simple response
-      console.warn(`[Slack] Agent "${installation.agentId}" has no AgentChannels configured`);
+    if (!this.#mastra) {
+      console.error('[Slack] Mastra not attached');
       return c.json({ ok: true });
     }
 
-    // Ensure adapter is registered with AgentChannels
-    this.#ensureAdapterRegistered(agentChannels, installation);
+    // Get or create AgentChannels with Slack adapter
+    const adapter = this.#adapters.get(installation.id) ?? createSlackAdapter({
+      botToken: installation.botToken,
+      botUserId: installation.botUserId,
+      signingSecret: installation.signingSecret,
+    });
+    const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
+    
+    // Ensure initialized
+    await agentChannels.initialize(this.#mastra);
 
     // Delegate event handling to AgentChannels
     // Reconstruct the request with the raw body we already read
@@ -1001,35 +1189,13 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
     }
   }
 
-  /**
-   * Ensure the Slack adapter is registered with the agent's AgentChannels.
-   * This is called lazily when the first event arrives for an installation.
-   */
-  #ensureAdapterRegistered(agentChannels: AgentChannels, installation: SlackInstallation): void {
-    // Check if adapter already registered
-    if (agentChannels.hasAdapter('slack')) {
-      return;
-    }
-
-    // Create and register adapter
-    const adapter = createSlackAdapter({
-      botToken: installation.botToken,
-      botUserId: installation.botUserId,
-      signingSecret: installation.signingSecret,
-    });
-
-    // Register with AgentChannels, telling it we manage the routes
-    agentChannels.__registerAdapter('slack', adapter, { adapter }, { managesRoutes: true });
-  }
-
   async #handleSlashCommand(c: Context): Promise<Response> {
     const webhookId = c.req.param('webhookId');
     if (!webhookId) {
       return c.json({ error: 'Missing webhookId' }, 400);
     }
 
-    const storage = await this.#getStorage();
-    const installationEncrypted = await storage.getInstallationByWebhookId(webhookId);
+    const installationEncrypted = await this.#getInstallationByWebhookId(webhookId);
     if (!installationEncrypted) {
       return c.json({ error: 'Unknown webhook' }, 404);
     }

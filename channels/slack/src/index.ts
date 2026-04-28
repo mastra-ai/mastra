@@ -33,13 +33,24 @@
 
 export { SlackChannel } from './channel';
 export { SlackManifestClient } from './client';
-export { InMemorySlackStorage } from './storage';
-export { MastraSlackStorageAdapter } from './mastra-storage-adapter';
 export { verifySlackRequest, parseSlackFormBody } from './crypto';
 
 // Re-export from @chat-adapter/slack for convenience
 export { createSlackAdapter } from '@chat-adapter/slack';
 export type { SlackAdapter } from '@chat-adapter/slack';
+
+// Zod schemas for parsing channel storage data
+export {
+  SlackInstallationDataSchema,
+  SlackPendingDataSchema,
+  SlackConfigDataSchema,
+  type SlackInstallationData,
+  type SlackPendingData,
+  type SlackConfigData,
+  type SlackInstallation,
+  type SlackPendingInstallation,
+  type SlackConfigTokens,
+} from './schemas';
 
 export type {
   SlackChannelConfig,
@@ -48,11 +59,7 @@ export type {
   SlashCommandConfig,
   SlackMessage,
   SlackBlock,
-  SlackInstallation,
-  PendingInstallation,
-  SlackStorage,
   SlackRoute,
-  StoredConfigTokens,
 } from './types';
 
 export { isSlackPendingAdapter } from './types';

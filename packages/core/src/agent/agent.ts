@@ -353,10 +353,8 @@ export class Agent<
       } else if (typeof config.channels === 'object' && Object.keys(config.channels).length > 0) {
         // Platform channel configs (e.g., { slack: true, discord: {...} })
         // Store raw config for MastraChannel registration
+        // Do NOT create AgentChannels here - MastraChannel implementations own that lifecycle
         this.__rawChannelsConfig = config.channels as Record<string, unknown>;
-        // Create an empty AgentChannels that MastraChannel implementations can populate
-        this.#agentChannels = new AgentChannels({ adapters: {}, userName: config.name });
-        this.#agentChannels.__setAgent(this);
       }
     }
 
@@ -541,6 +539,16 @@ export class Agent<
    */
   get agentChannels(): AgentChannels | null {
     return this.#agentChannels;
+  }
+
+  /**
+   * Sets the AgentChannels instance for this agent.
+   * Used by MastraChannel implementations to inject the channels they create.
+   * @internal
+   */
+  setAgentChannels(agentChannels: AgentChannels): void {
+    this.#agentChannels = agentChannels;
+    agentChannels.__setAgent(this);
   }
 
   /**
