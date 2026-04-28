@@ -4,6 +4,7 @@
 
 import type { MastraAuthProvider } from '../../server';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
+import { matchesPermission } from './defaults/roles';
 import type { IACLProvider } from './interfaces/acl';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
@@ -87,6 +88,8 @@ export interface AuthenticatedCapabilities extends PublicAuthCapabilities {
   capabilities: CapabilityFlags;
   /** User's access (if RBAC available) */
   access: UserAccess | null;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 }
 
 /**
@@ -271,6 +274,19 @@ export async function buildCapabilities(
     }
   }
 
+  // Expose available roles for admin users (for "View as role" feature)
+  let availableRoles: { id: string; name: string }[] | undefined;
+  if (access && rbacProvider?.getAvailableRoles) {
+    const isAdmin = access.permissions.some(p => matchesPermission(p, '*'));
+    if (isAdmin) {
+      try {
+        availableRoles = await rbacProvider.getAvailableRoles();
+      } catch {
+        // Ignore errors
+      }
+    }
+  }
+
   return {
     enabled: true,
     login,
@@ -282,5 +298,6 @@ export async function buildCapabilities(
     },
     capabilities,
     access,
+    availableRoles,
   };
 }

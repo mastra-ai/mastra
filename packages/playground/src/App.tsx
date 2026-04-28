@@ -95,6 +95,7 @@ import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
+import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
@@ -381,9 +382,11 @@ function App() {
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
-      <PostHogProvider>
-        <RouterProvider router={router} />
-      </PostHogProvider>
+      <RoleImpersonationProvider>
+        <PostHogProvider>
+          <RouterProvider router={router} />
+        </PostHogProvider>
+      </RoleImpersonationProvider>
     </MastraReactProvider>
   );
 }
