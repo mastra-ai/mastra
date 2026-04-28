@@ -3,7 +3,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { CheckIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
@@ -18,6 +18,7 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useWorkspaces } from '@/domains/workspace/hooks';
@@ -48,7 +49,15 @@ export default function AgentBuilderAgentEdit() {
     [workspacesData],
   );
 
+  const { data: currentUser } = useCurrentUser();
+  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
+
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
+
+  // Redirect non-owners to the view page (server blocks writes anyway)
+  if (!fromStarter && !isOwner) {
+    return <Navigate to={`/agent-builder/agents/${id}/view`} replace />;
+  }
 
   return (
     <AgentBuilderAgentEditPage
