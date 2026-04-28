@@ -3684,7 +3684,13 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                result = {
+                  text: generateResult.text,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults,
+                  usage: generateResult.usage,
+                };
               } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
@@ -3871,9 +3877,8 @@ export class Agent<
                 result = { text: fullText };
               }
 
-              // Enrich result with usage from the generate path.
-              // The stream paths accumulate text only; usage is already
-              // included on the generate paths above.
+              // Note: usage is included in result for all generate and stream paths above.
+              // Legacy stream paths (streamLegacy) accumulate text only and won't have usage.
 
               // Call onDelegationComplete hook if provided
               if (delegation?.onDelegationComplete) {
