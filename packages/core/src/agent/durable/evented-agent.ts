@@ -4,8 +4,8 @@
  * EventedAgent extends DurableAgent and overrides the execution strategy to use
  * fire-and-forget execution via the workflow engine's startAsync() method.
  *
- * Unlike DurableAgent which uses a synchronous executor, EventedAgent:
- * 1. Uses the built-in workflow engine for execution
+ * Unlike DurableAgent which runs the workflow synchronously, EventedAgent:
+ * 1. Uses startAsync() for non-blocking execution
  * 2. Fire-and-forget pattern - execution starts and returns immediately
  * 3. Events are streamed via pubsub as the workflow executes
  */
@@ -23,9 +23,7 @@ export interface EventedAgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-> extends Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'executor'> {
-  // EventedAgent doesn't use executor - it uses fire-and-forget via startAsync
-}
+> extends DurableAgentConfig<TAgentId, TTools, TOutput> {}
 
 /**
  * EventedAgent extends DurableAgent to use fire-and-forget execution.
@@ -36,7 +34,7 @@ export interface EventedAgentConfig<
  * - You need resumable streams with event caching
  *
  * The key difference from DurableAgent is the execution strategy:
- * - DurableAgent: Uses executor.execute() for synchronous execution
+ * - DurableAgent: Runs the workflow synchronously via createRun + start
  * - EventedAgent: Uses run.startAsync() for fire-and-forget execution
  *
  * @example
@@ -66,18 +64,13 @@ export class EventedAgent<
    * Create a new EventedAgent that wraps an existing Agent
    */
   constructor(config: EventedAgentConfig<TAgentId, TTools, TOutput>) {
-    // Pass config to DurableAgent, but don't use executor
-    // EventedAgent uses fire-and-forget via startAsync instead
-    super({
-      ...config,
-      executor: undefined,
-    });
+    super(config);
   }
 
   /**
    * Execute the durable workflow using fire-and-forget pattern.
    *
-   * Unlike DurableAgent which uses executor.execute(), EventedAgent uses
+   * Unlike DurableAgent which runs the workflow synchronously, EventedAgent uses
    * the workflow's startAsync() method for non-blocking execution.
    *
    * @param runId - The unique run ID

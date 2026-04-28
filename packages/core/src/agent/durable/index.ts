@@ -187,7 +187,3 @@ export type {
   IterationStateUpdateInput,
   StepRecord,
 } from './workflows/shared';
-
-// Workflow executors
-export { LocalWorkflowExecutor, localExecutor } from './executors';
-export type { WorkflowExecutor, WorkflowExecutionResult } from './executors';

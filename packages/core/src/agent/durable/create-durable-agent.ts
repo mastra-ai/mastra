@@ -30,7 +30,6 @@ import type { Agent } from '../agent';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
-import type { WorkflowExecutor } from './executors';
 
 /**
  * Options for createDurableAgent factory function.
@@ -66,12 +65,6 @@ export interface CreateDurableAgentOptions<
    */
   pubsub?: PubSub;
 
-  /**
-   * Workflow executor for running the durable workflow.
-   * Defaults to LocalWorkflowExecutor (direct execution).
-   */
-  executor?: WorkflowExecutor;
-
   /** Maximum steps for agentic loop */
   maxSteps?: number;
 }
@@ -106,7 +99,7 @@ export function createDurableAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const { agent, id, name, cache, pubsub, executor, maxSteps } = options;
+  const { agent, id, name, cache, pubsub, maxSteps } = options;
 
   return new DurableAgent({
     agent,
@@ -114,7 +107,6 @@ export function createDurableAgent<
     name,
     cache,
     pubsub,
-    executor,
     maxSteps,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);
 }

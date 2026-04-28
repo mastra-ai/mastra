@@ -12,8 +12,6 @@ import type { MessageListInput } from '../message-list';
 import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC } from './constants';
-import { localExecutor } from './executors';
-import type { WorkflowExecutor } from './executors';
 import { prepareForDurableExecution } from './preparation';
 import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
@@ -135,12 +133,6 @@ export interface DurableAgentConfig<
   cache?: MastraServerCache | false;
 
   /**
-   * Workflow executor for running the durable workflow.
-   * Defaults to LocalWorkflowExecutor (direct execution).
-   */
-  executor?: WorkflowExecutor;
-
-  /**
    * Maximum steps for the agentic loop.
    * Defaults to the workflow default if not specified.
    */
@@ -197,9 +189,6 @@ export class DurableAgent<
   /** The wrapped agent */
   readonly #wrappedAgent: Agent<TAgentId, TTools, TOutput>;
 
-  /** Workflow executor for running the durable workflow */
-  readonly #executor: WorkflowExecutor;
-
   /** Registry for per-run non-serializable state */
   readonly #runRegistry: ExtendedRunRegistry;
 
@@ -234,7 +223,7 @@ export class DurableAgent<
    * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { agent, id: idOverride, name: nameOverride, pubsub, executor, cache, maxSteps, cleanupTimeoutMs } = config;
+    const { agent, id: idOverride, name: nameOverride, pubsub, cache, maxSteps, cleanupTimeoutMs } = config;
 
     // Use provided id/name or fall back to agent.id/agent.name
     const agentId = idOverride ?? agent.id;
@@ -251,7 +240,6 @@ export class DurableAgent<
     });
 
     this.#wrappedAgent = agent;
-    this.#executor = executor ?? localExecutor;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
     this.#hasCustomPubsub = !!pubsub;
@@ -379,7 +367,7 @@ export class DurableAgent<
    * Execute the durable workflow.
    *
    * Subclasses override this method to customize how the workflow is executed:
-   * - DurableAgent (this): Uses executor.execute() for direct local execution
+   * - DurableAgent (this): Runs the workflow directly via createRun + start
    * - EventedAgent: Uses run.startAsync() for fire-and-forget execution
    * - InngestAgent: Uses inngest.send() to trigger Inngest function
    *
@@ -390,10 +378,13 @@ export class DurableAgent<
   protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     const workflow = this.getWorkflow();
     const requestContext = globalRunRegistry.get(runId)?.requestContext;
-    const result = await this.#executor.execute(workflow, workflowInput, this.pubsub, runId, requestContext);
 
-    if (!result.success && result.error) {
-      await this.emitError(runId, result.error);
+    const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+    const result = await run.start({ inputData: workflowInput, requestContext });
+
+    if (result?.status === 'failed') {
+      const error = new Error((result as any).error?.message || 'Workflow execution failed');
+      await this.emitError(runId, error);
     }
   }
 
@@ -604,10 +595,12 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const requestContext = globalRunRegistry.get(runId)?.requestContext;
     ready
-      .then(() => this.#executor.resume(workflow, this.pubsub, runId, resumeData, requestContext))
-      .then(result => {
-        if (!result.success && result.error) {
-          void this.emitError(runId, result.error);
+      .then(async () => {
+        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+        const result = await run.resume({ resumeData, requestContext });
+        if (result?.status === 'failed') {
+          const error = new Error((result as any).error?.message || 'Workflow resume failed');
+          void this.emitError(runId, error);
         }
       })
       .catch(error => {

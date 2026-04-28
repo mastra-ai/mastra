@@ -31,11 +31,6 @@ The architecture supports three increasingly durable patterns:
 
 **`EventedAgent` class** — Extends `DurableAgent` to fire execution into the workflow engine (fire-and-forget). The HTTP handler returns immediately after `prepare()`, and the agent loop runs in a background workflow.
 
-**`WorkflowExecutor` interface** — Pluggable execution backends:
-
-- `LocalWorkflowExecutor` — Executes the workflow directly in-process (default)
-- `InngestWorkflowExecutor` (in `workflows/inngest`) — Executes via Inngest function invocation
-
 **Durable workflow steps** — Reusable building blocks for the agentic loop:
 
 - `createDurableLLMExecutionStep()` — Runs the LLM with tools, emits chunks via PubSub
@@ -264,10 +259,6 @@ packages/core/src/agent/durable/
 ├── run-registry.ts                   # RunRegistry, ExtendedRunRegistry, globalRunRegistry
 ├── stream-adapter.ts                 # PubSub → MastraModelOutput adapter + emit helpers
 ├── preparation.ts                    # Preparation phase logic
-├── executors/
-│   ├── index.ts                      # Executor exports
-│   ├── types.ts                      # WorkflowExecutor interface
-│   └── local-executor.ts             # LocalWorkflowExecutor implementation
 ├── workflows/
 │   ├── index.ts                      # Workflow exports
 │   ├── create-durable-agentic-workflow.ts  # Main workflow factory
@@ -312,7 +303,7 @@ workflows/inngest/
 
 1. **Three-tier durability** — `DurableAgent` (resumable streams), `EventedAgent` (+ workflow execution), `InngestAgent` (+ distributed durability). Each tier builds on the previous.
 
-2. **Pluggable executors** — The `WorkflowExecutor` interface decouples the execution backend from the agent logic. `LocalWorkflowExecutor` runs in-process; Inngest provides distributed execution.
+2. **Direct workflow execution** — `DurableAgent` runs the workflow directly via `workflow.createRun()` + `run.start()`. `EventedAgent` overrides this to use `run.startAsync()` for fire-and-forget execution. `InngestAgent` (from `@mastra/inngest`) overrides it to dispatch via Inngest.
 
 3. **PubSub for streaming** — Closures can't be serialized, so PubSub streams events across process boundaries. `CachingPubSub` wraps any PubSub to add event caching and replay for resumable streams.
 
