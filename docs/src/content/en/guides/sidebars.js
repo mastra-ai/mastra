@@ -238,6 +238,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'guide/slack-assistant',
+          label: 'Channels: Slack Assistant',
+        },
+        {
+          type: 'doc',
           id: 'guide/whatsapp-chat-bot',
           label: 'WhatsApp Chat Bot',
         },
