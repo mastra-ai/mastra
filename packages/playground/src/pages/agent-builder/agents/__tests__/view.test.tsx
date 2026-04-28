@@ -23,6 +23,10 @@ vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
   useAvailableAgentTools: () => [],
 }));
 
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+}));
+
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: () => ({
     data: {

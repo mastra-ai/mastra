@@ -10,7 +10,7 @@ import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentConfigurePanel } from '../agent-configure-panel';
 
-const BASE_URL = 'http://localhost:4112';
+const BASE_URL = 'http://localhost:4111';
 
 const mockUseBuilderAgentFeatures = vi.fn();
 

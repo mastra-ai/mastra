@@ -1,5 +1,4 @@
 import { Button, Spinner } from '@mastra/playground-ui';
-import { MastraReactProvider } from '@mastra/react';
 import { CheckIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -183,35 +182,33 @@ const AgentBuilderAgentEditReady = ({
   };
 
   return (
-    <MastraReactProvider baseUrl="http://localhost:4112">
-      <ConversationPanelProvider
-        initialUserMessage={initialUserMessage}
-        isFreshThread={fromStarter}
-        features={features}
-        availableAgentTools={availableAgentTools}
-        availableWorkspaces={availableWorkspaces}
-        toolsReady
-        agentId={id}
-      >
-        <WorkspaceLayout
-          isLoading={false}
-          mode="build"
-          creating={mode === 'create'}
-          defaultExpanded={mode === 'edit'}
-          detailOpen={activeDetail !== null}
-          modeAction={<VisibilitySelectConnected />}
-          primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
-          chat={<ConversationPanelChat />}
-          configure={
-            <ConfigurePanelConnected
-              availableAgentTools={availableAgentTools}
-              activeDetail={activeDetail}
-              onActiveDetailChange={setActiveDetail}
-            />
-          }
-        />
-      </ConversationPanelProvider>
-    </MastraReactProvider>
+    <ConversationPanelProvider
+      initialUserMessage={initialUserMessage}
+      isFreshThread={fromStarter}
+      features={features}
+      availableAgentTools={availableAgentTools}
+      availableWorkspaces={availableWorkspaces}
+      toolsReady
+      agentId={id}
+    >
+      <WorkspaceLayout
+        isLoading={false}
+        mode="build"
+        creating={mode === 'create'}
+        defaultExpanded={mode === 'edit'}
+        detailOpen={activeDetail !== null}
+        modeAction={<VisibilitySelectConnected />}
+        primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
+        chat={<ConversationPanelChat />}
+        configure={
+          <ConfigurePanelConnected
+            availableAgentTools={availableAgentTools}
+            activeDetail={activeDetail}
+            onActiveDetailChange={setActiveDetail}
+          />
+        }
+      />
+    </ConversationPanelProvider>
   );
 };
 

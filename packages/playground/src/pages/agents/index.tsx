@@ -13,8 +13,8 @@ import {
 } from '@mastra/playground-ui';
 import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
+import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';

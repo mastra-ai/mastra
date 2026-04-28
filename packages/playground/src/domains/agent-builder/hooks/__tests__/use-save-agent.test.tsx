@@ -21,7 +21,7 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-const BASE_URL = 'http://localhost:4112';
+const BASE_URL = 'http://localhost:4111';
 
 const renderSave = ({
   agentId,

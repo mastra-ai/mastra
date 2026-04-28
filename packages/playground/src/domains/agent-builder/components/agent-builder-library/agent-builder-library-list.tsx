@@ -1,8 +1,8 @@
 import { Avatar, EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { useLinkComponent } from '@/lib/framework';
 import type { LibraryAgent } from '../../fixtures/library-agents';
+import { useLinkComponent } from '@/lib/framework';
 
 export type AgentBuilderLibraryListProps = {
   agents: LibraryAgent[];
@@ -48,10 +48,7 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
             <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description}</div>
           </div>
-          <div
-            className="flex items-center gap-2 text-ui-sm text-neutral5 shrink-0"
-            data-testid="library-agent-owner"
-          >
+          <div className="flex items-center gap-2 text-ui-sm text-neutral5 shrink-0" data-testid="library-agent-owner">
             <Avatar name={agent.owner.name} size="sm" />
             <span className="truncate max-w-[12rem]">{agent.owner.name}</span>
           </div>
