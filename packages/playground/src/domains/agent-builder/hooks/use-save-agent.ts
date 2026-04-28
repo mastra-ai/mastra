@@ -5,7 +5,7 @@ import { formValuesToSaveParams } from '../mappers/form-values-to-save-params';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
-import { useBuilderModelPolicy } from '@/domains/builder';
+import { isModelNotAllowedError, useBuilderModelPolicy } from '@/domains/builder';
 
 interface UseSaveAgentArgs {
   agentId: string;
@@ -130,7 +130,12 @@ export function useSaveAgent({
         onSuccess?.(created.id);
         return created;
       } catch (error) {
-        toast.error(`Failed to save agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const policyDetails = isModelNotAllowedError(error);
+        if (policyDetails) {
+          toast.error(policyDetails.message);
+        } else {
+          toast.error(`Failed to save agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
         throw error;
       }
     },

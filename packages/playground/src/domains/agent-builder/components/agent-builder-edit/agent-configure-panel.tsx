@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Avatar, cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, Plus, Sparkles, Wrench } from 'lucide-react';
+import { ChevronRight, Cpu, FileText, Plus, Sparkles, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -8,8 +8,10 @@ import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
 import { InstructionsDetail } from './details/instructions-detail';
+import { ModelDetail } from './details/model-detail';
 import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
+import { useBuilderModelPolicy } from '@/domains/builder';
 import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 
 export interface AgentConfig {
@@ -22,7 +24,7 @@ export interface AgentConfig {
   authorId?: string | null;
 }
 
-export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
+export type ActiveDetail = 'instructions' | 'model' | 'tools' | 'skills' | null;
 
 interface BaseProps {
   availableAgentTools?: AgentTool[];
@@ -91,6 +93,7 @@ function EditableConfigurePanel({
   disabled = false,
 }: EditableConfigurePanelProps) {
   const features = useBuilderAgentFeatures();
+  const policy = useBuilderModelPolicy();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
@@ -98,6 +101,7 @@ function EditableConfigurePanel({
   const draftDescription = formMethods.watch('description') ?? '';
   const draftInstructions = formMethods.watch('instructions') ?? '';
   const draftAvatarUrl = formMethods.watch('avatarUrl');
+  const draftModel = useWatch({ control: formMethods.control, name: 'model' });
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
   const setDraftDescription = (value: string) => formMethods.setValue('description', value);
@@ -129,6 +133,8 @@ function EditableConfigurePanel({
   };
 
   const instructionsDescription = formatInstructionsPreview(draftInstructions);
+  const modelRowVisible = features.model || policy.active;
+  const modelDescription = formatModelDescription(draftModel, policy);
 
   return (
     <div
@@ -211,6 +217,8 @@ function EditableConfigurePanel({
           <ConfigRows
             features={features}
             instructionsDescription={instructionsDescription}
+            modelRowVisible={modelRowVisible}
+            modelDescription={modelDescription}
             activeToolsCount={activeToolsCount}
             totalToolsCount={totalToolsCount}
             activeSkillsCount={activeSkillsCount}
@@ -225,6 +233,7 @@ function EditableConfigurePanel({
       <DetailPane
         activeDetail={activeDetail}
         features={features}
+        modelRowVisible={modelRowVisible}
         editable={!disabled}
         instructionsPrompt={draftInstructions}
         onInstructionsChange={setDraftInstructions}
@@ -248,7 +257,9 @@ function ReadOnlyConfigurePanel({
   onActiveDetailChange,
 }: ReadOnlyConfigurePanelProps) {
   const features = useBuilderAgentFeatures();
+  const policy = useBuilderModelPolicy();
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const draftModel = useWatch({ control: formMethods.control, name: 'model' });
 
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
   const totalToolsCount = availableAgentTools.length;
@@ -263,6 +274,8 @@ function ReadOnlyConfigurePanel({
   const closeDetail = () => onActiveDetailChange(null);
 
   const instructionsDescription = formatInstructionsPreview(agent.systemPrompt);
+  const modelRowVisible = features.model || policy.active;
+  const modelDescription = formatModelDescription(draftModel, policy);
 
   return (
     <div
@@ -291,6 +304,8 @@ function ReadOnlyConfigurePanel({
           <ConfigRows
             features={features}
             instructionsDescription={instructionsDescription}
+            modelRowVisible={modelRowVisible}
+            modelDescription={modelDescription}
             activeToolsCount={activeToolsCount}
             totalToolsCount={totalToolsCount}
             activeSkillsCount={activeSkillsCount}
@@ -304,6 +319,7 @@ function ReadOnlyConfigurePanel({
       <DetailPane
         activeDetail={activeDetail}
         features={features}
+        modelRowVisible={modelRowVisible}
         editable={false}
         instructionsPrompt={agent.systemPrompt}
         onInstructionsChange={() => {}}
@@ -322,9 +338,24 @@ function formatInstructionsPreview(instructions: string): string {
   return trimmed;
 }
 
+function formatModelDescription(
+  model: AgentBuilderEditFormValues['model'],
+  policy: ReturnType<typeof useBuilderModelPolicy>,
+): string {
+  if (policy.active && policy.pickerVisible === false) {
+    if (policy.default) return `Locked to ${policy.default.provider}/${policy.default.modelId}`;
+    return 'Locked by admin';
+  }
+  if (model?.provider && model?.name) return `${model.provider}/${model.name}`;
+  if (policy.active && policy.default) return `Default: ${policy.default.provider}/${policy.default.modelId}`;
+  return 'Pick the model that powers this agent';
+}
+
 interface ConfigRowsProps {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   instructionsDescription: string;
+  modelRowVisible: boolean;
+  modelDescription: string;
   activeToolsCount: number;
   totalToolsCount: number;
   activeSkillsCount: number;
@@ -337,6 +368,8 @@ interface ConfigRowsProps {
 function ConfigRows({
   features,
   instructionsDescription,
+  modelRowVisible,
+  modelDescription,
   activeToolsCount,
   totalToolsCount,
   activeSkillsCount,
@@ -356,6 +389,17 @@ function ConfigRows({
         disabled={disabled}
         testId="agent-preview-edit-system-prompt"
       />
+      {modelRowVisible && (
+        <ConfigRow
+          icon={<Cpu className="h-4 w-4" />}
+          label="Model"
+          description={modelDescription}
+          isActive={activeDetail === 'model'}
+          onClick={() => toggleDetail('model')}
+          disabled={disabled}
+          testId="agent-preview-edit-model"
+        />
+      )}
       {features.tools && (
         <ConfigRow
           icon={<Wrench className="h-4 w-4" />}
@@ -389,6 +433,7 @@ function ConfigRows({
 interface DetailPaneProps {
   activeDetail: ActiveDetail;
   features: ReturnType<typeof useBuilderAgentFeatures>;
+  modelRowVisible: boolean;
   editable: boolean;
   instructionsPrompt: string;
   onInstructionsChange: (next: string) => void;
@@ -400,6 +445,7 @@ interface DetailPaneProps {
 function DetailPane({
   activeDetail,
   features,
+  modelRowVisible,
   editable,
   instructionsPrompt,
   onInstructionsChange,
@@ -420,6 +466,7 @@ function DetailPane({
           editable={editable}
         />
       )}
+      {activeDetail === 'model' && modelRowVisible && <ModelDetail onClose={onClose} editable={editable} />}
       {activeDetail === 'tools' && features.tools && (
         <ToolsDetail onClose={onClose} editable={editable} availableAgentTools={availableAgentTools} />
       )}
