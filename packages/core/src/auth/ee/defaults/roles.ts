@@ -36,6 +36,8 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       '*:read',
       '*:write',
       '*:execute',
+      '*:publish',
+      '*:share',
       // Note: admins cannot delete resources
     ],
   },
@@ -106,6 +108,22 @@ export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = 
 }
 
 /**
+ * Compound resource keys that expand to a set of per-family resources.
+ * A granted `stored:<action>` is treated as matching any `stored-<family>:<action>`
+ * (and `stored:*` matches any `stored-<family>:*`).
+ */
+const RESOURCE_EXPANSIONS: Record<string, readonly string[]> = {
+  stored: [
+    'stored-agents',
+    'stored-mcp-clients',
+    'stored-prompt-blocks',
+    'stored-scorers',
+    'stored-skills',
+    'stored-workspaces',
+  ],
+};
+
+/**
  * Check if a permission matches (including wildcard support).
  *
  * Permission format: `{resource}:{action}[:{resource-id}]`
@@ -130,6 +148,14 @@ export function matchesPermission(userPermission: string, requiredPermission: st
 
   const grantedParts = userPermission.split(':');
   const requiredParts = requiredPermission.split(':');
+
+  // Compound resource alias: expand granted `stored:<action>` into its per-family equivalents.
+  // Only applies when the required permission targets one of the expanded families.
+  const expandedFamilies = RESOURCE_EXPANSIONS[grantedParts[0] ?? ''];
+  if (expandedFamilies && expandedFamilies.includes(requiredParts[0] ?? '')) {
+    const aliased = [requiredParts[0], ...grantedParts.slice(1)].join(':');
+    return matchesPermission(aliased, requiredPermission);
+  }
 
   // Must have at least resource:action
   if (grantedParts.length < 2 || requiredParts.length < 2) {

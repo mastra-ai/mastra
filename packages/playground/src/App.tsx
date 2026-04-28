@@ -25,6 +25,7 @@ import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
+import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
@@ -96,6 +97,7 @@ import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
+import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
@@ -162,7 +164,9 @@ const RootLayout = () => {
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <Layout>
-        <Outlet />
+        <RoutePermissionGuard>
+          <Outlet />
+        </RoutePermissionGuard>
       </Layout>
     </LinkComponentProvider>
   );
@@ -392,9 +396,11 @@ function App() {
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
-      <PostHogProvider>
-        <RouterProvider router={router} />
-      </PostHogProvider>
+      <RoleImpersonationProvider>
+        <PostHogProvider>
+          <RouterProvider router={router} />
+        </PostHogProvider>
+      </RoleImpersonationProvider>
     </MastraReactProvider>
   );
 }

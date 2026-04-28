@@ -424,6 +424,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       rawRequest: context.request,
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
+      requiresAuth: route.requiresAuth,
     });
 
     if (result.action === 'next') {

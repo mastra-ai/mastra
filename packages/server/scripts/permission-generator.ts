@@ -23,9 +23,19 @@ export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/ee/interfac
 const ACTION_DESCRIPTIONS: Record<string, string> = {
   delete: 'Delete',
   execute: 'Execute',
+  publish: 'Publish, activate, or restore',
   read: 'View',
+  share: 'Change visibility/audience (e.g. private↔public)',
   write: 'Create and modify',
 };
+
+/**
+ * Permissions that are not derived from any HTTP route (no `requiresPermission`,
+ * no method/path mapping) but are asserted in handler code via helpers like
+ * `assertShareAccess`. Seeded here so they appear in `PERMISSION_PATTERNS`
+ * and `PermissionPattern`, making them grantable in role configs.
+ */
+export const ASSERTION_ONLY_PERMISSIONS: readonly string[] = ['stored-agents:share', 'stored-skills:share'];
 
 /** Descriptions for resources (used for TSDoc comments in autocomplete) */
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
@@ -39,11 +49,31 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   processors: 'processors',
   scores: 'evaluation scores',
   'stored-agents': 'stored agents',
+  'stored-mcp-clients': 'stored MCP clients',
+  'stored-prompt-blocks': 'stored prompt blocks',
+  'stored-scorers': 'stored scorers',
+  'stored-skills': 'stored skills',
+  'stored-workspaces': 'stored workspaces',
   system: 'system info',
   tools: 'tools',
   vector: 'vector stores',
   workflows: 'workflows',
   workspaces: 'workspaces',
+};
+
+/**
+ * Compound permission patterns that expand across the per-family stored resources.
+ *
+ * Emitted in PERMISSION_PATTERNS so role configs can grant the broad form. Runtime
+ * matching in matchesPermission expands `stored:<action>` to each
+ * `stored-<family>:<action>`.
+ */
+const COMPOUND_PATTERNS: Record<string, string> = {
+  'stored:*':
+    'Full access to all stored-* resources (stored-agents, stored-skills, stored-prompt-blocks, stored-mcp-clients, stored-scorers, stored-workspaces)',
+  'stored:read': 'View any stored-* resource',
+  'stored:write': 'Create and modify any stored-* resource',
+  'stored:delete': 'Delete any stored-* resource',
 };
 
 /**
@@ -99,6 +129,16 @@ export function derivePermissionData(): PermissionData {
     }
   }
 
+  // Seed assertion-only permissions (not derivable from any route).
+  for (const permission of ASSERTION_ONLY_PERMISSIONS) {
+    const [resource, action] = permission.split(':');
+    if (resource && action) {
+      resourceSet.add(resource);
+      actionSet.add(action);
+      permissionSet.add(permission);
+    }
+  }
+
   const resources = [...resourceSet].sort();
   const actions = [...actionSet].sort();
   const permissions = [...permissionSet].sort();
@@ -126,6 +166,13 @@ export function generatePermissionFileContent(data: PermissionData): string {
       const desc = getPermissionDescription(pattern);
       return `  /** ${desc} */\n  '${pattern}': '${pattern}'`;
     })
+    .join(',\n');
+
+  // Compound patterns: broad shorthand entries that expand across per-family resources at match time.
+  // Skip any that collide with a current pattern (none today, but guard against regressions).
+  const compoundEntries = Object.entries(COMPOUND_PATTERNS)
+    .filter(([pattern]) => !allPatterns.includes(pattern))
+    .map(([pattern, desc]) => `  /** ${desc} */\n  '${pattern}': '${pattern}'`)
     .join(',\n');
 
   return `/**
@@ -171,7 +218,7 @@ export type Action = (typeof ACTIONS)[number];
  * Use \`keyof typeof PERMISSION_PATTERNS\` or the \`PermissionPattern\` type.
  */
 export const PERMISSION_PATTERNS = {
-${patternEntries},
+${patternEntries},${compoundEntries ? `\n${compoundEntries},` : ''}
 } as const;
 
 /**

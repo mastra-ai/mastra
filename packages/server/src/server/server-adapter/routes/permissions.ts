@@ -48,6 +48,18 @@ const EXECUTE_PATTERNS = [
 ];
 
 /**
+ * Path suffixes that indicate a "publish" action for POST requests.
+ * These are version-activation / rollback / publish operations on stored resources.
+ */
+const PUBLISH_PATTERNS = ['/publish', '/activate', '/restore'];
+
+/**
+ * Stored resource families that map `/stored/<family>` to `stored-<family>`.
+ * Order matters: longest/most specific matches first via segment equality.
+ */
+const STORED_RESOURCE_FAMILIES = ['agents', 'skills', 'prompt-blocks', 'mcp-clients', 'scorers', 'workspaces'] as const;
+
+/**
  * Extracts the primary resource name from a route path.
  *
  * The resource is derived from the first path segment, with special handling
@@ -63,6 +75,7 @@ const EXECUTE_PATTERNS = [
  * extractResource('/agents/:agentId') // → 'agents'
  * extractResource('/memory/threads/:threadId') // → 'memory'
  * extractResource('/stored/agents/:agentId') // → 'stored-agents'
+ * extractResource('/stored/skills/:skillId') // → 'stored-skills'
  */
 export function extractResource(path: string): string | null {
   // Remove leading slash and split by segments
@@ -74,9 +87,14 @@ export function extractResource(path: string): string | null {
 
   const firstSegment = segments[0];
 
-  // Handle special case: /stored/agents → 'stored-agents'
-  if (firstSegment === 'stored' && segments[1] === 'agents') {
-    return 'stored-agents';
+  // Handle special case: /stored/<family> → 'stored-<family>'
+  // Uses exact segment match (not startsWith) so paths like /stored/skills-archive
+  // don't incorrectly collapse into a stored family.
+  if (firstSegment === 'stored' && segments.length > 1) {
+    const family = segments[1];
+    if (family && (STORED_RESOURCE_FAMILIES as readonly string[]).includes(family)) {
+      return `stored-${family}`;
+    }
   }
 
   // Handle .well-known paths (A2A protocol)
@@ -97,8 +115,14 @@ export function extractResource(path: string): string | null {
 export function deriveAction(method: string, path: string): string {
   const upperMethod = method.toUpperCase();
 
-  // For POST requests, check if it's an execute operation
+  // For POST requests, check if it's a publish, execute, or write operation.
+  // Publish takes precedence over execute since these suffixes are distinct
+  // version-lifecycle operations on stored resources.
   if (upperMethod === 'POST') {
+    const isPublishOperation = PUBLISH_PATTERNS.some(pattern => path.endsWith(pattern));
+    if (isPublishOperation) {
+      return 'publish';
+    }
     const isExecuteOperation = EXECUTE_PATTERNS.some(pattern => path.includes(pattern));
     return isExecuteOperation ? 'execute' : 'write';
   }

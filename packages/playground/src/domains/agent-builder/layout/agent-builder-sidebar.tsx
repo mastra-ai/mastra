@@ -5,7 +5,7 @@ import { useLocation } from 'react-router';
 import { useLinkComponent } from '@/lib/framework';
 
 const links: NavLink[] = [
-  { name: 'Agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
+  { name: 'My agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
   { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon />, isOnMastraPlatform: true },
 ];
 

@@ -240,6 +240,8 @@ export interface AuthMiddlewareContext {
   rawRequest: unknown;
   token: string | null;
   buildAuthorizeContext: () => unknown;
+  /** When true, force authentication even if the path matches a public pattern. */
+  requiresAuth?: boolean;
 }
 
 export type AuthResult = { action: 'next' } | { action: 'error'; status: number; body: Record<string, unknown> };
@@ -275,7 +277,18 @@ export const getAuthenticatedUser = async <TUser = unknown>({
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
  */
 export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const { path, method, getHeader, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+  const {
+    path,
+    method,
+    getHeader,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    token,
+    requiresAuth,
+  } = ctx;
 
   // ── Skip checks (evaluated once) ──
 
@@ -291,7 +304,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     return pass;
   }
 
-  if (canAccessPublicly(path, method, authConfig)) {
+  // When a route explicitly requires auth (requiresAuth: true), skip the
+  // public-path bypass so the user is still authenticated and permissions
+  // are injected into the request context.
+  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
     return pass;
   }
 

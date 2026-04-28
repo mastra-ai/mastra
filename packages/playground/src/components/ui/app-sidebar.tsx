@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
@@ -269,6 +270,8 @@ export function AppSidebar() {
           </span>
         )}
       </div>
+
+      <ImpersonationBanner />
 
       <MainSidebar.Nav>
         {mainNavigation.map(section => {

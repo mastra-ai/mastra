@@ -87,6 +87,8 @@ export interface AuthenticatedCapabilities extends PublicAuthCapabilities {
   capabilities: CapabilityFlags;
   /** User's access (if RBAC available) */
   access: UserAccess | null;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 }
 
 /**
@@ -121,6 +123,13 @@ function isMastraCloudAuth(auth: unknown): boolean {
 function isSimpleAuth(auth: unknown): boolean {
   if (!auth || typeof auth !== 'object') return false;
   return 'isSimpleAuth' in auth && (auth as { isSimpleAuth: boolean }).isSimpleAuth === true;
+}
+
+/**
+ * Check if a set of permissions includes admin bypass (`*` or `*:*`).
+ */
+function hasAdminBypassPermissions(permissions: string[]): boolean {
+  return permissions.some(p => p === '*' || p === '*:*');
 }
 
 /**
@@ -271,6 +280,32 @@ export async function buildCapabilities(
     }
   }
 
+  // Expose available roles for admin users (for "View as role" feature).
+  // Exclude roles with admin-bypass permissions since previewing as admin
+  // is the same as the current experience.
+  let availableRoles: { id: string; name: string }[] | undefined;
+  if (access && rbacProvider?.getAvailableRoles) {
+    if (hasAdminBypassPermissions(access.permissions)) {
+      try {
+        const allRoles = await rbacProvider.getAvailableRoles();
+        if (rbacProvider.getPermissionsForRole) {
+          const nonAdminRoles: { id: string; name: string }[] = [];
+          for (const role of allRoles) {
+            const rolePerms = await rbacProvider.getPermissionsForRole(role.id);
+            if (!hasAdminBypassPermissions(rolePerms)) {
+              nonAdminRoles.push(role);
+            }
+          }
+          availableRoles = nonAdminRoles;
+        } else {
+          availableRoles = allRoles;
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+  }
+
   return {
     enabled: true,
     login,
@@ -282,5 +317,6 @@ export async function buildCapabilities(
     },
     capabilities,
     access,
+    availableRoles,
   };
 }

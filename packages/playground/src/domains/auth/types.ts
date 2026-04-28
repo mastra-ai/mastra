@@ -68,6 +68,8 @@ export type AuthenticatedCapabilities = PublicAuthCapabilities & {
   user: AuthenticatedUser;
   capabilities: CapabilityFlags;
   access: UserAccess;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 };
 
 /**

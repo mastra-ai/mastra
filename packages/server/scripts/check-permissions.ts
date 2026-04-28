@@ -12,7 +12,12 @@ import * as fs from 'node:fs';
 
 import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 import { getEffectivePermission } from '../src/server/server-adapter/routes/permissions.js';
-import { OUTPUT_PATH, derivePermissionData, generatePermissionFileContent } from './permission-generator.js';
+import {
+  ASSERTION_ONLY_PERMISSIONS,
+  OUTPUT_PATH,
+  derivePermissionData,
+  generatePermissionFileContent,
+} from './permission-generator.js';
 
 const data = derivePermissionData();
 const generatedContent = generatePermissionFileContent(data);
@@ -35,9 +40,13 @@ for (const route of SERVER_ROUTES) {
   }
 }
 
-// Check for permissions in generated that aren't from routes
+// Check for permissions in generated that aren't from routes.
+// Assertion-only permissions (e.g. `stored-agents:share`) are intentionally
+// not derivable from any route — they're enforced in handler code via helpers
+// like `assertShareAccess` — so exclude them from the "Extra" check.
+const assertionOnly = new Set<string>(ASSERTION_ONLY_PERMISSIONS);
 for (const perm of generatedPermissions) {
-  if (!runtimePermissions.has(perm)) {
+  if (!runtimePermissions.has(perm) && !assertionOnly.has(perm)) {
     mismatches.push(`Extra: ${perm} (not from any route)`);
   }
 }

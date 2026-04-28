@@ -8,6 +8,7 @@ import {
   assertOwnership,
   assertExecuteAccess,
   assertReadAccess,
+  assertShareAccess,
   assertWriteAccess,
   getCallerAuthorId,
   hasAdminBypass,
@@ -463,6 +464,170 @@ describe('authorship', () => {
       const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'a' } });
       expect(() =>
         assertOwnership({ requestContext: ctx, resource: 'stored-agents', record: { authorId: 'b' } }),
+      ).toThrow(HTTPException);
+    });
+  });
+
+  describe('assertShareAccess', () => {
+    it('passes when the record has no owner (legacy)', () => {
+      expect(() =>
+        assertShareAccess({
+          requestContext: new RequestContext(),
+          resource: 'stored-agents',
+          record: { authorId: null },
+        }),
+      ).not.toThrow();
+    });
+
+    it('passes when caller owns the record (creator can share their own)', () => {
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'me' } });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'me', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('passes with admin bypass (`*`)', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'admin' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['*'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'someone', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('passes with admin bypass (`<resource>:*`)', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'admin' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:*'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'someone', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('passes when caller holds `<resource>:share`', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:share'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('passes when caller holds `*:share`', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['*:share'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('passes when caller holds scoped `<resource>:share:<id>`', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:share:a1'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          resourceId: 'a1',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('rejects write-only caller (write does NOT imply share)', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'editor' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:write'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).toThrow(HTTPException);
+    });
+
+    it('rejects `*:write` caller (action wildcard for write does NOT imply share)', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'editor' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['*:write'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).toThrow(HTTPException);
+    });
+
+    it('rejects when record is `public` but caller has no share grant', () => {
+      // public visibility does not grant share access — being readable doesn't
+      // imply the right to change who else can read.
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'someone-else' } });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'public' },
+        }),
+      ).toThrow(HTTPException);
+    });
+
+    it('rejects scoped grant for a different resource id', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:share:a2'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          resourceId: 'a1',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).toThrow(HTTPException);
+    });
+
+    it('rejects share grant for a different resource family', () => {
+      const ctx = ctxWith({
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-skills:share'],
+      });
+      expect(() =>
+        assertShareAccess({
+          requestContext: ctx,
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
       ).toThrow(HTTPException);
     });
   });
