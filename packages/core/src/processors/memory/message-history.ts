@@ -181,8 +181,11 @@ export class MessageHistory implements Processor {
           newMessage.content = { ...m.content };
         }
 
-        if (Array.isArray(newMessage.content?.parts)) {
-          newMessage.content.parts = newMessage.content.parts
+        const originalContent =
+          m.content && typeof m.content === 'object' && !Array.isArray(m.content) ? m.content : undefined;
+        const originalParts = originalContent?.parts;
+        if (Array.isArray(originalParts)) {
+          const filteredParts = originalParts
             .map(p => {
               // Filter out streaming tool calls (partial-call is an intermediate state during streaming)
               if (p.type === `tool-invocation` && p.toolInvocation.state === `partial-call`) {
@@ -205,8 +208,12 @@ export class MessageHistory implements Processor {
             .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
           // If all parts were filtered out, skip the whole message
-          if (newMessage.content.parts.length === 0) {
+          if (filteredParts.length === 0) {
             return null;
+          }
+
+          if (newMessage.content && typeof newMessage.content === 'object' && !Array.isArray(newMessage.content)) {
+            newMessage.content.parts = filteredParts;
           }
         }
 

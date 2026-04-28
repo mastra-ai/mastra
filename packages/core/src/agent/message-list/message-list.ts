@@ -552,7 +552,7 @@ export class MessageList {
   };
 
   private remembered = {
-    db: () => this.messages.filter(m => this.memoryMessages.has(m)),
+    db: () => addLegacyGettersToMessages(this.messages.filter(m => this.memoryMessages.has(m))),
     v1: () => convertToV1Messages(this.remembered.db()),
 
     aiV5: {
@@ -595,7 +595,7 @@ export class MessageList {
   };
 
   private input = {
-    db: () => this.messages.filter(m => this.newUserMessages.has(m)),
+    db: () => addLegacyGettersToMessages(this.messages.filter(m => this.newUserMessages.has(m))),
     v1: () => convertToV1Messages(this.input.db()),
 
     aiV5: {
@@ -638,7 +638,7 @@ export class MessageList {
   };
 
   private response = {
-    db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessages.has(m)),
+    db: (): MastraDBMessage[] => addLegacyGettersToMessages(this.messages.filter(m => this.newResponseMessages.has(m))),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.response.db()),
 
     aiV5: {

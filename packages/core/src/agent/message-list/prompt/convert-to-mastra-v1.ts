@@ -122,7 +122,8 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           const userContent = experimental_attachments
             ? [...textParts, ...attachmentsToParts(experimental_attachments)]
             : textParts;
-          const outputContent: MastraMessageV1['content'] = useStringContent ? content || '' : userContent;
+          const outputContent: MastraMessageV1['content'] =
+            useStringContent && userContent.length === textParts.length ? content || '' : userContent;
 
           pushOrCombine({
             role: 'user',
