@@ -2702,6 +2702,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // Should include tool call and result
       expect(allText).toContain('Tool Call getWeather:');
       expect(allText).toContain('Tool Result getWeather:');
+      // Tool args/result payloads should be included so the title model has context
+      expect(allText).toContain('Paris');
+      expect(allText).toMatch(/22|sunny/);
       // Should NOT contain metadata
       expect(allText).not.toContain('providerOptions');
       expect(allText).not.toContain('toolCallId');
