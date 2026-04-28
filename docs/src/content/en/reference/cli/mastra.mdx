@@ -533,7 +533,7 @@ Calls a Mastra runtime server with JSON input and JSON output. Use it for local 
 ```bash
 mastra api agent list --pretty
 mastra api agent run weather-agent '{"messages":"What is the weather in London?"}'
-mastra api tool execute weather '{"params":{"city":"San Francisco"}}'
+mastra api tool execute get-weather '{"location":"San Francisco"}'
 ```
 
 Use `mastra api <resource> <action> --help` to see examples for a command.
@@ -594,7 +594,7 @@ mastra api --url https://example.com --header "Authorization: Bearer $TOKEN" age
 
 #### `--timeout <ms>`
 
-Set the request timeout in milliseconds. Defaults to `30000`.
+Set the request timeout in milliseconds. Defaults to `30000`. Workflow run start and resume commands default to `120000`.
 
 #### `--pretty`
 
@@ -616,10 +616,16 @@ mastra api tool execute --schema --pretty
 Commands that accept input take one inline JSON argument. Do not pass file paths or stdin.
 
 ```bash
-mastra api workflow run start data-pipeline '{"input":{"source":"s3://bucket/data.csv"}}'
+mastra api workflow run start data-pipeline '{"inputData":{"source":"s3://bucket/data.csv"}}'
 ```
 
-Use positional arguments for stable IDs and JSON for filters or payloads. List commands accept `page` and `perPage` in the JSON input when the target route supports pagination:
+Use positional arguments for stable IDs and JSON for filters or payloads. For routes that require both query parameters and a request body, pass one JSON object. The CLI splits the input according to the server route schema.
+
+```bash
+mastra api thread create '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'
+```
+
+List commands accept `page` and `perPage` in the JSON input when the target route supports pagination:
 
 ```bash
 mastra api score list '{"page":0,"perPage":50}'
@@ -642,19 +648,44 @@ mastra api agent run weather-agent '{"messages":[{"role":"user","content":"What 
 Execute a tool:
 
 ```bash
-mastra api tool execute weather '{"params":{"city":"San Francisco"}}'
+mastra api tool execute get-weather '{"location":"San Francisco"}'
 ```
 
 Search long-term memory:
 
 ```bash
-mastra api memory search '{"query":"caching strategy"}'
+mastra api memory search '{"agentId":"weather-agent","resourceId":"user_123","searchQuery":"caching strategy","limit":10}'
 ```
 
-Read current working memory:
+Read and update current working memory:
 
 ```bash
 mastra api memory current get '{"threadId":"thread_abc123","agentId":"code-reviewer"}'
+mastra api memory current update '{"threadId":"thread_abc123","agentId":"code-reviewer","resourceId":"user_123","workingMemory":"Remember the user prefers concise responses."}'
+```
+
+Create, update, and delete memory threads:
+
+```bash
+mastra api thread create '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'
+mastra api thread update thread_abc123 '{"agentId":"weather-agent","resourceId":"user_123","title":"Updated title"}'
+mastra api thread delete thread_abc123 '{"agentId":"weather-agent","resourceId":"user_123"}'
+```
+
+Inspect memory status and logs:
+
+```bash
+mastra api memory status '{"agentId":"weather-agent"}'
+mastra api log list
+mastra api log list '{"level":"info","page":0,"perPage":50}'
+```
+
+Create, list, and get observability scores:
+
+```bash
+mastra api score create '{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'
+mastra api score list '{"runId":"run_123","page":0,"perPage":50}'
+mastra api score get score_123
 ```
 
 ### Supported commands
@@ -681,7 +712,7 @@ mastra api memory current get '{"threadId":"thread_abc123","agentId":"code-revie
 - `mastra api thread get <threadId>`
 - `mastra api thread create <input>`
 - `mastra api thread update <threadId> <input>`
-- `mastra api thread delete <threadId>`
+- `mastra api thread delete <threadId> <input>`
 - `mastra api thread messages <threadId> [input]`
 - `mastra api memory search <input>`
 - `mastra api memory current get <input>`
