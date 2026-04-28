@@ -1,4 +1,4 @@
-import type { BuilderModelPolicy, DefaultModelEntry } from '@mastra/client-js';
+import type { StoredSkillResponse, BuilderModelPolicy, DefaultModelEntry } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui';
 import { useCallback } from 'react';
 import { formValuesToSaveParams } from '../mappers/form-values-to-save-params';
@@ -11,6 +11,7 @@ interface UseSaveAgentArgs {
   agentId: string;
   mode: 'create' | 'edit';
   availableAgentTools?: AgentTool[];
+  availableSkills?: StoredSkillResponse[];
   onSuccess?: (agentId: string) => void;
 }
 
@@ -67,13 +68,19 @@ function resolveCreateModel(
   return { model: undefined };
 }
 
-export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSuccess }: UseSaveAgentArgs) {
+export function useSaveAgent({
+  agentId,
+  mode,
+  availableAgentTools = [],
+  availableSkills = [],
+  onSuccess,
+}: UseSaveAgentArgs) {
   const { createStoredAgent, updateStoredAgent } = useStoredAgentMutations(agentId);
   const policy = useBuilderModelPolicy();
 
   const save = useCallback(
     async (values: AgentBuilderEditFormValues) => {
-      const params = formValuesToSaveParams(values, availableAgentTools);
+      const params = formValuesToSaveParams(values, availableAgentTools, availableSkills);
       const workspaceField = params.workspace ? { workspace: params.workspace } : {};
 
       try {
@@ -85,6 +92,8 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
             tools: params.tools,
             agents: params.agents,
             workflows: params.workflows,
+            skills: params.skills,
+            visibility: params.visibility,
             ...workspaceField,
             ...(params.model ? { model: params.model } : {}),
           });
@@ -111,6 +120,8 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
           tools: params.tools,
           agents: params.agents,
           workflows: params.workflows,
+          skills: params.skills,
+          visibility: params.visibility,
           ...workspaceField,
         });
         toast.success('Agent created');
@@ -121,7 +132,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
         throw error;
       }
     },
-    [agentId, mode, availableAgentTools, createStoredAgent, updateStoredAgent, onSuccess, policy],
+    [agentId, mode, availableAgentTools, availableSkills, createStoredAgent, updateStoredAgent, onSuccess, policy],
   );
 
   return { save, isSaving: createStoredAgent.isPending || updateStoredAgent.isPending };

@@ -21,7 +21,7 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-const BASE_URL = 'http://localhost:4112';
+const BASE_URL = 'http://localhost:4111';
 
 // Default: no admin builder configured. Tests that need a specific policy
 // override this with `server.use(...)` before exercising the hook.

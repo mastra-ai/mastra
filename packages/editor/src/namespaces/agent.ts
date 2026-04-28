@@ -98,9 +98,7 @@ function applyBuilderDefaults(
   // Conditional models are preserved verbatim (they are objects but not the
   // admin-config shape, and the user's intent always wins).
   if (input.model === undefined) {
-    const models = (builderAgentConfig.models ?? undefined) as
-      | { default?: DefaultModelEntryRuntime }
-      | undefined;
+    const models = (builderAgentConfig.models ?? undefined) as { default?: DefaultModelEntryRuntime } | undefined;
     const adminDefault = models?.default;
     if (adminDefault && typeof adminDefault.provider === 'string' && typeof adminDefault.modelId === 'string') {
       (defaults as Record<string, unknown>).model = defaultModelToStored(adminDefault);
@@ -1192,6 +1190,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       newName?: string;
       metadata?: Record<string, unknown>;
       authorId?: string;
+      visibility?: 'private' | 'public';
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType> {
@@ -1301,6 +1300,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,
       authorId: options.authorId,
+      visibility: options.visibility,
     };
 
     // Phase 6 enforcement: a previously-valid source model may now be outside

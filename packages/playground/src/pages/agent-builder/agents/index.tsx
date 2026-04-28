@@ -1,6 +1,8 @@
+import type { ListStoredAgentsParams } from '@mastra/client-js';
 import {
   AgentIcon,
   Button,
+  cn,
   EmptyState,
   EntityListPageLayout,
   ErrorState,
@@ -12,16 +14,30 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-builder-list/agent-builder-list';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
+type AgentScope = 'mine' | 'all';
+
 export default function AgentBuilderAgentsPage() {
-  const { data, isLoading, error } = useStoredAgents({ status: 'draft' });
+  const [scope, setScope] = useState<AgentScope>('mine');
+  const { data: currentUser } = useCurrentUser();
+
+  const listParams = useMemo<ListStoredAgentsParams>(() => {
+    const params: ListStoredAgentsParams = { status: 'draft' };
+    if (scope === 'mine' && currentUser?.id) {
+      params.authorId = currentUser.id;
+    }
+    return params;
+  }, [scope, currentUser?.id]);
+
+  const { data, isLoading, error } = useStoredAgents(listParams);
   const [search, setSearch] = useState('');
   const { Link: FrameworkLink } = useLinkComponent();
 
@@ -80,9 +96,11 @@ export default function AgentBuilderAgentsPage() {
         <div className="flex items-start justify-between gap-4">
           <PageHeader>
             <PageHeader.Title>
-              <AgentIcon /> Your agents
+              <AgentIcon /> {scope === 'mine' ? 'Your agents' : 'All agents'}
             </PageHeader.Title>
-            <PageHeader.Description>Agents you've created in Agent Builder.</PageHeader.Description>
+            <PageHeader.Description>
+              {scope === 'mine' ? "Agents you've created in Agent Builder." : 'All agents visible to you.'}
+            </PageHeader.Description>
           </PageHeader>
           {agents.length > 0 && (
             <div className="shrink-0">
@@ -92,6 +110,30 @@ export default function AgentBuilderAgentsPage() {
             </div>
           )}
         </div>
+        {currentUser && (
+          <div className="flex items-center gap-1 rounded-lg border border-border1 bg-surface1 p-0.5 w-fit">
+            <button
+              type="button"
+              onClick={() => setScope('mine')}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
+                scope === 'mine' ? 'bg-surface3 text-neutral6 shadow-sm' : 'text-neutral3 hover:text-neutral5',
+              )}
+            >
+              My agents
+            </button>
+            <button
+              type="button"
+              onClick={() => setScope('all')}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
+                scope === 'all' ? 'bg-surface3 text-neutral6 shadow-sm' : 'text-neutral3 hover:text-neutral5',
+              )}
+            >
+              All agents
+            </button>
+          </div>
+        )}
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
         </div>

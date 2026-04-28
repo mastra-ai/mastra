@@ -137,6 +137,7 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft' or 'published'
   activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -309,6 +310,7 @@ export const SKILLS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to skill_versions.id
   authorId: { type: 'text', nullable: true },
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

@@ -10,6 +10,7 @@ import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 interface CreateSkillParams {
   name: string;
   description: string;
+  visibility?: 'private' | 'public';
   workspaceId: string;
   files: InMemoryFileNode[];
 }
@@ -52,6 +53,7 @@ export function useCreateSkill() {
       return client.createStoredSkill({
         name,
         description,
+        visibility: params.visibility,
         instructions: extractSkillInstructions(files),
         license: extractSkillLicense(files),
         files,

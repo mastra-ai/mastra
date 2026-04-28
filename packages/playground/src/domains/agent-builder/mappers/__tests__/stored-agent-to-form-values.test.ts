@@ -13,7 +13,9 @@ describe('storedAgentToFormValues', () => {
       tools: {},
       agents: {},
       workflows: {},
+      skills: {},
       workspaceId: undefined,
+      visibility: 'private',
     };
 
     expect(fromNull).toEqual(expected);
@@ -39,8 +41,33 @@ describe('storedAgentToFormValues', () => {
       tools: { 'tool-a': true, 'tool-b': true },
       agents: { 'agent-x': true },
       workflows: { 'wf-1': true },
+      skills: {},
       workspaceId: 'ws-1',
+      visibility: 'private',
     });
+  });
+
+  it('hydrates skills from a flat record', () => {
+    const result = storedAgentToFormValues({
+      id: 'agent-1',
+      name: 'A',
+      skills: { s1: { description: 'desc' }, s2: {} },
+    } as never);
+
+    expect(result.skills).toEqual({ s1: true, s2: true });
+  });
+
+  it('merges skills across ConditionalField variants', () => {
+    const result = storedAgentToFormValues({
+      id: 'agent-1',
+      name: 'A',
+      skills: [
+        { when: { type: 'always' }, value: { s1: { description: 'one' } } },
+        { when: { type: 'always' }, value: { s2: {} } },
+      ],
+    } as never);
+
+    expect(result.skills).toEqual({ s1: true, s2: true });
   });
 
   it('falls back to empty string when instructions is not a string', () => {

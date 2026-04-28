@@ -17,7 +17,9 @@ export const AgentBuilderEditFormSchema = z.object({
   tools: z.record(z.string(), z.boolean()).optional(),
   agents: z.record(z.string(), z.boolean()).optional(),
   workflows: z.record(z.string(), z.boolean()).optional(),
+  skills: z.record(z.string(), z.boolean()).optional(),
   workspaceId: z.string().optional(),
+  visibility: z.enum(['private', 'public']).default('private').optional(),
   /**
    * Selected static model. Optional — the create path's decision matrix decides
    * whether this is required at submit time based on the admin's model policy.

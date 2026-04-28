@@ -1086,6 +1086,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1125,6 +1126,7 @@ export interface ListStoredAgentsParams {
   };
   status?: 'draft' | 'published' | 'archived';
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
 }
 
@@ -1151,6 +1153,8 @@ export interface CloneAgentParams {
   metadata?: Record<string, unknown>;
   /** Author identifier for the cloned agent. */
   authorId?: string;
+  /** Visibility of the cloned agent. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
   requestContext?: RequestContext | Record<string, any>;
 }
@@ -1163,6 +1167,8 @@ export interface CreateStoredAgentParams {
   /** Unique identifier for the agent. If not provided, derived from name via slugify. */
   id?: string;
   authorId?: string;
+  /** Visibility of the agent. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
@@ -1192,6 +1198,8 @@ export interface CreateStoredAgentParams {
  */
 export interface UpdateStoredAgentParams {
   authorId?: string;
+  /** Visibility of the agent. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
@@ -1929,6 +1937,7 @@ export interface StoredSkillResponse {
   id: string;
   status: string;
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1950,6 +1959,7 @@ export interface ListStoredSkillsParams {
     direction?: 'ASC' | 'DESC';
   };
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
 }
 
@@ -1970,6 +1980,8 @@ export interface ListStoredSkillsResponse {
 export interface CreateStoredSkillParams {
   id?: string;
   authorId?: string;
+  /** Visibility of the skill. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
@@ -1983,6 +1995,8 @@ export interface CreateStoredSkillParams {
  */
 export interface UpdateStoredSkillParams {
   authorId?: string;
+  /** Visibility of the skill. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;

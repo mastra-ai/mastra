@@ -1,4 +1,3 @@
-import { IconButton, cn } from '@mastra/playground-ui';
 import type { CodeHeaderProps } from '@assistant-ui/react-markdown';
 import {
   MarkdownTextPrimitive,
@@ -7,6 +6,7 @@ import {
 } from '@assistant-ui/react-markdown';
 import '@assistant-ui/react-markdown/styles/dot.css';
 import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { IconButton, cn } from '@mastra/playground-ui';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import type { FC, ImgHTMLAttributes } from 'react';
 import { memo, useEffect, useState } from 'react';

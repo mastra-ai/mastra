@@ -3,7 +3,12 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
-import { MASTRA_RESOURCE_ID_KEY } from '../constants';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+} from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -305,7 +310,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
     }
 
-    requestContext.set('user', user);
+    requestContext.set(MASTRA_USER_KEY, user);
 
     if (typeof authConfig.mapUserToResourceId === 'function') {
       try {
@@ -330,10 +335,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
         } else {
           const permissions = await rbacProvider.getPermissions(user as EEUser);
-          requestContext.set('userPermissions', permissions);
+          requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
 
           const roles = await rbacProvider.getRoles(user as EEUser);
-          requestContext.set('userRoles', roles);
+          requestContext.set(MASTRA_USER_ROLES_KEY, roles);
         }
       }
     } catch (rbacError) {

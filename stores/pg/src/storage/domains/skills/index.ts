@@ -90,6 +90,12 @@ export class SkillsPG extends SkillsStorage {
       tableName: TABLE_SKILL_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_SKILL_VERSIONS],
     });
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_SKILLS,
+      schema: TABLE_SCHEMAS[TABLE_SKILLS],
+      ifNotExists: ['visibility'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -147,17 +153,19 @@ export class SkillsPG extends SkillsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
+      const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
+
       // 1. Create the thin skill record (no metadata on entity)
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, status, "activeVersionId", "authorId",
+          id, status, "activeVersionId", "authorId", visibility,
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [skill.id, 'draft', null, skill.authorId ?? null, nowIso, nowIso, nowIso, nowIso],
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [skill.id, 'draft', null, skill.authorId ?? null, visibility ?? null, nowIso, nowIso, nowIso, nowIso],
       );
 
       // 2. Extract snapshot fields and create version 1
-      const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+      const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
       const versionId = crypto.randomUUID();
       await this.createVersion({
         id: versionId,
@@ -173,6 +181,7 @@ export class SkillsPG extends SkillsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: skill.authorId,
+        visibility,
         createdAt: now,
         updatedAt: now,
       };
@@ -220,7 +229,7 @@ export class SkillsPG extends SkillsStorage {
         });
       }
 
-      const { authorId, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
       let versionCreated = false;
 
       // Check if any snapshot config fields are present
@@ -278,6 +287,11 @@ export class SkillsPG extends SkillsStorage {
       if (authorId !== undefined) {
         setClauses.push(`"authorId" = $${paramIndex++}`);
         values.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        setClauses.push(`visibility = $${paramIndex++}`);
+        values.push(visibility);
       }
 
       if (activeVersionId !== undefined) {
@@ -357,7 +371,7 @@ export class SkillsPG extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, visibility } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -386,6 +400,11 @@ export class SkillsPG extends SkillsStorage {
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push(`visibility = $${paramIdx++}`);
+        queryParams.push(visibility);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -756,6 +775,7 @@ export class SkillsPG extends SkillsStorage {
       status: row.status as StorageSkillType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      visibility: row.visibility as StorageSkillType['visibility'],
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };

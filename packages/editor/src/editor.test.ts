@@ -1917,4 +1917,3 @@ describe('Phase 6: agent.create enforces model allowlist', () => {
     ).rejects.toMatchObject({ code: 'MODEL_NOT_ALLOWED' });
   });
 });
-

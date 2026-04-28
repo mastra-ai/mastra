@@ -2,6 +2,18 @@ import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import { extractWorkspaceId } from './extract-workspace-id';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 
+function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<string, unknown> {
+  if (!skills) return {};
+  if (Array.isArray(skills)) {
+    const merged: Record<string, unknown> = {};
+    for (const variant of skills) {
+      Object.assign(merged, variant.value);
+    }
+    return merged;
+  }
+  return skills as Record<string, unknown>;
+}
+
 /**
  * Pull the static `{ provider, name }` model out of a stored agent, if present.
  *
@@ -37,7 +49,9 @@ export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefi
     tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
     agents: Object.fromEntries(Object.keys(storedAgent?.agents ?? {}).map(k => [k, true])),
     workflows: Object.fromEntries(Object.keys(storedAgent?.workflows ?? {}).map(k => [k, true])),
+    skills: Object.fromEntries(Object.keys(flattenAgentSkills(storedAgent?.skills)).map(k => [k, true])),
     workspaceId: extractWorkspaceId(storedAgent?.workspace),
+    visibility: storedAgent?.visibility ?? 'private',
     model: extractStaticModel(storedAgent?.model),
   };
 }

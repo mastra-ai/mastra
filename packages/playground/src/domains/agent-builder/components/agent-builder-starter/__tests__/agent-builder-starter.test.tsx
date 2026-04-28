@@ -32,10 +32,16 @@ describe('AgentBuilderStarter', () => {
     navigateMock.mockReset();
   });
 
-  it('renders the submit button with the primary IconButton variant', () => {
+  it('renders a submit button that is disabled until the input has content', () => {
     const { getByTestId } = renderStarter();
-    const submit = getByTestId('agent-builder-starter-submit');
-    expect(submit.className).toContain('bg-accent1');
+    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
+    const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
+
+    expect(submit.type).toBe('submit');
+    expect(submit.disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: 'build something' } });
+    expect(submit.disabled).toBe(false);
   });
 
   it('navigates to the agent edit page with the user message in router state on submit', () => {

@@ -2,6 +2,7 @@ import type { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createStoredAgentBodySchema, updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
@@ -258,6 +259,15 @@ function createTestContext(mastra: MockMastra): ServerContext {
   };
 }
 
+function createAuthenticatedContext(mastra: MockMastra, userId: string, permissions: string[] = []): ServerContext {
+  const ctx = createTestContext(mastra);
+  ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, userId);
+  if (permissions.length > 0) {
+    ctx.requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+  }
+  return ctx;
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -452,7 +462,6 @@ describe('Stored Agents Handlers', () => {
         description: 'A newly created agent',
         instructions: 'Be creative',
         model: { name: 'gpt-4', provider: 'openai' },
-        authorId: 'user123',
         metadata: { created: 'test' },
         tools: ['tool1'],
         defaultOptions: {
@@ -467,10 +476,12 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toMatchObject(agentData);
+      // No auth context → no authorId → defaults to public (unowned resources are public)
       expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
+          visibility: 'public',
         }),
       });
     });
@@ -784,6 +795,168 @@ describe('Stored Agents Handlers', () => {
         // handleError wraps it - the error propagates
         expect(error).toBeDefined();
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Authorship & Visibility
+  // ---------------------------------------------------------------------------
+
+  describe('LIST visibility filtering', () => {
+    beforeEach(() => {
+      mockAgentsData.set('my-private', {
+        id: 'my-private',
+        name: 'My Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+      });
+      mockAgentsData.set('my-public', {
+        id: 'my-public',
+        name: 'My Public',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+      });
+      mockAgentsData.set('other-public', {
+        id: 'other-public',
+        name: 'Other Public',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-b',
+        visibility: 'public',
+      });
+      mockAgentsData.set('other-private', {
+        id: 'other-private',
+        name: 'Other Private',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-b',
+        visibility: 'private',
+      });
+      mockAgentsData.set('unowned', {
+        id: 'unowned',
+        name: 'Unowned Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+    });
+
+    it('should filter to owned + public for authenticated non-admin', async () => {
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        page: 1,
+        status: 'published' as const,
+      });
+
+      const ids = result.agents.map((a: any) => a.id);
+      expect(ids).toContain('my-private');
+      expect(ids).toContain('my-public');
+      expect(ids).toContain('other-public');
+      expect(ids).toContain('unowned');
+      expect(ids).not.toContain('other-private');
+    });
+
+    it('should return all agents for admin', async () => {
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        page: 1,
+        status: 'published' as const,
+      });
+
+      expect(result.agents).toHaveLength(5);
+    });
+
+    it('should filter by visibility=public', async () => {
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        page: 1,
+        status: 'published' as const,
+        visibility: 'public' as const,
+      });
+
+      const ids = result.agents.map((a: any) => a.id);
+      expect(ids).toContain('my-public');
+      expect(ids).toContain('other-public');
+      expect(ids).toContain('unowned');
+      expect(ids).not.toContain('my-private');
+      expect(ids).not.toContain('other-private');
+    });
+  });
+
+  describe('UPDATE write-access enforcement', () => {
+    it('should throw when non-owner tries to update', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+        activeVersionId: 'v-other-1',
+      });
+
+      await expect(
+        UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-b'),
+          storedAgentId: 'other-agent',
+          name: 'Hacked',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should allow admin to update any agent', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+        activeVersionId: 'v-other-1',
+      });
+
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        storedAgentId: 'other-agent',
+        name: 'Admin Updated',
+      });
+
+      expect(result).toMatchObject({
+        id: 'other-agent',
+        name: 'Admin Updated',
+      });
+    });
+  });
+
+  describe('DELETE write-access enforcement', () => {
+    it('should throw when non-owner tries to delete', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'public',
+      });
+
+      await expect(
+        DELETE_STORED_AGENT_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-b'),
+          storedAgentId: 'other-agent',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should allow admin to delete any agent', async () => {
+      mockAgentsData.set('other-agent', {
+        id: 'other-agent',
+        name: 'Other Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user-a',
+        visibility: 'private',
+      });
+
+      const result = await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'admin', ['*']),
+        storedAgentId: 'other-agent',
+      });
+
+      expect(result).toMatchObject({ success: true });
     });
   });
 });

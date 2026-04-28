@@ -43,7 +43,12 @@ export const WorkspaceLayout = ({
     <div className="flex flex-1 min-w-0 flex-col h-full">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
         <div className="justify-self-start">
-          <IconButton tooltip="Agents list" className="rounded-full" onClick={() => navigate(`/agent-builder/agents`)}>
+          <IconButton
+            variant="ghost"
+            tooltip="Agents list"
+            className="rounded-full"
+            onClick={() => navigate(`/agent-builder/agents`)}
+          >
             <ArrowLeftIcon />
           </IconButton>
         </div>
