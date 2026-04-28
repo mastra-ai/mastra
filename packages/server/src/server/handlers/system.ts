@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { NoOpObservability } from '@mastra/core/observability';
+
 import type { MastraPackage } from '../schemas/system';
 import { systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -39,6 +41,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!mastra.getEditor(),
+        hasObservability: !(mastra.observability instanceof NoOpObservability),
         storageType,
         observabilityStorageType,
         observabilityRuntimeStrategy,

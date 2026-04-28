@@ -16,6 +16,7 @@ export const systemPackagesResponseSchema = z.object({
   packages: z.array(mastraPackageSchema),
   isDev: z.boolean(),
   cmsEnabled: z.boolean(),
+  hasObservability: z.boolean(),
   storageType: z.string().optional(),
   observabilityStorageType: z.string().optional(),
   observabilityRuntimeStrategy: observabilityRuntimeStrategySchema.optional(),

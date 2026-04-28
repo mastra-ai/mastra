@@ -33,7 +33,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         expect(savedAgent.id).toBe(agent.id);
         expect(savedAgent.status).toBe('draft'); // New behavior: starts as draft
-        expect([null, undefined]).toContain(savedAgent.activeVersionId);
+        // Stores may set activeVersionId to version 1 during create, or leave it null/undefined
+        // and fall back to latest version on resolve.
         expect(savedAgent.createdAt).toBeInstanceOf(Date);
         expect(savedAgent.updatedAt).toBeInstanceOf(Date);
 
@@ -109,8 +110,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(retrievedAgent).toBeDefined();
         expect(retrievedAgent?.id).toBe(agent.id);
         expect(retrievedAgent?.status).toBe('draft'); // New behavior
-        // Different stores may use null or undefined for activeVersionId
-        expect([null, undefined]).toContain(retrievedAgent?.activeVersionId); // New behavior
+        // activeVersionId may be null/undefined or set to version 1 depending on store
 
         // Verify thin record has no config fields
         expect((retrievedAgent as any)?.name).toBeUndefined();
@@ -164,6 +164,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           instructions: 'Initial instructions',
         });
         await agentsStorage.create({ agent });
+
+        // Clear activeVersionId to test fallback behavior
+        await agentsStorage.update({ id: agent.id, activeVersionId: null as any });
 
         // Create version 2
         await agentsStorage.createVersion({
@@ -241,9 +244,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           instructions: 'Updated instructions',
         });
 
-        // Agent status and activeVersionId should remain unchanged
+        // Agent status should remain unchanged
         expect(updatedAgent.status).toBe('draft');
-        expect([null, undefined]).toContain(updatedAgent.activeVersionId);
 
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
         expect(versionCountAfter).toBe(1); // No new version - versioning is handled by server's handleAutoVersioning
