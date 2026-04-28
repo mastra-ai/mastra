@@ -84,9 +84,8 @@ function buildResponseModelMetadata(
 
 function createModelContextMessageList(messageList: MessageList, messages: MastraDBMessage[]): MessageList {
   const contextMessageList = new MessageList();
-  contextMessageList.deserialize(messageList.serialize());
-  const sourceChecker = contextMessageList.makeMessageSourceChecker();
-  contextMessageList.clear.all.db();
+  const sourceChecker = messageList.makeMessageSourceChecker();
+  contextMessageList.addSystem(messageList.getAllSystemMessages());
   for (const message of messages) {
     contextMessageList.add(
       message,
