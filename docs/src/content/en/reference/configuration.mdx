@@ -192,7 +192,7 @@ export const mastra = new Mastra({
     type: 'number',
     isOptional: true,
     description:
-      'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (wait indefinitely). Can be overridden per-agent or per-tool.',
+      'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
   },
   {
     name: 'onTaskComplete',

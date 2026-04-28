@@ -324,7 +324,7 @@ Success criteria:
 
 Sub-agent invocations are dispatched as tool calls, so they can run as [background tasks](./background-tasks). This is useful when one or more delegations are long-running and you don't want them to block the supervisor's response.
 
-Enable the [`backgroundTasks` manager](/reference/configuration#backgroundtasks) on the Mastra instance, then opt sub-agents in on the supervisor:
+Enable the [backgroundTasks manager](/reference/configuration#backgroundtasks) on the Mastra instance, then opt sub-agents in on the supervisor:
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const supervisor = new Agent({
@@ -348,6 +348,8 @@ const stream = await supervisor.streamUntilIdle('Research AI in education and wr
 ```
 
 Use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) instead of `stream()` so the stream stays open until the sub-agents complete and the supervisor has had a chance to respond to their results.
+
+If a sub-agent isn't listed on the supervisor but has its own background-eligible tools, the supervisor still dispatches the sub-agent as a background task and inherits its config. See [Inheriting from the sub-agent](./background-tasks#inheriting-from-the-sub-agent) for details.
 
 ## Sub-agent versioning
 

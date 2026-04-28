@@ -7,11 +7,9 @@ packages:
 
 # Agent.streamUntilIdle()
 
-Added in: `@mastra/core@1.9.0`
-
 `streamUntilIdle()` streams an agent's response and keeps the stream open until every background task dispatched during the run completes. When a task finishes, its result is written to memory and the agentic loop re-enters automatically so the LLM can react to it. The stream closes once no tasks are running and no completions are queued.
 
-Use it when the agent dispatches background tasks (typically long-running tools or sub-agents) and you want a single stream that spans the initial response **plus** every continuation triggered by a task completion. For foreground-only runs, use [`Agent.stream()`](./stream).
+Use it when the agent dispatches background tasks (typically long-running tools or sub-agents) and you want a single stream that spans the initial response **plus** every continuation triggered by a task completion. For foreground-only runs or if you prefer to manage the continuation manually (manually prompt agent to process the result), use [`Agent.stream()`](./stream).
 
 ## Usage example
 
@@ -99,10 +97,7 @@ For every other option (`maxSteps`, `modelSettings`, `toolChoice`, `outputProces
 
 `streamUntilIdle()` returns a proxy over the first turn's `MastraModelOutput`. Only `fullStream` is replaced with a combined stream that spans every continuation. Every other property — `text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()` — resolves against the **first turn's** internal buffer.
 
-If you need an aggregate view across all continuations:
-
-- consume `fullStream` yourself and accumulate, or
-- once the stream closes, follow up with `agent.generate([], { memory: { thread, resource } })` to read the final state from memory.
+If you need an aggregate view across all continuations, consume `fullStream` yourself and accumulate.
 
 ## Continuation behavior
 
@@ -112,30 +107,6 @@ Internally, `streamUntilIdle()`:
 1. Subscribes to background-task completion events for the resolved memory scope.
 1. Queues each terminal event (`background-task-completed`, `background-task-failed`, `background-task-cancelled`) and, when the outer wrapper is idle between turns, re-invokes `agent.stream([], ...)` with a directive listing the just-completed `toolCallId`s. The continuation turn flows into the same outer stream.
 1. Closes the outer stream once no tasks are running and no completions are queued.
-
-### Concurrency and dedup
-
-Only one inner LLM stream runs at a time. A completion arriving mid-turn is queued and processed after the current turn ends.
-
-If a second `streamUntilIdle()` call is made for the same `(threadId, resourceId)` scope on the same agent instance, the prior wrapper is aborted before the new one subscribes. This prevents background-task pubsub events from fanning out into two concurrent wrappers and triggering duplicate continuation turns.
-
-Each call also dedups terminal events on its own `processedCompletionIds` set, so at-least-once pubsub delivery (e.g. with a durable queue backing) does not produce duplicate continuations.
-
-## Background task chunks
-
-The outer stream emits these chunks alongside the usual `text-delta`, `tool-call`, and `tool-result` chunks:
-
-| Chunk type | Meaning |
-| - | - |
-| `background-task-started` | The task has been enqueued and assigned a `taskId`. |
-| `background-task-running` | The task picked up a worker. |
-| `background-task-progress` | Progress update from the task. |
-| `background-task-output` | A streamed output chunk from the task's `execute`. |
-| `background-task-completed` | The task finished successfully. Triggers a continuation turn. |
-| `background-task-failed` | The task threw or timed out. Triggers a continuation turn. |
-| `background-task-cancelled` | The task was cancelled. Triggers a continuation turn. |
-
-Visit [`ChunkType`](/reference/streaming/ChunkType) for the full payload shapes.
 
 ## Extended usage example
 
@@ -172,6 +143,6 @@ for await (const chunk of stream.fullStream) {
 ## Related
 
 - [Background tasks](/docs/agents/background-tasks)
-- [`Agent.stream()` reference](./stream)
-- [`backgroundTasks` configuration reference](/reference/configuration#backgroundtasks)
+- [Agent.stream() reference](./stream)
+- [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Stream chunk types](/reference/streaming/ChunkType)
