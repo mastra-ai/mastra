@@ -1,10 +1,10 @@
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
 import { Monitor, Moon, Sun } from 'lucide-react';
 
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
+import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface ThemeToggleOption {
   value: Theme;

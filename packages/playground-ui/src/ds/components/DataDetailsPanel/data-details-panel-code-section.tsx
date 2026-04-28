@@ -10,8 +10,8 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
-import { cn } from '@/lib/utils';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { cn } from '@/lib/utils';
 
 function buildDarkTheme(): Extension {
   return draculaInit({

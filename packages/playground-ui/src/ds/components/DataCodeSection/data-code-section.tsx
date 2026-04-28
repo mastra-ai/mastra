@@ -23,8 +23,8 @@ import {
   DialogDescription,
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import { cn } from '@/lib/utils';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
 

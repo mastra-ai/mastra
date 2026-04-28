@@ -1,7 +1,8 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { ThemeContext, type ResolvedTheme, type Theme, type ThemeContextValue } from './theme-context';
 import { createLocalStorageAdapter } from './storage-adapter';
+import { ThemeContext } from './theme-context';
+import type { ResolvedTheme, Theme, ThemeContextValue } from './theme-context';
 
 export interface ThemeProviderProps {
   children: React.ReactNode;
