@@ -7,6 +7,8 @@ import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
+const NUMERIC_TIMEOUT_STRING_REGEX = /^\d+(?:\.\d+)?$/;
+
 /**
  * Base input schema for execute_command (no background param).
  * Extended with `background` in tools.ts when sandbox.processes exists.
@@ -21,7 +23,7 @@ export const executeCommandInputSchema = z.object({
         return value;
       }
       const trimmed = value.trim();
-      return /^\d+(?:\.\d+)?$/.test(trimmed) ? Number(trimmed) : value;
+      return NUMERIC_TIMEOUT_STRING_REGEX.test(trimmed) ? Number(trimmed) : value;
     }, z.number())
     .nullish()
     .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
