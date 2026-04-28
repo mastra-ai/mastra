@@ -59,9 +59,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   #db: ClickhouseDB;
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, engine } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#db = new ClickhouseDB({ client, ttl, engine });
   }
 
   async init(): Promise<void> {

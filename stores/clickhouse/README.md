@@ -66,6 +66,15 @@ type ClickhouseConfig = {
   url: string; // Clickhouse HTTP interface URL
   username: string; // Database username
   password: string; // Database password
+  engine?:
+    | 'default'
+    | 'replicated'
+    | {
+        type: 'replicated';
+        cluster?: string;
+        zooPath?: string; // Supports {table}; defaults to /clickhouse/tables/{shard}/{database}/{table}
+        replica?: string; // Defaults to {replica}
+      };
 };
 ```
 
@@ -87,6 +96,8 @@ The store uses different table engines for different types of data:
 
 - `MergeTree()`: Used for messages, traces, and evals
 - `ReplacingMergeTree()`: Used for threads and workflow snapshots
+
+For replicated ClickHouse clusters, configure `engine: 'replicated'` or pass a replicated engine object. Mastra will create `ReplicatedMergeTree` and `ReplicatedReplacingMergeTree` tables instead of local `MergeTree` variants. For self-managed multi-replica clusters behind a load balancer, set `cluster` so DDL includes `ON CLUSTER` and creates the tables on every replica.
 
 ## Storage Methods
 
