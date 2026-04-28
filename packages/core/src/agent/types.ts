@@ -48,6 +48,7 @@ import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionTimeoutOptions } from './execution-timeout';
 import type { MessageList } from './message-list/index';
 export type {
   MastraDBMessage,
@@ -418,6 +419,10 @@ export interface AgentConfig<
    * Controls which tools can run in the background and their behavior.
    */
   backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Maximum wall-clock budget for one agent execution.
+   */
+  execution?: AgentExecutionTimeoutOptions;
 }
 
 export type AgentMemoryOption = {

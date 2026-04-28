@@ -4,6 +4,7 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
+import { isAgentExecutionTimeoutError } from '../../../agent/execution-timeout';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
@@ -286,6 +287,7 @@ function executeStreamWithFallbackModels<T>(
   models: ModelManagerModelConfig[],
   logger?: IMastraLogger,
   startIndex = 0,
+  options?: LoopConfig<any>,
 ): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = startIndex;
@@ -310,6 +312,18 @@ function executeStreamWithFallbackModels<T>(
         // from processors (e.g., processInputStep) and should not trigger model retries
         if (err instanceof TripWire) {
           throw err;
+        }
+
+        if (isAgentExecutionTimeoutError(err)) {
+          const executionTimeoutRuntime = options?.executionTimeoutRuntime;
+          if (executionTimeoutRuntime?.shouldFallbackModel(index === models.length)) {
+            executionTimeoutRuntime.resetForFallbackModel();
+            if (options) {
+              options.abortSignal = executionTimeoutRuntime.signal;
+            }
+          } else {
+            throw err;
+          }
         }
 
         lastError = err;
@@ -403,6 +417,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           models,
           logger,
           activeFallbackModelIndex,
+          options,
         )(async (modelConfig, isLastModel) => {
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
@@ -905,6 +920,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
 
             if (isAbortError(error) && options?.abortSignal?.aborted) {
+              if (options.executionTimeoutRuntime?.activeTimeoutError) {
+                throw options.executionTimeoutRuntime.activeTimeoutError;
+              }
+
               await options?.onAbort?.({
                 steps: inputData?.output?.steps ?? [],
               });
@@ -1003,6 +1022,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
+            if (options.executionTimeoutRuntime?.activeTimeoutError) {
+              throw options.executionTimeoutRuntime.activeTimeoutError;
+            }
+
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });

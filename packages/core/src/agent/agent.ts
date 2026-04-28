@@ -93,6 +93,8 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import { AgentExecutionTimeoutRuntime, normalizeAgentExecutionTimeoutOptions } from './execution-timeout';
+import type { AgentExecutionTimeoutOptions } from './execution-timeout';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -198,6 +200,7 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  #execution?: AgentExecutionTimeoutOptions;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -386,6 +389,10 @@ export class Agent<
 
     if (config.backgroundTasks) {
       this.#backgroundTasks = config.backgroundTasks;
+    }
+
+    if (config.execution) {
+      this.#execution = config.execution;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -4817,6 +4824,52 @@ export class Agent<
     return existingSnapshot;
   }
 
+  #applyExecutionTimeout<OUTPUT>(
+    options: Omit<InnerAgentExecutionOptions<OUTPUT>, 'methodType' | 'resumeContext'>,
+    runId: string,
+  ): Omit<InnerAgentExecutionOptions<OUTPUT>, 'methodType' | 'resumeContext'> {
+    const execution = deepMerge(
+      (this.#execution ?? {}) as Record<string, unknown>,
+      (options.execution ?? {}) as Record<string, unknown>,
+    ) as AgentExecutionTimeoutOptions;
+    const normalizedExecution = normalizeAgentExecutionTimeoutOptions(execution);
+
+    if (!normalizedExecution) {
+      return options;
+    }
+
+    const runtime = new AgentExecutionTimeoutRuntime({
+      options: normalizedExecution,
+      externalSignal: options.abortSignal,
+      agentId: this.id,
+      agentName: this.name,
+      runId,
+    });
+
+    const onFinish = options.onFinish;
+    const onAbort = options.onAbort;
+    const onError = options.onError;
+
+    return {
+      ...options,
+      abortSignal: runtime.signal,
+      execution,
+      executionTimeoutRuntime: runtime,
+      onFinish: async (...args: any[]) => {
+        runtime.clear();
+        await (onFinish as any)?.(...args);
+      },
+      onAbort: async (...args: any[]) => {
+        runtime.clear();
+        await (onAbort as any)?.(...args);
+      },
+      onError: async (...args: any[]) => {
+        runtime.clear();
+        await (onError as any)?.(...args);
+      },
+    };
+  }
+
   /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
@@ -4951,6 +5004,7 @@ export class Agent<
         resourceId,
       }) ||
       randomUUID();
+    options = this.#applyExecutionTimeout(options, runId);
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set Tracing context
@@ -5076,7 +5130,17 @@ export class Agent<
 
     const run = await executionWorkflow.createRun();
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    const result = await run.start({ ...observabilityContext });
+    let result;
+    try {
+      result = await run.start({ ...observabilityContext });
+    } catch (error) {
+      options.executionTimeoutRuntime?.clear();
+      throw error;
+    }
+
+    if (result.status !== 'success') {
+      options.executionTimeoutRuntime?.clear();
+    }
 
     return result;
   }

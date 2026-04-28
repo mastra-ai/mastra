@@ -169,6 +169,13 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description: 'Default options used when calling `stream()` and `generate()`.',
   },
   {
+    name: 'execution',
+    type: "{ maxExecutionMs?: number; onTimeout?: 'fail' | 'fallback-model' | { strategy: 'fail' | 'fallback-model'; maxFallbackHops?: number } }",
+    isOptional: true,
+    description:
+      'Wall-clock budget for a full agent execution. When `maxExecutionMs` is reached, the agent aborts the run with `AGENT_EXECUTION_TIMEOUT` by default, or tries the next fallback model when `onTimeout` is `fallback-model`.',
+  },
+  {
     name: 'defaultGenerateOptionsLegacy',
     type: 'AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>',
     isOptional: true,
