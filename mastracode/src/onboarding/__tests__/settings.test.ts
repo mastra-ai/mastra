@@ -76,8 +76,8 @@ const builtinPacks = [
   {
     id: 'openai',
     models: {
-      plan: 'openai/gpt-5.4',
-      build: 'openai/gpt-5.4',
+      plan: 'openai/gpt-5.5',
+      build: 'openai/gpt-5.5',
       fast: 'openai/gpt-5.4-mini',
     },
   },
@@ -267,8 +267,8 @@ describe('resolveThreadActiveModelPackId', () => {
     const settings = createSettings({ models: { ...createSettings().models, activeModelPackId: 'anthropic' } });
 
     const resolved = resolveThreadActiveModelPackId(settings, builtinPacks, {
-      modeModelId_plan: 'openai/gpt-5.4',
-      modeModelId_build: 'openai/gpt-5.4',
+      modeModelId_plan: 'openai/gpt-5.5',
+      modeModelId_build: 'openai/gpt-5.5',
       modeModelId_fast: 'openai/gpt-5.4-mini',
     });
 

@@ -96,6 +96,13 @@ const scorer = createScorer({
     description:
       "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
   },
+  {
+    name: 'prepareRun',
+    type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
+    isOptional: true,
+    description:
+      "Transform the scorer run data before the pipeline executes. Use this to filter messages, limit context size, or drop fields the scorer doesn't need. The [`filterRun()`](/reference/evals/filter-run) utility creates this function from declarative options. Can be async.",
+  },
 ]}
 />
 

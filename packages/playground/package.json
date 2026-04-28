@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.6.4-alpha.1",
+  "version": "1.7.0-alpha.5",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -92,9 +92,9 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@playwright/test": "^1.58.2",
-    "@testing-library/react": "^16.3.2",
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/vite": "4.2.2",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",

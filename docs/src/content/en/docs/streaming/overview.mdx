@@ -40,6 +40,12 @@ Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 :::
 
+:::tip
+
+For agents that dispatch [background tasks](/docs/agents/background-tasks), use [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) to keep the stream open until those tasks complete and the agent has had a chance to respond to their results.
+
+:::
+
 ### Output from `Agent.stream()`
 
 The output streams the generated response from the agent.
@@ -144,5 +150,6 @@ A workflow stream provides access to various response properties:
 ## Related
 
 - [Streaming events](./events)
+- [Background tasks](/docs/agents/background-tasks)
 - [Using Agents](/docs/agents/overview)
 - [Workflows overview](../workflows/overview)

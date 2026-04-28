@@ -15,11 +15,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
-        {
-          type: 'doc',
-          id: 'agents/channels',
-          label: 'Channels',
-        },
+        { type: 'doc', id: 'agents/channels', label: 'Channels' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -106,21 +102,13 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
-        {
-          type: 'doc',
-          id: 'client-js/conversations',
-          label: 'Conversations API',
-        },
+        { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
         { type: 'doc', id: 'client-js/logs', label: 'Logs API' },
         { type: 'doc', id: 'client-js/mastra-client', label: 'Mastra Client SDK' },
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
-        {
-          type: 'doc',
-          id: 'client-js/responses',
-          label: 'Responses API',
-        },
+        { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
         { type: 'doc', id: 'client-js/telemetry', label: 'Telemetry API' },
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
@@ -191,6 +179,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
+        { type: 'doc', id: 'evals/filter-run', label: 'filterRun()' },
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
         { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
@@ -468,6 +457,7 @@ const sidebars = {
             { type: 'doc', id: 'streaming/agents/MastraModelOutput', label: 'MastraModelOutput' },
             { type: 'doc', id: 'streaming/agents/stream', label: '.stream()' },
             { type: 'doc', id: 'streaming/agents/streamLegacy', label: '.streamLegacy()' },
+            { type: 'doc', id: 'streaming/agents/streamUntilIdle', label: '.streamUntilIdle()' },
           ],
         },
         {
@@ -609,6 +599,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
+        { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
         { type: 'doc', id: 'workspace/docker-sandbox', label: 'DockerSandbox' },

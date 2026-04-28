@@ -1,0 +1,91 @@
+---
+title: "Background task streaming | Streaming"
+description: "Learn how to subscribe to background task lifecycle events with `BackgroundTaskManager.stream()` to monitor task status across agents, threads, and runs."
+packages:
+  - "@mastra/core"
+---
+
+# Background task streaming
+
+**Added in:** `@mastra/core@1.28.0`
+
+`mastra.backgroundTaskManager.stream()` returns a `ReadableStream` of [background task](/docs/agents/background-tasks) lifecycle events. Use it to monitor running tasks across the system, for example to drive a status dashboard, surface progress in your own UI, or pipe events into an SSE response.
+
+The stream emits the same chunk types that appear inside `Agent.streamUntilIdle()` (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`). See [background task chunks](/reference/streaming/ChunkType#background-task-chunks) for the full payload shapes.
+
+:::note
+
+Background tasks must be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) before `backgroundTaskManager` is available. When disabled, `mastra.backgroundTaskManager` is `undefined`.
+
+:::
+
+## Subscribe to all task events
+
+Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
+
+```typescript title="src/mastra/run.ts"
+const bgManager = mastra.backgroundTaskManager
+if (!bgManager) throw new Error('Background tasks are not enabled')
+
+const controller = new AbortController()
+const stream = bgManager.stream({ abortSignal: controller.signal })
+
+for await (const chunk of stream) {
+  switch (chunk.type) {
+    case 'background-task-running':
+      console.log('started', chunk.payload.taskId, chunk.payload.toolName)
+      break
+    case 'background-task-completed':
+      console.log('done', chunk.payload.taskId, chunk.payload.result)
+      break
+    case 'background-task-failed':
+      console.error('failed', chunk.payload.taskId, chunk.payload.error)
+      break
+  }
+}
+```
+
+The stream stays open until the caller's `AbortSignal` fires. Always pass an `abortSignal` so you can disconnect cleanly.
+
+## Filter the stream
+
+Pass any combination of filter options to narrow the events you receive. Filters apply to both the initial snapshot and the live event subscription.
+
+```typescript
+const stream = bgManager.stream({
+  agentId: 'researcher',
+  threadId: 't1',
+  resourceId: 'u1',
+  abortSignal: controller.signal,
+})
+```
+
+| Filter | Description |
+| - | - |
+| `agentId` | Only events from tasks dispatched by this agent |
+| `runId` | Only events from this specific agent run |
+| `threadId` | Only events from tasks scoped to this memory thread |
+| `resourceId` | Only events from tasks scoped to this resource |
+| `taskId` | Only events for a single task |
+| `abortSignal` | Closes the stream when the signal aborts |
+
+## Look up task state directly
+
+For one-off lookups instead of a live stream, use `getTask` and `listTasks`:
+
+```typescript
+const task = await mastra.backgroundTaskManager?.getTask(taskId)
+const { tasks, total } = await mastra.backgroundTaskManager?.listTasks({
+  status: 'running',
+  agentId: 'researcher',
+})
+```
+
+These read from storage rather than the pubsub stream, so they're suitable for paginated lists and detail views.
+
+## Related
+
+- [Background tasks](/docs/agents/background-tasks)
+- [`Agent.streamUntilIdle()` reference](/reference/streaming/agents/streamUntilIdle)
+- [Background task chunks](/reference/streaming/ChunkType#background-task-chunks)
+- [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)

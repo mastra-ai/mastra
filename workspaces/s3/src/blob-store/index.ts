@@ -8,6 +8,8 @@ import {
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+
 import { BlobStore } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
 
@@ -21,10 +23,19 @@ export interface S3BlobStoreOptions {
   bucket: string;
   /** AWS region (use 'auto' for R2) */
   region: string;
-  /** AWS access key ID */
-  accessKeyId: string;
-  /** AWS secret access key */
-  secretAccessKey: string;
+  /**
+   * AWS credentials or credential provider function.
+   * Accepts static credentials or a provider that auto-refreshes
+   * (e.g. fromNodeProviderChain() from @aws-sdk/credential-providers).
+   * When set, takes precedence over accessKeyId/secretAccessKey/sessionToken.
+   * When ALL credential options are omitted, the SDK default credential
+   * provider chain is used (env vars, ~/.aws, IMDS, ECS container credentials).
+   */
+  credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
+  /** AWS access key ID. Optional - omit to use the SDK default credential provider chain. */
+  accessKeyId?: string;
+  /** AWS secret access key. Optional - omit to use the SDK default credential provider chain. */
+  secretAccessKey?: string;
   /** AWS session token for temporary credentials (SSO, AssumeRole, container credentials, etc.) */
   sessionToken?: string;
   /**
@@ -94,8 +105,9 @@ export class S3BlobStore extends BlobStore {
   private _client: S3Client | null = null;
 
   private readonly region: string;
-  private readonly accessKeyId: string;
-  private readonly secretAccessKey: string;
+  private readonly credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
+  private readonly accessKeyId?: string;
+  private readonly secretAccessKey?: string;
   private readonly sessionToken?: string;
   private readonly endpoint?: string;
   private readonly forcePathStyle: boolean;
@@ -104,6 +116,7 @@ export class S3BlobStore extends BlobStore {
     super();
     this.bucket = options.bucket;
     this.region = options.region;
+    this.credentials = options.credentials;
     this.accessKeyId = options.accessKeyId;
     this.secretAccessKey = options.secretAccessKey;
     this.sessionToken = options.sessionToken;
@@ -114,13 +127,24 @@ export class S3BlobStore extends BlobStore {
 
   private getClient(): S3Client {
     if (this._client) return this._client;
+
+    const hasStaticCredentials = this.accessKeyId && this.secretAccessKey;
+
+    let credentials: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined;
+    if (this.credentials) {
+      credentials = this.credentials;
+    } else if (hasStaticCredentials) {
+      credentials = {
+        accessKeyId: this.accessKeyId!,
+        secretAccessKey: this.secretAccessKey!,
+        ...(this.sessionToken && { sessionToken: this.sessionToken }),
+      };
+    }
+    // When credentials is undefined, SDK uses its default provider chain
+
     this._client = new S3Client({
       region: this.region,
-      credentials: {
-        accessKeyId: this.accessKeyId,
-        secretAccessKey: this.secretAccessKey,
-        ...(this.sessionToken && { sessionToken: this.sessionToken }),
-      },
+      ...(credentials !== undefined && { credentials }),
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
     });
