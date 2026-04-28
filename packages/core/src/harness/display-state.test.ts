@@ -48,6 +48,7 @@ describe('defaultDisplayState', () => {
     expect(ds.previousTasks).toEqual([]);
     expect(ds.bufferingMessages).toBe(false);
     expect(ds.bufferingObservations).toBe(false);
+    expect(ds.yourNewField).toBe(false);
   });
 
   it('returns independent instances', () => {
@@ -1290,5 +1291,12 @@ describe('Display state OMProgressState', () => {
     expect(omp).toHaveProperty('generationCount');
     expect(omp).toHaveProperty('stepNumber');
     expect(omp).toHaveProperty('preReflectionTokens');
+  });
+});
+
+describe('Display state shape', () => {
+  it('includes yourNewField', () => {
+    const ds = defaultDisplayState();
+    expect(ds).toHaveProperty('yourNewField');
   });
 });

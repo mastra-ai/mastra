@@ -108,6 +108,8 @@ export class Harness<TState = {}> {
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
+  private activeChannels = new Map<string, any>(); // platform -> adapter instance
+  private channelsConfig?: HarnessConfig<TState>['channels'];
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -115,6 +117,7 @@ export class Harness<TState = {}> {
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
+    this.channelsConfig = config.channels;
 
     // Convert PublicSchema to StandardSchemaWithJSON at the boundary
     this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
@@ -240,6 +243,7 @@ export class Harness<TState = {}> {
     }
 
     this.startHeartbeats();
+    await this.startChannels();
   }
 
   /**
@@ -3224,6 +3228,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
+    await this.stopChannels();
     await this.stopHeartbeats();
     await this.destroyWorkspace();
   }
@@ -3238,6 +3243,73 @@ export class Harness<TState = {}> {
       currentModeId: this.currentModeId,
       threads: await this.listThreads(),
     };
+  }
+
+  async startChannels(): Promise<void> {
+    if (!this.channelsConfig?.adapters) return;
+
+    const adapters = this.channelsConfig.adapters;
+
+    for (const platform of Object.keys(adapters) as string[]) {
+      const adapter = adapters[platform]!;
+      try {
+        await adapter.start({
+          onMessage: async (msg: any) => {
+            this.emit({
+              type: 'channel_message_received',
+              platform,
+              threadId: msg.threadId,
+              userId: msg.userId,
+              content: String(msg.content),
+            });
+
+            await this.sendMessage({
+              content: String(msg.content),
+            });
+
+            this.emit({
+              type: 'channel_message_sent',
+              platform,
+              threadId: msg.threadId,
+            });
+          },
+        });
+
+        this.activeChannels.set(platform, adapter);
+
+        this.emit({ type: 'channel_started', platform });
+      } catch (error) {
+        this.emit({
+          type: 'channel_error',
+          platform,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  async stopChannels(): Promise<void> {
+    for (const [platform, adapter] of this.activeChannels.entries()) {
+      try {
+        await adapter.stop();
+        this.emit({ type: 'channel_stopped', platform });
+      } catch (error) {
+        this.emit({
+          type: 'channel_error',
+          platform,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    this.activeChannels.clear();
+  }
+
+  getChannelWebhookPath({ platform }: { platform: string }): string {
+    return `/api/agents/${this.id}/channels/${platform}/webhook`;
+  }
+
+  listActiveChannels(): string[] {
+    return [...this.activeChannels.keys()];
   }
 
   // ===========================================================================

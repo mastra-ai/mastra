@@ -264,6 +264,16 @@ export interface HarnessConfig<TState = {}> {
    * observability backend so that agent runs produce trace spans.
    */
   observability?: ObservabilityEntrypoint;
+
+  channels?: {
+    adapters: Record<
+      string,
+      {
+        start: (opts: { onMessage: (msg: any) => Promise<void> }) => Promise<void>;
+        stop: () => Promise<void>;
+      }
+    >;
+  };
 }
 
 /**
@@ -614,6 +624,8 @@ export interface HarnessDisplayState {
     status: 'pending' | 'in_progress' | 'completed';
     activeForm: string;
   }>;
+
+  yourNewField: boolean;
 }
 
 /**
@@ -637,6 +649,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     modifiedFiles: new Map(),
     tasks: [],
     previousTasks: [],
+    yourNewField: false,
   };
 }
 
@@ -854,7 +867,32 @@ export type HarnessEvent =
         activeForm: string;
       }>;
     }
-  | { type: 'display_state_changed'; displayState: HarnessDisplayState };
+  | { type: 'display_state_changed'; displayState: HarnessDisplayState }
+  | {
+      type: 'channel_started';
+      platform: string;
+    }
+  | {
+      type: 'channel_stopped';
+      platform: string;
+    }
+  | {
+      type: 'channel_error';
+      platform: string;
+      error: string;
+    }
+  | {
+      type: 'channel_message_received';
+      platform: string;
+      threadId?: string;
+      userId?: string;
+      content: string;
+    }
+  | {
+      type: 'channel_message_sent';
+      platform: string;
+      threadId?: string;
+    };
 
 /**
  * Listener function for harness events.
