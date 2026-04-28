@@ -405,7 +405,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Publish to npm
-        run: pnpm publish -r --filter '!@mastra/azure' --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
 
