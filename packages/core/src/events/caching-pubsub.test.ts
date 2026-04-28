@@ -445,6 +445,7 @@ describe('CachingPubSub', () => {
       failingCache.increment = async (_key: string) => {
         throw new Error('Increment failed');
       };
+      const listPushSpy = vi.spyOn(failingCache, 'listPush');
 
       const failingCachingPubsub = new CachingPubSub(innerPubsub, failingCache);
 
@@ -453,6 +454,9 @@ describe('CachingPubSub', () => {
 
       // Live subscriber should still receive the event
       expect(callback).toHaveBeenCalledTimes(1);
+
+      // listPush should NOT be called when increment failed (avoids duplicate index-0 entries)
+      expect(listPushSpy).not.toHaveBeenCalled();
     });
   });
 

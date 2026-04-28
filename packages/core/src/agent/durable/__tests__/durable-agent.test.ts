@@ -383,6 +383,25 @@ describe('DurableAgent', () => {
       // Cleanup
       globalRunRegistry.delete(result.runId);
     });
+
+    it('should call entry.cleanup() when an entry is deleted from the TTLCache', () => {
+      const cleanupSpy = vi.fn();
+      const runId = 'test-dispose-' + crypto.randomUUID();
+
+      globalRunRegistry.set(runId, {
+        tools: {},
+        model: { provider: 'test', modelId: 'test' } as any,
+        cleanup: cleanupSpy,
+      });
+
+      expect(globalRunRegistry.has(runId)).toBe(true);
+      expect(cleanupSpy).not.toHaveBeenCalled();
+
+      globalRunRegistry.delete(runId);
+
+      expect(globalRunRegistry.has(runId)).toBe(false);
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
@@ -1022,10 +1041,6 @@ describe('emit helper functions', () => {
     expect(received[0].data.type).toBe('approval');
   });
 });
-
-// ============================================================================
-// Log Level Tests (H4/M3)
-// ============================================================================
 
 // ============================================================================
 // Resume model metadata (L3)

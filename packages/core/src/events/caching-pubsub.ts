@@ -96,11 +96,13 @@ export class CachingPubSub extends PubSub {
     const counterKey = this.getCounterKey(topic);
 
     let index = 0;
+    let indexFailed = false;
     try {
       // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
       index = (await this.cache.increment(counterKey)) - 1;
     } catch (error) {
       this.logError(`[CachingPubSub] Failed to increment counter for ${topic}`, error);
+      indexFailed = true;
     }
 
     const fullEvent: Event = {
@@ -110,11 +112,13 @@ export class CachingPubSub extends PubSub {
       index,
     };
 
-    try {
-      // Cache BEFORE live publish so late-joining observers never miss events
-      await this.cache.listPush(cacheKey, fullEvent);
-    } catch (error) {
-      this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
+    if (!indexFailed) {
+      try {
+        // Cache BEFORE live publish so late-joining observers never miss events
+        await this.cache.listPush(cacheKey, fullEvent);
+      } catch (error) {
+        this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
+      }
     }
 
     // Always publish to inner PubSub — cache failure must not block live delivery

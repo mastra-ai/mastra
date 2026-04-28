@@ -20,6 +20,10 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   max: 1000,
   ttl: 10 * 60 * 1000,
   updateAgeOnGet: true,
+  dispose: entry => {
+    entry.cleanup?.();
+  },
+  noDisposeOnSet: true,
 });
 
 /**
