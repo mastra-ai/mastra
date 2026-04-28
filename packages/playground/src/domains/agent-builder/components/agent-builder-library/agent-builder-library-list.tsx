@@ -1,11 +1,11 @@
-import { Avatar, EmptyState } from '@mastra/playground-ui';
+import type { StoredAgentResponse } from '@mastra/client-js';
+import { EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import type { LibraryAgent } from '../../fixtures/library-agents';
 import { useLinkComponent } from '@/lib/framework';
 
 export type AgentBuilderLibraryListProps = {
-  agents: LibraryAgent[];
+  agents: StoredAgentResponse[];
   search?: string;
 };
 
@@ -16,10 +16,9 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return agents;
     return agents.filter(a => {
-      const name = a.name.toLowerCase();
-      const description = a.description.toLowerCase();
-      const owner = a.owner.name.toLowerCase();
-      return name.includes(q) || description.includes(q) || owner.includes(q);
+      const name = a.name?.toLowerCase() ?? '';
+      const description = a.description?.toLowerCase() ?? '';
+      return name.includes(q) || description.includes(q);
     });
   }, [agents, search]);
 
@@ -29,7 +28,7 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
         <EmptyState
           iconSlot={<SearchIcon className="h-8 w-8 text-neutral3" />}
           titleSlot="No agents match your search"
-          descriptionSlot="Try a different name, description, or owner."
+          descriptionSlot="Try a different name or description."
         />
       </div>
     );
@@ -46,13 +45,24 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
         >
           <div className="flex-1 min-w-0">
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
-            <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description}</div>
-          </div>
-          <div className="flex items-center gap-2 text-ui-sm text-neutral5 shrink-0" data-testid="library-agent-owner">
-            <Avatar name={agent.owner.name} size="sm" />
-            <span className="truncate max-w-[12rem]">{agent.owner.name}</span>
+            <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description || 'No description'}</div>
           </div>
         </Link>
+      ))}
+    </div>
+  );
+}
+
+export function AgentBuilderLibraryListSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="px-6 py-5 flex items-center gap-4" data-testid="library-skeleton-row">
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="h-3.5 w-48 bg-surface3 rounded animate-pulse" />
+            <div className="h-3 w-72 max-w-full bg-surface3 rounded animate-pulse" />
+          </div>
+        </div>
       ))}
     </div>
   );

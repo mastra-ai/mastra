@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
+import type { StoredAgentResponse } from '@mastra/client-js';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { LibraryAgent } from '../../../fixtures/library-agents';
-import { AgentBuilderLibraryList } from '../agent-builder-library-list';
+import { AgentBuilderLibraryList, AgentBuilderLibraryListSkeleton } from '../agent-builder-library-list';
 import { LinkComponentProvider } from '@/lib/framework';
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -32,7 +32,7 @@ const noopPaths = {
   experimentLink: () => '',
 } as never;
 
-function renderList(agents: LibraryAgent[], search?: string) {
+function renderList(agents: StoredAgentResponse[], search?: string) {
   return render(
     <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
       <AgentBuilderLibraryList agents={agents} search={search} />
@@ -40,48 +40,40 @@ function renderList(agents: LibraryAgent[], search?: string) {
   );
 }
 
-const fixtureAgents: LibraryAgent[] = [
+const fixtureAgents = [
   {
     id: 'lib-1',
     name: 'Customer Support Agent',
     description: 'Triages and answers customer questions.',
-    owner: { id: 'u1', name: 'Alex Doe' },
   },
   {
     id: 'lib-2',
     name: 'Research Assistant',
     description: 'Summarizes long documents.',
-    owner: { id: 'u2', name: 'Jamie Lee' },
   },
   {
     id: 'lib-3',
     name: 'Code Reviewer',
     description: 'Reviews pull requests.',
-    owner: { id: 'u3', name: 'Sam Patel' },
   },
   {
     id: 'lib-4',
     name: 'Translator',
     description: 'Translates short content.',
-    owner: { id: 'u1', name: 'Alex Doe' },
   },
-];
+] as unknown as StoredAgentResponse[];
 
 describe('AgentBuilderLibraryList', () => {
   afterEach(() => {
     cleanup();
   });
 
-  it('renders each agent name and owner', () => {
+  it('renders each agent name', () => {
     renderList(fixtureAgents);
 
     for (const agent of fixtureAgents) {
       expect(screen.getByText(agent.name)).toBeTruthy();
     }
-    expect(screen.getAllByTestId('library-agent-owner')).toHaveLength(fixtureAgents.length);
-    expect(screen.getAllByText('Alex Doe')).toHaveLength(2);
-    expect(screen.getByText('Jamie Lee')).toBeTruthy();
-    expect(screen.getByText('Sam Patel')).toBeTruthy();
   });
 
   it('links each row to the agent view page', () => {
@@ -103,13 +95,13 @@ describe('AgentBuilderLibraryList', () => {
     expect(screen.queryByText('Translator')).toBeNull();
   });
 
-  it('filters by owner name', () => {
-    renderList(fixtureAgents, 'alex');
+  it('filters by description (case-insensitive)', () => {
+    renderList(fixtureAgents, 'pull requests');
 
-    expect(screen.getByText('Customer Support Agent')).toBeTruthy();
-    expect(screen.getByText('Translator')).toBeTruthy();
+    expect(screen.getByText('Code Reviewer')).toBeTruthy();
     expect(screen.queryByText('Research Assistant')).toBeNull();
-    expect(screen.queryByText('Code Reviewer')).toBeNull();
+    expect(screen.queryByText('Customer Support Agent')).toBeNull();
+    expect(screen.queryByText('Translator')).toBeNull();
   });
 
   it('shows empty state when no rows match', () => {
@@ -117,5 +109,23 @@ describe('AgentBuilderLibraryList', () => {
 
     expect(screen.getByText('No agents match your search')).toBeTruthy();
     expect(screen.queryByTestId('library-agent-row')).toBeNull();
+  });
+});
+
+describe('AgentBuilderLibraryListSkeleton', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders the requested number of rows', () => {
+    render(<AgentBuilderLibraryListSkeleton rows={6} />);
+
+    expect(screen.getAllByTestId('library-skeleton-row')).toHaveLength(6);
+  });
+
+  it('defaults to 4 rows', () => {
+    render(<AgentBuilderLibraryListSkeleton />);
+
+    expect(screen.getAllByTestId('library-skeleton-row')).toHaveLength(4);
   });
 });
