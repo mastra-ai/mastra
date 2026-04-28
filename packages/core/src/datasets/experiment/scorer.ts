@@ -1,5 +1,6 @@
 import type { MastraScorer } from '../../evals/base';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
+import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import { EntityType } from '../../observability';
@@ -47,8 +48,30 @@ export function resolveScorers(
 }
 
 /**
+ * Attempt to extract a Trajectory from the observability trace store.
+ * Falls back to undefined if storage is unavailable or the trace has no spans.
+ */
+async function extractTrajectoryFromStorage(
+  storage: MastraCompositeStore | null,
+  traceId?: string,
+): Promise<Trajectory | undefined> {
+  if (!storage || !traceId) return undefined;
+  try {
+    const observabilityStore = await storage.getStore('observability');
+    if (!observabilityStore) return undefined;
+    const trace = await observabilityStore.getTrace({ traceId });
+    if (!trace?.spans?.length) return undefined;
+    return extractTrajectoryFromTrace(trace.spans);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Run all scorers for a single item result.
  * Errors are isolated per scorer - one failing scorer doesn't affect others.
+ * Trajectory scorers (scorer.type === 'trajectory') receive a pre-extracted
+ * Trajectory as their output, mirroring the dispatch runEvals performs.
  */
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
@@ -64,6 +87,16 @@ export async function runScorersForItem(
   traceId?: string,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
+
+  // Pre-extract trajectory once for all trajectory scorers in this batch.
+  // Try the trace store first (requires observability storage + traceId), then
+  // fall back to extracting from the raw MastraDBMessage[] scoring output.
+  const hasTrajectoryScorer = scorers.some(s => s.type === 'trajectory');
+  let trajectoryOutput: Trajectory | undefined;
+  if (hasTrajectoryScorer) {
+    const traceTrajectory = await extractTrajectoryFromStorage(storage, traceId);
+    trajectoryOutput = traceTrajectory ?? (scorerOutput ? extractTrajectory(scorerOutput) : { steps: [] });
+  }
 
   // Build correlation context so scorers can emit scores with full experiment context
   const targetCorrelationContext: CorrelationContext = {
@@ -85,6 +118,7 @@ export async function runScorersForItem(
         targetType,
         traceId,
         targetCorrelationContext,
+        scorer.type === 'trajectory' ? trajectoryOutput : undefined,
       );
 
       // Persist score if storage available and score was computed
@@ -146,6 +180,8 @@ interface ScorerPromptMetadata {
 /**
  * Run a single scorer safely, catching any errors.
  * Returns both the ScorerResult and prompt metadata for DB persistence.
+ * When trajectoryOutput is provided the scorer receives it as run.output,
+ * honoring the type: 'trajectory' contract.
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
@@ -156,14 +192,17 @@ async function runScorerSafe(
   targetType?: TargetType,
   targetTraceId?: string,
   targetCorrelationContext?: CorrelationContext,
+  trajectoryOutput?: Trajectory,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
+    const effectiveOutput = trajectoryOutput ?? scorerOutput ?? output;
+    const effectiveScope = trajectoryOutput ? 'trajectory' : 'span';
     const scoreResult: unknown = await scorer.run({
       input: scorerInput ?? item.input,
-      output: scorerOutput ?? output,
+      output: effectiveOutput,
       groundTruth: item.groundTruth,
       scoreSource: 'experiment',
-      targetScope: 'span',
+      targetScope: effectiveScope,
       targetEntityType: toScorerTargetEntityType(targetType),
       targetTraceId,
       ...(targetCorrelationContext ? { targetCorrelationContext } : {}),

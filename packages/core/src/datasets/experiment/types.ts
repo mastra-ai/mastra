@@ -1,3 +1,4 @@
+import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
@@ -48,8 +49,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
 
   // === Scoring ===
 
-  /** Scorers — MastraScorer instances or string IDs */
-  scorers?: (MastraScorer<any, any, any, any> | string)[];
+  /** Scorers — flat array, or the same categorised shape accepted by runEvals */
+  scorers?: (MastraScorer<any, any, any, any> | string)[] | AgentScorerConfig | WorkflowScorerConfig;
 
   // === Options ===
 
