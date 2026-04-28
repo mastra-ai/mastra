@@ -552,12 +552,13 @@ describe('S3Filesystem', () => {
       );
     });
 
-    it('uses anonymous credentials for public buckets', async () => {
+    it('uses SDK default credential chain when no credentials provided', async () => {
       const { S3Client } = await import('@aws-sdk/client-s3');
       const MockS3Client = vi.mocked(S3Client);
       MockS3Client.mockClear();
 
-      // When no credentials provided, S3Filesystem should handle anonymous access
+      // When no credentials provided, S3Filesystem should let the SDK
+      // discover credentials from the environment automatically
       const fs = new S3Filesystem({
         bucket: 'public-bucket',
         region: 'us-east-1',
@@ -577,13 +578,10 @@ describe('S3Filesystem', () => {
         // Expected to fail (mock), but client should be created
       }
 
-      // Verify S3Client was constructed with empty credentials and signer bypass
-      expect(MockS3Client).toHaveBeenCalledWith(
-        expect.objectContaining({
-          credentials: { accessKeyId: '', secretAccessKey: '' },
-          signer: expect.objectContaining({ sign: expect.any(Function) }),
-        }),
-      );
+      // Verify S3Client was constructed without credentials or signer
+      const callArgs = MockS3Client.mock.calls[0]![0]!;
+      expect(callArgs).not.toHaveProperty('credentials');
+      expect(callArgs).not.toHaveProperty('signer');
     });
   });
 
@@ -709,6 +707,81 @@ describe('S3Filesystem', () => {
       const info = fs.getInfo();
       expect(info.metadata?.prefix).toBe('foo/bar/');
     });
+  });
+});
+
+describe('Credential resolution', () => {
+  beforeEach(async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    vi.mocked(S3Client).mockClear();
+  });
+
+  it('uses credentials provider when provided', async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const provider = vi.fn();
+    const fs = new S3Filesystem({
+      bucket: 'test',
+      region: 'us-east-1',
+      credentials: provider,
+    });
+
+    // Trigger client creation
+    fs.client;
+
+    expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ credentials: provider }));
+  });
+
+  it('uses static credentials when accessKeyId/secretAccessKey provided', async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const fs = new S3Filesystem({
+      bucket: 'test',
+      region: 'us-east-1',
+      accessKeyId: 'AKID',
+      secretAccessKey: 'SECRET',
+      sessionToken: 'TOKEN',
+    });
+
+    fs.client;
+
+    expect(S3Client).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: {
+          accessKeyId: 'AKID',
+          secretAccessKey: 'SECRET',
+          sessionToken: 'TOKEN',
+        },
+      }),
+    );
+  });
+
+  it('uses SDK default credential chain when no credentials provided', async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const fs = new S3Filesystem({
+      bucket: 'test',
+      region: 'us-east-1',
+    });
+
+    fs.client;
+
+    const callArgs = vi.mocked(S3Client).mock.calls[0]![0]!;
+    expect(callArgs).not.toHaveProperty('credentials');
+    expect(callArgs).not.toHaveProperty('signer');
+  });
+
+  it('credentials option takes precedence over accessKeyId/secretAccessKey', async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const provider = vi.fn();
+    const fs = new S3Filesystem({
+      bucket: 'test',
+      region: 'us-east-1',
+      credentials: provider,
+      accessKeyId: 'AKID',
+      secretAccessKey: 'SECRET',
+    });
+
+    fs.client;
+
+    expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ credentials: provider }));
   });
 });
 
