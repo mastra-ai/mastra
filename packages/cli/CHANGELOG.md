@@ -1,5 +1,17 @@
 # mastra
 
+## 1.7.0-alpha.3
+
+### Minor Changes
+
+- Added Feedback tab to the trace/span detail view in Studio. When a trace has feedback (thumbs up/down, ratings, comments, corrections), a Feedback tab appears alongside Details and Scoring with a count badge. Clicking an entry opens a detail dialog showing the full feedback record including source, type, value, comment, and metadata. ([#15642](https://github.com/mastra-ai/mastra/pull/15642))
+
+### Patch Changes
+
+- Updated dependencies [[`c04417b`](https://github.com/mastra-ai/mastra/commit/c04417ba0a2e4ded66da4352331ef29cd4bd1d79), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51), [`ba6b0c5`](https://github.com/mastra-ai/mastra/commit/ba6b0c51bfce358554fd33c7f2bcd5593633f2ff)]:
+  - @mastra/core@1.29.0-alpha.3
+  - @mastra/deployer@1.29.0-alpha.3
+
 ## 1.6.4-alpha.2
 
 ### Patch Changes
