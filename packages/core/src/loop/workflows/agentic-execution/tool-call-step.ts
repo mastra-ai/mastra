@@ -33,6 +33,8 @@ type AddToolMetadataOptions = {
   resumeSchema: string;
   suspendedToolRunId?: string;
   metadata?: Record<string, unknown>;
+  subAgentThreadId?: string;
+  subAgentResourceId?: string;
 } & (
   | {
       type: 'approval';
@@ -133,6 +135,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         type,
         suspendedToolRunId,
         metadata: toolStateTransformMetadata,
+        subAgentThreadId,
+        subAgentResourceId,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
@@ -176,6 +180,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
+            ...(subAgentThreadId ? { subAgentThreadId } : {}),
+            ...(subAgentResourceId ? { subAgentResourceId } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
           };
@@ -522,6 +528,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 type: 'approval',
                 suspendedToolRunId: options.runId,
+                subAgentThreadId: options.subAgentThreadId,
+                subAgentResourceId: options.subAgentResourceId,
                 resumeSchema: JSON.stringify(
                   standardSchemaToJSONSchema(
                     toStandardSchema(
@@ -580,6 +588,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args,
                 suspendPayload,
                 suspendedToolRunId: options?.runId,
+                subAgentThreadId: options?.subAgentThreadId,
+                subAgentResourceId: options?.subAgentResourceId,
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
                 metadata: suspensionChunk.metadata,
@@ -640,6 +650,25 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
+
+            // For agent tools, also restore the sub-agent thread/resource IDs
+            // so the specialist resumes with the same memory context.
+            if (isAgentTool) {
+              for (const message of assistantMessages) {
+                const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
+                  message.content.metadata?.pendingToolApprovals) as Record<string, any>;
+                if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
+                  const meta = pendingOrSuspendedTools[inputData.toolName];
+                  if (meta.subAgentThreadId) {
+                    args.suspendedSubAgentThreadId = meta.subAgentThreadId;
+                  }
+                  if (meta.subAgentResourceId) {
+                    args.suspendedSubAgentResourceId = meta.subAgentResourceId;
+                  }
+                  break;
+                }
+              }
+            }
           }
         }
 
