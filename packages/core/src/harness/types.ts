@@ -129,6 +129,31 @@ export type HarnessStateSchema<T> = T;
  */
 export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
 
+export type ChannelMessage = {
+  content: string;
+  threadId?: string;
+  userId?: string;
+};
+
+export interface ChannelAdapter {
+  start: (opts: {
+    onMessage: (msg: ChannelMessage) => Promise<void>;
+
+    send: (msg: ChannelMessage) => Promise<void>;
+
+    config?: {
+      threadContext?: { maxMessages?: number };
+      inlineMedia?: boolean;
+      inlineLinks?: boolean;
+    };
+  }) => Promise<void>;
+
+  stop: () => Promise<void>;
+
+  // optional override (platform-specific send)
+  send?: (msg: ChannelMessage) => Promise<void>;
+}
+
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
   id: string;
@@ -264,6 +289,17 @@ export interface HarnessConfig<TState = {}> {
    * observability backend so that agent runs produce trace spans.
    */
   observability?: ObservabilityEntrypoint;
+
+  channels?: {
+    adapters: Record<string, ChannelAdapter>;
+
+    threadContext?: {
+      maxMessages?: number;
+    };
+
+    inlineMedia?: boolean;
+    inlineLinks?: boolean;
+  };
 }
 
 /**
@@ -614,6 +650,8 @@ export interface HarnessDisplayState {
     status: 'pending' | 'in_progress' | 'completed';
     activeForm: string;
   }>;
+
+  yourNewField: boolean;
 }
 
 /**
@@ -637,6 +675,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     modifiedFiles: new Map(),
     tasks: [],
     previousTasks: [],
+    yourNewField: false,
   };
 }
 
@@ -854,7 +893,32 @@ export type HarnessEvent =
         activeForm: string;
       }>;
     }
-  | { type: 'display_state_changed'; displayState: HarnessDisplayState };
+  | { type: 'display_state_changed'; displayState: HarnessDisplayState }
+  | {
+      type: 'channel_started';
+      platform: string;
+    }
+  | {
+      type: 'channel_stopped';
+      platform: string;
+    }
+  | {
+      type: 'channel_error';
+      platform: string;
+      error: string;
+    }
+  | {
+      type: 'channel_message_received';
+      platform: string;
+      threadId?: string;
+      userId?: string;
+      content: string;
+    }
+  | {
+      type: 'channel_message_sent';
+      platform: string;
+      threadId?: string;
+    };
 
 /**
  * Listener function for harness events.
