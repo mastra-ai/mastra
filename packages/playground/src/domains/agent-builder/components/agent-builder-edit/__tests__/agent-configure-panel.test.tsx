@@ -10,7 +10,7 @@ import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentConfigurePanel } from '../agent-configure-panel';
 
-const BASE_URL = 'http://localhost:4112';
+const BASE_URL = 'http://localhost:4111';
 
 const mockUseBuilderAgentFeatures = vi.fn();
 
@@ -267,5 +267,56 @@ describe('AgentConfigurePanel instructions persistence', () => {
     });
 
     expect(formMethodsRef!.getValues('instructions')).toBe('New instructions from user');
+  });
+});
+
+describe('AgentConfigurePanel disabled propagation', () => {
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: true,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: true,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('disables name, description, avatar trigger, and config rows when disabled is true', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel disabled />
+      </FormWrapper>,
+    );
+
+    const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
+    const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
+    const avatarBtn = screen.getByTestId('agent-configure-avatar-trigger') as HTMLButtonElement;
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
+    const toolsRow = screen.getByTestId('agent-preview-tools-button') as HTMLButtonElement;
+
+    expect(nameInput.disabled).toBe(true);
+    expect(descInput.disabled).toBe(true);
+    expect(avatarBtn.disabled).toBe(true);
+    expect(instructionsRow.disabled).toBe(true);
+    expect(toolsRow.disabled).toBe(true);
+  });
+
+  it('renders enabled controls by default', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel />
+      </FormWrapper>,
+    );
+
+    const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
+
+    expect(nameInput.disabled).toBe(false);
+    expect(instructionsRow.disabled).toBe(false);
   });
 });

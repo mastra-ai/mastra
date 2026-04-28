@@ -24,7 +24,11 @@ vi.mock('@/domains/agent-builder/hooks/use-save-agent', () => ({
 }));
 
 vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false }),
+  useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false, skills: false }),
+}));
+
+vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
+  useStoredSkills: () => ({ data: { skills: [] }, isPending: false }),
 }));
 
 vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
@@ -62,6 +66,16 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
 // Heavy panels not under test — replace with dumb stubs.
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/conversation-panel', () => ({
   ConversationPanel: () => <div data-testid="stub-conversation-panel" />,
+  ConversationPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-provider', () => ({
+  StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-context', () => ({
+  useStreamRunning: () => false,
+  useStreamMessages: () => [],
+  useStreamSend: () => () => {},
 }));
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
   AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,
@@ -142,13 +156,13 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
 
-    it('Save still navigates to the agents list after a successful save', async () => {
+    it('Save navigates to the view page after a successful save', async () => {
       const { getByTestId } = renderAt();
       fireEvent.click(getByTestId('agent-builder-edit-save'));
 
       await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(navigateMock).toHaveBeenCalled());
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
   });
 

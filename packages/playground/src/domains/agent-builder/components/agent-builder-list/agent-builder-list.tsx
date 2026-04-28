@@ -113,7 +113,6 @@ export function AgentBuilderListSkeleton({ rows = 4 }: { rows?: number }) {
     <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="px-6 py-5 flex items-center gap-4">
-          <div className="h-9 w-9 rounded-md bg-surface3 animate-pulse" />
           <div className="flex-1 min-w-0 space-y-2">
             <div className="h-3.5 w-48 bg-surface3 rounded animate-pulse" />
             <div className="h-3 w-72 max-w-full bg-surface3 rounded animate-pulse" />

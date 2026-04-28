@@ -15,6 +15,7 @@ type Features = {
   memory: boolean;
   workflows: boolean;
   agents: boolean;
+  skills: boolean;
 };
 
 const sentMessages: Array<{ message: string; clientTools: Record<string, any> }> = [];
@@ -34,6 +35,10 @@ vi.mock('@mastra/react', () => ({
 
 vi.mock('@/hooks/use-agent-messages', () => ({
   useAgentMessages: () => ({ data: { messages: [] }, isLoading: false }),
+}));
+
+vi.mock('@/domains/agents/hooks/use-create-skill', () => ({
+  useCreateSkill: () => ({ mutateAsync: vi.fn() }),
 }));
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
@@ -89,8 +94,8 @@ const getAgentBuilderTool = () => {
   return tool;
 };
 
-const allOff: Features = { tools: false, memory: false, workflows: false, agents: false };
-const allOn: Features = { tools: true, memory: false, workflows: false, agents: false };
+const allOff: Features = { tools: false, memory: false, workflows: false, agents: false, skills: false };
+const allOn: Features = { tools: true, memory: false, workflows: false, agents: false, skills: false };
 
 describe('ConversationPanel agent-builder client tool', () => {
   beforeEach(() => {
@@ -360,6 +365,29 @@ describe('ConversationPanel agent-builder client tool', () => {
     await tool.execute({ name: 'N', instructions: 'I' });
 
     expect(formMethodsRef!.getValues('workspaceId')).toBeUndefined();
+  });
+
+  it('does not include createSkillTool when features.skills is false', () => {
+    renderPanel(allOff);
+    expect(sentMessages.length).toBeGreaterThan(0);
+    const clientTools = sentMessages[0].clientTools;
+
+    expect(clientTools.agentBuilderTool).toBeDefined();
+    expect(clientTools.createSkillTool).toBeUndefined();
+  });
+
+  it('includes createSkillTool when features.skills is true', () => {
+    renderPanel({ ...allOff, skills: true }, [], [{ id: 'ws-1', name: 'Primary' }]);
+    expect(sentMessages.length).toBeGreaterThan(0);
+    const clientTools = sentMessages[0].clientTools;
+
+    expect(clientTools.agentBuilderTool).toBeDefined();
+    expect(clientTools.createSkillTool).toBeDefined();
+    const createSkill = clientTools.createSkillTool;
+    expect(createSkill.id).toBe('createSkillTool');
+    expect(createSkill.inputSchema.shape.name).toBeDefined();
+    expect(createSkill.inputSchema.shape.description).toBeDefined();
+    expect(createSkill.inputSchema.shape.instructions).toBeDefined();
   });
 });
 

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTool } from '../../../types/agent-tool';
 import { buildAgentBuilderToolSchema } from '../build-tool-schema';
 
-const allOff = { tools: false, memory: false, workflows: false, agents: false };
-const allOn = { tools: true, memory: false, workflows: false, agents: false };
+const allOff = { tools: false, memory: false, workflows: false, agents: false, skills: false };
+const allOn = { tools: true, memory: false, workflows: false, agents: false, skills: false };
 
 describe('buildAgentBuilderToolSchema', () => {
   it('exposes name and instructions as required and omits tools when its flag is off', () => {
@@ -39,6 +39,42 @@ describe('buildAgentBuilderToolSchema', () => {
         name: 'N',
         instructions: 'I',
         tools: [{ id: 'unknown', name: 'Unknown' }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('exposes the skills field only when feature is on and there is at least one skill', () => {
+    const skill = {
+      id: 'skill-a',
+      status: 'published',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      name: 'skill-a',
+      instructions: 'inst',
+    } as never;
+
+    const offShape = buildAgentBuilderToolSchema(allOff, [], [], [skill]).shape;
+    expect(offShape.skills).toBeUndefined();
+
+    const onNoSkills = buildAgentBuilderToolSchema({ ...allOff, skills: true }, [], [], []).shape;
+    expect(onNoSkills.skills).toBeUndefined();
+
+    const schema = buildAgentBuilderToolSchema({ ...allOff, skills: true }, [], [], [skill]);
+    expect(schema.shape.skills).toBeDefined();
+
+    expect(
+      schema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        skills: [{ id: 'skill-a', name: 'Skill A' }],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      schema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        skills: [{ id: 'unknown', name: 'Unknown' }],
       }).success,
     ).toBe(false);
   });

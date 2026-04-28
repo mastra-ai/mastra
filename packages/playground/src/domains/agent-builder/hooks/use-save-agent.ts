@@ -1,3 +1,4 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui';
 import { useCallback } from 'react';
 import { formValuesToSaveParams } from '../mappers/form-values-to-save-params';
@@ -9,15 +10,22 @@ interface UseSaveAgentArgs {
   agentId: string;
   mode: 'create' | 'edit';
   availableAgentTools?: AgentTool[];
+  availableSkills?: StoredSkillResponse[];
   onSuccess?: (agentId: string) => void;
 }
 
-export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSuccess }: UseSaveAgentArgs) {
+export function useSaveAgent({
+  agentId,
+  mode,
+  availableAgentTools = [],
+  availableSkills = [],
+  onSuccess,
+}: UseSaveAgentArgs) {
   const { createStoredAgent, updateStoredAgent } = useStoredAgentMutations(agentId);
 
   const save = useCallback(
     async (values: AgentBuilderEditFormValues) => {
-      const params = formValuesToSaveParams(values, availableAgentTools);
+      const params = formValuesToSaveParams(values, availableAgentTools, availableSkills);
       const workspaceField = params.workspace ? { workspace: params.workspace } : {};
       const metadataField = params.metadata ? { metadata: params.metadata } : {};
 
@@ -30,6 +38,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
             tools: params.tools,
             agents: params.agents,
             workflows: params.workflows,
+            skills: params.skills,
             visibility: params.visibility,
             ...workspaceField,
             ...metadataField,
@@ -48,6 +57,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
           tools: params.tools,
           agents: params.agents,
           workflows: params.workflows,
+          skills: params.skills,
           visibility: params.visibility,
           ...workspaceField,
           ...metadataField,
@@ -60,7 +70,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
         throw error;
       }
     },
-    [agentId, mode, availableAgentTools, createStoredAgent, updateStoredAgent, onSuccess],
+    [agentId, mode, availableAgentTools, availableSkills, createStoredAgent, updateStoredAgent, onSuccess],
   );
 
   return { save, isSaving: createStoredAgent.isPending || updateStoredAgent.isPending };

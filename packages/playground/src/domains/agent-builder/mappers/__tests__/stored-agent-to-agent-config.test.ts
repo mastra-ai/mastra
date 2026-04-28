@@ -8,18 +8,18 @@ describe('storedAgentToAgentConfig', () => {
       name: '',
       description: '',
       systemPrompt: '',
+      authorId: undefined,
       visibility: 'private',
       avatarUrl: undefined,
-      authorId: undefined,
     });
     expect(storedAgentToAgentConfig(undefined, 'fallback-id')).toEqual({
       id: 'fallback-id',
       name: '',
       description: '',
       systemPrompt: '',
+      authorId: undefined,
       visibility: 'private',
       avatarUrl: undefined,
-      authorId: undefined,
     });
   });
 
@@ -39,9 +39,9 @@ describe('storedAgentToAgentConfig', () => {
       name: 'Researcher',
       description: 'Helps with research',
       systemPrompt: 'Be helpful',
+      authorId: undefined,
       visibility: 'private',
       avatarUrl: undefined,
-      authorId: undefined,
     });
   });
 

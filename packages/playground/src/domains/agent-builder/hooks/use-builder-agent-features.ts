@@ -10,5 +10,6 @@ export const useBuilderAgentFeatures = () => {
     workflows: features?.workflows === true,
     agents: features?.agents === true,
     avatarUpload: features?.avatarUpload === true,
+    skills: features?.skills === true,
   };
 };
