@@ -61,14 +61,8 @@ export const StarButton = ({
         className,
       )}
     >
-      <Star
-        size={config.icon}
-        className={cn('shrink-0', isStarred && 'fill-current')}
-        aria-hidden
-      />
-      {showCount && typeof starCount === 'number' && (
-        <span className="tabular-nums leading-none">{starCount}</span>
-      )}
+      <Star size={config.icon} className={cn('shrink-0', isStarred && 'fill-current')} aria-hidden />
+      {showCount && typeof starCount === 'number' && <span className="tabular-nums leading-none">{starCount}</span>}
     </button>
   );
 };

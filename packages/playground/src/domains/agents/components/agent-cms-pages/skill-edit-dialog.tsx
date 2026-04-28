@@ -7,6 +7,7 @@ import { useCreateSkill } from '../../hooks/use-create-skill';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import { createInitialStructure, updateRootFolderName } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
+import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
 import { useWorkspaces } from '@/domains/workspace/hooks';
 
 export interface SkillEditDialogProps {
@@ -25,21 +26,29 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
   const prevNameRef = useRef('');
   const createSkill = useCreateSkill();
   const { data: workspacesData } = useWorkspaces();
+  const { data: builderSettings } = useBuilderSettings();
   const workspaceOptions = useMemo(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
     [workspacesData],
   );
+
+  const builderDefaultWorkspaceId = useMemo(() => {
+    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
+      | { type: string; workspaceId?: string }
+      | undefined;
+    return ws?.type === 'id' ? ws.workspaceId : undefined;
+  }, [builderSettings]);
 
   useEffect(() => {
     if (isOpen) {
       setName('');
       setDescription('');
       setVisibility('private');
-      setWorkspaceId(workspaceOptions.length === 1 ? workspaceOptions[0].value : '');
+      setWorkspaceId(builderDefaultWorkspaceId ?? (workspaceOptions.length === 1 ? workspaceOptions[0].value : ''));
       setFiles([]);
       prevNameRef.current = '';
     }
-  }, [isOpen, workspaceOptions]);
+  }, [isOpen, workspaceOptions, builderDefaultWorkspaceId]);
 
   const handleNameChange = useCallback(
     (newName: string) => {

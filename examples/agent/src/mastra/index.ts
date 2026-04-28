@@ -151,6 +151,7 @@ export const mastra = new Mastra({
           agents: true,
           workflows: true,
           stars: true,
+          skills: true,
         },
         skill: {
           stars: true,
