@@ -12,6 +12,7 @@ export const agentFeaturesSchema = z.object({
   skills: z.boolean().optional(),
   memory: z.boolean().optional(),
   variables: z.boolean().optional(),
+  avatarUpload: z.boolean().optional(),
 });
 
 /**

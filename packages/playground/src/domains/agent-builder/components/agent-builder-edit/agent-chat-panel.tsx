@@ -15,6 +15,7 @@ interface AgentChatPanelProviderProps {
   agentId: string;
   agentName?: string;
   agentDescription?: string;
+  agentAvatarUrl?: string;
   children: ReactNode;
 }
 
@@ -22,6 +23,7 @@ interface AgentChatMeta {
   isConversationLoading: boolean;
   agentName?: string;
   agentDescription?: string;
+  agentAvatarUrl?: string;
 }
 
 const AgentChatMetaContext = createContext<AgentChatMeta>({ isConversationLoading: false });
@@ -30,6 +32,7 @@ export const AgentChatPanelProvider = ({
   agentId,
   agentName,
   agentDescription,
+  agentAvatarUrl,
   children,
 }: AgentChatPanelProviderProps) => {
   const { data, isLoading: isConversationLoading } = useAgentMessages({
@@ -45,8 +48,8 @@ export const AgentChatPanelProvider = ({
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
 
   const meta = useMemo<AgentChatMeta>(
-    () => ({ isConversationLoading, agentName, agentDescription }),
-    [isConversationLoading, agentName, agentDescription],
+    () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
+    [isConversationLoading, agentName, agentDescription, agentAvatarUrl],
   );
 
   return (
@@ -80,7 +83,7 @@ export const AgentChatPanel = (props: AgentChatPanelProps) => (
 const AgentChatMessageList = () => {
   const messages = useStreamMessages();
   const isRunning = useStreamRunning();
-  const { isConversationLoading, agentName, agentDescription } = useContext(AgentChatMetaContext);
+  const { isConversationLoading, agentName, agentDescription, agentAvatarUrl } = useContext(AgentChatMetaContext);
 
   return (
     <MessageList
@@ -94,7 +97,7 @@ const AgentChatMessageList = () => {
           data-testid="agent-builder-agent-chat-empty-state"
         >
           <div className="starter-chip" style={{ animationDelay: '0ms' }}>
-            <Avatar name={agentName ?? 'Agent'} size="lg" />
+            <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
           </div>
           <div className="starter-chip" style={{ animationDelay: '150ms' }}>
             <Txt variant="ui-md" className="text-neutral6 font-medium">
@@ -131,7 +134,6 @@ const AgentChatComposer = () => {
       placeholder="Message your agent…"
       inputTestId="agent-builder-agent-chat-input"
       submitTestId="agent-builder-agent-chat-submit"
-      viewTransitionName="agent-builder-prompt"
     />
   );
 };

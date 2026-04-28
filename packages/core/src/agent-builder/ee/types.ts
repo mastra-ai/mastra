@@ -35,6 +35,7 @@ export interface AgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
+  avatarUpload?: boolean;
 }
 
 /**
