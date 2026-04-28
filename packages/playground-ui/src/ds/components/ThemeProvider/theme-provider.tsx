@@ -1,4 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { ThemeContext, type ResolvedTheme, type Theme, type ThemeContextValue } from './theme-context';
 import { createLocalStorageAdapter } from './storage-adapter';
@@ -33,6 +33,7 @@ const applyThemeClass = (target: HTMLElement, resolved: ResolvedTheme) => {
 
 export const ThemeProvider = ({ children, defaultTheme = 'system', storageKey, target }: ThemeProviderProps) => {
   const adapter = useMemo(() => createLocalStorageAdapter(storageKey), [storageKey]);
+  const previousTargetRef = useRef<HTMLElement | null>(null);
 
   const [theme, setThemeState] = useState<Theme>(() => adapter.get() ?? defaultTheme);
   const systemTheme = useSyncExternalStore(subscribeSystemTheme, getSystemTheme, () => 'dark' as const);
@@ -43,7 +44,11 @@ export const ThemeProvider = ({ children, defaultTheme = 'system', storageKey, t
 
   useIsomorphicLayoutEffect(() => {
     const el = target ?? (typeof window === 'undefined' ? null : window.document.documentElement);
+    if (previousTargetRef.current && previousTargetRef.current !== el) {
+      previousTargetRef.current.classList.remove('dark', 'light');
+    }
     if (el) applyThemeClass(el, resolvedTheme);
+    previousTargetRef.current = el;
   }, [resolvedTheme, target]);
 
   const value = useMemo<ThemeContextValue>(

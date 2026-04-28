@@ -51,7 +51,11 @@ describe('useTheme', () => {
     it('exposes a no-op setTheme so callers do not crash', () => {
       mockMatchMedia(false);
       const { result } = renderHook(() => useTheme());
+      const initialTheme = result.current.theme;
+      const initialResolvedTheme = result.current.resolvedTheme;
       expect(() => result.current.setTheme('dark')).not.toThrow();
+      expect(result.current.theme).toBe(initialTheme);
+      expect(result.current.resolvedTheme).toBe(initialResolvedTheme);
     });
   });
 
