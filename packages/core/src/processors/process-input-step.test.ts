@@ -277,6 +277,75 @@ describe('processInputStep', () => {
   });
 
   describe('message part type transformation', () => {
+    it('should let processors set model context messages without mutating MessageList', async () => {
+      const seenByObserver: MastraDBMessage[][] = [];
+
+      const contextProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ messages }) => {
+          return {
+            modelContextMessages: messages.filter(message => message.id !== 'tool-result'),
+          };
+        },
+      };
+
+      const observerProcessor: Processor = {
+        id: 'observer-processor',
+        processInputStep: async ({ messages }) => {
+          seenByObserver.push(messages);
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [contextProcessor, observerProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+      messageList.add(
+        [
+          {
+            id: 'tool-result',
+            role: 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'lookup',
+                    args: {},
+                    result: 'SECRET_RESULT',
+                  },
+                },
+              ],
+            },
+            createdAt: new Date(),
+            threadId: 'test-thread',
+          } as unknown as MastraDBMessage,
+        ],
+        'response',
+      );
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result.modelContextMessages?.map(message => message.id)).not.toContain('tool-result');
+      expect(seenByObserver[0]?.map(message => message.id)).not.toContain('tool-result');
+      expect(messageList.get.all.db().map(message => message.id)).toContain('tool-result');
+      expect(JSON.stringify(messageList.get.all.db())).toContain('SECRET_RESULT');
+    });
+
     it('should transform message part types at each step', async () => {
       let transformationCount = 0;
 
@@ -1906,6 +1975,34 @@ describe('processInputStep', () => {
           steps: [],
         }),
       ).rejects.toThrow(/returned both messages and messageList/);
+    });
+
+    it('should reject returning both messages and modelContextMessages together', async () => {
+      const processor: Processor = {
+        id: 'both-context-processor',
+        processInputStep: async ({ messages }) => {
+          return { messages, modelContextMessages: messages };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/returned both messages and modelContextMessages/);
     });
 
     it('should reject v1 models', async () => {

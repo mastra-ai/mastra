@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
+import { ToolCallFilter } from '../processors/processors/tool-call-filter';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
@@ -3277,6 +3278,96 @@ describe('Workflow as Processor', () => {
   });
 
   describe('processInputStep steps accumulation', () => {
+    it('should filter only model context without dropping tool results from the run output', async () => {
+      const prompts: LanguageModelV2Prompt[] = [];
+
+      const searchTool = createTool({
+        id: 'search',
+        description: 'Searches old data',
+        inputSchema: z.object({}),
+        outputSchema: z.string(),
+        execute: async () => 'OLD_TOOL_RESULT',
+      });
+
+      const lookupTool = createTool({
+        id: 'lookup',
+        description: 'Looks up fresh data',
+        inputSchema: z.object({}),
+        outputSchema: z.string(),
+        execute: async () => 'LATEST_TOOL_RESULT',
+      });
+
+      let callCount = 0;
+      const multiStepModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          prompts.push(prompt);
+          callCount++;
+
+          if (callCount === 1) {
+            return {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  id: 'tc-1',
+                  toolCallId: 'old-call',
+                  toolName: 'search',
+                  args: JSON.stringify({}),
+                },
+              ],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: prompt, rawSettings: {} },
+              warnings: [],
+            };
+          }
+
+          if (callCount === 2) {
+            return {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  id: 'tc-2',
+                  toolCallId: 'latest-call',
+                  toolName: 'lookup',
+                  args: JSON.stringify({}),
+                },
+              ],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: prompt, rawSettings: {} },
+              warnings: [],
+            };
+          }
+
+          return {
+            content: [{ type: 'text' as const, text: 'Done!' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: prompt, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'tool-call-filter-context-test-agent',
+        name: 'Tool Call Filter Context Test Agent',
+        instructions: 'Use tools before answering.',
+        model: multiStepModel,
+        tools: { search: searchTool, lookup: lookupTool },
+        inputProcessors: [new ToolCallFilter()],
+      });
+
+      const result = await agent.generate('Find data');
+      const finalPrompt = JSON.stringify(prompts.at(-1));
+
+      expect(result.text).toBe('Done!');
+      expect(finalPrompt).not.toContain('OLD_TOOL_RESULT');
+      expect(finalPrompt).toContain('LATEST_TOOL_RESULT');
+      expect(JSON.stringify(result.toolResults)).toContain('OLD_TOOL_RESULT');
+      expect(JSON.stringify(result.toolResults)).toContain('LATEST_TOOL_RESULT');
+    });
+
     it('should pass accumulated steps to processInputStep across agentic loop iterations', async () => {
       const stepLog: { stepNumber: number; stepsLength: number }[] = [];
 

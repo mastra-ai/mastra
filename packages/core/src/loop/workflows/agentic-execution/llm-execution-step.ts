@@ -4,7 +4,8 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage } from '../../../agent/message-list';
+import { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -79,6 +80,20 @@ function buildResponseModelMetadata(
   }
 
   return Object.keys(metadata).length > 0 ? { metadata } : undefined;
+}
+
+function createModelContextMessageList(messageList: MessageList, messages: MastraDBMessage[]): MessageList {
+  const contextMessageList = new MessageList();
+  contextMessageList.deserialize(messageList.serialize());
+  const sourceChecker = contextMessageList.makeMessageSourceChecker();
+  contextMessageList.clear.all.db();
+  for (const message of messages) {
+    contextMessageList.add(
+      message,
+      sourceChecker.getSource(message) ?? (message.role === 'user' ? 'input' : 'response'),
+    );
+  }
+  return contextMessageList;
 }
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -440,6 +455,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             providerOptions?: SharedProviderOptions | undefined;
             modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
             structuredOutput?: StructuredOutputOptions<OUTPUT>;
+            modelContextMessages?: MastraDBMessage[];
             workspace?: Workspace;
           } = {
             messageId: currentMessageId,
@@ -663,7 +679,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          const promptMessageList = currentStep.modelContextMessages
+            ? createModelContextMessageList(messageList, currentStep.modelContextMessages)
+            : messageList;
+          let inputMessages = await promptMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();

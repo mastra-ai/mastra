@@ -160,7 +160,7 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 
 ### `messages` vs `messageList`
 
-- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence.
+- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence. In `processInputStep`, if an earlier processor returned `modelContextMessages`, this argument is that prompt-only message array instead of the canonical `messageList` messages.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
 Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
@@ -177,6 +177,8 @@ When memory is enabled, only what ends up in `messageList` after all processors 
 
 - Mutating `messageList` directly (or returning the same `MessageList` instance) — recorded mutations are applied in place, so the saved conversation reflects your changes.
 - Returning a `MastraDBMessage[]` or `{ messages, systemMessages }` — Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
+
+Returning `{ modelContextMessages }` from `processInputStep` changes only the messages used for the next model prompt. It does not mutate `messageList` and is not persisted. Later `processInputStep` processors in the same step receive those prompt-only messages as their `messages` argument.
 
 Returning a different `MessageList` instance is an error; always mutate the one passed to your processor.
 
@@ -333,7 +335,8 @@ processInputStep?<TTripwireMetadata = unknown>(
   {
     name: 'messages',
     type: 'MastraDBMessage[]',
-    description: 'All messages including tool calls and results from previous steps (read-only snapshot).',
+    description:
+      'All messages including tool calls and results from previous steps, or the prompt-only modelContextMessages returned by an earlier processInputStep processor in the same step.',
     isOptional: false,
   },
   {
@@ -437,7 +440,7 @@ processInputStep?<TTripwireMetadata = unknown>(
 
 - **`ProcessInputStepResult` object** — override any combination of the properties below for this step (described next).
 - **`MessageList`** — return the same `messageList` instance to signal you mutated messages in place.
-- **`MastraDBMessage[]`** — return a transformed messages array; replaces the step's messages.
+- **`MastraDBMessage[]`** — return a transformed messages array. If a prior processor has returned `modelContextMessages`, this updates the prompt-only message context; otherwise Mastra reconciles the array against `messageList`.
 - **`void` or `undefined`** — return nothing to leave the step unchanged.
 
 The object form can return any combination of these properties:
@@ -471,7 +474,15 @@ The object form can return any combination of these properties:
   {
     name: 'messages',
     type: 'MastraDBMessage[]',
-    description: 'Replace all messages. Cannot be used with messageList.',
+    description:
+      'Replace all messages for this step. If modelContextMessages is already active from an earlier processor, this replaces that prompt-only context. Cannot be used with messageList or modelContextMessages.',
+    isOptional: true,
+  },
+  {
+    name: 'modelContextMessages',
+    type: 'MastraDBMessage[]',
+    description:
+      'Replace the messages used to build the next model prompt without mutating the canonical messageList. Later processInputStep processors in the same step receive these messages as their messages argument.',
     isOptional: true,
   },
   {

@@ -1037,7 +1037,7 @@ export class ProcessorRunner {
 
     // Run through all input processors that have processInputStep
     for (const [index, processorOrWorkflow] of processors.entries()) {
-      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const processableMessages: MastraDBMessage[] = stepInput.modelContextMessages ?? messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
@@ -1169,9 +1169,18 @@ export class ProcessorRunner {
             stepNumber,
           },
         );
-        const { messages, systemMessages, ...rest } = result;
+        const { messages, systemMessages, modelContextMessages, ...rest } = result;
+        if (modelContextMessages) {
+          stepInput.modelContextMessages = modelContextMessages;
+        }
         if (messages) {
-          ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+          if (stepInput.modelContextMessages) {
+            // Once a processor opts into prompt-only model context, later message array transforms
+            // keep chaining against that transient prompt context instead of mutating MessageList.
+            stepInput.modelContextMessages = messages;
+          } else {
+            ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+          }
         }
         if (systemMessages) {
           messageList.replaceAllSystemMessages(systemMessages);
@@ -1188,7 +1197,7 @@ export class ProcessorRunner {
             afterStepInput: stepInput,
             beforeMessages: inputData.messages,
             beforeSystemMessages: inputData.systemMessages,
-            messages: messageList.get.all.db(),
+            messages: stepInput.modelContextMessages ?? messageList.get.all.db(),
             systemMessages: messageList.getAllSystemMessages(),
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
@@ -1689,6 +1698,14 @@ export class ProcessorRunner {
           domain: 'AGENT',
           id: 'PROCESSOR_RETURNED_MESSAGES_AND_MESSAGE_LIST',
           text: `Processor ${processor.id} returned both messages and messageList. Only one of these is allowed.`,
+        });
+      }
+      if (result.messages && result.modelContextMessages) {
+        throw new MastraError({
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_RETURNED_MESSAGES_AND_MODEL_CONTEXT_MESSAGES',
+          text: `Processor ${processor.id} returned both messages and modelContextMessages. Only one of these is allowed.`,
         });
       }
       const { model: _model, ...rest } = result;
