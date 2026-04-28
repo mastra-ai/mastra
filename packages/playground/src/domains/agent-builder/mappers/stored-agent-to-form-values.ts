@@ -11,5 +11,6 @@ export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefi
     agents: Object.fromEntries(Object.keys(storedAgent?.agents ?? {}).map(k => [k, true])),
     workflows: Object.fromEntries(Object.keys(storedAgent?.workflows ?? {}).map(k => [k, true])),
     workspaceId: extractWorkspaceId(storedAgent?.workspace),
+    visibility: storedAgent?.visibility ?? 'private',
   };
 }

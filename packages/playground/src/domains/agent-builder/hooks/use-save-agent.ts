@@ -29,6 +29,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
             tools: params.tools,
             agents: params.agents,
             workflows: params.workflows,
+            visibility: params.visibility,
             ...workspaceField,
           });
           toast.success('Agent updated');
@@ -45,6 +46,7 @@ export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSucces
           tools: params.tools,
           agents: params.agents,
           workflows: params.workflows,
+          visibility: params.visibility,
           ...workspaceField,
         });
         toast.success('Agent created');

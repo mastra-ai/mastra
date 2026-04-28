@@ -48,7 +48,7 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['status', 'authorId'],
+      ifNotExists: ['status', 'authorId', 'visibility'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
@@ -172,14 +172,23 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   /**
-   * Removes stale draft agent records that have no activeVersionId.
+   * Removes stale draft agent records that have no versions at all.
    * These are left behind when createAgent partially fails (inserts thin record
    * but fails to create the version due to schema mismatch).
+   *
+   * A legitimate draft (never published) will have rows in the versions table,
+   * so we must only delete records with zero associated versions.
    */
   async #cleanupStaleDrafts(): Promise<void> {
     try {
       await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_AGENTS}" WHERE status = 'draft' AND activeVersionId IS NULL`,
+        sql: `DELETE FROM "${TABLE_AGENTS}"
+              WHERE status = 'draft'
+                AND activeVersionId IS NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM "${TABLE_AGENT_VERSIONS}"
+                  WHERE "${TABLE_AGENT_VERSIONS}".agentId = "${TABLE_AGENTS}".id
+                )`,
       });
     } catch {
       // Non-critical cleanup, ignore errors
@@ -297,6 +306,7 @@ export class AgentsLibSQL extends AgentsStorage {
       status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
@@ -330,6 +340,9 @@ export class AgentsLibSQL extends AgentsStorage {
     try {
       const now = new Date();
 
+      // Default visibility to 'private' for owned agents; leave null for unowned/legacy rows
+      const visibility = agent.visibility ?? (agent.authorId ? 'private' : null);
+
       // 1. Create thin agent record with status='draft'
       await this.#db.insert({
         tableName: TABLE_AGENTS,
@@ -338,6 +351,7 @@ export class AgentsLibSQL extends AgentsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: agent.authorId ?? null,
+          visibility,
           metadata: agent.metadata ?? null,
           createdAt: now,
           updatedAt: now,
@@ -345,7 +359,7 @@ export class AgentsLibSQL extends AgentsStorage {
       });
 
       // 2. Extract config fields from the flat input
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+      const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
       const versionId = crypto.randomUUID();
@@ -401,7 +415,7 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status } = updates;
+      const { authorId, activeVersionId, metadata, status, visibility } = updates;
 
       // Build update data for the agent record
       const updateData: Record<string, unknown> = {
@@ -411,6 +425,7 @@ export class AgentsLibSQL extends AgentsStorage {
       if (authorId !== undefined) updateData.authorId = authorId;
       if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
       if (status !== undefined) updateData.status = status;
+      if (visibility !== undefined) updateData.visibility = visibility;
       if (metadata !== undefined) {
         updateData.metadata = { ...existing.metadata, ...metadata };
       }
@@ -475,7 +490,7 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status, visibility } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -506,6 +521,11 @@ export class AgentsLibSQL extends AgentsStorage {
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push('visibility = ?');
+        queryParams.push(visibility);
       }
 
       if (metadata && Object.keys(metadata).length > 0) {

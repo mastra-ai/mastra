@@ -14,6 +14,7 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
@@ -101,6 +102,8 @@ const AgentBuilderAgentViewReady = ({
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
+  const { data: currentUser } = useCurrentUser();
+  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
@@ -121,14 +124,16 @@ const AgentBuilderAgentViewReady = ({
       defaultExpanded={false}
       detailOpen={activeDetail !== null}
       primaryAction={
-        <Button
-          size="sm"
-          variant="default"
-          onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
-          data-testid="agent-builder-view-edit"
-        >
-          Edit configuration
-        </Button>
+        isOwner ? (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
+            data-testid="agent-builder-view-edit"
+          >
+            Edit configuration
+          </Button>
+        ) : undefined
       }
       chat={<AgentChatPanel agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description} />}
       configure={

@@ -50,11 +50,14 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     }
 
     const now = new Date();
+    // Default visibility to 'private' when an authorId is set; leave undefined for legacy unowned rows.
+    const visibility = agent.visibility ?? (agent.authorId ? 'private' : undefined);
     const newAgent: StorageAgentType = {
       id: agent.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: agent.authorId,
+      visibility,
       metadata: agent.metadata,
       createdAt: now,
       updatedAt: now,
@@ -63,7 +66,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     this.db.agents.set(agent.id, newAgent);
 
     // Extract config fields from the flat input (everything except agent-record fields)
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
     // Create version 1 from the config
     const versionId = crypto.randomUUID();
@@ -88,11 +91,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Agent with id ${id} not found`);
     }
 
-    const { authorId, activeVersionId, metadata, status } = updates;
+    const { authorId, visibility, activeVersionId, metadata, status } = updates;
 
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...metadata },
@@ -113,7 +117,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -140,6 +144,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Filter by authorId if provided
     if (authorId !== undefined) {
       agents = agents.filter(agent => agent.authorId === authorId);
+    }
+
+    // Filter by visibility if provided
+    if (visibility !== undefined) {
+      agents = agents.filter(agent => agent.visibility === visibility);
     }
 
     // Filter by metadata if provided (AND logic - all key-value pairs must match)
