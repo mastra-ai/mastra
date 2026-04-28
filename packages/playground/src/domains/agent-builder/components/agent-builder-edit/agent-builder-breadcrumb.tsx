@@ -1,4 +1,5 @@
 import { Breadcrumb, Crumb, Skeleton } from '@mastra/playground-ui';
+import type { ComponentProps } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { Link } from 'react-router';
 import type { AgentBuilderEditFormValues } from '../../schemas';
@@ -15,6 +16,8 @@ const MODE_LABELS: Record<WorkspaceMode, string> = {
   build: 'Edit configuration',
   test: 'Chat',
 };
+
+const AgentsLink = (props: ComponentProps<typeof Link>) => <Link {...props} viewTransition />;
 
 export const AgentBuilderBreadcrumb = ({
   className,
@@ -44,7 +47,7 @@ export const AgentBuilderBreadcrumb = ({
   return (
     <div className={className} data-testid="agent-builder-breadcrumb">
       <Breadcrumb label="Agent builder">
-        <Crumb as={Link} to="/agent-builder/agents">
+        <Crumb as={AgentsLink} to="/agent-builder/agents">
           Agents
         </Crumb>
         <Crumb as="span" isCurrent={!mode}>

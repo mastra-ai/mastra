@@ -164,4 +164,32 @@ export class StaticRBACProvider<TUser = unknown> implements IRBACProvider<TUser>
   getRoleDefinition(roleId: string): RoleDefinition | undefined {
     return this.roles?.find(r => r.id === roleId);
   }
+
+  /**
+   * Get all available roles in the system.
+   */
+  async getAvailableRoles(): Promise<{ id: string; name: string }[]> {
+    if (this.roles) {
+      return this.roles.map(r => ({ id: r.id, name: r.name }));
+    }
+    if (this._roleMapping) {
+      return Object.keys(this._roleMapping)
+        .filter(k => k !== '_default')
+        .map(k => ({ id: k, name: k }));
+    }
+    return [];
+  }
+
+  /**
+   * Get the resolved permissions for a specific role.
+   */
+  async getPermissionsForRole(roleId: string): Promise<string[]> {
+    if (this._roleMapping) {
+      return resolvePermissionsFromMapping([roleId], this._roleMapping);
+    }
+    if (this.roles) {
+      return resolvePermissions([roleId], this.roles);
+    }
+    return [];
+  }
 }
