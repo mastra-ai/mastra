@@ -1,3 +1,4 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { createTool } from '@mastra/client-js';
 import { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -21,22 +22,29 @@ interface UseAgentBuilderToolArgs {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   availableAgentTools: AgentTool[];
   availableWorkspaces?: AvailableWorkspace[];
+  availableSkills?: StoredSkillResponse[];
 }
 
 export function useAgentBuilderTool({
   features,
   availableAgentTools,
   availableWorkspaces = [],
+  availableSkills = [],
 }: UseAgentBuilderToolArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { tools: toolsEnabled } = features;
+  const { tools: toolsEnabled, skills: skillsEnabled } = features;
 
   return useMemo(
     () =>
       createTool({
         id: AGENT_BUILDER_TOOL_NAME,
-        description: buildAgentBuilderToolDescription(features, availableAgentTools, availableWorkspaces),
-        inputSchema: buildAgentBuilderToolSchema(features, availableAgentTools, availableWorkspaces),
+        description: buildAgentBuilderToolDescription(
+          features,
+          availableAgentTools,
+          availableWorkspaces,
+          availableSkills,
+        ),
+        inputSchema: buildAgentBuilderToolSchema(features, availableAgentTools, availableWorkspaces, availableSkills),
         outputSchema: z.object({ success: z.boolean() }),
         execute: async (inputData: any) => {
           if (typeof inputData?.name === 'string') {
@@ -54,6 +62,16 @@ export function useAgentBuilderTool({
             formMethods.setValue('agents', agents);
             formMethods.setValue('workflows', workflows);
           }
+          if (skillsEnabled && Array.isArray(inputData?.skills)) {
+            const validSkillIds = new Set(availableSkills.map(s => s.id));
+            const skills: Record<string, true> = {};
+            for (const entry of inputData.skills) {
+              if (entry && typeof entry.id === 'string' && validSkillIds.has(entry.id)) {
+                skills[entry.id] = true;
+              }
+            }
+            formMethods.setValue('skills', skills, { shouldDirty: true });
+          }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
             formMethods.setValue('workspaceId', inputData.workspaceId);
           }
@@ -61,7 +79,7 @@ export function useAgentBuilderTool({
           return { success: true };
         },
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools affects the schema/description (matches prior behavior)
-    [formMethods, toolsEnabled, availableAgentTools, availableWorkspaces],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills affects the schema/description (matches prior behavior)
+    [formMethods, toolsEnabled, skillsEnabled, availableAgentTools, availableWorkspaces, availableSkills],
   );
 }

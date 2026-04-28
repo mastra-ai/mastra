@@ -24,7 +24,11 @@ vi.mock('@/domains/agent-builder/hooks/use-save-agent', () => ({
 }));
 
 vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false }),
+  useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false, skills: false }),
+}));
+
+vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
+  useStoredSkills: () => ({ data: { skills: [] }, isPending: false }),
 }));
 
 vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
