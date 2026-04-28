@@ -422,7 +422,7 @@ ${typeDescriptions}
 
 By default the subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.
 
-Set \`forked: true\` to inherit the parent conversation context (useful when richer context matters). A forked subagent reuses the parent agent's instructions and tools so the prompt prefix stays cache-friendly.
+Set \`forked: true\` for context-dependent parallel work that needs the parent conversation, prior tool results, or the parent tool environment. Omit it for self-contained delegation. A forked subagent reuses the parent agent's instructions and tools so the prompt prefix stays cache-friendly.
 
 Use this tool when:
 - You want to run multiple investigations in parallel
