@@ -1,6 +1,17 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 import type { AgentTool } from '../../types/agent-tool';
 import { formValuesToSaveParams } from '../form-values-to-save-params';
+
+const buildSkill = (id: string, description?: string): StoredSkillResponse => ({
+  id,
+  status: 'published',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  name: id,
+  description,
+  instructions: 'inst',
+});
 
 const baseValues = {
   name: 'My agent',
@@ -114,5 +125,39 @@ describe('formValuesToSaveParams', () => {
     const result = formValuesToSaveParams({ ...baseValues, description: '  Hello  ' }, []);
 
     expect(result.description).toBe('Hello');
+  });
+
+  it('builds a skill entry with description when the available skill has one', () => {
+    const availableSkills = [buildSkill('skill-a', 'Skill A desc')];
+
+    const result = formValuesToSaveParams({ ...baseValues, skills: { 'skill-a': true } }, [], availableSkills);
+
+    expect(result.skills).toEqual({ 'skill-a': { description: 'Skill A desc' } });
+  });
+
+  it('builds a skill entry with an empty record when the available skill has no description', () => {
+    const availableSkills = [buildSkill('skill-a')];
+
+    const result = formValuesToSaveParams({ ...baseValues, skills: { 'skill-a': true } }, [], availableSkills);
+
+    expect(result.skills).toEqual({ 'skill-a': {} });
+  });
+
+  it('returns undefined skills when nothing is selected', () => {
+    const result = formValuesToSaveParams(baseValues, [], [buildSkill('skill-a', 'Skill A desc')]);
+
+    expect(result.skills).toBeUndefined();
+  });
+
+  it('omits disabled skills from the resulting record', () => {
+    const availableSkills = [buildSkill('skill-a'), buildSkill('skill-b')];
+
+    const result = formValuesToSaveParams(
+      { ...baseValues, skills: { 'skill-a': true, 'skill-b': false } },
+      [],
+      availableSkills,
+    );
+
+    expect(result.skills).toEqual({ 'skill-a': {} });
   });
 });

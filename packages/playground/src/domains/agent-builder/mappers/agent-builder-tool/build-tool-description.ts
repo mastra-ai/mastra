@@ -1,3 +1,4 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../types/agent-tool';
 
@@ -12,9 +13,13 @@ export function buildAgentBuilderToolDescription(
   features: Features,
   availableAgentTools: AgentTool[],
   availableWorkspaces: AvailableWorkspace[],
+  availableSkills: StoredSkillResponse[] = [],
 ): string {
+  const skillsAvailable = features.skills && availableSkills.length > 0;
+
   const descriptionParts = ['name', 'description', 'instructions'];
   if (features.tools) descriptionParts.push('tools');
+  if (skillsAvailable) descriptionParts.push('skills');
   descriptionParts.push('workspaceId');
 
   const availableToolsBlock =
@@ -23,6 +28,12 @@ export function buildAgentBuilderToolDescription(
           .map(t => `- ${t.id}${t.description ? `: ${t.description}` : ''}`)
           .join('\n')}`
       : '';
+
+  const availableSkillsBlock = skillsAvailable
+    ? `\n\nAvailable skills (use these ids in the "skills" field):\n${availableSkills
+        .map(s => `- ${s.id}${s.description ? `: ${s.description}` : ''}`)
+        .join('\n')}`
+    : '';
 
   const availableWorkspacesBlock =
     availableWorkspaces.length > 0
@@ -35,5 +46,13 @@ export function buildAgentBuilderToolDescription(
     ? ' When enabling tools, each entry in `tools` MUST include both `id` (from the available tools list) and `name` (a concise Title Case display label, e.g. "Web Search"). The `name` is shown to the user in chat.'
     : '';
 
-  return `Modify the agent configuration that the user is building. Supported fields: ${descriptionParts.join(', ')}.${toolsGuidance}${availableToolsBlock}${availableWorkspacesBlock}`;
+  const skillsGuidance = skillsAvailable
+    ? ' When enabling skills, each entry in `skills` MUST include both `id` (from the available skills list) and `name` (a concise Title Case display label). The `name` is shown to the user in chat.'
+    : '';
+
+  const createSkillGuidance = features.skills
+    ? ' If the user asks to create a NEW skill (one that does not already exist), call the separate `createSkillTool` tool with `name`, `description`, `instructions`, optional `workspaceId`, and optional `visibility`. The new skill will be auto-attached to the agent. Use this `agentBuilderTool` `skills` field only to attach skills that already exist.'
+    : '';
+
+  return `Modify the agent configuration that the user is building. Supported fields: ${descriptionParts.join(', ')}.${toolsGuidance}${skillsGuidance}${createSkillGuidance}${availableToolsBlock}${availableSkillsBlock}${availableWorkspacesBlock}`;
 }

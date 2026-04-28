@@ -27,7 +27,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "MASTRA_AUTO_DETECT_URL=true vite",
     "build": "vite build",
     "build:watch": "vite build --watch",
     "lint": "eslint --no-warn-ignored .",
