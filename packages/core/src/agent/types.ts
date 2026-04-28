@@ -367,16 +367,10 @@ export interface AgentConfig<
    *
    * For full control, pass an `AgentChannels` instance directly.
    *
-   * For platform channels (SlackChannel, etc.), pass a record keyed by channel name:
-   * ```ts
-   * channels: {
-   *   slack: {
-   *     slashCommands: ['/ask', '/help'],
-   *   },
-   * }
-   * ```
+   * For platform channels (Slack, Discord, etc.), use `mastra.channels.slack.connect(agentId)`
+   * instead of declaring channel config here.
    */
-  channels?: ChannelConfig | AgentChannels | Record<string, unknown>;
+  channels?: ChannelConfig | AgentChannels;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
-import { type MastraChannel, AgentChannels } from '@mastra/core/channels';
+import { type MastraChannel, type ChannelPlatformInfo, type ChannelInstallationInfo, type ChannelConnectResult, AgentChannels } from '@mastra/core/channels';
 import { type ChannelsStorage, type ChannelInstallation, InMemoryChannelsStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
@@ -15,8 +15,9 @@ import {
   type SlackInstallation,
   type SlackPendingInstallation,
   type SlackConfigTokens,
+  type StoredSlashCommand,
 } from './schemas';
-import type { SlackChannelConfig, SlashCommandConfig, SlackRoute, SlackAgentConfig } from './types';
+import type { SlackChannelConfig, SlashCommandConfig, SlackRoute, SlackConnectOptions } from './types';
 
 const PLATFORM = 'slack';
 
@@ -24,13 +25,11 @@ const PLATFORM = 'slack';
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
-function hashConfig(config: SlackAgentConfig, baseUrl: string, resolvedAppName: string): string {
+function hashConfig(config: SlackConnectOptions, baseUrl: string, resolvedAppName: string): string {
   const normalized = JSON.stringify({
     name: resolvedAppName,
     description: config.description,
     slashCommands: config.slashCommands,
-    respondToMentions: config.respondToMentions,
-    respondToDirectMessages: config.respondToDirectMessages,
     baseUrl,
   });
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
@@ -66,18 +65,15 @@ function hashConfig(config: SlackAgentConfig, baseUrl: string, resolvedAppName: 
  * });
  * ```
  */
-export class SlackChannel implements MastraChannel<SlackAgentConfig> {
+export class SlackChannel implements MastraChannel {
   readonly id = 'slack';
   readonly #channelConfig: SlackChannelConfig;
   #storage!: ChannelsStorage;
   #storageResolved = false;
   readonly #manifestClient: SlackManifestClient;
 
-  /** Agent-specific configurations (set via slack.config() on Agent.channels) */
-  readonly #agentConfigs = new Map<string, SlackAgentConfig>();
-
-  /** Slash command configs keyed by webhookId */
-  readonly #slashCommands = new Map<string, SlashCommandConfig[]>();
+  /** Slash command configs keyed by webhookId (restored from installation data) */
+  readonly #slashCommands = new Map<string, StoredSlashCommand[]>();
 
   /** SlackAdapter instances keyed by installation ID */
   readonly #adapters = new Map<string, SlackAdapter>();
@@ -121,7 +117,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   /**
    * Normalize slash command config (string -> full config object).
    */
-  #normalizeCommand(cmd: string | SlashCommandConfig): SlashCommandConfig {
+  #normalizeCommand(cmd: string | SlashCommandConfig): StoredSlashCommand {
     if (typeof cmd === 'string') {
       return {
         command: cmd,
@@ -138,32 +134,8 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   /**
    * Normalize all slash commands in a config.
    */
-  #normalizeCommands(commands?: (string | SlashCommandConfig)[]): SlashCommandConfig[] {
+  #normalizeCommands(commands?: (string | SlashCommandConfig)[]): StoredSlashCommand[] {
     return (commands ?? []).map((cmd) => this.#normalizeCommand(cmd));
-  }
-
-  // ===========================================================================
-  // Agent Configuration
-  // ===========================================================================
-
-  /**
-   * Register agent configuration (called by Mastra when agent is added).
-   * Supports both `channels: { slack: true }` (use defaults) and full config.
-   * @internal
-   */
-  __registerAgent(agentId: string, config: SlackAgentConfig | boolean): void {
-    // Skip if explicitly disabled
-    if (config === false) return;
-    // Normalize `true` to an empty config (use defaults)
-    const normalizedConfig: SlackAgentConfig = config === true ? {} : config;
-    this.#agentConfigs.set(agentId, normalizedConfig);
-  }
-
-  /**
-   * Get configuration for an agent.
-   */
-  getAgentConfig(agentId: string): SlackAgentConfig | undefined {
-    return this.#agentConfigs.get(agentId);
   }
 
   // ===========================================================================
@@ -420,16 +392,6 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   }
 
   /**
-   * Get a pending installation for an agent.
-   */
-  async #getPendingInstallation(agentId: string): Promise<SlackPendingInstallation | null> {
-    const storage = await this.#getStorage();
-    const record = await storage.getInstallationByAgent(PLATFORM, agentId);
-    if (!record || record.status !== 'pending') return null;
-    return this.#parsePendingInstallation(record);
-  }
-
-  /**
    * Get a pending installation by ID (used for OAuth state lookup).
    */
   async #getPendingInstallationById(id: string): Promise<SlackPendingInstallation | null> {
@@ -544,24 +506,22 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   }
 
   /**
-   * Initialize all configured agents.
-   * 
-   * For each agent with Slack config:
-   * - If already installed: activate the adapter
-   * - If not installed: create the app and log the install URL
-   * 
-   * Call this after Mastra is fully initialized.
+   * Restore active Slack installations from storage.
+   *
+   * For each active installation in the database, this creates a SlackAdapter
+   * and injects AgentChannels into the corresponding Agent so it can receive
+   * Slack events immediately on startup.
+   *
+   * Does NOT auto-provision new apps. Use `connect(agentId, options)` to
+   * create a new Slack app for an agent.
    */
   async initialize(): Promise<void> {
-
-    
     if (!this.#mastra) {
-      throw new Error('SlackChannel not attached to Mastra. Call setMastra() first.');
+      throw new Error('SlackChannel not attached to Mastra. Call __attach() first.');
     }
 
     // Prevent double initialization
     if (this.#initialized) {
-
       return;
     }
     this.#initialized = true;
@@ -577,68 +537,15 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       });
     }
 
-    const baseUrl = this.#getBaseUrl();
-    if (!baseUrl) {
-      console.warn('[Slack] Cannot initialize: baseUrl not configured. Set SLACK_BASE_URL or configure server.studioHost.');
-      return;
-    }
-
-    for (const [agentId, config] of this.#agentConfigs) {
+    // Restore all active installations from storage
+    const allInstallations = await this.#listInstallations();
+    for (const installationEncrypted of allInstallations) {
       try {
-        // Resolve the app name from config or agent
-        const agent = this.#resolveAgent(agentId);
-        const resolvedAppName = config.name ?? agent?.name ?? agentId;
-        const currentHash = hashConfig(config, baseUrl, resolvedAppName);
-
-        // Check if already installed
-        const installationEncrypted = await this.#getInstallation(agentId);
-        if (installationEncrypted) {
-          const installation = this.#decryptInstallation(installationEncrypted);
-          // Check if config changed - need to update manifest
-          if (installation.configHash !== currentHash) {
-            console.log(`[Slack] Config changed for "${agentId}", updating manifest...`);
-            await this.#updateAppManifest(installation, config, baseUrl);
-            installation.configHash = currentHash;
-            await this.#saveInstallation(this.#encryptInstallation(installation));
-          }
-          // Activate adapter
-          await this.#activateAdapter(installation);
-          console.log(`[Slack] ✓ Agent "${agentId}" connected to workspace "${installation.teamName ?? installation.teamId}"`);
-          continue;
-        }
-
-        // Check if there's already a pending installation
-        const existingPendingEncrypted = await this.#getPendingInstallation(agentId);
-        if (existingPendingEncrypted) {
-          const existingPending = this.#decryptPendingInstallation(existingPendingEncrypted);
-          // If config/baseUrl changed, need to recreate the app
-          if (existingPending.configHash !== currentHash) {
-            console.log(`[Slack] Config changed for pending "${agentId}", recreating app...`);
-            try {
-              await this.#manifestClient.deleteApp(existingPending.appId);
-            } catch {
-              // App may not exist anymore, ignore
-            }
-            await this.#deleteInstallation(existingPending.id);
-          } else {
-            // Reuse existing pending installation
-            console.log(`[Slack] Agent "${agentId}" - Install to workspace by clicking this link:`);
-            console.log(`        ${existingPending.authorizationUrl}`);
-            continue;
-          }
-        }
-
-        // Create new app
-        if (!this.#manifestClient) {
-          console.log(`[Slack] Agent "${agentId}" has Slack config but no configToken provided for auto-setup.`);
-          continue;
-        }
-
-        const result = await this.connect(agentId);
-        console.log(`[Slack] Agent "${agentId}" - Install to workspace by clicking this link:`);
-        console.log(`        ${result.authorizationUrl}`);
+        const installation = this.#decryptInstallation(installationEncrypted);
+        await this.#activateAdapter(installation);
+        console.log(`[Slack] ✓ Agent "${installation.agentId}" connected to workspace "${installation.teamName ?? installation.teamId}"`);
       } catch (err) {
-        console.error(`[Slack] Failed to initialize agent "${agentId}":`, err);
+        console.error(`[Slack] Failed to restore installation "${installationEncrypted.id}":`, err);
       }
     }
   }
@@ -656,10 +563,9 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
     
     this.#adapters.set(installation.id, adapter);
     
-    // Store slash commands for this webhook
-    const config = this.#agentConfigs.get(installation.agentId);
-    if (config?.slashCommands?.length) {
-      this.#slashCommands.set(installation.webhookId, this.#normalizeCommands(config.slashCommands));
+    // Restore slash commands from installation data
+    if (installation.slashCommands?.length) {
+      this.#slashCommands.set(installation.webhookId, installation.slashCommands);
     }
 
     // Create/get AgentChannels and register the adapter
@@ -700,35 +606,6 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   async #autoInitialize(): Promise<void> {
     if (!this.#mastra) return;
     await this.initialize();
-  }
-
-  /**
-   * Update an existing app's manifest (e.g., when config changes).
-   */
-  async #updateAppManifest(installation: SlackInstallation, config: SlackAgentConfig, baseUrl: string): Promise<void> {
-    if (!this.#manifestClient) return;
-
-    const agent = this.#resolveAgent(installation.agentId);
-    const appName = config.name ?? agent?.name ?? installation.agentId;
-    const normalizedCommands = this.#normalizeCommands(config.slashCommands);
-
-    const manifest = buildManifest({
-      name: appName,
-      description: config.description ?? `AI assistant powered by ${appName}`,
-      webhookUrl: `${baseUrl}/slack/events/${installation.webhookId}`,
-      oauthRedirectUrl: `${baseUrl}/slack/oauth/callback`,
-      commandsUrl: `${baseUrl}/slack/commands/${installation.webhookId}`,
-      slashCommands: normalizedCommands.map((cmd) => ({
-        command: cmd.command,
-        description: cmd.description ?? `Run ${cmd.command}`,
-        usageHint: cmd.usageHint,
-      })),
-      additionalScopes: config.additionalScopes,
-      additionalEvents: config.additionalEvents,
-      interactivity: true,
-    });
-
-    await this.#manifestClient.updateApp(installation.appId, manifest);
   }
 
   /**
@@ -801,8 +678,8 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
    */
   async connect(
     agentId: string,
-    options?: SlackAgentConfig,
-  ): Promise<{ appId: string; installationId: string; authorizationUrl: string }> {
+    options?: SlackConnectOptions,
+  ): Promise<ChannelConnectResult> {
     if (!this.#manifestClient) {
       throw new Error('Slack manifest client not configured. Provide configToken and refreshToken.');
     }
@@ -819,15 +696,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       throw new Error(`Agent "${agentId}" not found`);
     }
 
-    // Merge pre-configured settings with runtime options
-    const preConfig = this.#agentConfigs.get(agentId);
-    const config: SlackAgentConfig = {
-      ...preConfig,
-      ...options,
-      slashCommands: [...(preConfig?.slashCommands ?? []), ...(options?.slashCommands ?? [])],
-      additionalScopes: [...(preConfig?.additionalScopes ?? []), ...(options?.additionalScopes ?? [])],
-      additionalEvents: [...(preConfig?.additionalEvents ?? []), ...(options?.additionalEvents ?? [])],
-    };
+    const config = options ?? {};
 
     // Generate unique webhook ID for this installation
     const webhookId = crypto.randomUUID();
@@ -835,7 +704,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
     // Build manifest using the manifest builder (includes proper default scopes)
     const appName = config.name ?? agent.name ?? agentId;
     const normalizedCommands = this.#normalizeCommands(config.slashCommands);
-    const manifest = buildManifest({
+    let manifest = buildManifest({
       name: appName,
       description: config.description ?? `AI assistant powered by ${agent.name ?? agentId}`,
       webhookUrl: `${baseUrl}/slack/events/${webhookId}`,
@@ -846,10 +715,12 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
         description: cmd.description ?? `Run ${cmd.command}`,
         usageHint: cmd.usageHint,
       })),
-      additionalScopes: config.additionalScopes,
-      additionalEvents: config.additionalEvents,
-      interactivity: true,
     });
+
+    // Apply user's manifest transform if provided
+    if (config.manifest) {
+      manifest = config.manifest(manifest);
+    }
 
     // Create the app via Slack's manifest API
     const appCredentials = await this.#manifestClient.createApp(manifest);
@@ -890,6 +761,7 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       clientSecret: appCredentials.clientSecret,
       signingSecret: appCredentials.signingSecret,
       authorizationUrl,
+      slashCommands: normalizedCommands.length ? normalizedCommands : undefined,
       configHash,
       createdAt: new Date(),
     });
@@ -943,11 +815,32 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
   }
 
   /**
-   * List all Slack installations.
+   * List all Slack installations (public info only).
    */
-  async listInstallations(): Promise<SlackInstallation[]> {
+  async listInstallations(): Promise<ChannelInstallationInfo[]> {
     const installations = await this.#listInstallations();
-    return installations.map((i) => this.#decryptInstallation(i));
+    return installations.map((i) => {
+      const decrypted = this.#decryptInstallation(i);
+      return {
+        id: decrypted.id,
+        platform: PLATFORM,
+        agentId: decrypted.agentId,
+        status: 'active' as const,
+        displayName: decrypted.teamName ?? decrypted.teamId,
+        installedAt: decrypted.installedAt,
+      };
+    });
+  }
+
+  /**
+   * Discovery metadata for the editor UI.
+   */
+  getInfo(): ChannelPlatformInfo {
+    return {
+      id: PLATFORM,
+      name: 'Slack',
+      isConfigured: this.isConfigured(),
+    };
   }
 
   /**
@@ -1074,15 +967,13 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
         botUserId: tokenData.bot_user_id!,
         teamId: tokenData.team!.id,
         teamName: tokenData.team!.name,
+        slashCommands: pending.slashCommands,
         installedAt: new Date(),
         configHash: pending.configHash,
       };
 
       const encryptedInstallation = this.#encryptInstallation(installation);
-      console.log(`[Slack] Saving installation...`);
-      console.log(`[Slack] Installation ID: ${encryptedInstallation.id}, agentId: ${encryptedInstallation.agentId}`);
       await this.#saveInstallation(encryptedInstallation);
-      console.log(`[Slack] Installation saved (status: active)`);
 
       // Create SlackAdapter for this installation
       const adapter = createSlackAdapter({
@@ -1092,13 +983,17 @@ export class SlackChannel implements MastraChannel<SlackAgentConfig> {
       });
       this.#adapters.set(installation.id, adapter);
 
+      // Load slash commands into memory
+      if (installation.slashCommands?.length) {
+        this.#slashCommands.set(installation.webhookId, installation.slashCommands);
+      }
+
       // Notify callback
       if (this.#channelConfig.onInstall) {
         await this.#channelConfig.onInstall(installation);
       }
 
-      // Redirect to success page
-      console.log(`[Slack] Installation complete for agent ${pending.agentId} in team ${tokenData.team!.name}`);
+      console.log(`[Slack] ✓ Agent "${pending.agentId}" installed to team "${tokenData.team!.name}"`);
 
       const redirectUrl = this.#channelConfig.redirectPath ?? '/slack/success';
       return c.redirect(`${redirectUrl}?agent=${pending.agentId}&team=${tokenData.team!.name}`);

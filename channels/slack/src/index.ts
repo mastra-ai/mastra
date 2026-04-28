@@ -17,14 +17,15 @@
  *
  * const myAgent = new Agent({ id: 'my-agent', ... });
  *
- * slack.configure(myAgent, {
- *   name: 'My Bot',
- *   slashCommands: ['/ask', '/help'],
- * });
- *
  * const mastra = new Mastra({
  *   agents: { myAgent },
  *   channels: { slack },
+ * });
+ *
+ * // Connect an agent to Slack (creates app, returns OAuth URL)
+ * const { authorizationUrl } = await slack.connect('my-agent', {
+ *   name: 'My Bot',
+ *   slashCommands: ['/ask', '/help'],
  * });
  * ```
  *
@@ -34,6 +35,7 @@
 export { SlackChannel } from './channel';
 export { SlackManifestClient } from './client';
 export { verifySlackRequest, parseSlackFormBody } from './crypto';
+export { buildManifest, DEFAULT_BOT_SCOPES, DEFAULT_BOT_EVENTS } from './manifest';
 
 // Re-export from @chat-adapter/slack for convenience
 export { createSlackAdapter } from '@chat-adapter/slack';
@@ -54,12 +56,10 @@ export {
 
 export type {
   SlackChannelConfig,
-  SlackAgentConfig,
-  SlackPendingAdapter,
+  SlackConnectOptions,
+  SlackAppManifest,
   SlashCommandConfig,
   SlackMessage,
   SlackBlock,
   SlackRoute,
 } from './types';
-
-export { isSlackPendingAdapter } from './types';

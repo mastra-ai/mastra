@@ -6,6 +6,17 @@ import { z } from 'zod';
  */
 
 // =============================================================================
+// Slash Command Schema (stored alongside installation)
+// =============================================================================
+
+export const SlashCommandSchema = z.object({
+  command: z.string(),
+  description: z.string().optional(),
+  usageHint: z.string().optional(),
+  prompt: z.string().optional(),
+});
+
+// =============================================================================
 // Installation Data (stored in ChannelInstallation.data when status='active')
 // =============================================================================
 
@@ -18,6 +29,7 @@ export const SlackInstallationDataSchema = z.object({
   teamName: z.string().optional(),
   botToken: z.string(), // encrypted
   botUserId: z.string(),
+  slashCommands: z.array(SlashCommandSchema).optional(),
 });
 
 export type SlackInstallationData = z.infer<typeof SlackInstallationDataSchema>;
@@ -32,6 +44,7 @@ export const SlackPendingDataSchema = z.object({
   clientSecret: z.string(), // encrypted
   signingSecret: z.string(), // encrypted
   authorizationUrl: z.string(),
+  slashCommands: z.array(SlashCommandSchema).optional(),
 });
 
 export type SlackPendingData = z.infer<typeof SlackPendingDataSchema>;
@@ -51,6 +64,9 @@ export type SlackConfigData = z.infer<typeof SlackConfigDataSchema>;
 // Parsed Installation (combines ChannelInstallation fields + parsed data)
 // =============================================================================
 
+/** Normalized slash command config as stored in installation data. */
+export type StoredSlashCommand = z.infer<typeof SlashCommandSchema>;
+
 export interface SlackInstallation {
   id: string;
   agentId: string;
@@ -66,6 +82,7 @@ export interface SlackInstallation {
   teamName?: string;
   botToken: string;
   botUserId: string;
+  slashCommands?: StoredSlashCommand[];
 }
 
 export interface SlackPendingInstallation {
@@ -80,6 +97,7 @@ export interface SlackPendingInstallation {
   clientSecret: string;
   signingSecret: string;
   authorizationUrl: string;
+  slashCommands?: StoredSlashCommand[];
 }
 
 export interface SlackConfigTokens {

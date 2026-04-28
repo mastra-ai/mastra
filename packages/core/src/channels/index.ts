@@ -9,7 +9,14 @@ export type {
 } from './agent-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
-export type { ChannelContext, InferChannelAgentConfig, MastraChannel, ThreadHistoryMessage } from './types';
+export type {
+  ChannelContext,
+  ChannelConnectResult,
+  ChannelInstallationInfo,
+  ChannelPlatformInfo,
+  MastraChannel,
+  ThreadHistoryMessage,
+} from './types';
 
 // Re-export Chat SDK types for convenience
 export type { ChatConfig } from 'chat';

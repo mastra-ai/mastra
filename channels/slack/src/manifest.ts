@@ -67,15 +67,6 @@ export interface BuildManifestOptions {
 
   /** Slash commands to register */
   slashCommands?: SlashCommand[];
-
-  /** Additional bot scopes */
-  additionalScopes?: string[];
-
-  /** Additional bot events */
-  additionalEvents?: string[];
-
-  /** Enable interactivity (buttons, modals, etc.) */
-  interactivity?: boolean;
 }
 
 /**
@@ -89,16 +80,13 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
     oauthRedirectUrl,
     commandsUrl = webhookUrl,
     slashCommands = [],
-    additionalScopes = [],
-    additionalEvents = [],
-    interactivity = true,
   } = options;
 
-  const scopes = [...new Set([...DEFAULT_BOT_SCOPES, ...additionalScopes])];
-  const events = [...new Set([...DEFAULT_BOT_EVENTS, ...additionalEvents])];
+  const scopes: string[] = [...DEFAULT_BOT_SCOPES];
+  const events: string[] = [...DEFAULT_BOT_EVENTS];
 
-  // Add commands:write scope if we have slash commands
-  if (slashCommands.length > 0 && !scopes.includes('commands')) {
+  // Add commands scope if we have slash commands
+  if (slashCommands.length > 0) {
     scopes.push('commands');
   }
 
@@ -129,6 +117,10 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
         request_url: webhookUrl,
         bot_events: events,
       },
+      interactivity: {
+        is_enabled: true,
+        request_url: webhookUrl,
+      },
       org_deploy_enabled: false,
       socket_mode_enabled: false,
       token_rotation_enabled: false,
@@ -142,14 +134,6 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
       description: cmd.description ?? `Run ${cmd.command}`,
       url: commandsUrl,
     }));
-  }
-
-  // Add interactivity
-  if (interactivity) {
-    manifest.settings!.interactivity = {
-      is_enabled: true,
-      request_url: webhookUrl,
-    };
   }
 
   return manifest;

@@ -3,6 +3,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { SlackChannel } from '@mastra/slack';
 import { slackDemoAgent } from './agents/slack-agent';
 import { gatewayAgent } from './agents/gateway';
+import { MastraEditor } from '@mastra/editor';
 
 export const mastra = new Mastra({
   agents: {
@@ -20,4 +21,5 @@ export const mastra = new Mastra({
       baseUrl: process.env.SLACK_BASE_URL,
     }),
   },
+  editor: new MastraEditor({}),
 });

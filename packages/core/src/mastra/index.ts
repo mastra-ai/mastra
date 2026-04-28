@@ -1289,21 +1289,8 @@ export class Mastra<
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
 
-    // Register channels - either legacy AgentChannels or platform channel configs
+    // Set up AgentChannels for legacy/manual adapter configurations
     const agentChannelsInstance = mastraAgent.agentChannels;
-    const rawChannelsConfig = (mastraAgent as any).__rawChannelsConfig as Record<string, unknown> | undefined;
-
-    // Register with MastraChannels so channel.initialize() can set up adapters
-    if (rawChannelsConfig && this.#channels) {
-      for (const [channelKey, channelConfig] of Object.entries(rawChannelsConfig)) {
-        const channel = this.#channels[channelKey];
-        if (channel?.__registerAgent) {
-          channel.__registerAgent(mastraAgent.id, channelConfig);
-        }
-      }
-    }
-
-    // Set up AgentChannels (but don't initialize Chat SDK yet - let channel.initialize() register adapters first)
     if (agentChannelsInstance) {
       agentChannelsInstance.__setLogger(this.#logger);
       const channelRoutes = agentChannelsInstance.getWebhookRoutes();
@@ -1313,8 +1300,6 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      // Initialize Chat SDK for manual adapter configurations
-      // (Platform-managed channels initialize their own AgentChannels)
       void agentChannelsInstance.initialize(this);
     }
   }

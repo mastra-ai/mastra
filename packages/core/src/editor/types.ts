@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { ChannelConnectResult, ChannelInstallationInfo, ChannelPlatformInfo } from '../channels/types';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -272,6 +273,48 @@ export interface IEditorSkillNamespace {
 }
 
 // ============================================================================
+// Channel Namespace Interface
+// ============================================================================
+
+/**
+ * Editor namespace for managing platform channel connections.
+ *
+ * Exposes discovery (what platforms are available?) and management
+ * (connect/disconnect agents) for the editor UI.
+ */
+export interface IEditorChannelNamespace {
+  /**
+   * List available channel platforms and their configuration status.
+   * Used by the UI to show "Add to Slack", "Add to Discord", etc.
+   */
+  listPlatforms(): ChannelPlatformInfo[];
+
+  /**
+   * List active installations for a specific agent.
+   */
+  listInstallations(agentId: string): Promise<ChannelInstallationInfo[]>;
+
+  /**
+   * List all installations across all agents.
+   */
+  listAllInstallations(): Promise<ChannelInstallationInfo[]>;
+
+  /**
+   * Connect an agent to a platform channel.
+   * Creates a platform app and returns an OAuth authorization URL.
+   *
+   * @returns Object containing the authorization URL for user redirect
+   */
+  connect(platform: string, agentId: string, options?: Record<string, unknown>): Promise<ChannelConnectResult>;
+
+  /**
+   * Disconnect an agent from a platform channel.
+   * Deletes the platform app and cleans up storage.
+   */
+  disconnect(platform: string, agentId: string): Promise<void>;
+}
+
+// ============================================================================
 // Main Editor Interface
 // ============================================================================
 
@@ -306,6 +349,9 @@ export interface IMastraEditor {
 
   /** Skill management namespace */
   readonly skill: IEditorSkillNamespace;
+
+  /** Channel management namespace (connect/disconnect agents to platforms) */
+  readonly channels: IEditorChannelNamespace;
 
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;

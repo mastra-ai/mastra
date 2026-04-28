@@ -92,18 +92,19 @@ export interface SlackChannelConfig {
 // =============================================================================
 
 /**
- * Slack configuration for an individual agent.
+ * Options for connecting an agent to Slack via `slack.connect(agentId, options)`.
  * This is serializable and can be stored in the database for stored agents.
  */
-export interface SlackAgentConfig {
+export interface SlackConnectOptions {
   /**
    * Display name for the Slack bot.
-   * Defaults to agent name.
+   * Defaults to agent name, then agent ID.
    */
   name?: string;
 
   /**
    * Bot description shown in Slack.
+   * Defaults to "{name} - Powered by Mastra".
    */
   description?: string;
 
@@ -119,62 +120,60 @@ export interface SlackAgentConfig {
 
   /**
    * Slash commands this agent supports.
-   * 
+   *
    * Simple form - command triggers agent.generate() with the input text:
    * ```ts
    * slashCommands: ['/ask']
    * ```
-   * 
+   *
    * With custom prompt template:
    * ```ts
    * slashCommands: [
-   *   { 
-   *     command: '/summarize', 
+   *   {
+   *     command: '/summarize',
    *     description: 'Summarize a URL',
    *     prompt: 'Fetch and summarize: {{text}}'
    *   }
    * ]
    * ```
-   * 
+   *
    * Use {{text}} as placeholder for user input.
    */
   slashCommands?: (string | SlashCommandConfig)[];
 
   /**
-   * Whether to respond to @mentions in channels.
-   * Defaults to true.
-   */
-  respondToMentions?: boolean;
-
-  /**
-   * Whether to respond to direct messages.
-   * Defaults to true.
-   */
-  respondToDirectMessages?: boolean;
-
-  /**
-   * Additional OAuth scopes to request beyond the defaults.
-   * 
-   * Default scopes include: chat:write, chat:write.public, im:write,
-   * channels:history, channels:read, groups:history, groups:read,
-   * im:history, im:read, mpim:history, mpim:read, app_mentions:read,
-   * users:read, reactions:write, files:read
-   * 
+   * Customize the Slack app manifest before it's sent to the Manifest API.
+   *
+   * Receives the default manifest (built from name, description, slashCommands,
+   * and internal URLs) and returns the final manifest to use.
+   *
+   * Use this for any advanced Slack configuration: custom scopes, events,
+   * interactivity settings, etc.
+   *
    * @example
-   * additionalScopes: ['files:write', 'reactions:read']
-   */
-  additionalScopes?: string[];
-
-  /**
-   * Additional bot events to subscribe to beyond the defaults.
-   * 
-   * Default events: app_mention, message.channels, message.groups,
-   * message.im, message.mpim
-   * 
+   * // Add extra scopes
+   * manifest: (m) => ({
+   *   ...m,
+   *   oauth_config: {
+   *     ...m.oauth_config,
+   *     scopes: { bot: [...(m.oauth_config?.scopes?.bot ?? []), 'files:write'] }
+   *   }
+   * })
+   *
    * @example
-   * additionalEvents: ['reaction_added', 'file_shared']
+   * // Subscribe to additional events
+   * manifest: (m) => ({
+   *   ...m,
+   *   settings: {
+   *     ...m.settings,
+   *     event_subscriptions: {
+   *       ...m.settings?.event_subscriptions,
+   *       bot_events: [...(m.settings?.event_subscriptions?.bot_events ?? []), 'reaction_added']
+   *     }
+   *   }
+   * })
    */
-  additionalEvents?: string[];
+  manifest?: (defaults: SlackAppManifest) => SlackAppManifest;
 }
 
 /**
@@ -296,25 +295,4 @@ export interface SlackAppCredentials {
 // Internal Types
 // =============================================================================
 
-/**
- * Marker interface for pending Slack adapter.
- * Used internally to detect Slack config on agents.
- * @internal
- */
-export interface SlackPendingAdapter {
-  __type: 'slack-pending';
-  __slackChannel: unknown; // SlackChannel (avoid circular import)
-  __agentConfig: SlackAgentConfig;
-}
 
-/**
- * Check if a value is a SlackPendingAdapter.
- */
-export function isSlackPendingAdapter(value: unknown): value is SlackPendingAdapter {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    '__type' in value &&
-    (value as SlackPendingAdapter).__type === 'slack-pending'
-  );
-}

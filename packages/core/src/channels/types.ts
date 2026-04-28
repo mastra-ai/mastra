@@ -1,6 +1,60 @@
 import type { Mastra } from '../mastra';
 import type { ApiRoute } from '../server/types';
 
+// =============================================================================
+// Channel Info (discovery types for Editor/UI)
+// =============================================================================
+
+/**
+ * Discovery metadata for a channel platform.
+ * Used by the editor UI to show available integrations and render config forms.
+ */
+export interface ChannelPlatformInfo {
+  /** Platform identifier (e.g., 'slack', 'discord'). */
+  id: string;
+  /** Human-readable display name (e.g., 'Slack'). */
+  name: string;
+  /** Whether the platform is fully configured and ready to connect agents. */
+  isConfigured: boolean;
+  /** JSON Schema describing the options accepted by `connect()`. Used by UI to render config forms. */
+  connectOptionsSchema?: Record<string, unknown>;
+}
+
+/**
+ * Public installation info returned by the editor/UI.
+ * Sensitive fields (tokens, secrets) are excluded.
+ */
+export interface ChannelInstallationInfo {
+  /** Unique installation ID. */
+  id: string;
+  /** Platform identifier (e.g., 'slack'). */
+  platform: string;
+  /** The agent this installation is connected to. */
+  agentId: string;
+  /** Installation status. */
+  status: 'active' | 'pending';
+  /** Platform-specific display info (e.g., Slack workspace name). */
+  displayName?: string;
+  /** When the installation was created. */
+  installedAt?: Date;
+}
+
+/**
+ * Result of connecting an agent to a channel platform.
+ */
+export interface ChannelConnectResult {
+  /** URL to redirect the user to for OAuth authorization. */
+  authorizationUrl: string;
+  /** Unique installation ID. */
+  installationId: string;
+  /** Platform app ID. */
+  appId: string;
+}
+
+// =============================================================================
+// MastraChannel interface
+// =============================================================================
+
 /**
  * Interface for Mastra channel implementations (e.g., SlackChannel, DiscordChannel).
  *
@@ -18,16 +72,9 @@ import type { ApiRoute } from '../server/types';
  * });
  * ```
  */
-export interface MastraChannel<TAgentConfig = unknown> {
+export interface MastraChannel {
   /** Unique identifier for this channel type (e.g., 'slack', 'discord'). */
   readonly id: string;
-
-  /**
-   * Type brand for the agent config this channel accepts.
-   * Used for type inference only - not set at runtime.
-   * @internal
-   */
-  readonly __agentConfigType?: TAgentConfig;
 
   /**
    * Returns API routes for this channel (OAuth, webhooks, events).
@@ -44,22 +91,38 @@ export interface MastraChannel<TAgentConfig = unknown> {
 
   /**
    * Called during Mastra initialization after all agents are registered.
-   * Use this to perform async setup like auto-provisioning apps.
+   * Use this to perform async setup like restoring active installations.
    */
   initialize?(): Promise<void>;
 
-  /**
-   * Register an agent's channel config.
-   * Called by Mastra when an agent with this channel config is added.
-   * @internal
-   */
-  __registerAgent?(agentId: string, config: TAgentConfig): void;
-}
+  // ---------------------------------------------------------------------------
+  // Discovery & Management (used by Editor/UI)
+  // ---------------------------------------------------------------------------
 
-/**
- * Extract the agent config type from a MastraChannel.
- */
-export type InferChannelAgentConfig<T> = T extends MastraChannel<infer C> ? C : never;
+  /**
+   * Returns discovery metadata for the editor UI.
+   * Includes platform name, configuration status, and connect options schema.
+   */
+  getInfo?(): ChannelPlatformInfo;
+
+  /**
+   * Connect an agent to this channel platform.
+   * Creates a platform app and returns an OAuth authorization URL.
+   */
+  connect?(agentId: string, options?: Record<string, unknown>): Promise<ChannelConnectResult>;
+
+  /**
+   * Disconnect an agent from this channel platform.
+   * Deletes the platform app and cleans up storage.
+   */
+  disconnect?(agentId: string): Promise<void>;
+
+  /**
+   * List active installations for this platform.
+   * Returns public info only (no secrets).
+   */
+  listInstallations?(): Promise<ChannelInstallationInfo[]>;
+}
 
 /**
  * A message from the platform's thread history.

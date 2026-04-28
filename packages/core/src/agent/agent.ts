@@ -218,13 +218,6 @@ export class Agent<
   private _agentNetworkAppend = false;
 
   /**
-   * Raw platform channel configs (e.g., { slack: true, discord: {...} }).
-   * Used by Mastra to register agents with MastraChannels.
-   * @internal
-   */
-  __rawChannelsConfig?: Record<string, unknown>;
-
-  /**
    * Creates a new Agent instance with the specified configuration.
    *
    * @example
@@ -350,11 +343,6 @@ export class Agent<
           userName: channelConfig.userName ?? config.name,
         });
         this.#agentChannels.__setAgent(this);
-      } else if (typeof config.channels === 'object' && Object.keys(config.channels).length > 0) {
-        // Platform channel configs (e.g., { slack: true, discord: {...} })
-        // Store raw config for MastraChannel registration
-        // Do NOT create AgentChannels here - MastraChannel implementations own that lifecycle
-        this.__rawChannelsConfig = config.channels as Record<string, unknown>;
       }
     }
 
@@ -524,11 +512,10 @@ export class Agent<
    * For legacy AgentChannels, returns the AgentChannels instance.
    * For platform channel configs, returns the raw config record.
    */
-  getChannels(): AgentChannels | ChannelConfig | Record<string, unknown> | null {
+  getChannels(): AgentChannels | ChannelConfig | null {
     if (this.#agentChannels) {
       return this.#agentChannels;
     }
-    // Return raw platform channel config if set
     return this.#config.channels ?? null;
   }
 
