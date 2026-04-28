@@ -59,7 +59,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/react": "^2.0.156",
+    "@ai-sdk/react": "^2.0.181",
     "@assistant-ui/react": "^0.12.26",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
