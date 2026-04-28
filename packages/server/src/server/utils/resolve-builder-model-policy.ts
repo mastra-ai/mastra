@@ -22,6 +22,13 @@ export async function resolveBuilderModelPolicy(editor: IMastraEditor | undefine
     return { active: false };
   }
 
-  const builder = await editor.resolveBuilder();
-  return builderToModelPolicy(builder);
+  // Degrade to inactive on builder-resolution failure rather than letting the
+  // rejection escape: agent execution routes seed this on every request, so a
+  // transient failure must not 500 the entire route.
+  try {
+    const builder = await editor.resolveBuilder();
+    return builderToModelPolicy(builder);
+  } catch {
+    return { active: false };
+  }
 }

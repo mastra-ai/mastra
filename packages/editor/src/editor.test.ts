@@ -1805,14 +1805,15 @@ describe('agent.create with builder defaults', () => {
     new Mastra({ storage, editor });
 
     // Without a model on input AND no admin default, today's create-path validation
-    // continues to require a model — assert by attempting create + expecting throw.
+    // continues to require a model — assert by attempting create + expecting a
+    // model-related error (not just any throw).
     await expect(
       editor.agent.create({
         id: 'test-agent-no-default',
         name: 'Test Agent',
         instructions: 'Test',
       } as any),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/model/i);
   });
 });
 
@@ -1909,10 +1910,10 @@ describe('Phase 6: agent.create enforces model allowlist', () => {
         model: [
           {
             value: { provider: 'openai', name: 'gpt-4o-mini' },
-            rules: { combinator: 'and', rules: [{ field: 'env', operator: 'equals', value: 'prod' }] },
+            rules: { operator: 'AND', conditions: [{ field: 'env', operator: 'equals', value: 'prod' }] },
           },
           { value: { provider: 'anthropic', name: 'claude-opus-4-7' } },
-        ] as any,
+        ],
       }),
     ).rejects.toMatchObject({ code: 'MODEL_NOT_ALLOWED' });
   });

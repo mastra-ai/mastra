@@ -28,27 +28,37 @@ export const agentFeaturesSchema = z.object({
  *
  * NOTE: `z.union(...).extend()` does not exist; that's why these are separate schemas.
  */
-const knownProviderEntrySchema = z.object({
-  provider: z.string().min(1),
-  modelId: z.string().min(1).optional(),
-});
+// All four schemas are `.strict()` so typos like `modelID` or `Provider` are
+// rejected up-front instead of silently widening the policy.
+const knownProviderEntrySchema = z
+  .object({
+    provider: z.string().min(1),
+    modelId: z.string().min(1).optional(),
+  })
+  .strict();
 
-const customProviderEntrySchema = z.object({
-  kind: z.literal('custom'),
-  provider: z.string().min(1),
-  modelId: z.string().min(1).optional(),
-});
+const customProviderEntrySchema = z
+  .object({
+    kind: z.literal('custom'),
+    provider: z.string().min(1),
+    modelId: z.string().min(1).optional(),
+  })
+  .strict();
 
-const knownDefaultModelEntrySchema = z.object({
-  provider: z.string().min(1),
-  modelId: z.string().min(1),
-});
+const knownDefaultModelEntrySchema = z
+  .object({
+    provider: z.string().min(1),
+    modelId: z.string().min(1),
+  })
+  .strict();
 
-const customDefaultModelEntrySchema = z.object({
-  kind: z.literal('custom'),
-  provider: z.string().min(1),
-  modelId: z.string().min(1),
-});
+const customDefaultModelEntrySchema = z
+  .object({
+    kind: z.literal('custom'),
+    provider: z.string().min(1),
+    modelId: z.string().min(1),
+  })
+  .strict();
 
 // Custom-tagged variants must come first so the discriminator (`kind: 'custom'`)
 // wins over the more permissive known-provider schemas. Otherwise the union

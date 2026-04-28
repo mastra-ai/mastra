@@ -76,6 +76,16 @@ describe('resolveBuilderModelPolicy', () => {
     });
   });
 
+  it('returns inactive when resolveBuilder rejects (does not throw)', async () => {
+    const result = await resolveBuilderModelPolicy(
+      editor({
+        hasEnabledBuilderConfig: () => true,
+        resolveBuilder: vi.fn().mockRejectedValue(new Error('builder boom')),
+      }),
+    );
+    expect(result).toEqual({ active: false });
+  });
+
   it('treats a missing hasEnabledBuilderConfig as "skip the gate"', async () => {
     const builder: IAgentBuilder = {
       enabled: true,

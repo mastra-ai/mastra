@@ -33,6 +33,21 @@ describe('editor-builder schemas — admin model configuration', () => {
       const result = providerModelEntrySchema.safeParse({ provider: '' });
       expect(result.success).toBe(false);
     });
+
+    it('rejects unknown keys (e.g. typo `modelID`) via .strict()', () => {
+      const result = providerModelEntrySchema.safeParse({ provider: 'openai', modelID: 'gpt-4o-mini' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown keys on custom-tagged entries', () => {
+      const result = providerModelEntrySchema.safeParse({
+        kind: 'custom',
+        provider: 'acme/custom',
+        modelId: 'foo-1',
+        extra: true,
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('defaultModelEntrySchema', () => {
@@ -53,6 +68,15 @@ describe('editor-builder schemas — admin model configuration', () => {
       if (result.success) {
         expect(result.data).toEqual(input);
       }
+    });
+
+    it('rejects unknown keys on default entries via .strict()', () => {
+      const result = defaultModelEntrySchema.safeParse({
+        provider: 'openai',
+        modelId: 'gpt-4o-mini',
+        Provider: 'openai',
+      });
+      expect(result.success).toBe(false);
     });
   });
 
