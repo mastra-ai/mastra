@@ -1,4 +1,5 @@
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
 import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
@@ -180,7 +181,9 @@ interface RouteConfig<
   fga?: {
     resourceType: string;
     resourceIdParam?: string;
-    resourceId?: string | ((params: Record<string, unknown>) => string | undefined);
+    resourceId?:
+      | string
+      | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
     permission?: MastraFGAPermissionInput;
   };
   onValidationError?: ValidationErrorHook;

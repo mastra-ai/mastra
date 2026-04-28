@@ -134,4 +134,36 @@ describe('FGA Middleware - checkRouteFGA', () => {
       },
     );
   });
+
+  it('should pass request context to custom resource ID resolvers', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const route = {
+      fga: {
+        resourceType: 'tenant-resource',
+        permission: 'tenant-resource:read',
+        resourceId: (
+          _params: Record<string, unknown>,
+          { requestContext }: { requestContext?: Map<string, unknown> },
+        ) => {
+          return requestContext?.get('tenantResourceId') as string | undefined;
+        },
+      },
+    } as any;
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+    requestContext.set('tenantResourceId', 'tenant-1:resource-1');
+
+    const result = await checkRouteFGA(mastra, route, requestContext as any, {});
+
+    expect(result).toBeNull();
+    expect(fgaProvider.check).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      {
+        resource: { type: 'tenant-resource', id: 'tenant-1:resource-1' },
+        permission: 'tenant-resource:read',
+        context: { resourceId: 'tenant-1:resource-1', requestContext },
+      },
+    );
+  });
 });

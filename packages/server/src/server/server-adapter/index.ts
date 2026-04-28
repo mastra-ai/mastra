@@ -839,7 +839,7 @@ export async function checkRouteFGA(
 
   const resourceId =
     typeof fgaConfig.resourceId === 'function'
-      ? fgaConfig.resourceId(params)
+      ? fgaConfig.resourceId(params, { requestContext })
       : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
   const permission = fgaConfig.permission || `${fgaConfig.resourceType}:read`;
 
