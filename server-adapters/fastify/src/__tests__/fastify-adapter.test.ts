@@ -598,6 +598,97 @@ describe('Fastify Server Adapter', () => {
     });
   });
 
+  describe('Multipart File Handling (Busboy)', () => {
+    let context: AdapterTestContext;
+    let app: FastifyInstance | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (app) {
+        await app.close();
+        app = null;
+      }
+    });
+
+    it('should expose uploaded file as buffer', async () => {
+      app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload',
+        responseType: 'json',
+        handler: async (params: any) => {
+          return params;
+        },
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      const form = new FormData();
+      form.append('file', new Blob(['hello world']), 'test.txt');
+
+      const response = await fetch(`${address}/test/upload`, {
+        method: 'POST',
+        body: form as any,
+      });
+
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.file).toBeDefined();
+
+      // reconstruct buffer from JSON
+      const reconstructed = Buffer.from(data.file.data);
+
+      expect(reconstructed.toString()).toBe('hello world');
+    });
+
+    it('should return error when file exceeds size limit (no hang)', async () => {
+      app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        bodyLimitOptions: { maxSize: 1024 },
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload-limit',
+        responseType: 'json',
+        handler: async (params: any) => params,
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      const bigBuffer = new Uint8Array(1024 * 10);
+
+      const form = new FormData();
+      form.append('file', new Blob([bigBuffer]), 'big.txt');
+
+      const response = await fetch(`${address}/test/upload-limit`, {
+        method: 'POST',
+        body: form as any,
+      });
+
+      expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
   describe('Custom route prefix validation', () => {
     it('should throw when a custom route path starts with the server prefix', async () => {
       const customRoutes = [
