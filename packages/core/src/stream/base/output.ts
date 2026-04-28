@@ -809,6 +809,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 ...(self.#usageCount.cachedInputTokens !== undefined && {
                   cachedInputTokens: self.#usageCount.cachedInputTokens,
                 }),
+                ...(self.#usageCount.cacheCreationInputTokens !== undefined && {
+                  cacheCreationInputTokens: self.#usageCount.cacheCreationInputTokens,
+                }),
                 ...(self.#usageCount.raw !== undefined && {
                   raw: self.#usageCount.raw,
                 }),
@@ -1263,6 +1266,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (usage.cachedInputTokens !== undefined) {
       this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
+    if (usage.cacheCreationInputTokens !== undefined) {
+      this.#usageCount.cacheCreationInputTokens =
+        (this.#usageCount.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
+    }
     // raw is provider-specific and not summable; keep the latest step's raw
     if (usage.raw !== undefined) {
       this.#usageCount.raw = usage.raw;
@@ -1289,6 +1296,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
     if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
       this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
+    }
+    if (usage.cacheCreationInputTokens !== undefined && this.#usageCount.cacheCreationInputTokens === undefined) {
+      this.#usageCount.cacheCreationInputTokens = usage.cacheCreationInputTokens;
     }
     if (usage.raw !== undefined && this.#usageCount.raw === undefined) {
       this.#usageCount.raw = usage.raw;
@@ -1556,6 +1566,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       totalTokens: total,
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
+      cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens,
       ...(this.#usageCount.raw !== undefined && { raw: this.#usageCount.raw }),
     };
   }
