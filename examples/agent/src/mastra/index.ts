@@ -5,7 +5,7 @@ import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
 
-import { mastraAuth, rbacProvider } from './auth';
+import { mastraAuth, rbacProvider, fgaProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
 import { ComposioToolProvider } from '@mastra/editor/composio';
@@ -119,6 +119,7 @@ const config = {
   server: {
     auth: mastraAuth,
     rbac: rbacProvider,
+    fga: fgaProvider,
   },
 };
 

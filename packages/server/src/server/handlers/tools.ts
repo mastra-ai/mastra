@@ -1,3 +1,4 @@
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -91,7 +92,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, registeredTools }) => {
+  handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
       const allTools =
         registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
@@ -103,6 +104,20 @@ export const LIST_TOOLS_ROUTE = createRoute({
         },
         {} as Record<string, any>,
       );
+
+      // Filter tools by FGA if configured
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      if (fgaProvider && user) {
+        const toolList = Object.entries(serializedTools).map(([id, t]) => ({ id, ...t }));
+        const accessible = await fgaProvider.filterAccessible(user, toolList, 'tool', MastraFGAPermissions.TOOLS_READ);
+        const accessibleSet = new Set(accessible.map((t: any) => t.id));
+        for (const id of Object.keys(serializedTools)) {
+          if (!accessibleSet.has(id)) {
+            delete serializedTools[id];
+          }
+        }
+      }
 
       return serializedTools;
     } catch (error) {
@@ -121,6 +136,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
   requiresAuth: true,
+  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: MastraFGAPermissions.TOOLS_READ },
   handler: async ({ mastra, registeredTools, toolId }) => {
     try {
       let tool: any;
@@ -155,6 +171,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
   requiresAuth: true,
+  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: MastraFGAPermissions.TOOLS_EXECUTE },
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
@@ -223,6 +240,11 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  fga: {
+    resourceType: 'tool',
+    resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
+    permission: MastraFGAPermissions.TOOLS_READ,
+  },
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
@@ -256,6 +278,11 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  fga: {
+    resourceType: 'tool',
+    resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
+    permission: MastraFGAPermissions.TOOLS_EXECUTE,
+  },
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {

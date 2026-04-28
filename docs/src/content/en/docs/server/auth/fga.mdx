@@ -1,0 +1,149 @@
+---
+title: "Fine-Grained Authorization (FGA)"
+description: "Add resource-level authorization to your Mastra application with FGA providers."
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/core"
+---
+
+# Fine-Grained Authorization (FGA)
+
+Fine-Grained Authorization (FGA) adds resource-level permission checks to your Mastra application. While RBAC answers "can this role do this action?", FGA answers **"can this user do this action on this specific resource?"**
+
+## When to use FGA
+
+FGA is designed for multi-tenant B2B products where permissions are contextual:
+
+- A user might be an **admin** of Team A but only a **member** of Team B
+- Thread access should be limited to the user's own organization
+- Workflow execution should be scoped to a specific team or project
+- Tool access depends on the user's relationship to a resource
+
+## Configuration
+
+Configure FGA in your Mastra server config alongside authentication and RBAC:
+
+```typescript prettier: false
+import { Mastra } from '@mastra/core/mastra';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos';
+
+const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos({
+      /* ... */
+      fetchMemberships: true,
+    }),
+    fga: new MastraFGAWorkos({
+      resourceMapping: {
+        agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+        workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+        thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
+      },
+      permissionMapping: {
+        [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
+        [MastraFGAPermissions.WORKFLOWS_EXECUTE]: 'manage-workflows',
+        [MastraFGAPermissions.MEMORY_READ]: 'read',
+        [MastraFGAPermissions.MEMORY_WRITE]: 'update',
+      },
+    }),
+  },
+});
+```
+
+When using `MastraFGAWorkos`, set `fetchMemberships: true` on `MastraAuthWorkos`. WorkOS FGA checks need the user's organization memberships to resolve the correct membership ID for authorization.
+
+Use `thread` as the resource-mapping key for memory authorization. `MastraFGAWorkos` still accepts the legacy alias `memory`, but new configs should prefer `thread`.
+
+### Resource mapping
+
+The `resourceMapping` tells Mastra how to resolve FGA resource types and IDs from request context. Keys are Mastra resource types, values define the FGA resource type and how to derive the ID:
+
+```typescript prettier: false
+resourceMapping: {
+  // When checking "can user execute agent X?", resolve the FGA resource
+  // as the user's team (type: 'team', id: user.teamId)
+  agent: {
+    fgaResourceType: 'team',
+    deriveId: (ctx) => ctx.user.teamId,
+  },
+}
+```
+
+`deriveId()` receives:
+
+- `user` — the authenticated user
+- `resourceId` — the owning Mastra resource ID when available (for example, a thread's `resourceId`)
+- `requestContext` — the current request context for advanced tenant resolution
+
+Return `undefined` from `deriveId()` to fall back to the original Mastra resource ID.
+
+For thread and memory checks, Mastra still passes the raw `threadId` as the resource being checked, but it also forwards the thread's owning `resourceId` into `deriveId()`. This lets you map thread permissions to composite tenant IDs such as `userId-teamId-orgId`.
+
+### Permission mapping
+
+The `permissionMapping` translates Mastra's internal permission strings to your FGA provider's permission slugs:
+
+```typescript prettier: false
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+
+permissionMapping: {
+  [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows', // Mastra permission -> WorkOS permission slug
+  [MastraFGAPermissions.MEMORY_READ]: 'read',
+}
+```
+
+If no mapping exists for a permission, the original string is passed through.
+
+## Enforcement points
+
+When an FGA provider is configured, Mastra automatically checks authorization at these lifecycle points:
+
+| Lifecycle point | Permission checked | Resource |
+| - | - | - |
+| Agent execution (`generate`, `stream`) | `agents:execute` | `{ type: 'agent', id: agentId }` |
+| Workflow execution | `workflows:execute` | `{ type: 'workflow', id: workflowId }` |
+| Tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
+| Thread/memory access | `memory:read`, `memory:write`, `memory:delete` | `{ type: 'thread', id: threadId }` |
+| MCP tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
+| HTTP routes (opt-in) | Configured per route | Configured per route |
+
+All checks are **no-ops when FGA is not configured**, maintaining backward compatibility.
+
+## Custom FGA provider
+
+Implement `IFGAProvider` to use any FGA backend:
+
+```typescript
+import { FGADeniedError } from '@mastra/core/auth/ee'
+import type { FGACheckParams, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee'
+
+class MyFGAProvider implements IFGAProvider {
+  async check(user: any, params: FGACheckParams): Promise<boolean> {
+    // Your authorization logic
+    return true
+  }
+
+  async require(user: any, params: FGACheckParams): Promise<void> {
+    const allowed = await this.check(user, params)
+    if (!allowed) {
+      throw new FGADeniedError(user, params.resource, params.permission)
+    }
+  }
+
+  async filterAccessible<T extends { id: string }>(
+    user: any,
+    resources: T[],
+    resourceType: string,
+    permission: MastraFGAPermissionInput,
+  ): Promise<T[]> {
+    // Filter resources the user can access
+    return resources
+  }
+}
+```
+
+## Related
+
+- [Authentication overview](/docs/server/auth)
+- [WorkOS authentication](/docs/server/auth/workos)

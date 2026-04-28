@@ -7,6 +7,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -528,6 +529,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, route, c.get('requestContext'), {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+        }
+
         try {
           const result = await route.handler(handlerParams);
           return this.sendResponse(route, c, result, prefix);
@@ -589,6 +600,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         responseType: 'json',
         handler: async () => {},
         requiresAuth: route.requiresAuth,
+        requiresPermission: route.requiresPermission,
+        fga: route.fga,
       };
 
       const routeHandler: MiddlewareHandler = async (c: Context) => {
@@ -627,6 +640,15 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               );
             }
           }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
+          ...c.req.param(),
+          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
         }
 
         const reqHeaders: Record<string, string | string[] | undefined> = {};

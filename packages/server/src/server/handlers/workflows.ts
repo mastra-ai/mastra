@@ -1,4 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
@@ -99,7 +100,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: (async ({ mastra, partial }: any) => {
+  handler: (async ({ mastra, partial, requestContext }: any) => {
     try {
       const workflows = mastra.listWorkflows({ serialized: false });
       const isPartial = partial === 'true';
@@ -107,6 +108,29 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
         acc[key] = getWorkflowInfo(workflow as any, isPartial);
         return acc;
       }, {});
+
+      // Filter workflows by FGA if configured
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      if (fgaProvider) {
+        if (!user) {
+          return {};
+        }
+        const workflowList = Object.entries(_workflows).map(([id, w]) => ({ id, ...w }));
+        const accessible = await fgaProvider.filterAccessible(
+          user,
+          workflowList,
+          'workflow',
+          MastraFGAPermissions.WORKFLOWS_READ,
+        );
+        const accessibleSet = new Set(accessible.map((w: any) => w.id));
+        for (const id of Object.keys(_workflows)) {
+          if (!accessibleSet.has(id)) {
+            delete _workflows[id];
+          }
+        }
+      }
+
       return _workflows;
     } catch (error) {
       return handleError(error, 'Error getting workflows');
@@ -124,6 +148,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
   requiresAuth: true,
+  fga: { resourceType: 'workflow', resourceIdParam: 'workflowId', permission: MastraFGAPermissions.WORKFLOWS_READ },
   handler: (async ({ mastra, workflowId }: any) => {
     try {
       if (!workflowId) {

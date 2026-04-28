@@ -817,3 +817,58 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     };
   }
 }
+
+/**
+ * Check FGA authorization for an HTTP route.
+ * Returns null if authorized or FGA not configured, or an error object if denied.
+ */
+export async function checkRouteFGA(
+  mastra: any,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<{ status: number; error: string; message: string } | null> {
+  const fgaConfig = route.fga;
+  if (!fgaConfig) return null;
+
+  const fgaProvider = mastra?.getServer?.()?.fga;
+  if (!fgaProvider) return null;
+
+  const user = requestContext?.get('user');
+  if (!user) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: authenticated user is required',
+    };
+  }
+
+  const resourceId =
+    typeof fgaConfig.resourceId === 'function'
+      ? fgaConfig.resourceId(params, { requestContext })
+      : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
+  const permission = fgaConfig.permission || `${fgaConfig.resourceType}:read`;
+  if (!fgaConfig.resourceType || !resourceId) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is incomplete',
+    };
+  }
+
+  const authorized = await fgaProvider.check(user, {
+    resource: { type: fgaConfig.resourceType, id: resourceId },
+    permission,
+    context: { resourceId, requestContext },
+  });
+
+  if (!authorized) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
+    };
+  }
+
+  return null;
+}
