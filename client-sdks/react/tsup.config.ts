@@ -39,7 +39,7 @@ async function rewritePathAliases(rootDir: string) {
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
-  clean: true,
+  clean: !process.argv.includes('--watch'),
   dts: false,
   splitting: true,
   treeshake: {

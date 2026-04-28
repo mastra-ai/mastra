@@ -11,7 +11,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
-import { useIsDarkMode } from '@/store/playground-store';
+import { useTheme } from '@/ds/components/ThemeProvider';
 
 function buildDarkTheme(): Extension {
   return draculaInit({
@@ -75,7 +75,7 @@ function buildLightTheme(): Extension {
 }
 
 const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 

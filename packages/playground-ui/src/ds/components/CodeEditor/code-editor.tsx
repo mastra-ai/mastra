@@ -16,7 +16,7 @@ import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
-import { useIsDarkMode } from '@/store/playground-store';
+import { useTheme } from '@/ds/components/ThemeProvider';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 
@@ -217,7 +217,7 @@ function buildLightTheme(): Extension {
 }
 
 export const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 

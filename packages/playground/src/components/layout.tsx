@@ -1,7 +1,7 @@
-import { ErrorBoundary, MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { ErrorBoundary, MainSidebarProvider, ThemeProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { Agentation } from 'agentation';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
-import { ThemeProvider } from './ui/theme-provider';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { isAuthenticated } from '@/domains/auth/types';
@@ -42,7 +42,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="bg-surface1 font-sans h-screen">
       <Toaster position="bottom-right" />
-      <ThemeProvider defaultTheme="dark" attribute="class">
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
@@ -51,6 +51,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>
+      {import.meta.env.DEV && <Agentation />}
     </div>
   );
 };
