@@ -12,7 +12,9 @@ on:
 jobs:
   version:
     # Only run on the main repository, not on forks
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: |
+      github.repository == 'mastra-ai/mastra' &&
+      !startsWith(github.event.head_commit.message, 'chore: merge hotfix release into main')
     runs-on: ubuntu-latest
     steps:
       - name: Initial checkout
