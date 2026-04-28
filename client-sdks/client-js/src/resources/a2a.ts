@@ -50,6 +50,34 @@ function unwrapA2AResult<TResult>(response: JSONRPCResponse): TResult {
   throw new MastraClientErrorClass(200, 'OK', 'A2A JSON-RPC response did not include a result', response);
 }
 
+async function requireResponseBody(response: Response, method: string): Promise<ReadableStream<Uint8Array>> {
+  if (response.body) {
+    return response.body;
+  }
+
+  const headerSummary = Array.from(response.headers.entries())
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(', ');
+
+  let responseText = '';
+  try {
+    responseText = await response.text();
+  } catch {
+    // Ignore body read failures and surface the rest of the response context.
+  }
+
+  const details = [
+    `A2A ${method} stream response did not include a body`,
+    `(status: ${response.status} ${response.statusText})`,
+    headerSummary ? `headers: ${headerSummary}` : '',
+    responseText ? `body: ${responseText}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  throw new MastraClientErrorClass(response.status, response.statusText, details);
+}
+
 /**
  * Class for interacting with an agent via the A2A protocol
  */
@@ -129,11 +157,7 @@ export class A2A extends BaseResource {
       stream: true,
     });
 
-    if (!response.body) {
-      return;
-    }
-
-    yield* processA2AStream(response.body);
+    yield* processA2AStream(await requireResponseBody(response, 'message/stream'));
   }
 
   /**
@@ -205,11 +229,7 @@ export class A2A extends BaseResource {
       stream: true,
     });
 
-    if (!response.body) {
-      return;
-    }
-
-    yield* processA2AStream(response.body);
+    yield* processA2AStream(await requireResponseBody(response, 'tasks/resubscribe'));
   }
 
   /**
