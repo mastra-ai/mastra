@@ -76,6 +76,7 @@ export class Harness<TState = {}> {
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
+  private currentTraceId: string | null = null;
   private currentOperationId: number = 0;
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
   private pendingApprovalResolve:
@@ -153,6 +154,19 @@ export class Harness<TState = {}> {
   }
 
   // ===========================================================================
+  // Accessors
+  // ===========================================================================
+
+  /**
+   * Access the internal Mastra instance.
+   * Available after `init()` when storage is configured.
+   * Useful for scorer registration, observability access, and eval tooling.
+   */
+  getMastra(): Mastra | undefined {
+    return this.#internalMastra;
+  }
+
+  // ===========================================================================
   // Initialization
   // ===========================================================================
 
@@ -166,7 +180,11 @@ export class Harness<TState = {}> {
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     if (this.config.storage) {
-      this.#internalMastra = new Mastra({ logger: false, storage: this.config.storage });
+      this.#internalMastra = new Mastra({
+        logger: false,
+        storage: this.config.storage,
+        ...(this.config.observability ? { observability: this.config.observability } : {}),
+      });
       await this.#internalMastra.getStorage()!.init();
     }
 
@@ -1313,6 +1331,7 @@ export class Harness<TState = {}> {
 
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
+    this.currentTraceId = null;
     const agent = this.getCurrentAgent();
     this.emit({ type: 'agent_start' });
 
@@ -1700,9 +1719,12 @@ export class Harness<TState = {}> {
    * Process a stream response (shared between sendMessage and tool approval).
    */
   private async processStream(
-    response: { fullStream: AsyncIterable<any> },
+    response: { fullStream: AsyncIterable<any>; traceId?: string },
     requestContext: RequestContext,
   ): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+    if (response.traceId) {
+      this.currentTraceId = response.traceId;
+    }
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -2233,6 +2255,10 @@ export class Harness<TState = {}> {
 
   getCurrentRunId(): string | null {
     return this.currentRunId;
+  }
+
+  getCurrentTraceId(): string | null {
+    return this.currentTraceId;
   }
 
   // ===========================================================================

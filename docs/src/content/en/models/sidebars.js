@@ -108,6 +108,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/abliteration-ai',
+          label: 'abliteration.ai',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
