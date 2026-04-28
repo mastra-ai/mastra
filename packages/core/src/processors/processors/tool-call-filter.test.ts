@@ -2,8 +2,25 @@ import { describe, it, expect } from 'vitest';
 
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage } from '../../memory/types';
+import type { ProcessInputStepArgs } from '../index';
 
 import { ToolCallFilter } from './tool-call-filter';
+
+function mockStepArgs(messageList: MessageList): ProcessInputStepArgs {
+  return {
+    messages: messageList.get.all.db(),
+    messageList,
+    abort: ((reason?: string) => {
+      throw new Error(reason || 'Aborted');
+    }) as (reason?: string) => never,
+    stepNumber: 1,
+    steps: [],
+    systemMessages: [],
+    state: {},
+    model: 'test-model' as any,
+    retryCount: 0,
+  };
+}
 
 describe('ToolCallFilter', () => {
   const mockAbort = ((reason?: string) => {
@@ -890,6 +907,205 @@ describe('ToolCallFilter', () => {
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
       expect(resultMessages).toHaveLength(1);
       expect(resultMessages[0]!.id).toBe('msg-1');
+    });
+  });
+
+  describe('processInputStep (per-step filtering)', () => {
+    it('should filter tool calls at each agentic loop step', async () => {
+      const filter = new ToolCallFilter();
+
+      const baseTime = Date.now();
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Get the weather and then book a flight',
+            parts: [{ type: 'text' as const, text: 'Get the weather and then book a flight' }],
+          },
+          createdAt: new Date(baseTime),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                  result: 'Sunny, 72°F',
+                },
+              },
+              { type: 'text' as const, text: 'The weather is sunny. Now booking a flight...' },
+            ],
+          },
+          createdAt: new Date(baseTime + 1),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const filteredMessages = result.messages!;
+      expect(filteredMessages).toHaveLength(2);
+      expect(filteredMessages[0]!.id).toBe('msg-1');
+
+      // Tool invocations should be stripped, text kept
+      const assistantMsg = filteredMessages[1]!;
+      if (typeof assistantMsg.content !== 'string') {
+        const hasToolInvocation = assistantMsg.content.parts.some((p: any) => p.type === 'tool-invocation');
+        expect(hasToolInvocation).toBe(false);
+        const textParts = assistantMsg.content.parts.filter((p: any) => p.type === 'text');
+        expect(textParts.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should filter specific tools per step', async () => {
+      const filter = new ToolCallFilter({ exclude: ['weather'] });
+
+      const baseTime = Date.now();
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Do tasks',
+            parts: [{ type: 'text' as const, text: 'Do tasks' }],
+          },
+          createdAt: new Date(baseTime),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-weather',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-weather',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-booking',
+                  toolName: 'book-flight',
+                  args: { destination: 'LAX' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-booking',
+                  toolName: 'book-flight',
+                  args: {},
+                  result: 'Booked',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(baseTime + 1),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const filteredMessages = result.messages!;
+      expect(filteredMessages).toHaveLength(2);
+
+      // Weather tool calls should be removed, book-flight kept
+      const assistantMsg = filteredMessages[1]!;
+      if (typeof assistantMsg.content !== 'string') {
+        const toolParts = assistantMsg.content.parts.filter((p: any) => p.type === 'tool-invocation');
+        expect(toolParts.length).toBe(2); // Only book-flight call + result
+        expect(toolParts.every((p: any) => p.toolInvocation.toolName === 'book-flight')).toBe(true);
+      }
+    });
+
+    it('should return all messages when exclude list is empty', async () => {
+      const filter = new ToolCallFilter({ exclude: [] });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello',
+            parts: [{ type: 'text' as const, text: 'Hello' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      expect(result.messages!).toHaveLength(2);
     });
   });
 });
