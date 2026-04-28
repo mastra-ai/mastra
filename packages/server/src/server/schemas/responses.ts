@@ -4,6 +4,14 @@ export const responseIdPathParams = z.object({
   responseId: z.string().describe('Unique identifier for the stored response'),
 });
 
+export const responseLookupQuerySchema = z.object({
+  agent_id: z.string().optional().describe('Optional Mastra agent ID used to scope gateway-backed response lookups'),
+  conversation_id: z
+    .string()
+    .optional()
+    .describe('Optional conversation thread ID used to scope stored response lookup and deletion.'),
+});
+
 export const responseInputTextPartSchema = z.object({
   type: z.enum(['input_text', 'text', 'output_text']),
   text: z.string(),

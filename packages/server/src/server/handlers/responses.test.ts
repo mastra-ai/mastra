@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { createResponseBodySchema } from '../schemas/responses';
+import * as gatewayMemory from './gateway-memory-client';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { createTestServerContext } from './test-utils';
 
@@ -276,6 +277,32 @@ function createMastraWithAgentMemoryWithoutStorage() {
   };
 }
 
+function createGatewayMastra() {
+  const agent = new Agent({
+    id: 'gateway-agent',
+    name: 'gateway-agent',
+    instructions: 'gateway instructions',
+    model: 'mastra/openai/gpt-5' as never,
+  });
+  const mastra = new Mastra({
+    logger: false,
+    agents: {
+      'gateway-agent': agent,
+    },
+  });
+
+  vi.spyOn(agent, 'getModel').mockResolvedValue({
+    specificationVersion: 'v2',
+    provider: 'openai.responses',
+    modelId: 'gpt-5',
+  } as never);
+
+  return {
+    agent,
+    mastra,
+  };
+}
+
 describe('Responses Handlers', () => {
   let storage: InMemoryStore;
   let memory: MockMemory;
@@ -284,6 +311,7 @@ describe('Responses Handlers', () => {
   let mastra: Mastra;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     storage = new InMemoryStore();
     memory = new MockMemory({ storage });
 
@@ -1655,6 +1683,325 @@ describe('Responses Handlers', () => {
       }),
     ).rejects.toMatchObject({
       status: 400,
+    });
+  });
+
+  it('creates a stored gateway-backed response without requiring conversation_id', async () => {
+    const gateway = createGatewayMastra();
+    vi.spyOn(gatewayMemory, 'getGatewayClient').mockReturnValue({
+      listMessages: vi.fn().mockResolvedValue({
+        total: 1,
+        messages: [
+          {
+            id: 'msg_gateway',
+            threadId: 'conv_gateway',
+            role: 'assistant',
+            content: 'Gateway hello',
+            type: 'text',
+            createdAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+    } as any);
+    const generateSpy = vi
+      .spyOn(gateway.agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'Gateway hello' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      agent_id: 'gateway-agent',
+      input: 'Hello gateway',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    const generateCall = generateSpy.mock.calls[0]?.[1] as { memory?: { thread?: string; resource?: string } };
+
+    expect(generateCall.memory?.thread).toBeTruthy();
+    expect(generateCall.memory).toEqual({
+      thread: generateCall.memory?.thread,
+      resource: generateCall.memory?.thread,
+    });
+    expect(created).toMatchObject({
+      id: expect.any(String),
+      object: 'response',
+      conversation_id: generateCall.memory?.thread,
+      store: true,
+      output: [{ content: [{ text: 'Gateway hello' }] }],
+    });
+  });
+
+  it('returns the persisted gateway assistant message id so follow-up turns can continue', async () => {
+    const gateway = createGatewayMastra();
+    const gatewayClient = {
+      listThreads: vi.fn().mockResolvedValue({
+        total: 1,
+        threads: [
+          {
+            id: 'conv_gateway',
+            projectId: 'proj_123',
+            resourceId: 'user_gateway',
+            title: 'Gateway thread',
+            metadata: null,
+            createdAt: '2026-04-20T10:00:00.000Z',
+            updatedAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+      listMessages: vi.fn().mockResolvedValue({
+        total: 1,
+        messages: [
+          {
+            id: 'msg_gateway_persisted',
+            threadId: 'conv_gateway',
+            role: 'assistant',
+            content: 'Gateway hello',
+            type: 'text',
+            createdAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+    };
+    vi.spyOn(gatewayMemory, 'getGatewayClient').mockReturnValue(gatewayClient as any);
+    const generateSpy = vi.spyOn(gateway.agent, 'generate');
+    generateSpy
+      .mockResolvedValueOnce(
+        createGenerateResult({
+          text: 'Gateway hello',
+          dbMessages: [
+            createDbMessage({
+              id: 'msg_gateway_local',
+              role: 'assistant',
+              createdAt: new Date('2026-04-20T10:00:00.000Z'),
+              parts: [{ type: 'text', text: 'Gateway hello' }],
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(createGenerateResult({ text: 'Gateway follow-up' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      agent_id: 'gateway-agent',
+      input: 'Hello gateway',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+    expect(firstCreated.id).toBe('msg_gateway_persisted');
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      agent_id: 'gateway-agent',
+      input: 'Follow up',
+      previous_response_id: firstCreated.id,
+      store: true,
+      stream: false,
+    });
+
+    expect(generateSpy).toHaveBeenNthCalledWith(
+      2,
+      [{ role: 'user', content: 'Follow up' }],
+      expect.objectContaining({
+        memory: {
+          thread: 'conv_gateway',
+          resource: 'user_gateway',
+        },
+      }),
+    );
+  });
+
+  it('uses the gateway thread resource when conversation_id is provided', async () => {
+    const gateway = createGatewayMastra();
+    vi.spyOn(gatewayMemory, 'getGatewayClient').mockReturnValue({
+      getThread: vi.fn().mockResolvedValue({
+        thread: {
+          id: 'conv_gateway',
+          projectId: 'proj_123',
+          resourceId: 'user_gateway',
+          title: 'Gateway thread',
+          metadata: null,
+          createdAt: '2026-04-20T10:00:00.000Z',
+          updatedAt: '2026-04-20T10:00:00.000Z',
+        },
+      }),
+      listMessages: vi.fn().mockResolvedValue({
+        total: 1,
+        messages: [
+          {
+            id: 'msg_gateway',
+            threadId: 'conv_gateway',
+            role: 'assistant',
+            content: 'Gateway hello',
+            type: 'text',
+            createdAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+    } as any);
+    const generateSpy = vi
+      .spyOn(gateway.agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'Gateway hello' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      agent_id: 'gateway-agent',
+      input: 'Hello gateway',
+      conversation_id: 'conv_gateway',
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect(generateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Hello gateway' }],
+      expect.objectContaining({
+        memory: {
+          thread: 'conv_gateway',
+          resource: 'user_gateway',
+        },
+      }),
+    );
+    expect(created).toMatchObject({
+      id: expect.any(String),
+      object: 'response',
+      conversation_id: 'conv_gateway',
+      store: true,
+      output: [{ content: [{ text: 'Gateway hello' }] }],
+    });
+  });
+
+  it('reuses the gateway thread when previous_response_id is provided', async () => {
+    const gateway = createGatewayMastra();
+    vi.spyOn(gatewayMemory, 'getGatewayClient').mockReturnValue({
+      listThreads: vi.fn().mockResolvedValue({
+        total: 1,
+        threads: [
+          {
+            id: 'conv_gateway',
+            projectId: 'proj_123',
+            resourceId: 'user_gateway',
+            title: 'Gateway thread',
+            metadata: null,
+            createdAt: '2026-04-20T10:00:00.000Z',
+            updatedAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+      listMessages: vi.fn().mockResolvedValue({
+        total: 1,
+        messages: [
+          {
+            id: 'msg_gateway',
+            threadId: 'conv_gateway',
+            role: 'assistant',
+            content: 'Gateway response text',
+            type: 'text',
+            createdAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+    } as any);
+    const generateSpy = vi
+      .spyOn(gateway.agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'Gateway follow-up' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      agent_id: 'gateway-agent',
+      input: 'Follow up',
+      previous_response_id: 'msg_gateway',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect(generateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Follow up' }],
+      expect.objectContaining({
+        memory: {
+          thread: 'conv_gateway',
+          resource: 'user_gateway',
+        },
+      }),
+    );
+    expect(created).toMatchObject({
+      conversation_id: 'conv_gateway',
+      previous_response_id: 'msg_gateway',
+      store: true,
+    });
+  });
+
+  it('retrieves and deletes gateway-backed responses without requiring thread-scoped query params', async () => {
+    const gateway = createGatewayMastra();
+    const deleteMessages = vi.fn().mockResolvedValue({ ok: true });
+    const listThreads = vi.fn().mockResolvedValue({
+      total: 1,
+      threads: [
+        {
+          id: 'conv_gateway',
+          projectId: 'proj_123',
+          resourceId: 'user_gateway',
+          title: 'Gateway thread',
+          metadata: null,
+          createdAt: '2026-04-20T10:00:00.000Z',
+          updatedAt: '2026-04-20T10:00:00.000Z',
+        },
+      ],
+    });
+    vi.spyOn(gatewayMemory, 'getGatewayClient').mockReturnValue({
+      getThread: vi.fn(),
+      listThreads,
+      listMessages: vi.fn().mockResolvedValue({
+        total: 1,
+        messages: [
+          {
+            id: 'msg_gateway',
+            threadId: 'conv_gateway',
+            role: 'assistant',
+            content: 'Gateway response text',
+            type: 'text',
+            createdAt: '2026-04-20T10:00:00.000Z',
+          },
+        ],
+      }),
+      deleteMessages,
+    } as any);
+
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      responseId: 'msg_gateway',
+    });
+
+    expect(retrieved).toMatchObject({
+      id: 'msg_gateway',
+      object: 'response',
+      model: 'openai/gpt-5',
+      conversation_id: 'conv_gateway',
+      store: true,
+      output: [
+        {
+          id: 'msg_gateway',
+          type: 'message',
+          content: [{ text: 'Gateway response text' }],
+        },
+      ],
+    });
+
+    const deleted = await DELETE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      responseId: 'msg_gateway',
+    });
+
+    expect(listThreads).toHaveBeenCalled();
+    expect(deleteMessages).toHaveBeenCalledWith('conv_gateway', { messageIds: ['msg_gateway'] });
+    expect(deleted).toEqual({
+      id: 'msg_gateway',
+      object: 'response',
+      deleted: true,
     });
   });
 });
