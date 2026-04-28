@@ -25,6 +25,7 @@ import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
+import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
@@ -162,7 +163,9 @@ const RootLayout = () => {
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <Layout>
-        <Outlet />
+        <RoutePermissionGuard>
+          <Outlet />
+        </RoutePermissionGuard>
       </Layout>
     </LinkComponentProvider>
   );
