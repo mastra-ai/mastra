@@ -56,7 +56,7 @@ test.describe('Request Context', () => {
     // is only readable via route.request().postData() during interception — passive
     // request listeners see an empty body.
     let capturedBody: Record<string, unknown> | null = null;
-    await page.route('**/api/agents/test-agent/stream', async (route) => {
+    await page.route(/\/api\/agents\/test-agent\/stream(-until-idle)?$/, async (route) => {
       const request = route.request();
       try {
         capturedBody = JSON.parse(request.postData() ?? '{}');
@@ -84,7 +84,7 @@ test.describe('Request Context', () => {
     expect(rc.env).toBe('test');
 
     // 3. Remove the request context via the UI
-    await page.unroute('**/api/agents/test-agent/stream');
+    await page.unroute(/\/api\/agents\/test-agent\/stream(-until-idle)?$/);
     await page.goto('/request-context');
     const editorClear = page.getByRole('textbox').and(page.locator('.cm-content'));
     await expect(editorClear).toBeVisible();
@@ -102,7 +102,7 @@ test.describe('Request Context', () => {
     await page.goto('/agents/test-agent/chat/new');
     await expect(page.getByRole('heading', { name: 'Test Agent' })).toBeVisible({ timeout: 10_000 });
 
-    await page.route('**/api/agents/test-agent/stream', async (route) => {
+    await page.route(/\/api\/agents\/test-agent\/stream(-until-idle)?$/, async (route) => {
       const request = route.request();
       try {
         capturedBodyAfter = JSON.parse(request.postData() ?? '{}');
