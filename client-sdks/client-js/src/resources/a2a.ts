@@ -1,7 +1,6 @@
 import { MastraA2AError } from '@mastra/core/a2a';
 import type {
   AgentCard,
-  CancelTaskResponse,
   DeleteTaskPushNotificationConfigParams,
   DeleteTaskPushNotificationConfigResponse,
   GetAuthenticatedExtendedCardResponse,
@@ -95,12 +94,13 @@ export class A2A extends BaseResource {
   }
 
   /**
-   * Send a message to the agent and get a message or task response.
+   * @deprecated Use sendMessageStream() for the streaming experience.
+   * Send a message to the agent and gets a message or task response.
    * @param params - Parameters for the task
-   * @returns Promise containing the response
+   * @returns Promise containing the JSON-RPC response envelope
    */
-  async sendMessage(params: MessageSendParams): Promise<SendMessageResult> {
-    const response = await this.request<SendMessageResponse>(`/a2a/${this.agentId}`, {
+  async sendMessage(params: MessageSendParams): Promise<SendMessageResponse> {
+    return this.request<SendMessageResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -109,8 +109,6 @@ export class A2A extends BaseResource {
         params,
       },
     });
-
-    return unwrapA2AResult<SendMessageResult>(response);
   }
 
   /**
@@ -141,17 +139,27 @@ export class A2A extends BaseResource {
   /**
    * @deprecated Use sendMessageStream() instead.
    */
-  sendStreamingMessage(params: MessageSendParams): AsyncGenerator<A2AStreamEventData, void, undefined> {
-    return this.sendMessageStream(params);
+  async sendStreamingMessage(params: MessageSendParams): Promise<Response> {
+    return this.request<Response>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'message/stream',
+        params,
+      },
+      stream: true,
+    });
   }
 
   /**
+   * @deprecated
    * Get the status and result of a task.
    * @param params - Parameters for querying the task
-   * @returns Promise containing the task response
+   * @returns Promise containing the JSON-RPC response envelope
    */
-  async getTask(params: TaskQueryParams): Promise<Task> {
-    const response = await this.request<GetTaskResponse>(`/a2a/${this.agentId}`, {
+  async getTask(params: TaskQueryParams): Promise<GetTaskResponse> {
+    return this.request<GetTaskResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -160,17 +168,16 @@ export class A2A extends BaseResource {
         params,
       },
     });
-
-    return unwrapA2AResult<Task>(response);
   }
 
   /**
+   * @deprecated
    * Cancel a running task.
    * @param params - Parameters identifying the task to cancel
    * @returns Promise containing the task response
    */
-  async cancelTask(params: TaskIdParams): Promise<Task> {
-    const response = await this.request<CancelTaskResponse>(`/a2a/${this.agentId}`, {
+  async cancelTask(params: TaskQueryParams): Promise<Task> {
+    return this.request(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -179,8 +186,6 @@ export class A2A extends BaseResource {
         params,
       },
     });
-
-    return unwrapA2AResult<Task>(response);
   }
 
   /**

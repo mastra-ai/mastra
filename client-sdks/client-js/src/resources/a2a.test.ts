@@ -1,11 +1,18 @@
 import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AgentCard, MessageSendParams, Task, TaskPushNotificationConfig } from '@mastra/core/a2a';
+import type {
+  AgentCard,
+  GetTaskResponse,
+  MessageSendParams,
+  SendMessageResponse,
+  Task,
+  TaskPushNotificationConfig,
+} from '@mastra/core/a2a';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { MastraClientError } from '../types';
 import { A2A } from './a2a';
-import type { A2AStreamEventData, SendMessageResult } from './a2a';
+import type { A2AStreamEventData } from './a2a';
 
 async function collectStream<T>(stream: AsyncIterable<T>): Promise<T[]> {
   const chunks: T[] = [];
@@ -104,7 +111,7 @@ describe('A2A', () => {
   });
 
   describe('sendMessage', () => {
-    it('returns the unwrapped message or task result for non-streaming requests', async () => {
+    it('returns the full JSON-RPC envelope (backward-compatible contract)', async () => {
       const mockResponse = {
         jsonrpc: '2.0',
         id: 'req-1',
@@ -131,8 +138,8 @@ describe('A2A', () => {
       };
 
       const response = await a2a.sendMessage(params);
-      expectTypeOf(a2a.sendMessage(params)).toEqualTypeOf<Promise<SendMessageResult>>();
-      expect(response).toEqual(mockResponse.result);
+      expectTypeOf(a2a.sendMessage(params)).toEqualTypeOf<Promise<SendMessageResponse>>();
+      expect(response).toEqual(mockResponse);
     });
 
     it('should include JSON-RPC 2.0 fields in the request body', async () => {
@@ -185,9 +192,7 @@ describe('A2A', () => {
       const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
 
       expectTypeOf(a2a.sendMessageStream(params)).toEqualTypeOf<AsyncGenerator<A2AStreamEventData, void, undefined>>();
-      expectTypeOf(a2a.sendStreamingMessage(params)).toEqualTypeOf<
-        AsyncGenerator<A2AStreamEventData, void, undefined>
-      >();
+      expectTypeOf(a2a.sendStreamingMessage(params)).toEqualTypeOf<Promise<Response>>();
     });
 
     it('sendMessageStream unwraps JSON-RPC SSE events into A2A event data', async () => {
@@ -237,26 +242,17 @@ describe('A2A', () => {
       });
     });
 
-    it('deprecated sendStreamingMessage also yields typed stream events', async () => {
-      const streamEvents = [
-        { kind: 'task', id: 'task-1', status: { state: 'submitted' } },
-        { kind: 'status-update', taskId: 'task-1', status: { state: 'completed' }, final: true },
-      ];
-
+    it('deprecated sendStreamingMessage returns a raw Response for backward compatibility', async () => {
       server.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-        for (const event of streamEvents) {
-          res.write(`${JSON.stringify({ jsonrpc: '2.0', result: event })}\x1E`);
-        }
+        res.write(`data: ${JSON.stringify({ jsonrpc: '2.0', result: { kind: 'task', id: 'task-1' } })}\n\n`);
         res.end();
       });
 
       const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
-      const received = await collectStream(a2a.sendStreamingMessage(params));
+      const response = await a2a.sendStreamingMessage(params);
 
-      expect(received).toHaveLength(2);
-      expect(received[0]).toMatchObject({ kind: 'task' });
-      expect(received[1]).toMatchObject({ kind: 'status-update', final: true });
+      expect(response).toBeInstanceOf(Response);
     });
 
     it('throws a MastraClientError when the stream emits a JSON-RPC error', async () => {
@@ -278,13 +274,14 @@ describe('A2A', () => {
   });
 
   describe('task operations', () => {
-    it('cancelTask returns the unwrapped Task type', () => {
+    it('cancelTask returns the full JSON-RPC envelope (backward-compatible contract)', () => {
       const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
       expectTypeOf(a2a.cancelTask({ id: 'task-1' })).toEqualTypeOf<Promise<Task>>();
     });
 
     it('cancelTask sends the tasks/cancel JSON-RPC method', async () => {
       let receivedBody: Record<string, unknown> | undefined;
+      const mockEnvelope = { jsonrpc: '2.0', id: 'req-1', result: { kind: 'task', id: 'task-1' } };
 
       server.on('request', (req, res) => {
         let body = '';
@@ -294,7 +291,7 @@ describe('A2A', () => {
         req.on('end', () => {
           receivedBody = JSON.parse(body);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ jsonrpc: '2.0', id: receivedBody?.id, result: { kind: 'task', id: 'task-1' } }));
+          res.end(JSON.stringify(mockEnvelope));
         });
       });
 
@@ -305,26 +302,26 @@ describe('A2A', () => {
         method: 'tasks/cancel',
         params: { id: 'task-1' },
       });
-      expect(response).toEqual({ kind: 'task', id: 'task-1' });
+      expect(response).toMatchObject({ result: { kind: 'task', id: 'task-1' } });
     });
 
-    it('getTask returns the unwrapped Task result', async () => {
+    it('getTask returns the full JSON-RPC envelope (backward-compatible contract)', async () => {
+      const mockEnvelope = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: { kind: 'task', id: 'task-1', status: { state: 'working' } },
+      };
+
       server.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: 'req-1',
-            result: { kind: 'task', id: 'task-1', status: { state: 'working' } },
-          }),
-        );
+        res.end(JSON.stringify(mockEnvelope));
       });
 
       const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
       const task = await a2a.getTask({ id: 'task-1' });
 
-      expectTypeOf(a2a.getTask({ id: 'task-1' })).toEqualTypeOf<Promise<Task>>();
-      expect(task).toEqual({ kind: 'task', id: 'task-1', status: { state: 'working' } });
+      expectTypeOf(a2a.getTask({ id: 'task-1' })).toEqualTypeOf<Promise<GetTaskResponse>>();
+      expect(task).toEqual(mockEnvelope);
     });
 
     it('resubscribeTask returns typed stream events and uses tasks/resubscribe', async () => {
@@ -435,23 +432,6 @@ describe('A2A', () => {
       expect(listResponse).toEqual([{ taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/list' } }]);
       expect(deleteResponse).toBeUndefined();
       expect(setResponse).toEqual({ taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com/set' } });
-    });
-
-    it('throws a protocol-aware error for JSON-RPC task errors', async () => {
-      server.on('request', (_req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({ jsonrpc: '2.0', id: '1', error: { code: -32001, message: 'Task not found: task-1' } }),
-        );
-      });
-
-      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
-
-      await expect(a2a.getTask({ id: 'task-1' })).rejects.toMatchObject({
-        name: 'MastraA2AError',
-        code: -32001,
-        message: 'Task not found: task-1',
-      });
     });
 
     it('throws a protocol-aware error for unsupported push notification methods', async () => {
