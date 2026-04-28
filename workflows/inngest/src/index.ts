@@ -28,6 +28,7 @@ export * from './pubsub';
 export * from './run';
 export * from './serve';
 export * from './types';
+export * from './durable-agent';
 
 // ============================================
 // Type Guards

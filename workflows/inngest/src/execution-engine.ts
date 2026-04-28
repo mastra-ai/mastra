@@ -350,6 +350,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         ...options,
         traceId: executionContext.tracingIds?.traceId,
         parentSpanId,
+        tracingPolicy: this.options?.tracingPolicy,
       });
 
       // Return serializable form

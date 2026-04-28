@@ -6,6 +6,11 @@ export type Event = {
   runId: string;
   createdAt: Date;
   /**
+   * Sequential index for position tracking.
+   * Enables efficient resume from a specific position.
+   */
+  index?: number;
+  /**
    * How many times this message has been delivered (including this attempt).
    * Starts at 1 for the first delivery. Incremented on each nack/redelivery.
    * Not all PubSub backends support this — defaults to 1 if unknown.

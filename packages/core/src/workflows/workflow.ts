@@ -2242,6 +2242,8 @@ export class Workflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
+    /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
+    pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -2282,6 +2284,7 @@ export class Workflow<
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
+        pubsub: options?.pubsub,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -2363,7 +2366,7 @@ export class Workflow<
   // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
   // To run a workflow use `.createRun` and then `.start` or `.resume`
   async execute({
-    runId,
+    runId: _runId,
     resourceId,
     inputData,
     resumeData,
@@ -2447,11 +2450,16 @@ export class Workflow<
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps.length > 0);
 
+    // Pass parent pubsub to nested runs so events (like agent stream chunks) are visible
+    // to subscribers on the parent's pubsub. Since the nested run shares the same pubsub AND
+    // the same runId, events are already visible on the parent's topics — no nested-watch relay
+    // needed. (Setting up run.watch() here with shared pubsub + same runId would cause an
+    // infinite event loop between workflow.events.v2 and nested-watch topics.)
     // Forward the parent run's resourceId into the nested run so that
     // child workflow snapshots preserve the tenant/resource association.
     const run = isResume
-      ? await this.createRun({ runId: resume.runId, resourceId })
-      : await this.createRun({ runId, resourceId });
+      ? await this.createRun({ runId: resume.runId, pubsub, resourceId })
+      : await this.createRun({ runId: _runId, pubsub, resourceId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -2459,14 +2467,6 @@ export class Workflow<
     abortSignal.addEventListener('abort', async () => {
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
       await run.cancel();
-    });
-
-    const unwatch = run.watch(event => {
-      void pubsub.publish('nested-watch', {
-        type: 'nested-watch',
-        runId: run.runId,
-        data: { event, workflowId: this.id },
-      });
     });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
@@ -2514,7 +2514,6 @@ export class Workflow<
       } as any);
     }
 
-    unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
@@ -2955,6 +2954,8 @@ export class Run<
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
     workflowEngineType: WorkflowEngineType;
+    /** Optional pubsub instance. If not provided, a new EventEmitterPubSub is created. */
+    pubsub?: PubSub;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -2963,7 +2964,7 @@ export class Run<
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
     this.#mastra = params.mastra;
-    this.pubsub = new EventEmitterPubSub();
+    this.pubsub = params.pubsub ?? new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;
@@ -3654,44 +3655,46 @@ export class Run<
       }
     };
 
-    const nestedWatchCb = (event: Event) => {
-      if (event.runId === this.runId) {
-        const { event: nestedEvent, workflowId } = event.data as {
-          event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
-          workflowId: string;
-        };
+    // Scoped nested-watch topic prevents feedback loops when parent and child share pubsub.
+    // Each run subscribes to its own topic; children publish to the parent's topic.
+    const nestedWatchTopic = `nested-watch:${this.runId}`;
 
-        // Data chunks from writer.custom() should bubble up directly without modification
-        // These are events with type starting with 'data-' and have a 'data' property
-        if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
-          // Bubble up custom data events directly to preserve their structure
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-            type: 'watch',
-            runId: this.runId,
-            data: nestedEvent,
-          });
-        } else {
-          // Regular workflow events get prefixed with nested workflow ID
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-            type: 'watch',
-            runId: this.runId,
-            data: {
-              ...nestedEvent,
-              ...(nestedEvent.payload?.id
-                ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
-                : {}),
-            },
-          });
-        }
+    const nestedWatchCb = (event: Event) => {
+      const { event: nestedEvent, workflowId } = event.data as {
+        event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
+        workflowId: string;
+      };
+
+      // Data chunks from writer.custom() should bubble up directly without modification
+      // These are events with type starting with 'data-' and have a 'data' property
+      if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
+        // Bubble up custom data events directly to preserve their structure
+        void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          type: 'watch',
+          runId: this.runId,
+          data: nestedEvent,
+        });
+      } else {
+        // Regular workflow events get prefixed with nested workflow ID
+        void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          type: 'watch',
+          runId: this.runId,
+          data: {
+            ...nestedEvent,
+            ...(nestedEvent.payload?.id
+              ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
+              : {}),
+          },
+        });
       }
     };
 
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
-    void this.pubsub.subscribe('nested-watch', nestedWatchCb);
+    void this.pubsub.subscribe(nestedWatchTopic, nestedWatchCb);
 
     return () => {
       void this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
-      void this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
+      void this.pubsub.unsubscribe(nestedWatchTopic, nestedWatchCb);
     };
   }
 

@@ -32,6 +32,7 @@ export type InngestServeAdapter<THandler> = (options: {
  */
 function prepareServeOptions({ mastra, inngest, functions: userFunctions = [], registerOptions }: MastraServeOptions) {
   const wfs = mastra.listWorkflows();
+
   const workflowFunctions = Array.from(
     new Set(
       Object.values(wfs).flatMap(wf => {
