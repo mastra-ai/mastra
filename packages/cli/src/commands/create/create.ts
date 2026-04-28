@@ -31,6 +31,7 @@ export const create = async (args: {
   skills?: string[];
   template?: string | boolean;
   analytics?: PosthogAnalytics;
+  observe?: boolean;
 }) => {
   if (args.template !== undefined) {
     await createFromTemplate({
@@ -59,6 +60,7 @@ export const create = async (args: {
     llmApiKey: args?.llmApiKey,
     skills: args?.skills,
     mcpServer: args?.mcpServer,
+    observe: args?.observe,
     needsInteractive,
   });
 
@@ -89,6 +91,7 @@ export const create = async (args: {
       skills: result?.skills || args.skills,
       mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
+      observe: args.observe ?? result?.observe,
     });
     postCreate({ projectName });
     return;
@@ -123,6 +126,7 @@ export const create = async (args: {
     skills: args.skills,
     mcpServer: args.mcpServer,
     versionTag: args.createVersionTag,
+    observe: args.observe,
   });
 
   postCreate({ projectName });

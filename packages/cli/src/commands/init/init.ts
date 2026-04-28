@@ -6,16 +6,19 @@ import { DepsService } from '../../services/service.deps';
 import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
+import { provisionObserveProject } from './observe-provision';
 import { installMastraSkills } from './skills-install';
 import {
   createComponentsDir,
   createMastraDir,
   getAPIKey,
+  readPackageName,
   writeAgentsMarkdown,
   writeAPIKey,
   writeClaudeMarkdown,
   writeCodeSample,
   writeIndexFile,
+  writeObserveEnv,
 } from './utils';
 import type { Component, LLMProvider } from './utils';
 
@@ -31,6 +34,7 @@ export const init = async ({
   mcpServer,
   versionTag,
   initGit = false,
+  observe,
 }: {
   directory?: string;
   components: Component[];
@@ -41,6 +45,7 @@ export const init = async ({
   mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
+  observe?: boolean;
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -178,6 +183,33 @@ export const init = async ({
         s.stop('Git repository initialized');
       } catch {
         s.stop();
+      }
+    }
+
+    if (observe) {
+      try {
+        const defaultProjectName = await readPackageName();
+        const result = await provisionObserveProject({ defaultProjectName });
+        await writeObserveEnv({ token: result.token, endpoint: result.endpoint });
+        p.note(
+          `${color.green('Mastra Observe enabled.')}
+
+  Project: ${color.cyan(result.projectName)} (${result.orgName})
+  Access token written to ${color.cyan('.env')} as ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')}.`,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        try {
+          await writeObserveEnv();
+        } catch {}
+        p.note(
+          `${color.yellow('Could not connect this project to Mastra Observe automatically:')} ${message}
+
+  Empty ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and ${color.cyan('MASTRA_CLOUD_TRACES_ENDPOINT')} placeholders were added to your ${color.cyan('.env')} file.
+
+  1. Visit ${color.cyan('https://cloud.mastra.ai')} to create a project and mint an access token.
+  2. Paste the token into ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and the spans endpoint into ${color.cyan('MASTRA_CLOUD_TRACES_ENDPOINT')}.`,
+        );
       }
     }
 

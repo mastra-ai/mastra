@@ -209,6 +209,7 @@ async function resolveProject(
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
+  autoAccept?: boolean,
 ): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
@@ -232,16 +233,46 @@ async function resolveProject(
     };
   }
 
-  // Check if a project already exists matching the package name before creating
   const name = defaultName;
   if (!name) {
     throw new Error('Could not determine project name from package.json. Use --project to specify one.');
   }
 
   const existing = await fetchServerProjects(token, orgId);
-  const match = existing.find(proj => proj.name === name || proj.slug === name);
-  if (match) {
-    return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+  const nameMatches = existing.filter(proj => proj.name === name || proj.slug === name);
+
+  if (existing.length > 0) {
+    if (autoAccept) {
+      // Non-interactive: only safe to auto-pick when exactly one project matches by name/slug.
+      if (nameMatches.length === 1) {
+        const m = nameMatches[0]!;
+        return { projectId: m.id, projectName: m.name, projectSlug: m.slug ?? m.name };
+      }
+      throw new Error(
+        `Found ${existing.length} existing project(s) in this organization. Pass --project <id-or-slug> to select one, or re-run without --yes to choose interactively.`,
+      );
+    }
+
+    const CREATE_NEW = '__create_new__';
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : existing[0]!.id;
+    const selected = await p.select({
+      message: 'Select a project to deploy to',
+      initialValue,
+      options: [
+        ...existing.map(proj => ({ value: proj.id, label: `${proj.name} (${proj.id})` })),
+        { value: CREATE_NEW, label: `＋ Create new project "${name}"` },
+      ],
+    });
+
+    if (p.isCancel(selected)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+
+    if (selected !== CREATE_NEW) {
+      const match = existing.find(proj => proj.id === selected)!;
+      return { projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+    }
   }
 
   const project = await createServerProject(token, orgId, name);
@@ -302,6 +333,7 @@ export async function serverDeployAction(
     projectConfig,
     opts.project,
     packageName,
+    autoAccept,
   );
 
   // Step 5: Confirmation

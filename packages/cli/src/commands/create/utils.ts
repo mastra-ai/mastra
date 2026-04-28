@@ -162,6 +162,7 @@ export const createMastraProject = async ({
   llmApiKey,
   skills,
   mcpServer,
+  observe,
   needsInteractive,
 }: {
   projectName?: string;
@@ -171,6 +172,7 @@ export const createMastraProject = async ({
   llmApiKey?: string;
   skills?: string[];
   mcpServer?: string;
+  observe?: boolean;
   needsInteractive?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
@@ -205,6 +207,7 @@ export const createMastraProject = async ({
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        observe: observe !== undefined,
         directory: true,
         gitInit: skipGitInit,
       },

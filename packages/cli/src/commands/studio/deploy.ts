@@ -248,6 +248,7 @@ async function resolveProject(
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
+  autoAccept?: boolean,
 ): Promise<ProjectResolution> {
   // 0. MASTRA_PROJECT_ID env var (CI/CD headless path)
   const envProjectId = process.env.MASTRA_PROJECT_ID;
@@ -275,7 +276,52 @@ async function resolveProject(
     };
   }
 
-  // 3. No existing project — return the name so caller can create after confirmation
+  // 3. Consult the list of existing projects in this org before defaulting to create-new.
+  const projects = await fetchProjects(token, orgId);
+  const nameMatches = defaultName
+    ? projects.filter(proj => proj.name === defaultName || proj.slug === defaultName)
+    : [];
+
+  if (projects.length > 0) {
+    if (autoAccept) {
+      // Non-interactive: only safe to auto-pick when there is exactly one
+      // project whose name/slug matches the package.json name.
+      if (nameMatches.length === 1) {
+        const m = nameMatches[0]!;
+        return { existing: true, projectId: m.id, projectName: m.name, projectSlug: m.slug ?? m.name };
+      }
+      throw new Error(
+        `Found ${projects.length} existing project(s) in this organization. Pass --project <id-or-slug> to select one, or re-run without --yes to choose interactively.`,
+      );
+    }
+
+    const CREATE_NEW = '__create_new__';
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : projects[0]!.id;
+    const selected = await p.select({
+      message: 'Select a project to deploy to',
+      initialValue,
+      options: [
+        ...projects.map(proj => ({
+          value: proj.id,
+          label: `${proj.name} (${proj.id})`,
+        })),
+        { value: CREATE_NEW, label: defaultName ? `＋ Create new project "${defaultName}"` : '＋ Create new project' },
+      ],
+    });
+
+    if (p.isCancel(selected)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+
+    if (selected !== CREATE_NEW) {
+      const match = projects.find(proj => proj.id === selected)!;
+      return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+    }
+    // fall through to create-new flow
+  }
+
+  // 4. No existing project (or user chose "Create new") — return the name so caller can create after confirmation.
   const name = defaultName;
   if (!name) {
     throw new Error('Could not determine project name from package.json. Use --project to specify one.');
@@ -324,7 +370,7 @@ export async function deployAction(
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project (does NOT create yet — waits for confirmation)
-  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName);
+  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName, autoAccept);
 
   let projectId: string;
   let projectName: string;

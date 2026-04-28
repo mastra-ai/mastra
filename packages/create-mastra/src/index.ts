@@ -52,6 +52,8 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observe', 'Enable Mastra Observe (writes MASTRA_CLOUD_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observe', 'Do not enable Mastra Observe')
   .action(async (projectNameArg, args) => {
     // TODO(major): Remove args.projectName in favor of projectNameArg
     const projectName = projectNameArg || args.projectName;
@@ -69,6 +71,7 @@ program
         directory: 'src/',
         template: args.template,
         analytics,
+        observe: args.observe,
       });
       return;
     }
@@ -85,6 +88,7 @@ program
       mcpServer: args.mcp,
       template: args.template,
       analytics,
+      observe: args.observe,
     });
   });
 
