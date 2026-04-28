@@ -4,7 +4,9 @@ import { z } from 'zod/v4';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import { ToolCallFilter } from './processors/tool-call-filter';
 import { ProcessorRunner } from './runner';
+import { ProcessorStepOutputSchema } from './step-schema';
 import type { Processor } from './index';
 
 /**
@@ -277,6 +279,265 @@ describe('processInputStep', () => {
   });
 
   describe('message part type transformation', () => {
+    it('should let processors set model context messages without mutating MessageList', async () => {
+      const seenByObserver: MastraDBMessage[][] = [];
+
+      const contextProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ messages }) => {
+          return {
+            modelContextMessages: messages.filter(message => message.id !== 'tool-result'),
+          };
+        },
+      };
+
+      const observerProcessor: Processor = {
+        id: 'observer-processor',
+        processInputStep: async ({ messages }) => {
+          seenByObserver.push(messages);
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [contextProcessor, observerProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+      messageList.add(
+        [
+          {
+            id: 'tool-result',
+            role: 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'lookup',
+                    args: {},
+                    result: 'SECRET_RESULT',
+                  },
+                },
+              ],
+            },
+            createdAt: new Date(),
+            threadId: 'test-thread',
+          } as unknown as MastraDBMessage,
+        ],
+        'response',
+      );
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result.modelContextMessages?.map(message => message.id)).not.toContain('tool-result');
+      expect(seenByObserver[0]?.map(message => message.id)).not.toContain('tool-result');
+      expect(messageList.get.all.db().map(message => message.id)).toContain('tool-result');
+      expect(JSON.stringify(messageList.get.all.db())).toContain('SECRET_RESULT');
+    });
+
+    it('should not enter prompt-only mode when ToolCallFilter makes no changes', async () => {
+      const mutatingProcessor: Processor = {
+        id: 'mutating-processor',
+        processInputStep: async ({ messageList }) => {
+          messageList.add([createMessage('Injected canonical message')], 'input');
+          return messageList;
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [new ToolCallFilter({ exclude: [] }), mutatingProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).resolves.toBeDefined();
+      expect(messageList.get.all.db().map(message => message.content.parts?.[0]?.type)).toEqual(['text', 'text']);
+    });
+
+    it('should isolate model context messages from canonical MessageList objects', async () => {
+      const contextProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ messages }) => {
+          return {
+            modelContextMessages: messages,
+          };
+        },
+      };
+
+      const mutatingPromptProcessor: Processor = {
+        id: 'mutating-prompt-processor',
+        processInputStep: async ({ messages }) => {
+          const firstTextPart = messages[0]?.content.parts?.[0];
+          if (firstTextPart?.type === 'text') {
+            firstTextPart.text = 'Mutated prompt only';
+          }
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [contextProcessor, mutatingPromptProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result.modelContextMessages?.[0]?.content.parts?.[0]).toMatchObject({ text: 'Mutated prompt only' });
+      expect(messageList.get.all.db()[0]?.content.parts?.[0]).toMatchObject({ text: 'User question' });
+    });
+
+    it('should chain workflow processor messages through model context messages', async () => {
+      const seenByObserver: string[][] = [];
+
+      const contextProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ messages }) => {
+          return {
+            modelContextMessages: messages,
+          };
+        },
+      };
+
+      const workflowProcessor = {
+        id: 'workflow-filter',
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+        execute: vi.fn(),
+        createRun: vi.fn(async () => ({
+          start: vi.fn(async ({ inputData }: any) => ({
+            status: 'success',
+            steps: {},
+            result: {
+              phase: 'inputStep',
+              messages: inputData.messages.filter((message: MastraDBMessage) => message.id !== 'workflow-removed'),
+            },
+          })),
+        })),
+      };
+
+      const observerProcessor: Processor = {
+        id: 'observer-processor',
+        processInputStep: async ({ messages }) => {
+          seenByObserver.push(messages.map(message => message.id));
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [contextProcessor, workflowProcessor as any, observerProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+      messageList.add(
+        [
+          {
+            ...createMessage('Remove me', 'assistant'),
+            id: 'workflow-removed',
+          },
+        ],
+        'response',
+      );
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result.modelContextMessages?.map(message => message.id)).not.toContain('workflow-removed');
+      expect(seenByObserver[0]).not.toContain('workflow-removed');
+      expect(messageList.get.all.db().map(message => message.id)).toContain('workflow-removed');
+    });
+
+    it('should preserve modelContextMessages through processor workflow schemas', () => {
+      const message = createMessage('User question');
+
+      const parsed = ProcessorStepOutputSchema.parse({
+        phase: 'inputStep',
+        messages: [message],
+        modelContextMessages: [message],
+      });
+
+      expect(parsed.modelContextMessages).toHaveLength(1);
+    });
+
+    it('should reject messageList mutations after model context messages without a prompt context return', async () => {
+      const contextProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ messages }) => {
+          return {
+            modelContextMessages: messages,
+          };
+        },
+      };
+
+      const mutatingProcessor: Processor = {
+        id: 'mutating-processor',
+        processInputStep: async ({ messageList }) => {
+          messageList.add([createMessage('Injected canonical message')], 'input');
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [contextProcessor, mutatingProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/mutated messageList after a previous processor returned modelContextMessages/);
+    });
+
     it('should transform message part types at each step', async () => {
       let transformationCount = 0;
 
@@ -1906,6 +2167,34 @@ describe('processInputStep', () => {
           steps: [],
         }),
       ).rejects.toThrow(/returned both messages and messageList/);
+    });
+
+    it('should reject returning both messages and modelContextMessages together', async () => {
+      const processor: Processor = {
+        id: 'both-context-processor',
+        processInputStep: async ({ messages }) => {
+          return { messages, modelContextMessages: messages };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/returned both messages and modelContextMessages/);
     });
 
     it('should reject v1 models', async () => {

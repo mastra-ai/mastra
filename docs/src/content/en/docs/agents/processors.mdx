@@ -373,7 +373,9 @@ See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-
 
 ### `ToolCallFilter`
 
-Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.
+Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools.
+
+The filter runs on the initial input and on each agentic loop step. During step processing, it keeps the latest completed step by default and changes only the next model prompt, so stored history and final tool results remain intact.
 
 See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
 

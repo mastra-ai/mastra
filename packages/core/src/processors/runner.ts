@@ -231,6 +231,14 @@ function buildProcessInputStepSpanOutput(args: {
   return output;
 }
 
+function hasRegularMessageListMutations(mutations: ReturnType<MessageList['stopRecording']>): boolean {
+  return mutations.some(mutation => mutation.type !== 'addSystem');
+}
+
+function cloneModelContextMessages(messages: MastraDBMessage[]): MastraDBMessage[] {
+  return structuredClone(messages);
+}
+
 export class ProcessorRunner {
   public readonly inputProcessors: ProcessorOrWorkflow[];
   public readonly outputProcessors: ProcessorOrWorkflow[];
@@ -1037,37 +1045,108 @@ export class ProcessorRunner {
 
     // Run through all input processors that have processInputStep
     for (const [index, processorOrWorkflow] of processors.entries()) {
-      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const processableMessages: MastraDBMessage[] = stepInput.modelContextMessages ?? messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
       // Handle workflow as processor with inputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
         const currentSystemMessages = messageList.getAllSystemMessages();
-        const result = await this.executeWorkflowAsProcessor(
-          processorOrWorkflow,
-          {
-            phase: 'inputStep',
-            messages: processableMessages,
+        const hadModelContextMessages = stepInput.modelContextMessages !== undefined;
+        messageList.startRecording();
+        let recordingStopped = false;
+        try {
+          const result = await this.executeWorkflowAsProcessor(
+            processorOrWorkflow,
+            {
+              phase: 'inputStep',
+              messages: processableMessages,
+              messageList,
+              stepNumber,
+              steps,
+              systemMessages: currentSystemMessages,
+              rotateResponseMessageId: args.rotateResponseMessageId
+                ? () => {
+                    const nextMessageId = args.rotateResponseMessageId!();
+                    stepInput.messageId = nextMessageId;
+                    return nextMessageId;
+                  }
+                : undefined,
+              ...stepInput,
+            },
+            observabilityContext,
+            requestContext,
+            writer,
+            args.abortSignal,
+          );
+          const mutations = messageList.stopRecording();
+          recordingStopped = true;
+          const rawResult = result as RunProcessInputStepResult & { phase?: string };
+          const workflowProcessInputStepResult: ProcessInputStepResult = {
+            ...rawResult,
+            messageList: undefined,
+            messages:
+              rawResult.messages &&
+              (rawResult.modelContextMessages === undefined ||
+                !areProcessorMessageArraysEqual(rawResult.messages, rawResult.modelContextMessages)) &&
+              !areProcessorMessageArraysEqual(processableMessages, rawResult.messages)
+                ? rawResult.messages
+                : undefined,
+            modelContextMessages: rawResult.modelContextMessages,
+          };
+          delete (workflowProcessInputStepResult as { phase?: string }).phase;
+          const {
+            messages,
+            systemMessages,
+            modelContextMessages,
+            messageList: _messageList,
+            ...rest
+          } = await ProcessorRunner.validateAndFormatProcessInputStepResult(workflowProcessInputStepResult, {
             messageList,
+            processor: { id: processorOrWorkflow.id },
             stepNumber,
-            steps,
-            systemMessages: currentSystemMessages,
-            rotateResponseMessageId: args.rotateResponseMessageId
-              ? () => {
-                  const nextMessageId = args.rotateResponseMessageId!();
-                  stepInput.messageId = nextMessageId;
-                  return nextMessageId;
-                }
-              : undefined,
-            ...stepInput,
-          },
-          observabilityContext,
-          requestContext,
-          writer,
-          args.abortSignal,
-        );
-        Object.assign(stepInput, result);
+          });
+
+          if (messages) {
+            if (stepInput.modelContextMessages || modelContextMessages) {
+              stepInput.modelContextMessages = cloneModelContextMessages(messages as MastraDBMessage[]);
+            } else {
+              ProcessorRunner.applyMessagesToMessageList(
+                messages as MastraDBMessage[],
+                messageList,
+                idsBeforeProcessing,
+                check,
+              );
+            }
+          }
+          if (modelContextMessages) {
+            stepInput.modelContextMessages = cloneModelContextMessages(modelContextMessages as MastraDBMessage[]);
+          }
+          if (systemMessages) {
+            messageList.replaceAllSystemMessages(systemMessages);
+          }
+          Object.assign(stepInput, rest);
+
+          if (
+            hadModelContextMessages &&
+            mutations.length > 0 &&
+            hasRegularMessageListMutations(mutations) &&
+            !messages &&
+            !modelContextMessages
+          ) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_MUTATED_MESSAGE_LIST_AFTER_MODEL_CONTEXT_MESSAGES',
+              text: `Processor workflow ${processorOrWorkflow.id} mutated messageList after a previous processor returned modelContextMessages. Return messages or modelContextMessages from this workflow so the next model prompt stays in sync with the mutation.`,
+            });
+          }
+        } catch (error) {
+          if (!recordingStopped) {
+            messageList.stopRecording();
+          }
+          throw error;
+        }
         continue;
       }
 
@@ -1161,6 +1240,7 @@ export class ProcessorRunner {
           abortSignal: args.abortSignal,
         };
 
+        const hadModelContextMessages = stepInput.modelContextMessages !== undefined;
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
           await processMethod(processMethodArgs),
           {
@@ -1169,9 +1249,18 @@ export class ProcessorRunner {
             stepNumber,
           },
         );
-        const { messages, systemMessages, ...rest } = result;
+        const { messages, systemMessages, modelContextMessages, ...rest } = result;
+        if (modelContextMessages) {
+          stepInput.modelContextMessages = cloneModelContextMessages(modelContextMessages);
+        }
         if (messages) {
-          ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+          if (stepInput.modelContextMessages) {
+            // Once a processor opts into prompt-only model context, later message array transforms
+            // keep chaining against that transient prompt context instead of mutating MessageList.
+            stepInput.modelContextMessages = cloneModelContextMessages(messages);
+          } else {
+            ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+          }
         }
         if (systemMessages) {
           messageList.replaceAllSystemMessages(systemMessages);
@@ -1180,6 +1269,20 @@ export class ProcessorRunner {
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
+        if (
+          hadModelContextMessages &&
+          mutations.length > 0 &&
+          hasRegularMessageListMutations(mutations) &&
+          !messages &&
+          !modelContextMessages
+        ) {
+          throw new MastraError({
+            category: 'USER',
+            domain: 'AGENT',
+            id: 'PROCESSOR_MUTATED_MESSAGE_LIST_AFTER_MODEL_CONTEXT_MESSAGES',
+            text: `Processor ${processor.id} mutated messageList after a previous processor returned modelContextMessages. Return messages or modelContextMessages from this processor so the next model prompt stays in sync with the mutation.`,
+          });
+        }
 
         processorSpan?.end({
           output: buildProcessInputStepSpanOutput({
@@ -1188,7 +1291,7 @@ export class ProcessorRunner {
             afterStepInput: stepInput,
             beforeMessages: inputData.messages,
             beforeSystemMessages: inputData.systemMessages,
-            messages: messageList.get.all.db(),
+            messages: stepInput.modelContextMessages ?? messageList.get.all.db(),
             systemMessages: messageList.getAllSystemMessages(),
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
@@ -1689,6 +1792,14 @@ export class ProcessorRunner {
           domain: 'AGENT',
           id: 'PROCESSOR_RETURNED_MESSAGES_AND_MESSAGE_LIST',
           text: `Processor ${processor.id} returned both messages and messageList. Only one of these is allowed.`,
+        });
+      }
+      if (result.messages && result.modelContextMessages) {
+        throw new MastraError({
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_RETURNED_MESSAGES_AND_MODEL_CONTEXT_MESSAGES',
+          text: `Processor ${processor.id} returned both messages and modelContextMessages. Only one of these is allowed.`,
         });
       }
       const { model: _model, ...rest } = result;

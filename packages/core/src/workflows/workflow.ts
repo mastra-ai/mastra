@@ -714,6 +714,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const {
         phase,
         messages,
+        modelContextMessages,
         messageList,
         stepNumber,
         systemMessages,
@@ -778,6 +779,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
             return {
               messages: (messages as MastraDBMessage[]) ?? [],
+              ...(modelContextMessages ? { modelContextMessages } : {}),
               ...(systemMessages ? { systemMessages } : {}),
               ...(stepNumber !== undefined ? { stepNumber } : {}),
               ...(currentMessageId ? { messageId: currentMessageId } : {}),
@@ -838,6 +840,16 @@ function createStepFromProcessor<TProcessorId extends string>(
               !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
             ) {
               output.messages = payload.messages;
+            }
+
+            if (
+              Array.isArray(payload.modelContextMessages) &&
+              !areProcessorMessageArraysEqual(
+                modelContextMessages as unknown[] | undefined,
+                payload.modelContextMessages,
+              )
+            ) {
+              output.modelContextMessages = payload.modelContextMessages;
             }
 
             if (
@@ -998,6 +1010,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 .add(messages as MastraDBMessage[], 'input')
                 .addSystem((systemMessages ?? []) as CoreMessage[])
             : undefined),
+        modelContextMessages,
         stepNumber,
         systemMessages,
         streamParts,
@@ -1160,12 +1173,14 @@ function createStepFromProcessor<TProcessorId extends string>(
               });
 
               if (validatedResult.messages) {
-                ProcessorRunner.applyMessagesToMessageList(
-                  validatedResult.messages,
-                  checkedMessageList,
-                  idsBeforeProcessing,
-                  check,
-                );
+                if (modelContextMessages === undefined && validatedResult.modelContextMessages === undefined) {
+                  ProcessorRunner.applyMessagesToMessageList(
+                    validatedResult.messages,
+                    checkedMessageList,
+                    idsBeforeProcessing,
+                    check,
+                  );
+                }
               }
 
               if (validatedResult.systemMessages) {
@@ -1174,10 +1189,15 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Preserve messages in return - passThrough doesn't include messages,
               // so we must explicitly include it to avoid losing it for subsequent steps.
+              const nextModelContextMessages =
+                validatedResult.modelContextMessages ??
+                (modelContextMessages !== undefined && validatedResult.messages ? validatedResult.messages : undefined);
+              const nextMessages = nextModelContextMessages ?? validatedResult.messages ?? messages;
               return {
                 ...passThrough,
-                messages,
+                messages: nextMessages,
                 ...validatedResult,
+                ...(nextModelContextMessages ? { modelContextMessages: nextModelContextMessages } : {}),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
