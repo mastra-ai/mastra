@@ -6,6 +6,8 @@ import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import { assertModelAllowed } from '../agent-builder/ee';
+import type { BuilderModelPolicy, ModelCandidateInput } from '../agent-builder/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -61,7 +63,13 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
+import {
+  RequestContext,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+  MASTRA_BUILDER_MODEL_POLICY_KEY,
+} from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
@@ -1821,6 +1829,8 @@ export class Agent<
     modelConfig: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks,
     requestContext: RequestContext,
   ): Promise<ResolvedModelSelection> {
+    let resolvedSelection: ResolvedModelSelection;
+
     // If it's a dynamic function, resolve it
     if (typeof modelConfig === 'function') {
       const resolved = await modelConfig({
@@ -1842,15 +1852,12 @@ export class Agent<
           throw mastraError;
         }
 
-        return this.normalizeModelFallbacks(resolved);
+        resolvedSelection = this.normalizeModelFallbacks(resolved);
+      } else {
+        resolvedSelection = resolved;
       }
-
-      return resolved;
-    }
-
-    // Already resolved - if it's a static array, check if already normalized
-    if (Array.isArray(modelConfig)) {
-      // Validate empty array
+    } else if (Array.isArray(modelConfig)) {
+      // Already resolved - if it's a static array, check if already normalized
       if (modelConfig.length === 0) {
         const mastraError = new MastraError({
           id: 'AGENT_RESOLVE_MODEL_EMPTY_ARRAY',
@@ -1863,10 +1870,41 @@ export class Agent<
         throw mastraError;
       }
 
-      return this.normalizeModelFallbacks(modelConfig);
+      resolvedSelection = this.normalizeModelFallbacks(modelConfig);
+    } else {
+      resolvedSelection = modelConfig;
     }
 
-    return modelConfig;
+    // Phase 7 runtime defense: enforce builder model allowlist if a policy was seeded by the server.
+    // Inactive / missing policy is a strict pass-through (regression guard for non-builder agents).
+    this.enforceBuilderModelPolicy(resolvedSelection, requestContext);
+
+    return resolvedSelection;
+  }
+
+  /**
+   * Runtime defense for Agent Builder model allowlist. Pulls the seeded policy from request
+   * context, walks the resolved model selection (single or fallback array), and throws
+   * `ModelNotAllowedError` on the first disallowed candidate.
+   *
+   * @internal
+   */
+  private enforceBuilderModelPolicy(resolved: ResolvedModelSelection, requestContext: RequestContext): void {
+    const policy = requestContext.get(MASTRA_BUILDER_MODEL_POLICY_KEY) as BuilderModelPolicy | undefined;
+    if (!policy || policy.active !== true) return;
+    if (!policy.allowed || policy.allowed.length === 0) return;
+
+    const entries: ModelCandidateInput[] = Array.isArray(resolved)
+      ? resolved.map(fallback => fallback.model as ModelCandidateInput)
+      : [resolved as ModelCandidateInput];
+
+    for (const entry of entries) {
+      // Dynamic per-fallback model functions are skipped here; they resolve later via getModel
+      // and re-enter resolveModelSelection, which re-applies this guard.
+      if (typeof entry === 'function') continue;
+      // Throws structured ModelNotAllowedError on rejection; server adapter maps to HTTP 422.
+      assertModelAllowed(policy.allowed, entry);
+    }
   }
 
   /**
@@ -1967,6 +2005,16 @@ export class Agent<
    */
   __resetToOriginalModel() {
     this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+  }
+
+  /**
+   * Returns the original model snapshot captured at construction. Used by
+   * server enforcement to validate reset attempts against the current
+   * allowlist without mutating runtime state.
+   * @internal
+   */
+  __getOriginalModel(): DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks {
+    return Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
   }
 
   /**

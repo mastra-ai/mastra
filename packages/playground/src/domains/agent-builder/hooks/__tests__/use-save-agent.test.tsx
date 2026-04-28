@@ -6,7 +6,7 @@ import { renderHook, act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { useSaveAgent } from '../use-save-agent';
@@ -22,6 +22,16 @@ vi.mock('@mastra/playground-ui', async () => {
 });
 
 const BASE_URL = 'http://localhost:4111';
+
+// Default: no admin builder configured. Tests that need a specific policy
+// override this with `server.use(...)` before exercising the hook.
+beforeEach(() => {
+  server.use(
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+      HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+    ),
+  );
+});
 
 const renderSave = ({
   agentId,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RequestContext } from './index';
+import { INTERNAL_CONTEXT_KEYS, MASTRA_BUILDER_MODEL_POLICY_KEY, RequestContext } from './index';
 
 describe('RequestContext', () => {
   describe('constructor', () => {
@@ -166,6 +166,23 @@ describe('RequestContext', () => {
         userId: 'user-123',
         feature: 'dark-mode',
       });
+    });
+
+    it('should skip internal context keys (admin policy must not leak into traces)', () => {
+      const ctx = new RequestContext();
+      ctx.set('userId', 'user-123');
+      ctx.set(MASTRA_BUILDER_MODEL_POLICY_KEY, { active: true, allowed: [{ kind: 'known', provider: 'openai' }] });
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ userId: 'user-123' });
+      expect(json).not.toHaveProperty(MASTRA_BUILDER_MODEL_POLICY_KEY);
+      // get() still works in-process
+      expect(ctx.get(MASTRA_BUILDER_MODEL_POLICY_KEY)).toMatchObject({ active: true });
+    });
+
+    it('should expose all internal keys via INTERNAL_CONTEXT_KEYS', () => {
+      expect(INTERNAL_CONTEXT_KEYS.has(MASTRA_BUILDER_MODEL_POLICY_KEY)).toBe(true);
     });
   });
 });

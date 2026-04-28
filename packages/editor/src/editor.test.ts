@@ -1742,4 +1742,179 @@ describe('agent.create with builder defaults', () => {
     const rawConfig = agent.toRawConfig?.();
     expect(rawConfig?.browser).toBeNull();
   });
+
+  it('seeds model from models.default when input omits it', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: {
+            models: { default: { provider: 'openai', modelId: 'gpt-4o-mini' } },
+          },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      // intentionally no `model` field
+      id: 'test-agent-no-model',
+      name: 'Test Agent',
+      instructions: 'Test',
+    } as any);
+
+    const rawConfig = agent.toRawConfig?.();
+    // Stored shape uses { provider, name }, not { provider, modelId }.
+    expect(rawConfig?.model).toEqual({ provider: 'openai', name: 'gpt-4o-mini' });
+  });
+
+  it('does not overwrite an input model with the admin default', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: {
+            models: { default: { provider: 'openai', modelId: 'gpt-4o-mini' } },
+          },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-with-model',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.model).toEqual({ provider: 'anthropic', name: 'claude-opus-4-7' });
+  });
+
+  it('does not seed a model when no admin default is configured', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { models: { allowed: [{ provider: 'openai' }] } } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    // Without a model on input AND no admin default, today's create-path validation
+    // continues to require a model — assert by attempting create + expecting a
+    // model-related error (not just any throw).
+    await expect(
+      editor.agent.create({
+        id: 'test-agent-no-default',
+        name: 'Test Agent',
+        instructions: 'Test',
+      } as any),
+    ).rejects.toThrow(/model/i);
+  });
+});
+
+describe('Phase 6: agent.create enforces model allowlist', () => {
+  it('rejects a create whose model is not in the allowlist', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: {
+            models: {
+              allowed: [{ provider: 'openai', modelId: 'gpt-4o-mini' }],
+              default: { provider: 'openai', modelId: 'gpt-4o-mini' },
+            },
+          },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    await expect(
+      editor.agent.create({
+        id: 'rejected',
+        name: 'Rejected Agent',
+        instructions: 'Test',
+        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      }),
+    ).rejects.toMatchObject({ code: 'MODEL_NOT_ALLOWED' });
+  });
+
+  it('passes when model matches an allowlist entry', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: {
+            models: {
+              allowed: [{ provider: 'openai', modelId: 'gpt-4o-mini' }],
+              default: { provider: 'openai', modelId: 'gpt-4o-mini' },
+            },
+          },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'allowed',
+      name: 'Allowed Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4o-mini' },
+    });
+    expect(agent.toRawConfig?.()?.model).toEqual({ provider: 'openai', name: 'gpt-4o-mini' });
+  });
+
+  it('does not enforce when policy is inactive (no models config)', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({ builder: { enabled: true } });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'inactive-ok',
+      name: 'OK',
+      instructions: 'Test',
+      model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+    });
+    expect(agent).toBeDefined();
+  });
+
+  it('rejects a conditional model whose variant is outside the allowlist', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: {
+          agent: {
+            models: {
+              allowed: [{ provider: 'openai', modelId: 'gpt-4o-mini' }],
+              default: { provider: 'openai', modelId: 'gpt-4o-mini' },
+            },
+          },
+        },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    await expect(
+      editor.agent.create({
+        id: 'conditional-rejected',
+        name: 'Conditional Rejected',
+        instructions: 'Test',
+        model: [
+          {
+            value: { provider: 'openai', name: 'gpt-4o-mini' },
+            rules: { operator: 'AND', conditions: [{ field: 'env', operator: 'equals', value: 'prod' }] },
+          },
+          { value: { provider: 'anthropic', name: 'claude-opus-4-7' } },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'MODEL_NOT_ALLOWED' });
+  });
 });

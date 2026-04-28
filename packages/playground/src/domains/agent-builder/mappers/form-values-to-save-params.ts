@@ -4,7 +4,7 @@ import type {
   StoredSkillResponse,
   StoredWorkspaceRef,
 } from '@mastra/client-js';
-import type { AgentBuilderEditFormValues } from '../schemas';
+import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 
 export interface SaveParams {
@@ -17,6 +17,12 @@ export interface SaveParams {
   skills: Record<string, StoredAgentSkillConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
   visibility: 'private' | 'public';
+  /**
+   * Static model selection from the form. Conditional models are owned by code;
+   * the form never round-trips them, so this is always either `undefined` or
+   * a `{ provider, name }` pair.
+   */
+  model: AgentBuilderModel | undefined;
 }
 
 function buildEnabledRecord(
@@ -78,5 +84,6 @@ export function formValuesToSaveParams(
     skills,
     workspace,
     visibility: values.visibility ?? 'private',
+    model: values.model,
   };
 }
