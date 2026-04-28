@@ -1550,6 +1550,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@mastra/duckdb':
+        specifier: workspace:*
+        version: link:../stores/duckdb
       '@mastra/fastembed':
         specifier: workspace:*
         version: link:../packages/fastembed
@@ -1562,6 +1565,9 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../packages/memory
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../observability/mastra
       '@mastra/pg':
         specifier: workspace:*
         version: link:../stores/pg

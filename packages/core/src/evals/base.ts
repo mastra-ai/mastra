@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
+import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
@@ -72,6 +73,17 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
         input: z.ZodSchema<TInput>;
         output: z.ZodSchema<TRunOutput>;
       };
+
+  /**
+   * Transform the scorer run data before the SCORER_RUN span is created.
+   * Use this to strip unnecessary data from `input` and `output`, reducing
+   * what flows into both the scorer pipeline and the observability span.
+   *
+   * Runs synchronously before any span creation or pipeline execution.
+   */
+  prepareRun?: (
+    run: ScorerRun<TInput, TRunOutput>,
+  ) => ScorerRun<TInput, TRunOutput> | Promise<ScorerRun<TInput, TRunOutput>>;
 }
 
 // Standardized input type for all scorer runs.
@@ -501,40 +513,44 @@ class MastraScorer<
       });
     }
 
-    let runId = input.runId;
+    // Apply prepareRun transformation before span creation to reduce data
+    // flowing into both the observability span and the scorer pipeline.
+    const prepared = this.config.prepareRun ? await this.config.prepareRun(input) : input;
+
+    let runId = prepared.runId;
     if (!runId) {
       runId = randomUUID();
     }
 
-    const normalizedRequestContext = this.normalizeRunRequestContext(input.requestContext);
+    const normalizedRequestContext = this.normalizeRunRequestContext(prepared.requestContext);
     const evalSpan = getOrCreateSpan({
       type: SpanType.SCORER_RUN,
       name: `scorer run: '${this.id}'`,
       entityType: EntityType.SCORER,
       entityId: this.id,
       input: {
-        input: input.input,
-        output: input.output,
-        groundTruth: input.groundTruth,
-        expectedTrajectory: input.expectedTrajectory,
+        input: prepared.input,
+        output: prepared.output,
+        groundTruth: prepared.groundTruth,
+        expectedTrajectory: prepared.expectedTrajectory,
         requestContext: normalizedRequestContext,
       },
       attributes: {
         scorerId: this.id,
         scorerName: this.name,
-        ...(input.scoreSource ? { scoreSource: input.scoreSource } : {}),
-        ...(input.targetScope ? { targetScope: input.targetScope } : {}),
-        ...(input.targetEntityType ? { targetEntityType: input.targetEntityType } : {}),
+        ...(prepared.scoreSource ? { scoreSource: prepared.scoreSource } : {}),
+        ...(prepared.targetScope ? { targetScope: prepared.targetScope } : {}),
+        ...(prepared.targetEntityType ? { targetEntityType: prepared.targetEntityType } : {}),
         ...(this.source ? { scorerDefinition: this.source } : {}),
       },
       metadata: {
-        ...(input.targetTraceId ? { targetTraceId: input.targetTraceId } : {}),
-        ...(input.targetSpanId ? { targetSpanId: input.targetSpanId } : {}),
+        ...(prepared.targetTraceId ? { targetTraceId: prepared.targetTraceId } : {}),
+        ...(prepared.targetSpanId ? { targetSpanId: prepared.targetSpanId } : {}),
       },
       mastra: this.#mastra,
     });
     const run: ScorerRun<TInput, TRunOutput> & { runId: string; scoreTraceId?: string } = {
-      ...input,
+      ...prepared,
       runId,
       ...(evalSpan?.traceId ? { scoreTraceId: evalSpan.traceId } : {}),
     };
@@ -957,6 +973,7 @@ export function createScorer(config: any): any {
     description: config.description,
     judge: config.judge,
     type: config.type,
+    prepareRun: config.prepareRun,
   });
 }
 
@@ -966,6 +983,252 @@ export type MastraScorerEntry = {
 };
 
 export type MastraScorers = Record<string, MastraScorerEntry>;
+
+// ============================================================================
+// filterRun — declarative utility for prepareRun
+// ============================================================================
+
+/**
+ * Known MastraMessagePart type values. Provides autocomplete for common types
+ * while still allowing arbitrary `data-*` strings via the `string & {}` escape hatch.
+ */
+export type MastraPartType =
+  // Core part types
+  | 'text'
+  | 'tool-invocation'
+  | 'step-start'
+  | 'reasoning'
+  | 'image'
+  | 'file'
+  | 'source'
+  | 'source-document'
+  // Data part prefixes (prefix-matched)
+  | 'data-'
+  | 'data-om-'
+  | 'data-om-status'
+  | 'data-om-observation-start'
+  | 'data-om-observation-end'
+  | 'data-om-observation-failed'
+  | 'data-om-buffering-start'
+  | 'data-om-buffering-end'
+  | 'data-om-buffering-failed'
+  | 'data-om-activation'
+  | 'data-om-thread-update'
+  | 'data-workspace-'
+  | 'data-workspace-metadata'
+  | 'data-sandbox-'
+  | 'data-sandbox-stdout'
+  | 'data-sandbox-stderr'
+  | 'data-sandbox-exit'
+  | 'data-sandbox-command'
+  | 'data-tool-'
+  | 'data-tool-call-approval'
+  | 'data-tool-call-suspended'
+  | 'data-system-reminder'
+  | 'data-tripwire'
+  | 'data-structured-output'
+  // Allow arbitrary strings for custom data-* types
+  | (string & {});
+
+export interface FilterRunOptions {
+  /**
+   * Keep only messages whose parts match these MastraMessagePart type patterns.
+   * Applied to both `input.rememberedMessages` and `output` when they contain
+   * MastraDBMessage arrays (the `type: 'agent'` scorer shape).
+   *
+   * Each entry is prefix-matched against `MastraMessagePart.type`:
+   * - `'text'` — text parts
+   * - `'tool-invocation'` — tool invocation parts
+   * - `'step-start'` — step markers
+   * - `'data-'` — all data parts (OM, workspace, sandbox, etc.)
+   * - `'data-om-'` — only observational memory data parts
+   *
+   * Messages where no part matches are dropped. Plain text messages (user text,
+   * assistant text without tool parts) are always kept regardless of this filter.
+   *
+   * To filter by specific tool names, use `toolNames` instead.
+   */
+  partTypes?: MastraPartType[];
+
+  /**
+   * Keep only tool-invocation messages for these specific tools.
+   * Each entry is prefix-matched against `toolInvocation.toolName`.
+   * Non-tool messages (text, data) are unaffected by this filter.
+   *
+   * @example `['execute_command', 'write_file', 'string_replace']`
+   */
+  toolNames?: string[];
+
+  /**
+   * Maximum number of messages to keep in `input.rememberedMessages`.
+   * Taken from the end (most recent messages). Useful for limiting context window.
+   */
+  maxRememberedMessages?: number;
+
+  /**
+   * Maximum number of messages to keep in `output` (response messages).
+   * Taken from the end.
+   */
+  maxOutputMessages?: number;
+
+  /**
+   * Drop `requestContext` entirely from the run.
+   */
+  dropRequestContext?: boolean;
+
+  /**
+   * Drop `expectedTrajectory` from the run.
+   */
+  dropExpectedTrajectory?: boolean;
+
+  /**
+   * Drop `groundTruth` from the run.
+   */
+  dropGroundTruth?: boolean;
+}
+
+/**
+ * Creates a `prepareRun` function from declarative options.
+ * Use this with `createScorer({ prepareRun: filterRun({ ... }) })`.
+ *
+ * @example
+ * ```ts
+ * createScorer({
+ *   id: 'my-scorer',
+ *   description: '...',
+ *   type: 'agent',
+ *   prepareRun: filterRun({
+ *     toolNames: ['execute_command', 'write_file', 'string_replace_lsp'],
+ *     maxRememberedMessages: 20,
+ *   }),
+ * })
+ * ```
+ */
+export function filterRun<TInput = unknown, TOutput = unknown>(
+  options: FilterRunOptions,
+): (run: ScorerRun<TInput, TOutput>) => ScorerRun<TInput, TOutput> {
+  return (run: ScorerRun<TInput, TOutput>): ScorerRun<TInput, TOutput> => {
+    const result = { ...run };
+
+    if (options.dropRequestContext) {
+      result.requestContext = undefined;
+    }
+    if (options.dropExpectedTrajectory) {
+      result.expectedTrajectory = undefined;
+    }
+    if (options.dropGroundTruth) {
+      result.groundTruth = undefined;
+    }
+
+    const hasMessageFilters = options.partTypes || options.toolNames;
+
+    // Filter input (ScorerRunInputForAgent shape)
+    if (result.input && typeof result.input === 'object' && 'rememberedMessages' in (result.input as object)) {
+      const agentInput = result.input as unknown as ScorerRunInputForAgent;
+
+      let remembered = agentInput.rememberedMessages ?? [];
+      if (hasMessageFilters) {
+        remembered = filterMessages(remembered, options);
+      }
+      if (options.maxRememberedMessages && remembered.length > options.maxRememberedMessages) {
+        remembered = remembered.slice(-options.maxRememberedMessages);
+      }
+
+      result.input = {
+        ...agentInput,
+        rememberedMessages: remembered,
+      } as unknown as TInput;
+    }
+
+    // Filter output (MastraDBMessage[] shape)
+    if (Array.isArray(result.output)) {
+      let output: MastraDBMessage[] = result.output as unknown as MastraDBMessage[];
+      if (hasMessageFilters) {
+        output = filterMessages(output, options);
+      }
+      if (options.maxOutputMessages && output.length > options.maxOutputMessages) {
+        output = output.slice(-options.maxOutputMessages);
+      }
+      result.output = output as unknown as TOutput;
+    }
+
+    return result;
+  };
+}
+
+/**
+ * Get the tool name from a MastraMessagePart if it's a tool-invocation.
+ * Handles the Mastra `tool-invocation` shape: `{ type: 'tool-invocation', toolInvocation: { toolName } }`.
+ */
+function getToolName(part: MastraMessagePart): string | undefined {
+  if (part.type === 'tool-invocation') {
+    return (part as MastraToolInvocationPart).toolInvocation?.toolName;
+  }
+  return undefined;
+}
+
+/**
+ * Check if a message part is a tool-invocation.
+ */
+function isToolPart(part: MastraMessagePart): boolean {
+  return part.type === 'tool-invocation';
+}
+
+/**
+ * Get the `type` string from a MastraMessagePart.
+ * All part types in the union have a `type` discriminator.
+ */
+function getPartType(part: MastraMessagePart): string {
+  return part.type;
+}
+
+/**
+ * Filter messages by part type patterns and/or tool names.
+ *
+ * - `partTypes` prefix-matches against `MastraMessagePart.type`
+ * - `toolNames` prefix-matches against `toolInvocation.toolName` for tool-invocation parts
+ * - Plain text messages (no tool-invocation parts) are always kept
+ */
+function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions): MastraDBMessage[] {
+  return messages.filter(msg => {
+    const parts = msg?.content?.parts;
+    if (!Array.isArray(parts)) return true; // Keep non-structured messages (plain string content)
+
+    const typedParts = parts as MastraMessagePart[];
+    const hasToolInvocations = typedParts.some(isToolPart);
+
+    // Plain text messages — no tool invocations — always kept (unless partTypes explicitly excludes them)
+    if (!hasToolInvocations) {
+      if (!options.partTypes) return true;
+      // If partTypes is set, keep only if at least one part type matches
+      return typedParts.some(p => {
+        const type = getPartType(p);
+        return options.partTypes!.some(pattern => type.startsWith(pattern));
+      });
+    }
+
+    // Message has tool invocations — apply filters
+    if (options.toolNames) {
+      // Keep if any tool-invocation matches a tool name prefix
+      const hasMatchingTool = typedParts.some(p => {
+        const name = getToolName(p);
+        return name != null && options.toolNames!.some(pattern => name.startsWith(pattern));
+      });
+      if (!hasMatchingTool) return false;
+    }
+
+    if (options.partTypes) {
+      // Keep if any part type matches
+      const hasMatchingType = typedParts.some(p => {
+        const type = getPartType(p);
+        return options.partTypes!.some(pattern => type.startsWith(pattern));
+      });
+      if (!hasMatchingType) return false;
+    }
+
+    return true;
+  });
+}
 
 // Export types and interfaces for use in test files
 export type { ScorerConfig, ScorerRun, PromptObject };
