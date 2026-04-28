@@ -1026,6 +1026,37 @@ describe('ToolCallFilter', () => {
       expect(JSON.stringify(messageList.get.all.db())).toContain('SECRET_RESULT');
     });
 
+    it('should filter legacy toolInvocations even when parts have no tool parts', async () => {
+      const filter = new ToolCallFilter({ exclude: ['lookup'] });
+      const messages = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Tool summary',
+            parts: [{ type: 'text' as const, text: 'Tool summary' }],
+            toolInvocations: [
+              { toolCallId: 'call-1', toolName: 'lookup', result: 'SECRET_RESULT' },
+              { toolCallId: 'call-2', toolName: 'calculator', result: '4' },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ] as unknown as MastraDBMessage[];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(createProcessInputStepArgs(messageList));
+      expect(result.modelContextMessages).toHaveLength(1);
+      expect(JSON.stringify(result.modelContextMessages)).not.toContain('SECRET_RESULT');
+      expect((result.modelContextMessages![0]!.content as any).toolInvocations).toEqual([
+        { toolCallId: 'call-2', toolName: 'calculator', result: '4' },
+      ]);
+      expect(JSON.stringify(messageList.get.all.db())).toContain('SECRET_RESULT');
+    });
+
     it('should not infer generic raw tool-call and tool-result type suffixes as tool names', async () => {
       const filter = new ToolCallFilter({ exclude: ['result'] });
       const messages = [

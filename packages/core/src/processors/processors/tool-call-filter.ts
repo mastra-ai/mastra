@@ -162,6 +162,26 @@ export class ToolCallFilter implements Processor {
     return filteredParts;
   }
 
+  private shouldKeepTool(
+    toolName: unknown,
+    toolCallId: unknown,
+    preservedToolCallIds: Set<string>,
+    excludedToolCallIds: Set<string>,
+  ) {
+    if (typeof toolCallId === 'string' && preservedToolCallIds.has(toolCallId)) {
+      return true;
+    }
+
+    if (this.exclude === 'all') {
+      return false;
+    }
+
+    return !(
+      (typeof toolName === 'string' && this.exclude.includes(toolName)) ||
+      (typeof toolCallId === 'string' && excludedToolCallIds.has(toolCallId))
+    );
+  }
+
   private filterMessages(
     messages: MastraDBMessage[],
     preservedToolCallIds: Set<string> = new Set(),
@@ -181,74 +201,82 @@ export class ToolCallFilter implements Processor {
             excludedToolCallIds.add(toolCallId);
           }
         }
+
+        const toolInvocations = (message.content as { toolInvocations?: unknown }).toolInvocations;
+        if (!Array.isArray(toolInvocations)) continue;
+
+        for (const invocation of toolInvocations) {
+          if (!invocation || typeof invocation !== 'object') continue;
+          const toolName = (invocation as { toolName?: unknown }).toolName;
+          const toolCallId = (invocation as { toolCallId?: unknown }).toolCallId;
+          if (typeof toolName === 'string' && typeof toolCallId === 'string' && this.exclude.includes(toolName)) {
+            excludedToolCallIds.add(toolCallId);
+          }
+        }
       }
     }
 
     return messages
       .map(message => {
-        if (!message.content?.parts) {
+        const originalParts = message.content?.parts;
+        const originalToolInvocations = (message.content as { toolInvocations?: unknown }).toolInvocations;
+        const hasToolParts = originalParts?.some(part => this.isToolPart(part)) ?? false;
+        const hasToolInvocations = Array.isArray(originalToolInvocations);
+
+        if (!hasToolParts && !hasToolInvocations) {
           return message;
         }
 
-        const hasToolParts = message.content.parts.some(part => this.isToolPart(part));
-        if (!hasToolParts) {
-          return message;
-        }
+        const filteredParts = originalParts
+          ? this.removeOrphanStepStarts(
+              originalParts.filter(part => {
+                if (!this.isToolPart(part)) {
+                  return true;
+                }
 
-        const filteredParts = this.removeOrphanStepStarts(
-          message.content.parts.filter(part => {
-            if (!this.isToolPart(part)) {
-              return true;
-            }
+                return this.shouldKeepTool(
+                  this.getToolName(part),
+                  this.getToolCallId(part),
+                  preservedToolCallIds,
+                  excludedToolCallIds,
+                );
+              }),
+            )
+          : undefined;
 
-            const toolCallId = this.getToolCallId(part);
-            if (toolCallId && preservedToolCallIds.has(toolCallId)) {
-              return true;
-            }
+        const filteredToolInvocations = hasToolInvocations
+          ? originalToolInvocations.filter(invocation => {
+              if (!invocation || typeof invocation !== 'object') {
+                return true;
+              }
 
-            if (this.exclude === 'all') {
-              return false;
-            }
+              return this.shouldKeepTool(
+                (invocation as { toolName?: unknown }).toolName,
+                (invocation as { toolCallId?: unknown }).toolCallId,
+                preservedToolCallIds,
+                excludedToolCallIds,
+              );
+            })
+          : undefined;
 
-            const toolName = this.getToolName(part);
-            return !(
-              (toolName && this.exclude.includes(toolName)) ||
-              (toolCallId && excludedToolCallIds.has(toolCallId))
-            );
-          }),
-        );
-
-        const meaningfulParts = filteredParts.filter(part => part.type !== 'step-start');
-        if (meaningfulParts.length === 0) {
+        const meaningfulParts = filteredParts?.filter(part => part.type !== 'step-start') ?? [];
+        const hasTextContent =
+          typeof message.content?.content === 'string' && message.content.content.trim().length > 0;
+        if (meaningfulParts.length === 0 && (filteredToolInvocations?.length ?? 0) === 0 && !hasTextContent) {
           return null;
         }
 
-        const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
+        const { toolInvocations: _originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
         const updatedContent: any = {
           ...contentWithoutToolInvocations,
-          parts: filteredParts,
         };
 
-        if (Array.isArray(originalToolInvocations)) {
-          const filteredToolInvocations = originalToolInvocations.filter((invocation: any) => {
-            const toolCallId = invocation.toolCallId;
-            if (typeof toolCallId === 'string' && preservedToolCallIds.has(toolCallId)) {
-              return true;
-            }
+        if (filteredParts) {
+          updatedContent.parts = filteredParts;
+        }
 
-            if (this.exclude === 'all') {
-              return false;
-            }
-
-            return !(
-              (typeof invocation.toolName === 'string' && this.exclude.includes(invocation.toolName)) ||
-              (typeof toolCallId === 'string' && excludedToolCallIds.has(toolCallId))
-            );
-          });
-
-          if (filteredToolInvocations.length > 0) {
-            updatedContent.toolInvocations = filteredToolInvocations;
-          }
+        if (filteredToolInvocations && filteredToolInvocations.length > 0) {
+          updatedContent.toolInvocations = filteredToolInvocations;
         }
 
         return {

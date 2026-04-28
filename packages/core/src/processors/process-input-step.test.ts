@@ -346,6 +346,44 @@ describe('processInputStep', () => {
       expect(JSON.stringify(messageList.get.all.db())).toContain('SECRET_RESULT');
     });
 
+    it('should reject messageList mutations after model context messages without a prompt context return', async () => {
+      const contextProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ messages }) => {
+          return {
+            modelContextMessages: messages,
+          };
+        },
+      };
+
+      const mutatingProcessor: Processor = {
+        id: 'mutating-processor',
+        processInputStep: async ({ messageList }) => {
+          messageList.add([createMessage('Injected canonical message')], 'input');
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [contextProcessor, mutatingProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User question')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/mutated messageList after a previous processor returned modelContextMessages/);
+    });
+
     it('should transform message part types at each step', async () => {
       let transformationCount = 0;
 
