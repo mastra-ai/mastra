@@ -26,6 +26,7 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "@mastra/slack": "latest",
     "@mastra/voice-openai": "latest",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5.0.93",
@@ -52,6 +53,7 @@
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/slack": "link:../../channels/slack",
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/auth-studio": "link:../../auth/studio",
       "mastra": "link:../../packages/cli"
