@@ -3076,6 +3076,162 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     expect(promptStr).toContain('Do the task please');
   });
 
+  it('should hide sub-agent tool results from supervisor model context while preserving raw tool results', async () => {
+    const nestedToolArg = 'SECRET_NESTED_TOOL_ARG';
+    const nestedToolResult = 'SECRET_NESTED_TOOL_RESULT';
+    const rawSubAgentText = 'Task completed.';
+    const processedSubAgentText = 'Processed summary without nested tool details.';
+
+    const isTextPart = (part: unknown): part is { type: 'text'; text?: string } =>
+      typeof part === 'object' && part !== null && (part as { type?: unknown }).type === 'text';
+
+    const getAgentToolPayload = (
+      toolResult: unknown,
+    ): { toolName?: string; result?: { subAgentToolResults?: unknown } } | undefined => {
+      if (typeof toolResult !== 'object' || toolResult === null) return undefined;
+
+      const payload = (toolResult as { payload?: unknown }).payload;
+      if (typeof payload !== 'object' || payload === null) return undefined;
+
+      return payload as { toolName?: string; result?: { subAgentToolResults?: unknown } };
+    };
+
+    const textTransformProcessor: Processor<'text-transform'> = {
+      id: 'text-transform',
+      async processOutputResult(args: ProcessOutputResultArgs) {
+        return args.messages.map(msg => {
+          if (msg.role !== 'assistant') return msg;
+          const parts = msg.content?.parts ?? [];
+          return {
+            ...msg,
+            content: {
+              ...msg.content,
+              format: msg.content?.format ?? 2,
+              parts: parts.map(part => (isTextPart(part) ? { ...part, text: processedSubAgentText } : part)),
+            },
+          };
+        });
+      },
+    };
+
+    const subAgentTool = createTool({
+      id: 'lookup-secret',
+      description: 'Looks up private data',
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => ({
+        query,
+        secret: nestedToolResult,
+        records: [{ id: 'private-record', value: nestedToolResult }],
+      }),
+    });
+
+    const runSupervisor = async (includeSubAgentToolResultsInModelContext?: boolean) => {
+      const supervisorPrompts: unknown[] = [];
+
+      const subAgent = new Agent({
+        id: 'context-isolation-sub-agent',
+        name: 'context-isolation-sub-agent',
+        description: 'A sub-agent that uses a nested tool',
+        instructions: 'Use lookupSecret, then summarize the result.',
+        model: makeSubAgentModelWithTool('lookupSecret', { query: nestedToolArg }),
+        tools: { lookupSecret: subAgentTool },
+        outputProcessors: [textTransformProcessor],
+      });
+
+      let supervisorCallCount = 0;
+      const supervisorAgent = new Agent({
+        id: 'context-isolation-supervisor',
+        name: 'context-isolation-supervisor',
+        instructions: 'Delegate to sub-agents.',
+        model: new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            supervisorCallCount++;
+            supervisorPrompts.push(prompt);
+
+            if (supervisorCallCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: '',
+                content: [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'call-1',
+                    toolName: 'agent-subAgent',
+                    input: JSON.stringify({ prompt: 'Research the private record', maxSteps: 3 }),
+                  },
+                ],
+                warnings: [],
+              };
+            }
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Done',
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          },
+        }),
+        agents: { subAgent },
+        memory: new MockMemory(),
+      });
+
+      const delegation =
+        includeSubAgentToolResultsInModelContext === undefined ? {} : { includeSubAgentToolResultsInModelContext };
+
+      const result = await supervisorAgent.generate('Delegate this task', {
+        maxSteps: 5,
+        delegation,
+      });
+
+      expect(supervisorPrompts.length).toBeGreaterThanOrEqual(2);
+
+      return {
+        result,
+        supervisorContextAfterDelegation: JSON.stringify(supervisorPrompts[1]),
+      };
+    };
+
+    const assertTextOnlySupervisorContext = (supervisorContextAfterDelegation: string) => {
+      expect(supervisorContextAfterDelegation).toContain(processedSubAgentText);
+      expect(supervisorContextAfterDelegation).not.toContain(rawSubAgentText);
+      expect(supervisorContextAfterDelegation).not.toContain('subAgentToolResults');
+      expect(supervisorContextAfterDelegation).not.toContain(nestedToolArg);
+      expect(supervisorContextAfterDelegation).not.toContain(nestedToolResult);
+    };
+
+    const implicitDefaultRun = await runSupervisor();
+    assertTextOnlySupervisorContext(implicitDefaultRun.supervisorContextAfterDelegation);
+
+    const defaultRun = await runSupervisor(false);
+    const supervisorContextAfterDelegation = defaultRun.supervisorContextAfterDelegation;
+    assertTextOnlySupervisorContext(supervisorContextAfterDelegation);
+
+    const agentToolResult = defaultRun.result.toolResults
+      .map(getAgentToolPayload)
+      .find(payload => payload?.toolName === 'agent-subAgent')?.result;
+
+    expect(agentToolResult?.subAgentToolResults).toEqual([
+      expect.objectContaining({
+        toolName: 'lookupSecret',
+        args: { query: nestedToolArg },
+        result: expect.objectContaining({ secret: nestedToolResult }),
+      }),
+    ]);
+
+    const optInRun = await runSupervisor(true);
+    expect(optInRun.supervisorContextAfterDelegation).toContain(processedSubAgentText);
+    expect(optInRun.supervisorContextAfterDelegation).toContain('subAgentToolResults');
+    expect(optInRun.supervisorContextAfterDelegation).toContain(nestedToolArg);
+    expect(optInRun.supervisorContextAfterDelegation).toContain(nestedToolResult);
+  });
+
   it('should save only the last user message and response to sub-agent memory (not full supervisor context)', async () => {
     // The supervisor forwards ALL messages as context to the sub-agent (so it can see
     // the full conversation history), but only the immediate delegation prompt + response

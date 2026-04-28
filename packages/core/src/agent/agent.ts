@@ -3261,8 +3261,8 @@ export class Agent<
               z.object({
                 toolName: z.string().describe('The name of the tool'),
                 toolCallId: z.string().describe('The ID of the tool call'),
-                result: z.any().describe('The result of the tool call'),
-                args: z.any().describe('The arguments of the tool call').optional(),
+                result: z.unknown().describe('The result of the tool call'),
+                args: z.unknown().describe('The arguments of the tool call').optional(),
                 isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
               }),
             )
@@ -3270,12 +3270,20 @@ export class Agent<
             .optional(),
         });
 
+        const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
+          ? undefined
+          : (output: z.infer<typeof agentOutputSchema>) => ({
+              type: 'text' as const,
+              value: output.text,
+            });
+
         const toolObj = createTool({
           id: `agent-${agentName}`,
           description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
+          ...(toModelOutput ? { toModelOutput } : {}),
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {

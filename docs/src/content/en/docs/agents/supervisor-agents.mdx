@@ -183,6 +183,22 @@ const stream = await supervisor.stream('Research AI trends', {
 
 The callback receives `messages` (the full conversation history), `primitiveId` (the subagent ID), and `prompt` (the delegation prompt). Return the filtered array of messages.
 
+## Subagent result context
+
+When a subagent completes, the supervisor model receives the subagent's text response in later iterations. Nested tool calls and subagent metadata, such as thread and resource IDs, are not added to the supervisor model context.
+
+Application code and UI integrations can still inspect the raw delegation result, including `subAgentToolResults`, from the tool result payload. This keeps debugging and display data available without sending nested tool arguments or outputs back into the supervisor's next model call.
+
+Set `includeSubAgentToolResultsInModelContext` to include the full subagent result, including nested tool results and subagent metadata, in the supervisor model context.
+
+```typescript title="src/mastra/agents/supervisor.ts"
+await supervisor.generate('Research AI trends', {
+  delegation: {
+    includeSubAgentToolResultsInModelContext: true,
+  },
+})
+```
+
 ## Iteration monitoring
 
 `onIterationComplete` is called after each iteration of the supervisor loop. Use it to log progress, inject feedback, or stop execution early.
