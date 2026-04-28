@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.29.0-alpha.6
+
+### Patch Changes
+
+- Fixed Studio observability tabs so runtime-injected observability unlocks them. ([#15821](https://github.com/mastra-ai/mastra/pull/15821))
+
+- Added a stream error retry processor with OpenAI Responses stream error matching. ([#15760](https://github.com/mastra-ai/mastra/pull/15760))
+
+- Added missing A2A vNext error variants for protocol 0.3 handling. ([#15720](https://github.com/mastra-ai/mastra/pull/15720))
+
 ## 1.29.0-alpha.5
 
 ### Patch Changes
