@@ -9,6 +9,7 @@ import type { Processor, ProcessOutputResultArgs } from '../../processors/index'
 import { RequestContext, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
+import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import type { MessageFilterContext, DelegationCompleteContext, IterationCompleteContext } from '../agent.types';
 import type { MastraDBMessage } from '../message-list/state/types';
@@ -3983,4 +3984,226 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
       }
     }
   });
+});
+
+/**
+ * Supervisor → Specialist → Workflow suspend/resume (#15734).
+ *
+ * When a supervisor delegates to a specialist that owns a workflow, and the
+ * workflow suspends for human-in-the-loop approval, calling `resumeStream` on
+ * the supervisor must resume the workflow at its suspended step — not restart
+ * from scratch.
+ *
+ * Root cause: the sub-agent thread ID was regenerated on every delegation
+ * (including resume), so the suspended tool metadata became unreachable and the
+ * workflow ran with a fresh runId.
+ */
+describe('Supervisor Pattern - Workflow suspend/resume through delegation (#15734)', () => {
+  it('should resume a suspended workflow through supervisor delegation instead of restarting', async () => {
+    const mockStorage = new InMemoryStore();
+
+    // Track whether the workflow step's execute was called with resumeData
+    let stepExecuteCount = 0;
+    let receivedResumeData: any = undefined;
+
+    const approvalStep = createStep({
+      id: 'approval-step',
+      description: 'A step that suspends for approval, then returns the approved data',
+      inputSchema: z.object({
+        request: z.string(),
+      }),
+      suspendSchema: z.object({
+        message: z.string(),
+      }),
+      resumeSchema: z.object({
+        approved: z.boolean(),
+        reason: z.string(),
+      }),
+      outputSchema: z.object({
+        request: z.string(),
+        approved: z.boolean(),
+        reason: z.string(),
+      }),
+      execute: async ({ inputData, suspend, resumeData }) => {
+        stepExecuteCount++;
+        if (!resumeData) {
+          return await suspend({ message: `Please approve: ${inputData.request}` });
+        }
+        receivedResumeData = resumeData;
+        return {
+          request: inputData.request,
+          approved: resumeData.approved,
+          reason: resumeData.reason,
+        };
+      },
+    });
+
+    const approvalWorkflow = createWorkflow({
+      id: 'approval-workflow',
+      description: 'Workflow that requires human approval',
+      inputSchema: z.object({
+        request: z.string(),
+      }),
+      outputSchema: z.object({
+        request: z.string(),
+        approved: z.boolean(),
+        reason: z.string(),
+      }),
+    })
+      .then(approvalStep)
+      .commit();
+
+    // Sub-agent model: calls the approval workflow tool on first call, returns text on second
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doStream: async () => {
+        subCallCount++;
+        if (subCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'sub-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'sub-tool-call-1',
+                toolName: 'workflow-approvalWorkflow',
+                input: JSON.stringify({ inputData: { request: 'deploy to production' } }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+        // After workflow completes, return a text response
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'sub-id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Approval granted for deployment.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const specialistAgent = new Agent({
+      id: 'approval-specialist',
+      name: 'Approval Specialist',
+      description: 'An agent that handles approval workflows.',
+      instructions: 'You handle approval requests using the approval workflow.',
+      model: subAgentModel,
+      workflows: { approvalWorkflow },
+      memory: new MockMemory(),
+    });
+
+    // Supervisor model: delegates to agent-approvalSpecialist on first call, returns text on second
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doStream: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'sup-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'supervisor-call-1',
+                toolName: 'agent-approvalSpecialist',
+                input: JSON.stringify({ prompt: 'Please approve deploy to production' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+        // After resume completes, return final text
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'sup-id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Deployment approved.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const supervisorAgent = new Agent({
+      id: 'workflow-suspend-supervisor',
+      name: 'Workflow Suspend Supervisor',
+      instructions: 'You orchestrate approval workflows via sub-agents.',
+      model: supervisorModel,
+      agents: { approvalSpecialist: specialistAgent },
+      memory: new MockMemory(),
+    });
+
+    new Mastra({
+      agents: { workflowSuspendSupervisor: supervisorAgent },
+      storage: mockStorage,
+    });
+
+    // Step 1: Initial stream — should suspend
+    const stream = await supervisorAgent.stream('Approve deploy to production', { maxSteps: 5 });
+
+    let suspendChunkReceived = false;
+    let suspendPayload: any = undefined;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-suspended') {
+        suspendChunkReceived = true;
+        suspendPayload = chunk.payload.suspendPayload;
+      }
+    }
+
+    expect(suspendChunkReceived).toBe(true);
+    expect(suspendPayload).toBeDefined();
+    expect(suspendPayload?.message).toBe('Please approve: deploy to production');
+
+    // The step should have been called exactly once (initial suspension)
+    expect(stepExecuteCount).toBe(1);
+
+    // Step 2: Resume the supervisor with approval data
+    const resumeStream = await supervisorAgent.resumeStream(
+      { approved: true, reason: 'Looks good' },
+      { runId: stream.runId },
+    );
+
+    for await (const _chunk of resumeStream.fullStream) {
+      // consume
+    }
+
+    // The step should have been called exactly twice:
+    // once for the initial suspend, once for the resume with data.
+    // If the bug were present, it would be called 3+ times (restart from step 1 + new suspend + resume)
+    expect(stepExecuteCount).toBe(2);
+
+    // Verify the resume data was received correctly
+    expect(receivedResumeData).toEqual({ approved: true, reason: 'Looks good' });
+  }, 30000);
 });
