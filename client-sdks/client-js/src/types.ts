@@ -1102,6 +1102,9 @@ export interface StoredAgentResponse {
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
+  // Stars (EE feature, present when stars feature is enabled)
+  isStarred?: boolean;
+  starCount?: number;
 }
 
 /**
@@ -1118,6 +1121,18 @@ export interface ListStoredAgentsParams {
   authorId?: string;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
+  /** When true, only return agents starred by the caller (or by `pinStarredFor`). */
+  starredOnly?: boolean;
+  /** When set, sort starred-first for this user id. Required for `starredOnly`. */
+  pinStarredFor?: string;
+}
+
+/**
+ * Response from star / unstar mutations.
+ */
+export interface StarToggleResponse {
+  starred: boolean;
+  starCount: number;
 }
 
 /**
@@ -1936,6 +1951,9 @@ export interface StoredSkillResponse {
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
+  // Stars (EE feature, present when stars feature is enabled)
+  isStarred?: boolean;
+  starCount?: number;
 }
 
 /**
@@ -1951,6 +1969,10 @@ export interface ListStoredSkillsParams {
   authorId?: string;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
+  /** When true, only return skills starred by the caller (or by `pinStarredFor`). */
+  starredOnly?: boolean;
+  /** When set, sort starred-first for this user id. Required for `starredOnly`. */
+  pinStarredFor?: string;
 }
 
 /**
@@ -2749,6 +2771,7 @@ export interface BuilderAgentFeatures {
   skills?: boolean;
   memory?: boolean;
   variables?: boolean;
+  stars?: boolean;
 }
 
 /**

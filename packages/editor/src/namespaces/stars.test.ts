@@ -125,8 +125,6 @@ describe('EditorStarsNamespace', () => {
   it('throws if the storage domain is not configured', async () => {
     const editor = new MastraEditor({ logger: mockLogger() });
     // No mastra registered → no storage available.
-    await expect(
-      editor.stars.star({ userId: 'u1', entityType: 'agent', entityId: 'agent-1' }),
-    ).rejects.toThrow();
+    await expect(editor.stars.star({ userId: 'u1', entityType: 'agent', entityId: 'agent-1' })).rejects.toThrow();
   });
 });

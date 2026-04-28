@@ -2,6 +2,7 @@ import type { StoredAgentResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
+import { StarButton } from '@/domains/agents/components/star-button';
 import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -87,6 +88,13 @@ export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
             <span className="hidden md:inline-flex truncate max-w-[16rem]">{getModelLabel(agent.model)}</span>
             <span className="hidden lg:inline-flex">Updated {formatRelativeTime(agent.updatedAt)}</span>
           </div>
+          <StarButton
+            agentId={agent.id}
+            isStarred={agent.isStarred}
+            starCount={agent.starCount}
+            size="sm"
+            className="shrink-0"
+          />
         </Link>
       ))}
     </div>

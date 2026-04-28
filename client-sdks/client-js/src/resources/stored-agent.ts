@@ -12,6 +12,7 @@ import type {
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
+  StarToggleResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -71,6 +72,40 @@ export class StoredAgent extends BaseResource {
   delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredAgentResponse> {
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  // ==========================================================================
+  // Star Methods (EE feature)
+  // ==========================================================================
+
+  /**
+   * Stars this agent for the calling user. Idempotent.
+   * Requires the `agent.stars` builder feature flag to be enabled on the server.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the new starred state and updated star count
+   */
+  star(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/star${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+      },
+    );
+  }
+
+  /**
+   * Unstars this agent for the calling user. Idempotent.
+   * Requires the `agent.stars` builder feature flag to be enabled on the server.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the new starred state and updated star count
+   */
+  unstar(requestContext?: RequestContext | Record<string, any>): Promise<StarToggleResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/star${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

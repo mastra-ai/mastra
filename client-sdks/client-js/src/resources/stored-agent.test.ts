@@ -233,6 +233,47 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    describe('Stars', () => {
+      it('should star the agent via PUT /star', async () => {
+        const mockResponse = { starred: true, starCount: 3 };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.star();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/star`,
+          expect.objectContaining({
+            method: 'PUT',
+          }),
+        );
+      });
+
+      it('should unstar the agent via DELETE /star', async () => {
+        const mockResponse = { starred: false, starCount: 2 };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.unstar();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/star`,
+          expect.objectContaining({
+            method: 'DELETE',
+          }),
+        );
+      });
+    });
+
+    it('should pass starredOnly and pinStarredFor on listStoredAgents', async () => {
+      const mockResponse = { agents: [], total: 0, page: 0, perPage: 100, hasMore: false };
+      mockFetchResponse(mockResponse);
+
+      await client.listStoredAgents({ starredOnly: true, pinStarredFor: 'user-1' });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?starredOnly=true&pinStarredFor=user-1`,
+        expect.anything(),
+      );
+    });
+
     it('should handle special characters in storedAgentId', async () => {
       const specialId = 'agent/with/slashes';
       const encodedId = encodeURIComponent(specialId);

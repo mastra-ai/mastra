@@ -1,9 +1,4 @@
-import type {
-  AgentsStorage,
-  MastraStorage,
-  SkillsStorage,
-  StarsStorage,
-} from '@mastra/core/storage';
+import type { AgentsStorage, MastraStorage, SkillsStorage, StarsStorage } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSampleAgent, createSampleSkill } from './data';
 
@@ -103,9 +98,7 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
       });
 
       it('throws when starring a non-existent entity', async () => {
-        await expect(
-          starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: 'missing' }),
-        ).rejects.toThrow();
+        await expect(starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: 'missing' })).rejects.toThrow();
       });
 
       it('separates agent and skill counters even when ids collide', async () => {
@@ -134,12 +127,8 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent });
         await starsStorage.star({ userId: 'u1', entityType: 'agent', entityId: agent.id });
 
-        expect(
-          await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: agent.id }),
-        ).toBe(true);
-        expect(
-          await starsStorage.isStarred({ userId: 'u2', entityType: 'agent', entityId: agent.id }),
-        ).toBe(false);
+        expect(await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(true);
+        expect(await starsStorage.isStarred({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
       });
 
       it('isStarredBatch returns only the starred subset', async () => {
@@ -208,12 +197,8 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
         });
         expect(removed).toBe(2);
 
-        expect(
-          await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: agent.id }),
-        ).toBe(false);
-        expect(
-          await starsStorage.isStarred({ userId: 'u2', entityType: 'agent', entityId: agent.id }),
-        ).toBe(false);
+        expect(await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: agent.id })).toBe(false);
+        expect(await starsStorage.isStarred({ userId: 'u2', entityType: 'agent', entityId: agent.id })).toBe(false);
       });
 
       it('does not touch stars for other entities', async () => {
@@ -226,9 +211,7 @@ export function createStarsTests({ storage }: { storage: MastraStorage }) {
 
         await starsStorage.deleteStarsForEntity({ entityType: 'agent', entityId: a1.id });
 
-        expect(
-          await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: a2.id }),
-        ).toBe(true);
+        expect(await starsStorage.isStarred({ userId: 'u1', entityType: 'agent', entityId: a2.id })).toBe(true);
       });
     });
 

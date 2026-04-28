@@ -2,6 +2,7 @@ import type { StoredAgentResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
+import { StarButton } from '@/domains/agents/components/star-button';
 import { useLinkComponent } from '@/lib/framework';
 
 export type AgentBuilderLibraryListProps = {
@@ -47,6 +48,13 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
             <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description || 'No description'}</div>
           </div>
+          <StarButton
+            agentId={agent.id}
+            isStarred={agent.isStarred}
+            starCount={agent.starCount}
+            size="sm"
+            className="shrink-0"
+          />
         </Link>
       ))}
     </div>
