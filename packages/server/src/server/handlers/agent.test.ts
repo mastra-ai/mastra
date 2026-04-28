@@ -943,5 +943,51 @@ describe('Agent Handlers', () => {
         }
       }
     });
+
+    it('rejects with 400 when the only connected model is outside the admin allowlist', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      // Allow only anthropic — agent's openai model must be filtered out by the
+      // policy-aware findConnectedModel, even though OPENAI_API_KEY is set.
+      const editor = {
+        hasEnabledBuilderConfig: () => true,
+        resolveBuilder: async () => ({
+          enabled: true,
+          getFeatures: () => ({ agent: { model: true } }),
+          getConfiguration: () => ({
+            agent: { models: { allowed: [{ kind: 'known' as const, provider: 'anthropic' }] } },
+          }),
+        }),
+      };
+      (mockMastra as unknown as { getEditor: () => unknown }).getEditor = () => editor;
+
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+
+      try {
+        let caught: HTTPException | undefined;
+        try {
+          await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+            ...createTestServerContext({ mastra: mockMastra }),
+            agentId: 'test-agent',
+            instructions: 'You are a helpful assistant.',
+            comment: 'Make it more specific',
+          });
+        } catch (e) {
+          caught = e as HTTPException;
+        }
+
+        expect(caught).toBeInstanceOf(HTTPException);
+        expect(caught?.status).toBe(400);
+        expect(generateSpy).not.toHaveBeenCalled();
+      } finally {
+        generateSpy.mockRestore();
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      }
+    });
   });
 });

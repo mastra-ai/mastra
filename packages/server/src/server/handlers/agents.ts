@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
-import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
+import { assertModelAllowed, isModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -2175,15 +2175,22 @@ Return your response as JSON with exactly these two fields:
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
 // Helper to find the first model with a connected provider
-async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+async function findConnectedModel(
+  agent: Agent,
+  policy?: Awaited<ReturnType<typeof resolveBuilderModelPolicy>>,
+): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+  const allowed = policy?.active ? policy.allowed : undefined;
+  const isPermitted = (model: { provider: string; modelId: string }) =>
+    isModelAllowed(allowed, { provider: model.provider, modelId: model.modelId });
+
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
-    // Find the first enabled model with a connected provider
+    // Find the first enabled model with a connected provider that is allowed by policy
     for (const modelConfig of modelList) {
       if (modelConfig.enabled !== false) {
         const model = modelConfig.model;
-        if (isProviderConnected(model.provider)) {
+        if (isProviderConnected(model.provider) && isPermitted(model)) {
           return model;
         }
       }
@@ -2193,7 +2200,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
 
   // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (isProviderConnected(defaultModel.provider)) {
+  if (isProviderConnected(defaultModel.provider) && isPermitted(defaultModel)) {
     return defaultModel;
   }
   return null;
@@ -2218,12 +2225,15 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
 
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent);
+      // Find the first model with a connected provider AND permitted by the
+      // Agent Builder allowlist (so enhance never picks a model the runtime
+      // would reject with MODEL_NOT_ALLOWED).
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+      const model = await findConnectedModel(agent, policy);
       if (!model) {
         throw new HTTPException(400, {
           message:
-            'No model with a configured API key found. Please set the required environment variable for your model provider.',
+            'No model with a configured API key found that is permitted by the current model policy. Please set an environment variable for an allowed provider, or update the Agent Builder model policy.',
         });
       }
 
