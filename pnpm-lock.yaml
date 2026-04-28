@@ -2192,8 +2192,8 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       posthog-node:
-        specifier: ^4.18.0
-        version: 4.18.0
+        specifier: ^5.30.6
+        version: 5.30.6(rxjs@7.8.1)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13234,6 +13234,9 @@ packages:
   '@posthog/core@1.27.1':
     resolution: {integrity: sha512-130F5zAmGoY0KAqdT2FYfU79mk54z0wTWfCMkyzXmkKz2eg23694O2ofaAf4NuIdI8e6LFNHyaZ7aWbatUeW5A==}
 
+  '@posthog/core@1.27.7':
+    resolution: {integrity: sha512-6rzOZajUkhuezgPeF+ReMMly0D9oiwIZtMQrsJtZcS/mwi5OtvuYgxeaohgP9PKOhkK1c7cvGskX0Y2YUtBYCw==}
+
   '@posthog/core@1.7.1':
     resolution: {integrity: sha512-kjK0eFMIpKo9GXIbts8VtAknsoZ18oZorANdtuTj1CbgS28t4ZVq//HAWhnxEuXRTrtkd+SUJ6Ux3j2Af8NCuA==}
 
@@ -13249,6 +13252,9 @@ packages:
 
   '@posthog/types@1.371.2':
     resolution: {integrity: sha512-Ak3kuGMPBTjuoK6Ki0kQbq9eROk7LRJ3GBkbQINCZBT9FPlHvlXRwQr0/OVsi4xYPSMSGxWjRDMPFsR9Px66Cg==}
+
+  '@posthog/types@1.372.3':
+    resolution: {integrity: sha512-4mkXC9AhsquJnvogWtWsCi+ReODj/jbK0d3fkwCNLLTOpaiAF125FJ6OJyRFax2u+dEKXAPA/dCTGx1S2WF0nw==}
 
   '@prisma/instrumentation@7.4.2':
     resolution: {integrity: sha512-r9JfchJF1Ae6yAxcaLu/V1TGqBhAuSDe3mRNOssBfx1rMzfZ4fdNvrgUBwyb/TNTGXFxlH9AZix5P257x07nrg==}
@@ -22990,16 +22996,21 @@ packages:
   posthog-js@1.371.2:
     resolution: {integrity: sha512-2cd4NqsFbBUiBAXLRCcM8De4lA/x2ZmNI7ii3BegpQItMKZUk2w1HY/91pLvvwEyShWa2WGloBJSCBJAVo/hWg==}
 
-  posthog-node@4.18.0:
-    resolution: {integrity: sha512-XROs1h+DNatgKh/AlIlCtDxWzwrKdYDb2mOs58n4yN8BkGN9ewqeQwG5ApS4/IzwCb7HPttUkOVulkYatd2PIw==}
-    engines: {node: '>=15.0.0'}
-
   posthog-node@5.17.2:
     resolution: {integrity: sha512-lz3YJOr0Nmiz0yHASaINEDHqoV+0bC3eD8aZAG+Ky292dAnVYul+ga/dMX8KCBXg8hHfKdxw0SztYD5j6dgUqQ==}
     engines: {node: '>=20'}
 
   posthog-node@5.28.3:
     resolution: {integrity: sha512-kcnEgBW4o3oSqr+oHy54+w0o5Ww91bp6I3iEe7jvr6Nd7mAyWLbAMIILnSbDJpn2129WXhMCCbVP//VlfBtCNA==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
+
+  posthog-node@5.30.6:
+    resolution: {integrity: sha512-deZuSiLkpdEipiywkww1FhQoKpVVFmJP6SAVQcZcMbugTLwJRYSGjgm+qV0Y91xghf2yP6Nr5Plfl52i9Qj15Q==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       rxjs: ^7.0.0
@@ -34251,6 +34262,10 @@ snapshots:
     dependencies:
       '@posthog/types': 1.371.2
 
+  '@posthog/core@1.27.7':
+    dependencies:
+      '@posthog/types': 1.372.3
+
   '@posthog/core@1.7.1':
     dependencies:
       cross-spawn: 7.0.6
@@ -34263,6 +34278,8 @@ snapshots:
       '@types/react': 19.2.14
 
   '@posthog/types@1.371.2': {}
+
+  '@posthog/types@1.372.3': {}
 
   '@prisma/instrumentation@7.4.2(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -46146,12 +46163,6 @@ snapshots:
       query-selector-shadow-dom: 1.0.1
       web-vitals: 5.1.0
 
-  posthog-node@4.18.0:
-    dependencies:
-      axios: 1.15.0
-    transitivePeerDependencies:
-      - debug
-
   posthog-node@5.17.2:
     dependencies:
       '@posthog/core': 1.7.1
@@ -46159,6 +46170,12 @@ snapshots:
   posthog-node@5.28.3(rxjs@7.8.1):
     dependencies:
       '@posthog/core': 1.23.4
+    optionalDependencies:
+      rxjs: 7.8.1
+
+  posthog-node@5.30.6(rxjs@7.8.1):
+    dependencies:
+      '@posthog/core': 1.27.7
     optionalDependencies:
       rxjs: 7.8.1
 
