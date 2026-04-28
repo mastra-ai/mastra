@@ -109,6 +109,7 @@ export class Harness<TState = {}> {
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private activeChannels = new Map<string, any>(); // platform -> adapter instance
+  private channelQueues = new Map<string, Promise<void>>();
   private channelsConfig?: HarnessConfig<TState>['channels'];
   #internalMastra: Mastra | undefined = undefined;
 
@@ -3265,37 +3266,40 @@ export class Harness<TState = {}> {
       try {
         await adapter.start({
           onMessage: async (msg: any) => {
-            try {
-              this.emit({
-                type: 'channel_message_received',
-                platform,
-                threadId: msg.threadId,
-                userId: msg.userId,
-                content: String(msg.content),
-              });
+            const key = `${platform}:${msg.threadId ?? 'global'}`;
+            const prev = this.channelQueues.get(key) ?? Promise.resolve();
 
-              if (msg.threadId) {
-                await this.switchThread({
-                  threadId: `${platform}:${msg.threadId}`,
+            const next = prev.then(async () => {
+              try {
+                this.emit({
+                  type: 'channel_message_received',
+                  platform,
+                  threadId: msg.threadId,
+                  userId: msg.userId,
+                  content: String(msg.content),
+                });
+
+                if (msg.threadId) {
+                  await this.switchThread({ threadId: key });
+                }
+
+                await this.sendMessage({
+                  content: String(msg.content),
+                });
+              } catch (error) {
+                this.emit({
+                  type: 'channel_error',
+                  platform,
+                  error: error instanceof Error ? error.message : String(error),
                 });
               }
+            });
 
-              await this.sendMessage({
-                content: String(msg.content),
-              });
-
-              this.emit({
-                type: 'channel_message_sent',
-                platform,
-                threadId: msg.threadId,
-              });
-            } catch (error) {
-              this.emit({
-                type: 'channel_error',
-                platform,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
+            this.channelQueues.set(
+              key,
+              next.catch(() => {}),
+            );
+            await next;
           },
         });
 
@@ -3316,6 +3320,7 @@ export class Harness<TState = {}> {
     for (const [platform, adapter] of this.activeChannels.entries()) {
       try {
         await adapter.stop();
+        this.activeChannels.delete(platform);
         this.emit({ type: 'channel_stopped', platform });
       } catch (error) {
         this.emit({
@@ -3325,7 +3330,6 @@ export class Harness<TState = {}> {
         });
       }
     }
-    this.activeChannels.clear();
   }
 
   getChannelWebhookPath({ platform }: { platform: string }): string {

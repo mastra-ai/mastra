@@ -129,6 +129,31 @@ export type HarnessStateSchema<T> = T;
  */
 export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
 
+export type ChannelMessage = {
+  content: string;
+  threadId?: string;
+  userId?: string;
+};
+
+export interface ChannelAdapter {
+  start: (opts: {
+    onMessage: (msg: ChannelMessage) => Promise<void>;
+
+    send: (msg: ChannelMessage) => Promise<void>;
+
+    config?: {
+      threadContext?: { maxMessages?: number };
+      inlineMedia?: boolean;
+      inlineLinks?: boolean;
+    };
+  }) => Promise<void>;
+
+  stop: () => Promise<void>;
+
+  // optional override (platform-specific send)
+  send?: (msg: ChannelMessage) => Promise<void>;
+}
+
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
   id: string;
@@ -266,15 +291,7 @@ export interface HarnessConfig<TState = {}> {
   observability?: ObservabilityEntrypoint;
 
   channels?: {
-    adapters: Record<
-      string,
-      {
-        start: (opts: { onMessage: (msg: any) => Promise<void> }) => Promise<void>;
-        stop: () => Promise<void>;
-
-        send?: (msg: { threadId?: string; userId?: string; content: string }) => Promise<void>;
-      }
-    >;
+    adapters: Record<string, ChannelAdapter>;
 
     threadContext?: {
       maxMessages?: number;
