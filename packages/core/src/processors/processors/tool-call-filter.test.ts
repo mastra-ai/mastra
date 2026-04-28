@@ -1078,8 +1078,8 @@ describe('ToolCallFilter', () => {
       messageList.add(messages, 'input');
 
       const result = await filter.processInputStep(createProcessInputStepArgs(messageList));
-      expect(result.modelContextMessages).toHaveLength(1);
-      expect(JSON.stringify(result.modelContextMessages)).toContain('RESULT_WITHOUT_TOOL_NAME');
+      expect(result.modelContextMessages).toBeUndefined();
+      expect(JSON.stringify(messageList.get.all.db())).toContain('RESULT_WITHOUT_TOOL_NAME');
     });
   });
 

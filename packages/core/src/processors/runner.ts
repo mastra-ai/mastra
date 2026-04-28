@@ -235,6 +235,10 @@ function hasRegularMessageListMutations(mutations: ReturnType<MessageList['stopR
   return mutations.some(mutation => mutation.type !== 'addSystem');
 }
 
+function cloneModelContextMessages(messages: MastraDBMessage[]): MastraDBMessage[] {
+  return structuredClone(messages);
+}
+
 export class ProcessorRunner {
   public readonly inputProcessors: ProcessorOrWorkflow[];
   public readonly outputProcessors: ProcessorOrWorkflow[];
@@ -1048,30 +1052,84 @@ export class ProcessorRunner {
       // Handle workflow as processor with inputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
         const currentSystemMessages = messageList.getAllSystemMessages();
-        const result = await this.executeWorkflowAsProcessor(
-          processorOrWorkflow,
-          {
-            phase: 'inputStep',
-            messages: processableMessages,
-            messageList,
-            stepNumber,
-            steps,
-            systemMessages: currentSystemMessages,
-            rotateResponseMessageId: args.rotateResponseMessageId
-              ? () => {
-                  const nextMessageId = args.rotateResponseMessageId!();
-                  stepInput.messageId = nextMessageId;
-                  return nextMessageId;
-                }
-              : undefined,
-            ...stepInput,
-          },
-          observabilityContext,
-          requestContext,
-          writer,
-          args.abortSignal,
-        );
-        Object.assign(stepInput, result);
+        const hadModelContextMessages = stepInput.modelContextMessages !== undefined;
+        messageList.startRecording();
+        let recordingStopped = false;
+        try {
+          const result = await this.executeWorkflowAsProcessor(
+            processorOrWorkflow,
+            {
+              phase: 'inputStep',
+              messages: processableMessages,
+              messageList,
+              stepNumber,
+              steps,
+              systemMessages: currentSystemMessages,
+              rotateResponseMessageId: args.rotateResponseMessageId
+                ? () => {
+                    const nextMessageId = args.rotateResponseMessageId!();
+                    stepInput.messageId = nextMessageId;
+                    return nextMessageId;
+                  }
+                : undefined,
+              ...stepInput,
+            },
+            observabilityContext,
+            requestContext,
+            writer,
+            args.abortSignal,
+          );
+          const mutations = messageList.stopRecording();
+          recordingStopped = true;
+          const {
+            messages,
+            systemMessages,
+            modelContextMessages,
+            messageList: _messageList,
+            phase: _phase,
+            ...rest
+          } = result as RunProcessInputStepResult & { phase?: string };
+
+          if (messages) {
+            if (stepInput.modelContextMessages || modelContextMessages) {
+              stepInput.modelContextMessages = cloneModelContextMessages(messages as MastraDBMessage[]);
+            } else {
+              ProcessorRunner.applyMessagesToMessageList(
+                messages as MastraDBMessage[],
+                messageList,
+                idsBeforeProcessing,
+                check,
+              );
+            }
+          }
+          if (modelContextMessages) {
+            stepInput.modelContextMessages = cloneModelContextMessages(modelContextMessages as MastraDBMessage[]);
+          }
+          if (systemMessages) {
+            messageList.replaceAllSystemMessages(systemMessages);
+          }
+          Object.assign(stepInput, rest);
+
+          if (
+            hadModelContextMessages &&
+            mutations.length > 0 &&
+            hasRegularMessageListMutations(mutations) &&
+            !messages &&
+            !modelContextMessages
+          ) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_MUTATED_MESSAGE_LIST_AFTER_MODEL_CONTEXT_MESSAGES',
+              text: `Processor workflow ${processorOrWorkflow.id} mutated messageList after a previous processor returned modelContextMessages. Return messages or modelContextMessages from this workflow so the next model prompt stays in sync with the mutation.`,
+            });
+          }
+        } catch (error) {
+          if (!recordingStopped) {
+            messageList.stopRecording();
+          }
+          throw error;
+        }
         continue;
       }
 
@@ -1176,13 +1234,13 @@ export class ProcessorRunner {
         );
         const { messages, systemMessages, modelContextMessages, ...rest } = result;
         if (modelContextMessages) {
-          stepInput.modelContextMessages = modelContextMessages;
+          stepInput.modelContextMessages = cloneModelContextMessages(modelContextMessages);
         }
         if (messages) {
           if (stepInput.modelContextMessages) {
             // Once a processor opts into prompt-only model context, later message array transforms
             // keep chaining against that transient prompt context instead of mutating MessageList.
-            stepInput.modelContextMessages = messages;
+            stepInput.modelContextMessages = cloneModelContextMessages(messages);
           } else {
             ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
           }

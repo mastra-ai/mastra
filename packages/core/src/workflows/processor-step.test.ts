@@ -259,6 +259,43 @@ describe('createStep with Processor', () => {
       );
     });
 
+    it('should keep inputStep message returns prompt-only when modelContextMessages is active', async () => {
+      const processInputStepMock = async ({ messages }) => {
+        return messages.filter(m => m.id !== 'remove-me');
+      };
+
+      const processor: Processor = {
+        id: 'input-step-processor',
+        processInputStep: processInputStepMock,
+      };
+
+      const step = createStep(processor);
+      const messages = [
+        { id: 'keep-me', role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'keep' }] } },
+        { id: 'remove-me', role: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'remove' }] } },
+      ] as MastraDBMessage[];
+      const messageList = createMockMessageList(messages);
+      const inputData = {
+        phase: 'inputStep' as const,
+        messages,
+        modelContextMessages: messages,
+        messageList,
+        stepNumber: 5,
+        systemMessages: [],
+      };
+
+      const result = await step.execute({ inputData } as any);
+
+      expect(messageList.removeByIds).not.toHaveBeenCalled();
+      expect(messageList.add).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          messages: [messages[0]],
+          modelContextMessages: [messages[0]],
+        }),
+      );
+    });
+
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
       const processOutputStreamMock = async ({ part }) => {
         return { ...part, processed: true };

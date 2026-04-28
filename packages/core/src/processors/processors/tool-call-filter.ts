@@ -15,6 +15,17 @@ type ToolLikePart = {
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
+type FilterMessagesResult = {
+  messages: MastraDBMessage[];
+  changed: boolean;
+};
+
+function arraysReferenceEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((item, index) => item === b[index]);
+}
+
 export type ToolCallFilterOptions = {
   /**
    * List of specific tool names to exclude. If not provided, all tool calls are excluded.
@@ -185,9 +196,9 @@ export class ToolCallFilter implements Processor {
   private filterMessages(
     messages: MastraDBMessage[],
     preservedToolCallIds: Set<string> = new Set(),
-  ): MastraDBMessage[] {
+  ): FilterMessagesResult {
     if (this.exclude !== 'all' && this.exclude.length === 0) {
-      return messages;
+      return { messages, changed: false };
     }
 
     const excludedToolCallIds = new Set<string>();
@@ -216,7 +227,8 @@ export class ToolCallFilter implements Processor {
       }
     }
 
-    return messages
+    let changed = false;
+    const filteredMessages = messages
       .map(message => {
         const originalParts = message.content?.parts;
         const originalToolInvocations = (message.content as { toolInvocations?: unknown }).toolInvocations;
@@ -263,9 +275,20 @@ export class ToolCallFilter implements Processor {
         const hasTextContent =
           typeof message.content?.content === 'string' && message.content.content.trim().length > 0;
         if (meaningfulParts.length === 0 && (filteredToolInvocations?.length ?? 0) === 0 && !hasTextContent) {
+          changed = true;
           return null;
         }
 
+        const partsChanged = !arraysReferenceEqual(originalParts, filteredParts);
+        const toolInvocationsChanged = !arraysReferenceEqual(
+          originalToolInvocations as unknown[] | undefined,
+          filteredToolInvocations,
+        );
+        if (!partsChanged && !toolInvocationsChanged) {
+          return message;
+        }
+
+        changed = true;
         const { toolInvocations: _originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
         const updatedContent: any = {
           ...contentWithoutToolInvocations,
@@ -285,6 +308,12 @@ export class ToolCallFilter implements Processor {
         };
       })
       .filter((message): message is MastraDBMessage => message !== null);
+
+    if (filteredMessages.length !== messages.length) {
+      changed = true;
+    }
+
+    return { messages: filteredMessages, changed };
   }
 
   async processInput(args: {
@@ -296,13 +325,18 @@ export class ToolCallFilter implements Processor {
     const { messageList } = args;
     // Use messages from messageList to respect consolidation
     const messages = messageList.get.all.db();
-    return this.filterMessages(messages);
+    return this.filterMessages(messages).messages;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     const preservedToolCallIds = this.getLatestStepToolCallIds(args.steps, args.messages);
+    const result = this.filterMessages(args.messages, preservedToolCallIds);
+    if (!result.changed) {
+      return {};
+    }
+
     return {
-      modelContextMessages: this.filterMessages(args.messages, preservedToolCallIds),
+      modelContextMessages: result.messages,
     };
   }
 }
