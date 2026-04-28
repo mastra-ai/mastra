@@ -15,10 +15,64 @@ vi.mock('@mastra/core/llm', () => ({
 }));
 
 vi.mock('@mastra/core/agent', () => ({
-  Agent: class {},
+  Agent: class {
+    constructor(config: unknown) {
+      agentConstructorMock(config);
+    }
+  },
 }));
 
+const agentConstructorMock = vi.fn();
+
 const harnessConstructorMock = vi.fn();
+const loadSettingsMock = vi.fn();
+
+function createMockSettings() {
+  return {
+    onboarding: {
+      completedAt: null,
+      skippedAt: null,
+      version: 0,
+      modePackId: null,
+      omPackId: null,
+    },
+    models: {
+      activeModelPackId: null,
+      modeDefaults: {},
+      activeOmPackId: null,
+      omModelOverride: null,
+      observerModelOverride: null,
+      reflectorModelOverride: null,
+      omObservationThreshold: null,
+      omReflectionThreshold: null,
+      subagentModels: {},
+    },
+    preferences: {
+      yolo: null,
+      theme: 'auto',
+      thinkingLevel: 'off',
+      quietMode: false,
+    },
+    storage: {
+      backend: 'libsql',
+      libsql: {},
+      pg: {},
+    },
+    customModelPacks: [],
+    customProviders: [],
+    modelUseCounts: {},
+    updateDismissedVersion: null,
+    memoryGateway: {},
+    lsp: {},
+    browser: {
+      enabled: false,
+      provider: 'stagehand',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      stagehand: { env: 'LOCAL' },
+    },
+  };
+}
 
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
@@ -29,6 +83,21 @@ vi.mock('@mastra/core/harness', () => ({
   },
   taskWriteTool: {},
   taskCheckTool: {},
+}));
+
+vi.mock('@mastra/core/processors', () => ({
+  AgentsMDInjector: class {
+    readonly id = 'agents-md-injector';
+  },
+  PrefillErrorHandler: class {
+    readonly id = 'prefill-error-handler';
+  },
+  ProviderHistoryCompat: class {
+    readonly id = 'provider-history-compat';
+  },
+  StreamErrorRetryProcessor: class {
+    readonly id = 'stream-error-retry-processor';
+  },
 }));
 
 vi.mock('./agents/instructions.js', () => ({
@@ -88,9 +157,10 @@ vi.mock('./onboarding/packs.js', () => ({
   getAvailableOmPacks: vi.fn(() => []),
 }));
 
-vi.mock('./onboarding/settings.js', () => ({
+vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
-  loadSettings: vi.fn(() => ({ customProviders: [], modelUseCounts: {}, models: { modeDefaults: {} } })),
+  loadSettings: loadSettingsMock,
+  MEMORY_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
@@ -108,6 +178,10 @@ vi.mock('./providers/claude-max.js', () => ({
 
 vi.mock('./providers/openai-codex.js', () => ({
   setAuthStorage: vi.fn(),
+}));
+
+vi.mock('./tools/index.js', () => ({
+  defaultTools: {},
 }));
 
 vi.mock('./schema.js', () => ({
@@ -135,9 +209,11 @@ vi.mock('./utils/project.js', () => ({
 }));
 
 const createStorageMock = vi.fn(() => ({ storage: {} }));
+const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('./utils/storage-factory.js', () => ({
   createStorage: createStorageMock,
+  createVectorStore: createVectorStoreMock,
 }));
 
 vi.mock('./utils/thread-lock.js', () => ({
@@ -153,8 +229,13 @@ describe('createMastraCode', () => {
     gatewayRegistryGetProviders.mockReturnValue({});
     gatewayRegistryGetInstance.mockClear();
     createStorageMock.mockReset();
-    createStorageMock.mockReturnValue({ storage: {} });
+    createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
+    createVectorStoreMock.mockReset();
+    createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
+    loadSettingsMock.mockReset();
+    loadSettingsMock.mockReturnValue(createMockSettings());
+    agentConstructorMock.mockReset();
     harnessConstructorMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
@@ -168,7 +249,7 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(gatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
-  });
+  }, 10_000);
 
   it('forces a gateway sync after loading stored API keys', async () => {
     const { createMastraCode } = await import('../index.js');
@@ -186,5 +267,17 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('enables OpenAI Responses stream error retries by default', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { errorProcessors?: Array<{ id?: string }> }
+      | undefined;
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('stream-error-retry-processor');
   });
 });

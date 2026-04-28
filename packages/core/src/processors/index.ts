@@ -528,6 +528,12 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export {
+  isRetryableOpenAIResponsesStreamError,
+  StreamErrorRetryProcessor,
+  type StreamErrorRetryMatcher,
+  type StreamErrorRetryProcessorOptions,
+} from './stream-error-retry-processor';
 export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
