@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Added `visibility` and `authorId` fields to stored agent and skill response/request types. `listStoredAgents` and `listStoredSkills` now accept `visibility` and `authorId` query parameters for filtering by ownership and access level.
+`listStoredAgents` and `listStoredSkills` now accept `visibility` and `authorId` parameters for filtering by access level and ownership. Response types for stored agents and skills include the new `visibility` and `authorId` fields.

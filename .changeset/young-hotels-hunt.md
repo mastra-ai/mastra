@@ -2,8 +2,4 @@
 '@mastra/server': minor
 ---
 
-Added ownership and visibility enforcement to agent and skill routes.
-
-**Agents:** `GET /agents` returns the caller's stored agents plus all code-defined agents by default. Use `?authorId=X` to see a specific user's public agents, or `?visibility=public` to list all public stored agents. `GET /agents/:agentId` returns 404 for stored agents the caller cannot read. `POST /agents/:agentId/clone` forces the clone's `authorId` to the caller and marks it private.
-
-**Stored agents & skills:** `CREATE` injects the caller's `authorId` automatically. `UPDATE` and `DELETE` are blocked for non-owners (admins can bypass). `LIST` returns owned + public resources for regular users, and all resources for admins.
+Stored agents and skills now have ownership and visibility controls. Each resource is automatically assigned to the user who created it. Regular users see their own resources plus any public ones; admins see everything. Updating or deleting a resource is restricted to its owner (admins can bypass). Cloned agents are assigned to the cloning user and default to private.
