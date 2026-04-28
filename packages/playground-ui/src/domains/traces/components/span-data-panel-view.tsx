@@ -1,14 +1,14 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
-import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { BracesIcon, FileInputIcon, FileOutputIcon, TriangleAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
-import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
@@ -136,10 +136,15 @@ function SpanDataPanelContent({
   const detailsBody = (
     <>
       {isTokenLimitExceeded(span) && (
-        <Alert variant="warning" className="mb-3">
-          <AlertTitle>Token Limit Exceeded</AlertTitle>
-          <AlertDescription as="p">{getTokenLimitMessage(span)}</AlertDescription>
-        </Alert>
+        <div className="mb-3">
+          <Notice variant="warning">
+            <TriangleAlertIcon />
+            <Notice.Column>
+              <Notice.Title>Token Limit Exceeded</Notice.Title>
+              <Notice.Message>{getTokenLimitMessage(span)}</Notice.Message>
+            </Notice.Column>
+          </Notice>
+        </div>
       )}
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 

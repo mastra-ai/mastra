@@ -25,7 +25,7 @@ const meta: Meta<typeof Notice> = {
   },
   decorators: [
     Story => (
-      <div style={{ width: 800 }}>
+      <div className="bg-surface2 rounded-lg p-6" style={{ width: 800 }}>
         <Story />
       </div>
     ),
@@ -102,6 +102,43 @@ export const WithTitleAndColumn: Story = {
   ),
 };
 
+export const Combinations: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      <Notice variant="info">
+        <Notice.Message>Message only.</Notice.Message>
+      </Notice>
+      <Notice variant="info">
+        <InfoIcon />
+        <Notice.Message>Icon + message.</Notice.Message>
+      </Notice>
+      <Notice variant="info">
+        <Notice.Message>Message + button.</Notice.Message>
+        <Notice.Button>Action</Notice.Button>
+      </Notice>
+      <Notice variant="info">
+        <InfoIcon />
+        <Notice.Message>Icon + message + button.</Notice.Message>
+        <Notice.Button>Action</Notice.Button>
+      </Notice>
+      <Notice variant="info">
+        <Notice.Column>
+          <Notice.Title>Title only in a column</Notice.Title>
+          <Notice.Message>Message under the title.</Notice.Message>
+        </Notice.Column>
+      </Notice>
+      <Notice variant="info">
+        <InfoIcon />
+        <Notice.Column>
+          <Notice.Title>Full layout</Notice.Title>
+          <Notice.Message>Icon + title + message + button.</Notice.Message>
+        </Notice.Column>
+        <Notice.Button>Action</Notice.Button>
+      </Notice>
+    </div>
+  ),
+};
+
 export const AllVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
@@ -136,3 +173,4 @@ export const AllVariants: Story = {
     </div>
   ),
 };
+

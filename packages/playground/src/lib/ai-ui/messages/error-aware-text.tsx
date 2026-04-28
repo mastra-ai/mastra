@@ -1,7 +1,7 @@
 import { useAssistantState } from '@assistant-ui/react';
-import { Alert, AlertDescription, AlertTitle, Badge, Icon, cn } from '@mastra/playground-ui';
+import { Notice, Badge, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessageMetadata } from '@mastra/react';
-import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
+import { CheckCircleIcon, ChevronUpIcon, InfoIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 import { MarkdownText } from './markdown-text';
 import { TripwireNotice } from './tripwire-notice';
@@ -21,19 +21,25 @@ export const ErrorAwareText = () => {
 
   if (metadata?.status === 'warning') {
     return (
-      <Alert variant="warning">
-        <AlertTitle as="h5">Warning</AlertTitle>
-        <AlertDescription as="p">{text}</AlertDescription>
-      </Alert>
+      <Notice variant="warning">
+        <TriangleAlertIcon />
+        <Notice.Column>
+          <Notice.Title>Warning</Notice.Title>
+          <Notice.Message>{text}</Notice.Message>
+        </Notice.Column>
+      </Notice>
     );
   }
 
   if (metadata?.status === 'error') {
     return (
-      <Alert variant="destructive">
-        <AlertTitle as="h5">Error</AlertTitle>
-        <AlertDescription as="p">{text}</AlertDescription>
-      </Alert>
+      <Notice variant="destructive">
+        <OctagonAlertIcon />
+        <Notice.Column>
+          <Notice.Title>Error</Notice.Title>
+          <Notice.Message>{text}</Notice.Message>
+        </Notice.Column>
+      </Notice>
     );
   }
 
@@ -50,10 +56,13 @@ export const ErrorAwareText = () => {
           </Badge>
         </button>
         {!collapsedCompletionCheck && (
-          <Alert variant="info">
-            <AlertTitle as="h5">{taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
-            <MarkdownText />
-          </Alert>
+          <Notice variant="info">
+            <InfoIcon />
+            <Notice.Column>
+              <Notice.Title>{taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}</Notice.Title>
+              <MarkdownText />
+            </Notice.Column>
+          </Notice>
         )}
       </div>
     );
@@ -69,20 +78,26 @@ export const ErrorAwareText = () => {
       const errorMessage = trimmedText.substring('__ERROR__:'.length);
 
       return (
-        <Alert variant="destructive">
-          <AlertTitle as="h5">Error</AlertTitle>
-          <AlertDescription as="p">{errorMessage}</AlertDescription>
-        </Alert>
+        <Notice variant="destructive">
+          <OctagonAlertIcon />
+          <Notice.Column>
+            <Notice.Title>Error</Notice.Title>
+            <Notice.Message>{errorMessage}</Notice.Message>
+          </Notice.Column>
+        </Notice>
       );
     } else if (trimmedText.startsWith('Error:')) {
       // Handle plain error messages without special prefix
       const errorMessage = trimmedText.substring('Error:'.length).trim();
 
       return (
-        <Alert variant="destructive">
-          <AlertTitle as="h5">Error</AlertTitle>
-          <AlertDescription as="p">{errorMessage}</AlertDescription>
-        </Alert>
+        <Notice variant="destructive">
+          <OctagonAlertIcon />
+          <Notice.Column>
+            <Notice.Title>Error</Notice.Title>
+            <Notice.Message>{errorMessage}</Notice.Message>
+          </Notice.Column>
+        </Notice>
       );
     }
 
@@ -91,10 +106,13 @@ export const ErrorAwareText = () => {
   } catch {
     // Fallback to displaying the raw text if something goes wrong
     return (
-      <Alert variant="destructive">
-        <AlertTitle as="h5">Error</AlertTitle>
-        <AlertDescription as="p">{String(text)}</AlertDescription>
-      </Alert>
+      <Notice variant="destructive">
+        <OctagonAlertIcon />
+        <Notice.Column>
+          <Notice.Title>Error</Notice.Title>
+          <Notice.Message>{String(text)}</Notice.Message>
+        </Notice.Column>
+      </Notice>
     );
   }
 };
