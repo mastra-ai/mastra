@@ -1,29 +1,9 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
-import { AgentIcon, Badge, EmptyState } from '@mastra/playground-ui';
-import { Globe, Lock, SearchIcon } from 'lucide-react';
+import { AgentIcon, EmptyState } from '@mastra/playground-ui';
+import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
+import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 import { useLinkComponent } from '@/lib/framework';
-
-function VisibilityBadge({
-  visibility,
-  size = 'md',
-  className,
-}: {
-  visibility?: string;
-  size?: 'sm' | 'md';
-  className?: string;
-}) {
-  const iconSize = size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3';
-  return (
-    <span className={className}>
-      {visibility === 'public' ? (
-        <Badge icon={<Globe className={iconSize} />}>Public</Badge>
-      ) : (
-        <Badge icon={<Lock className={iconSize} />}>Private</Badge>
-      )}
-    </span>
-  );
-}
 
 function getModelLabel(model: StoredAgentResponse['model']): string {
   if (model && typeof model === 'object' && !Array.isArray(model) && 'provider' in model && 'name' in model) {
@@ -97,11 +77,16 @@ export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
-              <VisibilityBadge visibility={agent.visibility} size="sm" className="shrink-0 sm:hidden" />
+              <VisibilityBadge
+                visibility={agent.visibility}
+                authorId={agent.authorId}
+                size="sm"
+                className="shrink-0 sm:hidden"
+              />
             </div>
           </div>
           <div className="hidden sm:inline-flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
-            <VisibilityBadge visibility={agent.visibility} />
+            <VisibilityBadge visibility={agent.visibility} authorId={agent.authorId} />
             <span className="hidden md:inline-flex truncate max-w-[16rem]">{getModelLabel(agent.model)}</span>
             <span className="hidden lg:inline-flex">Updated {formatRelativeTime(agent.updatedAt)}</span>
           </div>

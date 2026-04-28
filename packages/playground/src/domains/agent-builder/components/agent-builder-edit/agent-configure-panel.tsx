@@ -1,4 +1,4 @@
-import { Avatar, Badge, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Avatar, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
 import { ChevronRight, FileText, Globe, Lock, Plus, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -7,6 +7,7 @@ import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { InstructionsDetail } from './details/instructions-detail';
 import { ToolsDetail } from './details/tools-detail';
+import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 
 export interface AgentConfig {
   id: string;
@@ -15,6 +16,7 @@ export interface AgentConfig {
   avatarUrl?: string;
   systemPrompt: string;
   visibility?: 'private' | 'public';
+  authorId?: string | null;
 }
 
 export type ActiveDetail = 'instructions' | 'tools' | null;
@@ -220,7 +222,7 @@ function ReadOnlyConfigurePanel({
                 {agent.description}
               </Txt>
             )}
-            <VisibilityBadge visibility={agent.visibility} />
+            <VisibilityBadge visibility={agent.visibility} authorId={agent.authorId} />
           </div>
 
           <ConfigRows
@@ -424,15 +426,6 @@ function VisibilitySegmentedControl({
         </button>
       </div>
     </div>
-  );
-}
-
-function VisibilityBadge({ visibility }: { visibility?: 'private' | 'public' }) {
-  const isPublic = visibility === 'public';
-  return (
-    <Badge icon={isPublic ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}>
-      {isPublic ? 'Public' : 'Private'}
-    </Badge>
   );
 }
 

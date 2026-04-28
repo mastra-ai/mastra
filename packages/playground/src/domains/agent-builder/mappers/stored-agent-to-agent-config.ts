@@ -8,5 +8,6 @@ export function storedAgentToAgentConfig(storedAgent: StoredAgent | null | undef
     description: storedAgent?.description ?? '',
     systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
     visibility: storedAgent?.visibility ?? 'private',
+    authorId: storedAgent?.authorId,
   };
 }

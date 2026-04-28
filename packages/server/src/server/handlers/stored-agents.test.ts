@@ -466,11 +466,12 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toMatchObject(agentData);
+      // No auth context → no authorId → defaults to public (unowned resources are public)
       expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
-          visibility: 'private',
+          visibility: 'public',
         }),
       });
     });

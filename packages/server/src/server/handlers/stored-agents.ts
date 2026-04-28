@@ -235,9 +235,10 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
-      // Use body-supplied visibility if provided, default to 'private'.
+      // Default visibility: 'private' when there's an owner, 'public' when unowned
+      // (no auth / no user context). Unowned resources should always be public.
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
-      const visibility = bodyVisibility ?? 'private';
+      const visibility = bodyVisibility ?? (authorId ? 'private' : 'public');
 
       const input = {
         id,

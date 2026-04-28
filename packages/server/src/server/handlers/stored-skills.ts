@@ -148,6 +148,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
     scripts,
     assets,
     metadata,
+    visibility: bodyVisibility,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -177,14 +178,16 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
-      // Default visibility to 'private' so the caller owns this skill exclusively.
+      // Default visibility: 'private' when there's an owner, 'public' when unowned
+      // (no auth / no user context). Unowned resources should always be public.
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
+      const visibility: 'private' | 'public' = bodyVisibility ?? (authorId ? 'private' : 'public');
 
       await skillStore.create({
         skill: {
           id,
           authorId,
-          visibility: 'private' as const,
+          visibility,
           name,
           description,
           instructions,
