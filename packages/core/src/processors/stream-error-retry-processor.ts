@@ -2,12 +2,14 @@ import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
-export type OpenAIErrorProcessorOptions = {
+export type StreamErrorRetryMatcher = (error: unknown) => boolean;
+
+export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
+  matchers?: StreamErrorRetryMatcher[];
 };
 
 const DEFAULT_MAX_RETRIES = 1;
-const RETRYABLE_STATUS_CODES = new Set([408, 409, 429]);
 const RETRYABLE_OPENAI_ERROR_CODES = [
   'rate_limit',
   'server_error',
@@ -28,15 +30,6 @@ function getStringProperty(value: Record<string, unknown>, key: string): string 
   return typeof property === 'string' ? property : undefined;
 }
 
-function getNumberProperty(value: Record<string, unknown>, key: string): number | undefined {
-  const property = value[key];
-  return typeof property === 'number' ? property : undefined;
-}
-
-function isRetryableStatusCode(statusCode: number | undefined): boolean {
-  return statusCode !== undefined && (RETRYABLE_STATUS_CODES.has(statusCode) || statusCode >= 500);
-}
-
 function getObjectCause(error: unknown): unknown {
   if (error instanceof Error) {
     return error.cause;
@@ -47,37 +40,6 @@ function getObjectCause(error: unknown): unknown {
   }
 
   return error.cause;
-}
-
-function getRetryableFlag(error: unknown): boolean | undefined {
-  if (APICallError.isInstance(error)) {
-    return error.isRetryable;
-  }
-
-  if (!isRecord(error)) {
-    return undefined;
-  }
-
-  const retryable = error.isRetryable;
-  return typeof retryable === 'boolean' ? retryable : undefined;
-}
-
-function getStatusCode(error: unknown): number | undefined {
-  if (APICallError.isInstance(error)) {
-    return error.statusCode;
-  }
-
-  if (!isRecord(error)) {
-    return undefined;
-  }
-
-  const directStatus = getNumberProperty(error, 'statusCode') ?? getNumberProperty(error, 'status');
-  if (directStatus !== undefined) {
-    return directStatus;
-  }
-
-  const response = error.response;
-  return isRecord(response) ? getNumberProperty(response, 'status') : undefined;
 }
 
 function getOpenAIErrorPayload(error: unknown): Record<string, unknown> | undefined {
@@ -112,7 +74,7 @@ function hasExplicitRetryMessage(payload: Record<string, unknown>): boolean {
   return message !== undefined && OPENAI_RETRY_MESSAGE_PATTERN.test(message);
 }
 
-function isRetryableOpenAIStreamError(error: unknown): boolean {
+export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
   const payload = getOpenAIErrorPayload(error);
   if (!payload) {
     return false;
@@ -121,7 +83,17 @@ function isRetryableOpenAIStreamError(error: unknown): boolean {
   return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
 }
 
-export function isRetryableOpenAIError(error: unknown): boolean {
+function isRetryableProviderMetadata(error: unknown): boolean {
+  const retryable = APICallError.isInstance(error)
+    ? error.isRetryable
+    : isRecord(error) && typeof error.isRetryable === 'boolean'
+      ? error.isRetryable
+      : undefined;
+
+  return retryable === true;
+}
+
+function isRetryableStreamError(error: unknown, matchers: StreamErrorRetryMatcher[]): boolean {
   const visited = new WeakSet<object>();
 
   function visit(candidate: unknown): boolean {
@@ -132,16 +104,11 @@ export function isRetryableOpenAIError(error: unknown): boolean {
       visited.add(candidate);
     }
 
-    const retryable = getRetryableFlag(candidate);
-    if (retryable === true) {
+    if (isRetryableProviderMetadata(candidate)) {
       return true;
     }
 
-    if (retryable !== false && isRetryableStatusCode(getStatusCode(candidate))) {
-      return true;
-    }
-
-    if (isRetryableOpenAIStreamError(candidate)) {
+    if (matchers.some(matcher => matcher(candidate))) {
       return true;
     }
 
@@ -152,19 +119,21 @@ export function isRetryableOpenAIError(error: unknown): boolean {
   return visit(error);
 }
 
-export class OpenAIErrorProcessor implements Processor<'openai-error-processor'> {
-  readonly id = 'openai-error-processor' as const;
-  readonly name = 'OpenAI Error Processor';
+export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-processor'> {
+  readonly id = 'stream-error-retry-processor' as const;
+  readonly name = 'Stream Error Retry Processor';
 
   readonly #maxRetries: number;
+  readonly #matchers: StreamErrorRetryMatcher[];
 
-  constructor(options: OpenAIErrorProcessorOptions = {}) {
+  constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.#matchers = options.matchers ?? [];
   }
 
   async processAPIError({ error, retryCount }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (retryCount >= this.#maxRetries) return;
-    if (!isRetryableOpenAIError(error)) return;
+    if (!isRetryableStreamError(error, this.#matchers)) return;
 
     return { retry: true };
   }

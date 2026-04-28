@@ -12,9 +12,10 @@ import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import {
   AgentsMDInjector,
-  OpenAIErrorProcessor,
   PrefillErrorHandler,
   ProviderHistoryCompat,
+  StreamErrorRetryProcessor,
+  isRetryableOpenAIResponsesStreamError,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -212,7 +213,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
     ],
-    errorProcessors: [new OpenAIErrorProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    errorProcessors: [
+      new StreamErrorRetryProcessor({ matchers: [isRetryableOpenAIResponsesStreamError] }),
+      new PrefillErrorHandler(),
+      new ProviderHistoryCompat(),
+    ],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];

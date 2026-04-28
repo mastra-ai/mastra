@@ -3,4 +3,4 @@
 'mastracode': patch
 ---
 
-Added an OpenAI error processor that retries transient Responses stream errors.
+Added a stream error retry processor with OpenAI Responses stream error matching.

@@ -89,15 +89,16 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
-  OpenAIErrorProcessor: class {
-    readonly id = 'openai-error-processor';
-  },
   PrefillErrorHandler: class {
     readonly id = 'prefill-error-handler';
   },
   ProviderHistoryCompat: class {
     readonly id = 'provider-history-compat';
   },
+  StreamErrorRetryProcessor: class {
+    readonly id = 'stream-error-retry-processor';
+  },
+  isRetryableOpenAIResponsesStreamError: vi.fn(),
 }));
 
 vi.mock('./agents/instructions.js', () => ({
@@ -269,7 +270,7 @@ describe('createMastraCode', () => {
     expect(typeof harnessConfig?.memory).toBe('function');
   });
 
-  it('enables OpenAI transient error retries by default', async () => {
+  it('enables OpenAI Responses stream error retries by default', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -278,6 +279,6 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       | { errorProcessors?: Array<{ id?: string }> }
       | undefined;
-    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('openai-error-processor');
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('stream-error-retry-processor');
   });
 });
