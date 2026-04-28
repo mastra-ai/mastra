@@ -9,6 +9,7 @@ import {
   listScoresResponseSchema as obsListScoresResponseSchema,
   createScoreBodySchema,
   createScoreResponseSchema,
+  scoreRecordSchema,
   getScoreAggregateArgsSchema,
   getScoreAggregateResponseSchema,
   getScoreBreakdownArgsSchema,
@@ -58,7 +59,7 @@ import {
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
 import { generateSignalId } from '@mastra/core/observability';
-import type { z } from 'zod/v4';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -155,6 +156,16 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
       score: { ...score, scoreId: score.scoreId ?? generateSignalId(), timestamp: new Date() },
     });
     return { success: true };
+  },
+});
+
+export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
+  pathParamSchema: z.object({ scoreId: z.string() }),
+  responseSchema: z.object({ score: scoreRecordSchema.nullable() }),
+  handler: async ({ mastra, scoreId }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    const { scores } = await observabilityStore.listScores({ pagination: { page: 0, perPage: 100 } });
+    return { score: scores.find(score => score.scoreId === scoreId) ?? null };
   },
 });
 

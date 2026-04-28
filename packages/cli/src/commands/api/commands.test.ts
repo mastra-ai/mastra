@@ -61,4 +61,15 @@ describe('API_COMMANDS', () => {
       responseShape: { kind: 'object-property', listProperty: 'logs', paginationProperty: 'pagination' },
     });
   });
+
+  it('uses observability score routes for score commands', () => {
+    expect(API_COMMANDS.scoreCreate).toMatchObject({ path: '/observability/scores', method: 'POST' });
+    expect(API_COMMANDS.scoreList).toMatchObject({
+      path: '/observability/scores',
+      method: 'GET',
+      list: true,
+      responseShape: { kind: 'object-property', listProperty: 'scores', paginationProperty: 'pagination' },
+    });
+    expect(API_COMMANDS.scoreGet).toMatchObject({ path: '/observability/scores/:scoreId', method: 'GET' });
+  });
 });

@@ -154,7 +154,7 @@ describe('api command executor', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://example.com/api/scores?runId=run-1&page=2&perPage=50&filters=%7B%22a%22%3Atrue%7D',
+      'https://example.com/api/observability/scores?runId=run-1&page=2&perPage=50&filters=%7B%22a%22%3Atrue%7D',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(JSON.parse(stdout)).toEqual({ data: [], page: { total: 125, page: 2, perPage: 50, hasMore: true } });

@@ -26,9 +26,26 @@ describe('buildCommandExamples', () => {
     });
   });
 
-  it('uses page and perPage for generic list examples', () => {
+  it('uses observability score shapes for score examples', () => {
+    expect(buildCommandExamples(API_COMMANDS.scoreCreate)).toEqual([
+      {
+        description: 'Create an observability score',
+        command:
+          'mastra api score create \'{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}\'',
+      },
+    ]);
     expect(buildCommandExamples(API_COMMANDS.scoreList)).toEqual([
-      { description: 'List scores', command: 'mastra api score list \'{"page":0,"perPage":50}\'' },
+      {
+        description: 'List observability scores with pagination',
+        command: 'mastra api score list \'{"page":0,"perPage":50}\'',
+      },
+      {
+        description: 'List observability scores for a run',
+        command: 'mastra api score list \'{"runId":"run_123","page":0,"perPage":50}\'',
+      },
+    ]);
+    expect(buildCommandExamples(API_COMMANDS.scoreGet)).toEqual([
+      { description: 'Get an observability score by ID', command: 'mastra api score get score_123' },
     ]);
   });
 

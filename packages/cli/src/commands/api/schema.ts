@@ -167,10 +167,23 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
     case 'scoreCreate':
       return [
         {
-          description: 'Create a score',
-          command: `${command} '{"runId":"run_123","scorerId":"quality","score":0.95}'`,
+          description: 'Create an observability score',
+          command: `${command} '{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'`,
         },
       ];
+    case 'scoreList':
+      return [
+        {
+          description: 'List observability scores with pagination',
+          command: `${command} '{"page":0,"perPage":50}'`,
+        },
+        {
+          description: 'List observability scores for a run',
+          command: `${command} '{"runId":"run_123","page":0,"perPage":50}'`,
+        },
+      ];
+    case 'scoreGet':
+      return [{ description: 'Get an observability score by ID', command: `${command} score_123` }];
     case 'datasetCreate':
       return [{ description: 'Create a dataset', command: `${command} '{"name":"weather-eval"}'` }];
     case 'experimentRun':

@@ -55,6 +55,13 @@ export const NEW_ROUTE_DEFS = {
     description: 'Creates a single score record in the observability store',
   },
 
+  GET_SCORE: {
+    method: 'GET',
+    path: '/observability/scores/:scoreId',
+    summary: 'Get score',
+    description: 'Returns a single score by scoreId',
+  },
+
   GET_SCORE_AGGREGATE: {
     method: 'POST',
     path: '/observability/scores/aggregate',
