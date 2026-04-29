@@ -1289,8 +1289,8 @@ export class Mastra<
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
 
-    // Set up AgentChannels for legacy/manual adapter configurations
-    const agentChannelsInstance = mastraAgent.agentChannels;
+    // Set up AgentChannels for manual adapter configurations
+    const agentChannelsInstance = mastraAgent.getChannels();
     if (agentChannelsInstance) {
       agentChannelsInstance.__setLogger(this.#logger);
       const channelRoutes = agentChannelsInstance.getWebhookRoutes();

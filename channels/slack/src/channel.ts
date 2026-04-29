@@ -665,7 +665,7 @@ export class SlackChannel implements MastraChannel {
    * SlackChannel owns the AgentChannels lifecycle for platform-managed agents.
    */
   #getOrCreateAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
-    let agentChannels = agent.agentChannels as AgentChannels | null;
+    let agentChannels = agent.getChannels() as AgentChannels | null;
 
     if (!agentChannels) {
       // Create AgentChannels with Slack adapter
@@ -674,7 +674,7 @@ export class SlackChannel implements MastraChannel {
         userName: agent.name,
       });
       // Inject into the agent
-      agent.setAgentChannels(agentChannels);
+      agent.setChannels(agentChannels);
     } else if (!agentChannels.hasAdapter('slack')) {
       // AgentChannels exists but doesn't have slack adapter
       agentChannels.__registerAdapter('slack', adapter, { adapter }, { managesRoutes: true });

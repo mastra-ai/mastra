@@ -514,19 +514,11 @@ export class Agent<
   }
 
   /**
-   * Returns the AgentChannels instance, or null if not configured.
-   * @internal Used by MastraChannel implementations.
-   */
-  get agentChannels(): AgentChannels | null {
-    return this.#agentChannels;
-  }
-
-  /**
    * Sets the AgentChannels instance for this agent.
    * Used by MastraChannel implementations to inject the channels they create.
    * @internal
    */
-  setAgentChannels(agentChannels: AgentChannels): void {
+  setChannels(agentChannels: AgentChannels): void {
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
   }
