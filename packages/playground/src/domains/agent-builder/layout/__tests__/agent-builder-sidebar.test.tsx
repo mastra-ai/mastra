@@ -60,13 +60,15 @@ describe('AgentBuilderSidebar', () => {
     cleanup();
   });
 
-  it('renders both Agents and Library links', async () => {
+  it('renders My agents, Favorites, and Library links', async () => {
     renderSidebar('/agent-builder/agents');
 
     const agents = await screen.findByRole('link', { name: /My agents/i });
+    const favorites = await screen.findByRole('link', { name: /Favorites/i });
     const library = await screen.findByRole('link', { name: /Library/i });
 
     expect(agents.getAttribute('href')).toBe('/agent-builder/agents');
+    expect(favorites.getAttribute('href')).toBe('/agent-builder/favorite');
     expect(library.getAttribute('href')).toBe('/agent-builder/library');
   });
 
@@ -80,5 +82,21 @@ describe('AgentBuilderSidebar', () => {
     const agentsLink = await screen.findByRole('link', { name: /My agents/i });
     const agentsItem = agentsLink.closest('li');
     expect(agentsItem?.className).not.toMatch(/before:absolute/);
+  });
+
+  it('marks the Favorites link active when on /agent-builder/favorite', async () => {
+    renderSidebar('/agent-builder/favorite');
+
+    const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
+    const favoritesItem = favoritesLink.closest('li');
+    expect(favoritesItem?.className).toMatch(/before:absolute/);
+
+    const agentsLink = await screen.findByRole('link', { name: /My agents/i });
+    const agentsItem = agentsLink.closest('li');
+    expect(agentsItem?.className).not.toMatch(/before:absolute/);
+
+    const libraryLink = await screen.findByRole('link', { name: /Library/i });
+    const libraryItem = libraryLink.closest('li');
+    expect(libraryItem?.className).not.toMatch(/before:absolute/);
   });
 });

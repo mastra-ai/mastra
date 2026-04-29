@@ -64,6 +64,13 @@ describe('AgentChatPanel', () => {
     expect(input.disabled).toBe(true);
   });
 
+  it('renders the composer with success border token styling', () => {
+    const { getByTestId } = renderPanel();
+    const composer = getByTestId('agent-builder-agent-chat-composer');
+    expect(composer.className).toContain('border-accent1Dark');
+    expect(composer.className).toContain('focus-within:border-accent1');
+  });
+
   it('loads and sends runtime agent messages on the raw agent thread', () => {
     const { getByTestId } = renderPanel();
 

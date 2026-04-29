@@ -118,6 +118,13 @@ describe('ConversationPanel agent-builder client tool', () => {
     cleanup();
   });
 
+  it('renders the composer with info border token styling', () => {
+    const { getByTestId } = renderPanel(allOff);
+    const composer = getByTestId('agent-builder-conversation-composer');
+    expect(composer.className).toContain('border-accent5Dark');
+    expect(composer.className).toContain('focus-within:border-accent5');
+  });
+
   it('loads and sends builder messages on a prefixed builder thread', () => {
     renderPanel(allOff);
 
