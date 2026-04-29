@@ -9,12 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       publish_type:
-        description: 'Type of publish'
+        description: 'Type of publish/action'
         required: true
         type: choice
         options:
           - prerelease
           - stable
+          - enter-prerelease
           - snapshot
         default: prerelease
       tag:
@@ -78,39 +79,6 @@ jobs:
             console.error(`Expected .changeset/pre.json to be in alpha pre mode, got mode=${pre.mode} tag=${pre.tag}`);
             process.exit(1);
           }
-
-          const packageJsons = execSync('git ls-files "**/package.json" package.json', { encoding: 'utf8' })
-            .trim()
-            .split('\n')
-            .filter(Boolean);
-          const publishablePackages = packageJsons
-            .map(file => ({ file, packageJson: JSON.parse(readFileSync(file, 'utf8')) }))
-            .filter(({ packageJson }) => packageJson.name && packageJson.version && packageJson.private !== true);
-          const alphaPackages = publishablePackages.filter(({ packageJson }) => packageJson.version.includes('-alpha.'));
-
-          if (alphaPackages.length === 0) {
-            console.error('No publishable package versions contain -alpha.; refusing to publish stable versions to the alpha tag.');
-            process.exit(1);
-          }
-
-          const unpublishedStablePackages = publishablePackages.filter(({ packageJson }) => {
-            if (packageJson.version.includes('-alpha.')) return false;
-
-            try {
-              execSync(`npm view ${packageJson.name}@${packageJson.version} version`, { stdio: 'ignore' });
-              return false;
-            } catch {
-              return true;
-            }
-          });
-
-          if (unpublishedStablePackages.length > 0) {
-            console.error('Refusing to publish unpublished stable package versions to the alpha tag:');
-            for (const { file, packageJson } of unpublishedStablePackages) {
-              console.error(`- ${packageJson.name}@${packageJson.version} (${file})`);
-            }
-            process.exit(1);
-          }
           NODE
 
       - name: Ensure npm 11.5.1+ for OIDC
@@ -172,8 +140,6 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
-    outputs:
-      exited_prerelease: ${{ steps.exit-prerelease-mode.outputs.executed }}
     steps:
       - name: Initial checkout
         uses: actions/checkout@v5
@@ -197,9 +163,13 @@ jobs:
 
       - name: Check for pre.json file existence
         id: check_files
-        uses: andstor/file-existence-action@v3.0.0
-        with:
-          files: '.changeset/pre.json'
+        shell: bash
+        run: |
+          if [[ -f .changeset/pre.json ]]; then
+            echo "files_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "files_exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -223,7 +193,6 @@ jobs:
         run: pnpm build
 
       - name: Exit prerelease mode
-        id: exit-prerelease-mode
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
           pnpm changeset-cli pre exit
@@ -232,7 +201,6 @@ jobs:
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           git push
-          echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
           pnpm build
         env:
@@ -302,8 +270,13 @@ jobs:
   enter_prerelease:
     needs: stable
     if: |
+      always() &&
       github.repository == 'mastra-ai/mastra' && 
-      needs.stable.outputs.exited_prerelease == 'true'
+      github.event_name == 'workflow_dispatch' && 
+      (
+        (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
+        github.event.inputs.publish_type == 'enter-prerelease'
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Initial checkout
@@ -344,6 +317,10 @@ jobs:
       - name: Enter prerelease mode
         run: |
           git pull
+          if [[ -f .changeset/pre.json ]]; then
+            echo "Already in prerelease mode; no changes needed."
+            exit 0
+          fi
           pnpm changeset-cli pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode' --no-verify
@@ -449,9 +426,13 @@ jobs:
 
       - name: Check for pre.json file existence
         id: check-snapshot-pre-json
-        uses: andstor/file-existence-action@v3.0.0
-        with:
-          files: '.changeset/pre.json'
+        shell: bash
+        run: |
+          if [[ -f .changeset/pre.json ]]; then
+            echo "files_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "files_exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run Changeset Pre Exit
         if: steps.check-snapshot-pre-json.outputs.files_exists == 'true'

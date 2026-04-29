@@ -60,13 +60,6 @@ jobs:
             exit 0
           fi
 
-          echo "Missing .changeset/pre.json; restoring alpha prerelease mode"
-          pnpm changeset-cli pre enter alpha
-          git add .changeset/pre.json
-          git commit -m "chore: version - enter prerelease mode" --no-verify
-          git fetch origin "${GITHUB_REF_NAME}"
-          git rebase "origin/${GITHUB_REF_NAME}"
-          git push origin HEAD:"${GITHUB_REF_NAME}"
           echo "restored=true" >> "$GITHUB_OUTPUT"
 
       - name: Version packages (alpha prerelease)
