@@ -54,25 +54,36 @@ vi.mock('@/domains/agents/hooks/use-create-skill', () => ({
 
 const llmProviderState = { isLoading: false };
 
+type MockProvider = { id: string; name: string; models: Array<{ id: string; name: string }> };
+type MockModel = { provider: string; providerName: string; model: string };
+
+const llmProvidersFixture: { value: MockProvider[] } = {
+  value: [
+    {
+      id: 'openai',
+      name: 'OpenAI',
+      models: [{ id: 'gpt-4o', name: 'gpt-4o' }],
+    },
+    {
+      id: 'anthropic',
+      name: 'Anthropic',
+      models: [{ id: 'claude-opus-4-7', name: 'claude-opus-4-7' }],
+    },
+  ],
+};
+
+const builderFilterRef: { fn: (models: MockModel[]) => MockModel[] } = {
+  fn: models => models.filter(model => model.provider === 'openai'),
+};
+
 vi.mock('@/domains/llm', () => ({
   useLLMProviders: () => ({
     data: {
-      providers: [
-        {
-          id: 'openai',
-          name: 'OpenAI',
-          models: [{ id: 'gpt-4o', name: 'gpt-4o' }],
-        },
-        {
-          id: 'anthropic',
-          name: 'Anthropic',
-          models: [{ id: 'claude-opus-4-7', name: 'claude-opus-4-7' }],
-        },
-      ],
+      providers: llmProvidersFixture.value,
     },
     isLoading: llmProviderState.isLoading,
   }),
-  useAllModels: (providers: Array<{ id: string; name: string; models: Array<{ id: string; name: string }> }>) =>
+  useAllModels: (providers: MockProvider[]) =>
     providers.flatMap(provider =>
       provider.models.map(model => ({ provider: provider.id, providerName: provider.name, model: model.name })),
     ),
@@ -81,8 +92,7 @@ vi.mock('@/domains/llm', () => ({
 
 vi.mock('@/domains/builder', () => ({
   useBuilderModelPolicy: () => ({ active: true }),
-  useBuilderFilteredModels: (models: Array<{ provider: string; providerName: string; model: string }>) =>
-    models.filter(model => model.provider === 'openai'),
+  useBuilderFilteredModels: (models: MockModel[]) => builderFilterRef.fn(models),
 }));
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
@@ -158,6 +168,19 @@ describe('ConversationPanel agent-builder client tool', () => {
     formMethodsRef = null;
     chatState.isRunning = false;
     llmProviderState.isLoading = false;
+    llmProvidersFixture.value = [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        models: [{ id: 'gpt-4o', name: 'gpt-4o' }],
+      },
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        models: [{ id: 'claude-opus-4-7', name: 'claude-opus-4-7' }],
+      },
+    ];
+    builderFilterRef.fn = models => models.filter(model => model.provider === 'openai');
   });
 
   afterEach(() => {
@@ -441,8 +464,87 @@ describe('ConversationPanel agent-builder client tool', () => {
         .success,
     ).toBe(true);
     expect(
-      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'anthropic', name: 'claude-opus-4-7' } })
+      tool.inputSchema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('respects a combined provider-wildcard + specific-modelId policy across description and schema', () => {
+    // Simulate the admin-configured allowlist:
+    //   [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }]
+    // Server returns all providers/models — the policy filter is what enforces the allowlist.
+    llmProvidersFixture.value = [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        models: [
+          { id: 'gpt-4o', name: 'gpt-4o' },
+          { id: 'gpt-4o-mini', name: 'gpt-4o-mini' },
+        ],
+      },
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        models: [
+          { id: 'claude-opus-4-7', name: 'claude-opus-4-7' },
+          { id: 'claude-haiku-4-5', name: 'claude-haiku-4-5' },
+        ],
+      },
+      {
+        id: 'mistral',
+        name: 'Mistral',
+        models: [{ id: 'mistral-large', name: 'mistral-large' }],
+      },
+    ];
+    builderFilterRef.fn = models =>
+      models.filter(m => m.provider === 'openai' || (m.provider === 'anthropic' && m.model === 'claude-opus-4-7'));
+
+    renderPanel({ ...allOff, model: true });
+    const tool = getAgentBuilderTool();
+
+    // Both OpenAI models survive (provider wildcard).
+    expect(tool.description).toContain('provider: openai (OpenAI), name: gpt-4o');
+    expect(tool.description).toContain('provider: openai (OpenAI), name: gpt-4o-mini');
+    // Only the explicit Anthropic model survives.
+    expect(tool.description).toContain('provider: anthropic (Anthropic), name: claude-opus-4-7');
+    expect(tool.description).not.toContain('claude-haiku-4-5');
+    // Disallowed provider is dropped entirely.
+    expect(tool.description).not.toContain('mistral');
+
+    // Schema accepts every allowed combination.
+    expect(
+      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } })
         .success,
+    ).toBe(true);
+    expect(
+      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o-mini' } })
+        .success,
+    ).toBe(true);
+    expect(
+      tool.inputSchema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      }).success,
+    ).toBe(true);
+
+    // Schema rejects disallowed entries.
+    expect(
+      tool.inputSchema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        model: { provider: 'anthropic', name: 'claude-haiku-4-5' },
+      }).success,
+    ).toBe(false);
+    expect(
+      tool.inputSchema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        model: { provider: 'mistral', name: 'mistral-large' },
+      }).success,
     ).toBe(false);
   });
 
