@@ -198,6 +198,12 @@ export class MastraTUI {
           continue;
         }
 
+        // Check if a model is selected (sync — fast, no reason to defer)
+        if (!this.state.harness.hasModelSelected()) {
+          showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+          continue;
+        }
+
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
@@ -226,14 +232,15 @@ export class MastraTUI {
           this.state.pendingNewThread = false;
         }
 
-        // Check if a model is selected
-        if (!this.state.harness.hasModelSelected()) {
-          showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
-          continue;
-        }
-
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
+          // Hook blocked the message — remove it from the chat
+          const comp = this.state.messageComponentsById.get(messageId);
+          if (comp) {
+            this.state.chatContainer.removeChild(comp as never);
+            this.state.messageComponentsById.delete(messageId);
+            this.state.ui.requestRender();
+          }
           continue;
         }
 
