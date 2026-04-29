@@ -141,13 +141,27 @@ function ConfigurePanelContent({
   const modelSectionVisible = features.model || policy.active;
 
   return (
-    <div
-      className={cn(
-        'grid h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden agent-builder-detail-grid',
-        activeDetail ? 'grid-cols-[320px_calc(100%-320px)]' : 'grid-cols-[320px_0px]',
-      )}
-    >
-      <div className="flex h-full min-w-0 flex-col">
+    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
+      <div
+        className={cn(
+          'agent-builder-detail-pane absolute inset-y-0 right-[320px] overflow-hidden',
+          activeDetail ? 'w-[calc(100%-320px)] border-r border-border1' : 'w-0 pointer-events-none',
+        )}
+        aria-hidden={!activeDetail}
+      >
+        <DetailPane
+          activeDetail={activeDetail}
+          features={features}
+          editable={!mutationsDisabled}
+          instructionsPrompt={panelInstructions}
+          onInstructionsChange={setDraftInstructions}
+          onClose={closeDetail}
+          availableAgentTools={availableAgentTools}
+          availableSkills={availableSkills}
+        />
+      </div>
+
+      <div className="ml-auto w-[320px] flex h-full min-w-0 flex-col">
         <div className="flex-1 flex flex-col py-6 overflow-y-auto">
           <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
             <div className="flex items-center justify-center">
@@ -218,17 +232,6 @@ function ConfigurePanelContent({
           />
         </div>
       </div>
-
-      <DetailPane
-        activeDetail={activeDetail}
-        features={features}
-        editable={!mutationsDisabled}
-        instructionsPrompt={panelInstructions}
-        onInstructionsChange={setDraftInstructions}
-        onClose={closeDetail}
-        availableAgentTools={availableAgentTools}
-        availableSkills={availableSkills}
-      />
     </div>
   );
 }
@@ -420,10 +423,7 @@ function DetailPane({
   availableSkills,
 }: DetailPaneProps) {
   return (
-    <div
-      className={cn('h-full min-w-0 overflow-hidden', activeDetail ? 'border-l border-border1' : 'pointer-events-none')}
-      aria-hidden={!activeDetail}
-    >
+    <div className="h-full w-full min-w-0 overflow-hidden">
       {activeDetail === 'instructions' && (
         <InstructionsDetail
           prompt={instructionsPrompt}
