@@ -125,15 +125,17 @@ const connection = await NativeConnection.connect({
   address: 'localhost:7233',
 })
 
+const mastraPlugin = new MastraPlugin()
+
+await mastraPlugin.prebuild({
+  entryFile: import.meta.resolve('./index.ts'),
+})
+
 const worker = await Worker.create({
   connection,
   namespace: 'default',
   taskQueue: 'mastra',
-  plugins: [
-    new MastraPlugin({
-      src: import.meta.resolve('./index.ts'),
-    }),
-  ],
+  plugins: [mastraPlugin],
 })
 
 await worker.run()
@@ -150,10 +152,6 @@ await worker.run()
    ```bash
    docker run --rm -p 7233:7233 -p 8080:8080 temporalio/auto-setup:latest
    ```
-
-   :::note
-   The `@mastra/temporal` package also ships a `docker-compose.yaml` you can copy into your project as a reference.
-   :::
 
 1. Open the Temporal UI at [http://localhost:8080](http://localhost:8080) to inspect namespaces, workflows, and activities.
 
@@ -210,23 +208,10 @@ export const { createWorkflow, createStep } = init({
 })
 ```
 
-### `MastraPlugin` debug mode
-
-Pass `debug: true` to write the transformed modules and emitted workflow bundles to `.mastra/temporal` for inspection. Use this when troubleshooting plugin output.
-
-```ts title="src/mastra/worker.ts"
-new MastraPlugin({
-  src: import.meta.resolve('./index.ts'),
-  debug: true,
-})
-```
-
 ## Constraints and notes
 
 - Workflow ids must be static string literals. The build-time transformer reads the literal value to derive Temporal workflow export names.
-- `MastraPlugin`'s `src` must point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
 - Activities are generated automatically from `createStep()` handlers. Do not pass them in `Worker.create({ activities })`.
-- The package does not currently implement Inngest-style flow control (`concurrency`, `rateLimit`, `throttle`, `debounce`, `priority`) or `cron` scheduling on `createWorkflow()`. Use Temporal's native [retry policies](https://docs.temporal.io/encyclopedia/retry-policies) and [schedules](https://docs.temporal.io/schedules) instead.
 
 ## Related
 
