@@ -86,8 +86,18 @@ export const isScorerRunInputForAgent = (input: unknown): input is ScorerRunInpu
   );
 };
 
+const isMastraDBMessageLike = (message: unknown): message is MastraDBMessage => {
+  return (
+    isRecord(message) &&
+    typeof message.id === 'string' &&
+    typeof message.role === 'string' &&
+    'content' in message &&
+    'createdAt' in message
+  );
+};
+
 export const isScorerRunOutputForAgent = (output: unknown): output is ScorerRunOutputForAgent => {
-  return Array.isArray(output);
+  return Array.isArray(output) && output.every(isMastraDBMessageLike);
 };
 
 const getTextFromMessages = (messages: unknown, role: string): string | undefined => {
@@ -321,9 +331,11 @@ export const getAssistantMessageFromRunOutput = (output?: unknown) => {
   if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
   if (!isRecord(output)) return undefined;
 
-  if (typeof output.text === 'string') return output.text;
-  if (typeof output.content === 'string') return output.content;
-  if (isRecord(output.content) || Array.isArray(output.content)) {
+  const isAssistantOutput = output.role === undefined || output.role === 'assistant';
+
+  if (isAssistantOutput && typeof output.text === 'string') return output.text;
+  if (isAssistantOutput && typeof output.content === 'string') return output.content;
+  if (isAssistantOutput && (isRecord(output.content) || Array.isArray(output.content))) {
     return (
       getTextContentFromMastraDBMessage(output as MastraDBMessage) ||
       getTextContentFromMastraDBMessage(output.content as MastraDBMessage) ||

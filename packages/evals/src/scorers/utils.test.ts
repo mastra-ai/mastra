@@ -14,6 +14,7 @@ import {
   getUserMessageFromRunInput,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
+  isScorerRunOutputForAgent,
   createTestMessage,
   createToolInvocation,
   extractToolResults,
@@ -66,6 +67,11 @@ describe('Scorer Utils', () => {
       expect(getAssistantMessageFromRunOutput('String response')).toBe('String response');
     });
 
+    it('should not extract non-assistant role text from single message output', () => {
+      expect(getAssistantMessageFromRunOutput({ role: 'user', text: 'User text' })).toBeUndefined();
+      expect(getAssistantMessageFromRunOutput({ role: 'user', content: 'User content' })).toBeUndefined();
+    });
+
     it('should extract assistant text from nested content output', () => {
       expect(
         getAssistantMessageFromRunOutput({
@@ -87,6 +93,17 @@ describe('Scorer Utils', () => {
       ];
 
       expect(getAssistantMessageFromRunOutput(output)).toBe('Model response');
+    });
+  });
+
+  describe('isScorerRunOutputForAgent', () => {
+    it('should only match arrays of message-like objects', () => {
+      expect(isScorerRunOutputForAgent([createTestMessage({ role: 'assistant', content: 'Assistant response' })])).toBe(
+        true,
+      );
+      expect(isScorerRunOutputForAgent(['Assistant response'])).toBe(false);
+      expect(isScorerRunOutputForAgent([{ role: 'assistant', content: 'Assistant response' }])).toBe(false);
+      expect(isScorerRunOutputForAgent({ text: 'Workflow response' })).toBe(false);
     });
   });
 
