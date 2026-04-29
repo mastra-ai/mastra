@@ -62,17 +62,17 @@ function hashConfig(
  * const slack = new SlackChannel({
  *   configToken: process.env.SLACK_APP_CONFIG_TOKEN,
  *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
- *   baseUrl: process.env.SLACK_BASE_URL,
- * });
- *
- * slack.configure(myAgent, {
- *   name: 'My Bot',
- *   slashCommands: ['/ask', '/help'],
  * });
  *
  * const mastra = new Mastra({
  *   agents: { myAgent },
  *   channels: { slack },
+ * });
+ *
+ * // Connect an agent to Slack (creates app, returns OAuth URL)
+ * const { authorizationUrl } = await slack.connect('my-agent', {
+ *   name: 'My Bot',
+ *   slashCommands: ['/ask', '/help'],
  * });
  * ```
  */
