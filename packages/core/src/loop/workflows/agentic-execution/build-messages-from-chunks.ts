@@ -63,13 +63,23 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // State for text span accumulation (keyed by text ID to handle interleaved spans)
-  const textSpans = new Map<string, { deltas: string[]; providerMetadata: Record<string, any> | undefined }>();
+  // State for text span accumulation (keyed by text ID to handle interleaved spans).
+  // `placeholder` reserves the part's position at first-seen-delta so the resulting
+  // parts array reflects semantic stream order rather than end-event order. See #15914.
+  const textSpans = new Map<
+    string,
+    { deltas: string[]; providerMetadata: Record<string, any> | undefined; placeholder: MastraMessagePart | null }
+  >();
 
   // State for reasoning span accumulation (keyed by reasoning ID)
   const reasoningSpans = new Map<
     string,
-    { deltas: string[]; providerMetadata: Record<string, any> | undefined; redacted: boolean }
+    {
+      deltas: string[];
+      providerMetadata: Record<string, any> | undefined;
+      redacted: boolean;
+      placeholder: MastraMessagePart | null;
+    }
   >();
   for (const chunk of chunks) {
     switch (chunk.type) {
@@ -80,6 +90,7 @@ export function buildMessagesFromChunks({
           textSpans.set(p.id, {
             deltas: [],
             providerMetadata: p.providerMetadata,
+            placeholder: null,
           });
         } else {
           // Update providerMetadata if this start has it
@@ -95,8 +106,14 @@ export function buildMessagesFromChunks({
         let span = textSpans.get(p.id);
         // Auto-create span if delta arrives without a matching text-start
         if (!span) {
-          span = { deltas: [], providerMetadata: p.providerMetadata };
+          span = { deltas: [], providerMetadata: p.providerMetadata, placeholder: null };
           textSpans.set(p.id, span);
+        }
+        // First-seen-delta reserves the part's slot in `parts` so the final order tracks
+        // when content actually started arriving — not when the end event happened.
+        if (span.placeholder === null) {
+          span.placeholder = { type: 'text' as const, text: '' } as MastraMessagePart;
+          parts.push(span.placeholder);
         }
         span.deltas.push(p.text);
         // AI SDK semantics: latest non-null providerMetadata wins
@@ -114,8 +131,21 @@ export function buildMessagesFromChunks({
             span.providerMetadata = pEnd.providerMetadata;
           }
           const text = span.deltas.join('');
-          // Only emit a part if there's actual content — skip empty text spans
-          if (text.length > 0) {
+          if (span.placeholder) {
+            // Fill the slot reserved at first-seen-delta
+            if (text.length > 0) {
+              (span.placeholder as { text: string }).text = text;
+              if (span.providerMetadata) {
+                (span.placeholder as { providerMetadata?: Record<string, any> }).providerMetadata =
+                  span.providerMetadata;
+              }
+            } else {
+              // Drop the empty placeholder so we keep the prior "skip empty text spans" behavior
+              const idx = parts.indexOf(span.placeholder);
+              if (idx >= 0) parts.splice(idx, 1);
+            }
+          } else if (text.length > 0) {
+            // Defensive: text exists but no delta arrived (shouldn't happen with current chunk shapes)
             parts.push({
               type: 'text' as const,
               text,
@@ -134,10 +164,22 @@ export function buildMessagesFromChunks({
         const isRedacted = Object.values(p.providerMetadata || {}).some((v: any) => v?.redactedData);
 
         if (!reasoningSpans.has(p.id)) {
+          let placeholder: MastraMessagePart | null = null;
+          // Redacted reasoning never receives a delta, so reserve its slot at start
+          if (isRedacted) {
+            placeholder = {
+              type: 'reasoning' as const,
+              reasoning: '',
+              details: [{ type: 'redacted', data: '' }],
+              providerMetadata: p.providerMetadata,
+            } as MastraMessagePart;
+            parts.push(placeholder);
+          }
           reasoningSpans.set(p.id, {
             deltas: [],
             providerMetadata: p.providerMetadata,
             redacted: isRedacted,
+            placeholder,
           });
         } else {
           // Update providerMetadata if this start has it
@@ -156,8 +198,17 @@ export function buildMessagesFromChunks({
         let span = reasoningSpans.get(p.id);
         // Auto-create span if delta arrives without a matching reasoning-start
         if (!span) {
-          span = { deltas: [], providerMetadata: p.providerMetadata, redacted: false };
+          span = { deltas: [], providerMetadata: p.providerMetadata, redacted: false, placeholder: null };
           reasoningSpans.set(p.id, span);
+        }
+        // First-seen-delta reserves the slot for non-redacted reasoning
+        if (span.placeholder === null && !span.redacted) {
+          span.placeholder = {
+            type: 'reasoning' as const,
+            reasoning: '',
+            details: [{ type: 'text', text: '' }],
+          } as MastraMessagePart;
+          parts.push(span.placeholder);
         }
         span.deltas.push(p.text);
         // AI SDK semantics: latest non-null providerMetadata wins
@@ -175,22 +226,27 @@ export function buildMessagesFromChunks({
             span.providerMetadata = p.providerMetadata;
           }
 
-          if (span.redacted) {
-            parts.push({
-              type: 'reasoning' as const,
-              reasoning: '',
-              details: [{ type: 'redacted', data: '' }],
-              providerMetadata: span.providerMetadata,
-            } as MastraMessagePart);
+          const reasoningPart = span.redacted
+            ? {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'redacted', data: '' }],
+                providerMetadata: span.providerMetadata,
+              }
+            : {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: span.deltas.join('') }],
+                providerMetadata: span.providerMetadata,
+              };
+
+          if (span.placeholder) {
+            // Fill the slot reserved at first-seen-delta (or reasoning-start for redacted)
+            Object.assign(span.placeholder, reasoningPart);
           } else {
-            // Always emit reasoning parts, even if empty — OpenAI requires item_reference
-            // for tool calls that follow reasoning. See: https://github.com/mastra-ai/mastra/issues/9005
-            parts.push({
-              type: 'reasoning' as const,
-              reasoning: '',
-              details: [{ type: 'text', text: span.deltas.join('') }],
-              providerMetadata: span.providerMetadata,
-            } as MastraMessagePart);
+            // No delta arrived and not redacted — emit at end so we still satisfy
+            // the "always emit reasoning, even if empty" contract from #9005
+            parts.push(reasoningPart as MastraMessagePart);
           }
 
           reasoningSpans.delete(p.id);
@@ -288,28 +344,40 @@ export function buildMessagesFromChunks({
 
   // Flush any unclosed reasoning spans (stream ended without reasoning-end)
   for (const [_id, span] of reasoningSpans) {
-    if (span.redacted) {
-      parts.push({
-        type: 'reasoning' as const,
-        reasoning: '',
-        details: [{ type: 'redacted', data: '' }],
-        providerMetadata: span.providerMetadata,
-      } as MastraMessagePart);
+    const reasoningPart = span.redacted
+      ? {
+          type: 'reasoning' as const,
+          reasoning: '',
+          details: [{ type: 'redacted', data: '' }],
+          providerMetadata: span.providerMetadata,
+        }
+      : {
+          type: 'reasoning' as const,
+          reasoning: '',
+          details: [{ type: 'text', text: span.deltas.join('') }],
+          providerMetadata: span.providerMetadata,
+        };
+    if (span.placeholder) {
+      Object.assign(span.placeholder, reasoningPart);
     } else {
-      const text = span.deltas.join('');
-      parts.push({
-        type: 'reasoning' as const,
-        reasoning: '',
-        details: [{ type: 'text', text }],
-        providerMetadata: span.providerMetadata,
-      } as MastraMessagePart);
+      parts.push(reasoningPart as MastraMessagePart);
     }
   }
 
   // Flush any unclosed text spans (stream ended without text-end)
   for (const [, span] of textSpans) {
     const text = span.deltas.join('');
-    if (text.length > 0) {
+    if (span.placeholder) {
+      if (text.length > 0) {
+        (span.placeholder as { text: string }).text = text;
+        if (span.providerMetadata) {
+          (span.placeholder as { providerMetadata?: Record<string, any> }).providerMetadata = span.providerMetadata;
+        }
+      } else {
+        const idx = parts.indexOf(span.placeholder);
+        if (idx >= 0) parts.splice(idx, 1);
+      }
+    } else if (text.length > 0) {
       parts.push({
         type: 'text' as const,
         text,
