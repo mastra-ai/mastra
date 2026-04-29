@@ -25,6 +25,7 @@ import {
 } from '../onboarding/settings.js';
 import {
   detectPackageManager,
+  fetchChangelog,
   fetchLatestVersion,
   getInstallCommand,
   isNewerVersion,
@@ -197,29 +198,21 @@ export class MastraTUI {
           continue;
         }
 
-        // Create thread lazily on first message (may load last-used model)
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
-        // Check if a model is selected
+        // Check if a model is selected (sync — fast, no reason to defer)
         if (!this.state.harness.hasModelSelected()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
-          continue;
-        }
-
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
           continue;
         }
 
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        // Add user message to chat immediately
+        // Show the user message in the TUI right away — before any async work
+        // (thread creation, hooks, sending) so the UI feels instant even when
+        // GC pauses or I/O slow things down.
+        const messageId = `user-${Date.now()}`;
         addUserMessage(this.state, {
-          id: `user-${Date.now()}`,
+          id: messageId,
           role: 'user',
           content: [
             { type: 'text', text: content },
@@ -232,6 +225,25 @@ export class MastraTUI {
           createdAt: new Date(),
         });
         this.state.ui.requestRender();
+
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          // Hook blocked the message — remove it from the chat
+          const comp = this.state.messageComponentsById.get(messageId);
+          if (comp) {
+            this.state.chatContainer.removeChild(comp as never);
+            this.state.messageComponentsById.delete(messageId);
+            this.state.ui.requestRender();
+          }
+          continue;
+        }
+
+        // Create thread lazily on first message (may load last-used model).
+        // Runs after the hook check so we don't create a thread for blocked messages.
+        if (this.state.pendingNewThread) {
+          await this.state.harness.createThread();
+          this.state.pendingNewThread = false;
+        }
 
         // Normal send — fire and forget; events handle the rest
         this.fireMessage(content, images);
@@ -1051,11 +1063,11 @@ export class MastraTUI {
       return;
     }
 
-    const pm = await detectPackageManager();
+    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
   }
 
   /**
@@ -1065,11 +1077,18 @@ export class MastraTUI {
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
+    changelog: string | null,
   ): Promise<void> {
+    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
+    if (changelog) {
+      question += `\n\nWhat's new:\n${changelog}`;
+    }
+    question += `\n\nWould you like to update now?`;
+
     return new Promise<void>(resolve => {
       const questionComponent = new AskQuestionInlineComponent(
         {
-          question: `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}). Would you like to update now?`,
+          question,
           options: [
             { label: 'Yes', description: 'Update and restart' },
             { label: 'No', description: 'Skip this version' },

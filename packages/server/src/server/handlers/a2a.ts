@@ -151,7 +151,26 @@ function validateMessageSendParams(params: MessageSendParams) {
   }
 }
 
-function createTextArtifactUpdate({ taskId, contextId, text }: { taskId: string; contextId: string; text: string }) {
+function createArtifactUpdate({
+  taskId,
+  contextId,
+  text,
+  data,
+}: {
+  taskId: string;
+  contextId: string;
+  text?: string;
+  data?: Record<string, unknown>;
+}) {
+  const parts = [
+    ...(text ? [{ kind: 'text' as const, text }] : []),
+    ...(data ? [{ kind: 'data' as const, data }] : []),
+  ];
+
+  if (parts.length === 0) {
+    return undefined;
+  }
+
   return {
     kind: 'artifact-update' as const,
     taskId,
@@ -159,10 +178,121 @@ function createTextArtifactUpdate({ taskId, contextId, text }: { taskId: string;
     lastChunk: true,
     artifact: {
       artifactId: `${taskId}:response`,
+      name: data ? 'response.json' : 'response.txt',
+      parts,
+    },
+  };
+}
+
+function createTextChunkArtifactUpdate({
+  taskId,
+  contextId,
+  text,
+  append,
+  lastChunk,
+}: {
+  taskId: string;
+  contextId: string;
+  text: string;
+  append?: boolean;
+  lastChunk?: boolean;
+}) {
+  return {
+    kind: 'artifact-update' as const,
+    taskId,
+    contextId,
+    ...(append ? { append: true } : {}),
+    ...(lastChunk !== undefined ? { lastChunk } : {}),
+    artifact: {
+      artifactId: `${taskId}:response:text`,
       name: 'response.txt',
       parts: [{ kind: 'text' as const, text }],
     },
   };
+}
+
+function createDataArtifactUpdate({
+  taskId,
+  contextId,
+  data,
+  lastChunk,
+}: {
+  taskId: string;
+  contextId: string;
+  data: Record<string, unknown>;
+  lastChunk?: boolean;
+}) {
+  return {
+    kind: 'artifact-update' as const,
+    taskId,
+    contextId,
+    ...(lastChunk !== undefined ? { lastChunk } : {}),
+    artifact: {
+      artifactId: `${taskId}:response:data`,
+      name: 'response.json',
+      parts: [{ kind: 'data' as const, data }],
+    },
+  };
+}
+
+function extractFullStreamTextDelta(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('type' in value)) {
+    return null;
+  }
+
+  const chunk = value as {
+    type: string;
+    payload?: { text?: string; delta?: string };
+    textDelta?: string;
+    text?: string;
+    delta?: string;
+  };
+
+  switch (chunk.type) {
+    case 'text-delta':
+      if (typeof chunk.payload?.text === 'string') {
+        return chunk.payload.text;
+      }
+
+      if (typeof chunk.payload?.delta === 'string') {
+        return chunk.payload.delta;
+      }
+
+      if (typeof chunk.textDelta === 'string') {
+        return chunk.textDelta;
+      }
+
+      if (typeof chunk.delta === 'string') {
+        return chunk.delta;
+      }
+
+      if (typeof chunk.text === 'string') {
+        return chunk.text;
+      }
+
+      return null;
+    default:
+      return null;
+  }
+}
+
+function extractFinalStructuredObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || !('type' in value)) {
+    return undefined;
+  }
+
+  const chunk = value as {
+    type: string;
+    object?: unknown;
+    payload?: { object?: unknown };
+  };
+
+  if (chunk.type !== 'object-result') {
+    return undefined;
+  }
+
+  const objectValue = chunk.payload?.object ?? chunk.object;
+  return objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : undefined;
 }
 
 export async function handleMessageSend({
@@ -216,15 +346,15 @@ export async function handleMessageSend({
       ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
-    if (result.text) {
-      currentData = applyUpdateToTask(
-        currentData,
-        createTextArtifactUpdate({
-          taskId: currentData.id,
-          contextId: currentData.contextId,
-          text: result.text,
-        }),
-      );
+    const artifactUpdate = createArtifactUpdate({
+      taskId: currentData.id,
+      contextId: currentData.contextId,
+      text: result.text,
+      data: result.object as Record<string, unknown> | undefined,
+    });
+
+    if (artifactUpdate) {
+      currentData = applyUpdateToTask(currentData, artifactUpdate);
     }
 
     currentData = applyUpdateToTask(currentData, {
@@ -345,22 +475,83 @@ export async function* handleMessageStream({
 
   try {
     const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
-    const result = await agent.generate([convertToCoreMessage(message)], {
+    const result = await agent.stream([convertToCoreMessage(message)], {
       runId: taskId,
       requestContext,
       ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
+    let sawTextArtifact = false;
+    let pendingTextChunk: string | undefined;
+    let structuredData: Record<string, unknown> | undefined;
 
-    const artifactUpdate =
-      result.text &&
-      createTextArtifactUpdate({
+    for await (const chunk of result.fullStream) {
+      const textDelta = extractFullStreamTextDelta(chunk);
+      if (textDelta !== null) {
+        if (!pendingTextChunk) {
+          pendingTextChunk = textDelta;
+          continue;
+        }
+
+        const textUpdate = createTextChunkArtifactUpdate({
+          taskId: currentData.id,
+          contextId: currentData.contextId,
+          text: pendingTextChunk,
+          append: sawTextArtifact,
+          lastChunk: false,
+        });
+
+        currentData = applyUpdateToTask(currentData, textUpdate);
+        await taskStore.save({ agentId, data: currentData });
+        yield createSuccessResponse(requestId, textUpdate);
+
+        sawTextArtifact = true;
+        pendingTextChunk = textDelta;
+        continue;
+      }
+
+      const finalStructuredObject = extractFinalStructuredObject(chunk);
+      if (finalStructuredObject) {
+        structuredData = finalStructuredObject;
+      }
+    }
+
+    structuredData ??= (await result.object) as Record<string, unknown> | undefined;
+
+    if (!pendingTextChunk && !sawTextArtifact) {
+      const finalText = await result.text;
+      if (finalText) {
+        pendingTextChunk = finalText;
+      }
+    }
+
+    if (pendingTextChunk) {
+      const textUpdate = createTextChunkArtifactUpdate({
         taskId: currentData.id,
         contextId: currentData.contextId,
-        text: result.text,
+        text: pendingTextChunk,
+        append: sawTextArtifact,
+        lastChunk: !structuredData,
       });
 
-    if (artifactUpdate) {
-      currentData = applyUpdateToTask(currentData, artifactUpdate);
+      currentData = applyUpdateToTask(currentData, textUpdate);
+      await taskStore.save({ agentId, data: currentData });
+      yield createSuccessResponse(requestId, textUpdate);
+
+      sawTextArtifact = true;
+      pendingTextChunk = undefined;
+    }
+
+    if (structuredData) {
+      const dataUpdate = createDataArtifactUpdate({
+        taskId: currentData.id,
+        contextId: currentData.contextId,
+        data: structuredData,
+        lastChunk: true,
+      });
+
+      currentData = applyUpdateToTask(currentData, dataUpdate);
+      await taskStore.save({ agentId, data: currentData });
+      yield createSuccessResponse(requestId, dataUpdate);
     }
 
     currentData = applyUpdateToTask(currentData, {
@@ -371,18 +562,14 @@ export async function* handleMessageStream({
     currentData.metadata = {
       ...currentData.metadata,
       execution: {
-        toolCalls: result.toolCalls,
-        toolResults: result.toolResults,
-        usage: result.usage,
-        finishReason: result.finishReason,
+        toolCalls: await result.toolCalls,
+        toolResults: await result.toolResults,
+        usage: await result.usage,
+        finishReason: await result.finishReason,
       },
     };
 
     await taskStore.save({ agentId, data: currentData });
-
-    if (artifactUpdate) {
-      yield createSuccessResponse(requestId, artifactUpdate);
-    }
   } catch (handlerError) {
     currentData = applyUpdateToTask(currentData, {
       state: 'failed',
