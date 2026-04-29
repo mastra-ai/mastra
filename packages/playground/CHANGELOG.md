@@ -1,5 +1,19 @@
 # @internal/playground
 
+## 1.7.1-alpha.2
+
+### Patch Changes
+
+- feat(playground): editor UX improvements - unsaved changes warning in chat, version revert buttons for prompt blocks and scorers, copy button on prompt block editor ([#15873](https://github.com/mastra-ai/mastra/pull/15873))
+
+- Fixed integration tools (Arcade, Composio) and registry tools not being properly saved or removed when editing agents. Previously, removing all tools from an agent and saving a draft would cause the old tools to reappear, and adding tools via a tool provider could fail to persist. ([#15930](https://github.com/mastra-ai/mastra/pull/15930))
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+  - @mastra/client-js@1.15.1-alpha.2
+  - @mastra/react@0.2.31-alpha.2
+  - @mastra/playground-ui@24.0.1-alpha.2
+
 ## 1.7.1-alpha.1
 
 ### Patch Changes

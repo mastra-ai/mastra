@@ -1,5 +1,14 @@
 # @mastra/azure
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- @mastra/azure: Fixed AzureBlobFilesystem mount configs to include configured prefixes so mounts use the configured prefix instead of the entire container. ([#15874](https://github.com/mastra-ai/mastra/pull/15874))
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
 ## 0.2.0
 
 ### Minor Changes

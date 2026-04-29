@@ -1,5 +1,24 @@
 # @mastra/evals
 
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed prebuilt LLM-judge scorers (faithfulness, answer relevancy, bias, hallucination, toxicity, …) crashing with `TypeError: output.find is not a function` when used against workflows, inline tasks, or string targets. The shared input/output helpers and scorer run types now also accept `string`, `ModelMessage[]`, `{ prompt }` (workflow input), `{ text }` / `{ content }` (workflow / task output), and a single assistant message object — alongside the existing agent shape. ([#15805](https://github.com/mastra-ai/mastra/pull/15805))
+
+  ```ts
+  // Previously crashed; now works.
+  await createFaithfulnessScorer({ model, options: { context: ['Paris is the capital of France.'] } }).run({
+    input: { prompt: 'What is the capital of France?' },
+    output: { text: 'Paris is the capital of France.' },
+  });
+  ```
+
+  Fixes [#15615](https://github.com/mastra-ai/mastra/issues/15615).
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
 ## 1.2.1
 
 ### Patch Changes

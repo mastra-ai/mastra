@@ -1,5 +1,26 @@
 # @mastra/e2b
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added Azure Blob sandbox mount support via blobfuse2 in @mastra/e2b and @mastra/daytona. `sandbox.mount(azureBlobFilesystem, '/data')` now works for Azure containers, matching the existing s3fs (S3) and gcsfuse (GCS) integration. Supports authentication via accountKey, sasToken, connectionString, or managed identity/default credentials, and preserves AzureBlobFilesystem prefixes when mounting. ([#15874](https://github.com/mastra-ai/mastra/pull/15874))
+
+  ```ts
+  import { E2BSandbox } from '@mastra/e2b';
+  import { AzureBlobFilesystem } from '@mastra/azure/blob';
+
+  const azureFs = new AzureBlobFilesystem({ container: 'my-data', connectionString: '...' });
+  const sandbox = new E2BSandbox();
+  await sandbox.mount(azureFs, '/data');
+  // Sandbox processes can now read/write /data/* directly against the Azure container.
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
 ## 0.2.0
 
 ### Minor Changes
