@@ -5434,6 +5434,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
   "dbMessages": [
     {
       "content": {
+        "content": "Hello",
         "format": 2,
         "metadata": {
           "modelId": "mock-model-id",
@@ -5601,6 +5602,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
       "dbMessages": [
         {
           "content": {
+            "content": "Hello!",
             "format": 2,
             "metadata": {
               "modelId": "mock-model-id",
@@ -12533,6 +12535,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
   "dbMessages": [
     {
       "content": {
+        "content": "Hello",
         "format": 2,
         "metadata": {
           "modelId": "mock-model-id",
@@ -12700,6 +12703,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
       "dbMessages": [
         {
           "content": {
+            "content": "Hello!",
             "format": 2,
             "metadata": {
               "modelId": "mock-model-id",
