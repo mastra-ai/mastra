@@ -366,9 +366,6 @@ export interface AgentConfig<
    * ```
    *
    * For full control, pass an `AgentChannels` instance directly.
-   *
-   * For platform channels (Slack, Discord, etc.), use `mastra.channels.slack.connect(agentId)`
-   * instead of declaring channel config here.
    */
   channels?: ChannelConfig | AgentChannels;
   /**
