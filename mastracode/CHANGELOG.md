@@ -1,5 +1,28 @@
 # mastracode
 
+## 0.16.1
+
+### Patch Changes
+
+- Added common binary availability to the Mastra Code environment prompt. ([#15820](https://github.com/mastra-ai/mastra/pull/15820))
+
+- dependencies updates: ([#15770](https://github.com/mastra-ai/mastra/pull/15770))
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.71` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.71) (from `^3.0.58`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.53` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.53) (from `^3.0.41`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.168` ↗︎](https://www.npmjs.com/package/ai/v/6.0.168) (from `^6.0.116`, in `dependencies`)
+- Updated dependencies [[`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185), [`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`95b001f`](https://github.com/mastra-ai/mastra/commit/95b001f750af6947ad9d174cd47abffc776663a5), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`1d7d50f`](https://github.com/mastra-ai/mastra/commit/1d7d50f0cf29449c17758cd9a9ad7f975f2c6fcc), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/observability@1.10.2
+  - @mastra/core@1.29.1
+  - @mastra/memory@1.17.3
+  - @mastra/pg@1.9.3
+
+## 0.16.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
 ## 0.16.1-alpha.2
 
 ### Patch Changes

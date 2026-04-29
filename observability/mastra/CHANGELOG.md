@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.10.2
+
+### Patch Changes
+
+- Fixed `inputDetails.cacheWrite` reflecting only the final step's cache-write tokens in multi-step Anthropic prompt-caching runs (e.g. subagent and workflow flows). Trace `inputDetails.cacheWrite` and the derived input-token totals now reflect the full multi-step run, so cost accounting in Langfuse and other exporters matches what Anthropic actually charged. ([#15828](https://github.com/mastra-ai/mastra/pull/15828))
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+
 ## 1.10.2-alpha.0
 
 ### Patch Changes

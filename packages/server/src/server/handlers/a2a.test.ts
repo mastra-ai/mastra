@@ -58,6 +58,50 @@ function createMockMastra(agents: Record<string, Agent>) {
   });
 }
 
+function createStreamResult({
+  chunks,
+  text,
+  object,
+  streamEvents,
+  toolCalls = [],
+  toolResults = [],
+  usage = undefined,
+  finishReason = 'stop',
+}: {
+  chunks: string[];
+  text?: string;
+  object?: Record<string, unknown>;
+  streamEvents?: unknown[];
+  toolCalls?: unknown[];
+  toolResults?: unknown[];
+  usage?: unknown;
+  finishReason?: string;
+}) {
+  const fullStreamEvents = streamEvents ?? [
+    ...chunks.map(chunk => ({ type: 'text-delta', textDelta: chunk })),
+    ...(object ? [{ type: 'object-result', object }] : []),
+  ];
+
+  return {
+    textStream: (async function* () {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    })(),
+    fullStream: (async function* () {
+      for (const event of fullStreamEvents) {
+        yield event;
+      }
+    })(),
+    text: Promise.resolve(text ?? chunks.join('')),
+    object: Promise.resolve(object),
+    toolCalls: Promise.resolve(toolCalls),
+    toolResults: Promise.resolve(toolResults),
+    usage: Promise.resolve(usage),
+    finishReason: Promise.resolve(finishReason),
+  };
+}
+
 describe('A2A Handler', () => {
   describe('getAgentCardByIdHandler', () => {
     let mockMastra: Mastra;
@@ -202,9 +246,9 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgentById(agentId);
-      // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+      const mockAgent = {
+        generate: vi.fn().mockResolvedValue({ text: agentResponseText }),
+      } as unknown as Agent;
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
       const requestContext = new RequestContext();
@@ -357,6 +401,47 @@ describe('A2A Handler', () => {
       );
     });
 
+    it('should include structured output as a data artifact part', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const userMessage = 'Summarize this order';
+      const structured = {
+        summary: 'Order confirmed.',
+        total: 33.98,
+      };
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Order confirmed.', object: structured });
+
+      vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
+      const requestContext = new RequestContext();
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      expect(result.result.artifacts).toEqual([
+        {
+          artifactId: expect.stringContaining(':response'),
+          name: 'response.json',
+          parts: [
+            { kind: 'text', text: 'Order confirmed.' },
+            { kind: 'data', data: structured },
+          ],
+        },
+      ]);
+    });
+
     it('should allow user to pass resourceId via params metadata', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
@@ -425,9 +510,9 @@ describe('A2A Handler', () => {
         },
       };
 
-      const mockAgent = mockMastra.getAgentById(agentId);
-      // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+      const mockAgent = {
+        generate: vi.fn().mockResolvedValue({ text: agentResponseText }),
+      } as unknown as Agent;
 
       const requestContext = new RequestContext();
       await handleMessageSend({
@@ -910,7 +995,11 @@ describe('A2A Handler', () => {
 
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+      mockAgent.stream.mockResolvedValue(
+        createStreamResult({
+          chunks: [agentResponseText],
+        }),
+      );
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
 
@@ -1012,7 +1101,7 @@ describe('A2A Handler', () => {
 
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockRejectedValue is not available on the Agent class
-      mockAgent.generate.mockRejectedValue(new Error(errorMessage));
+      mockAgent.stream.mockRejectedValue(new Error(errorMessage));
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
 
@@ -1060,6 +1149,150 @@ describe('A2A Handler', () => {
 
       const done = await gen.next();
       expect(done.done).toBe(true);
+    });
+
+    it('should stream structured output as a data artifact part', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const userMessage = 'Summarize this order';
+      const structured = {
+        summary: 'Order confirmed.',
+        total: 33.98,
+      };
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.stream.mockResolvedValue(
+        createStreamResult({
+          chunks: ['Order confirmed.'],
+          object: structured,
+        }),
+      );
+
+      vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+      });
+
+      const first = await gen.next();
+      expect(first.value?.result.kind).toBe('task');
+
+      const second = await gen.next();
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: expect.stringContaining(':response:text'),
+            name: 'response.txt',
+            parts: [
+              {
+                text: 'Order confirmed.',
+                kind: 'text',
+              },
+            ],
+          },
+          contextId: first.value?.result.contextId,
+          kind: 'artifact-update',
+          lastChunk: false,
+          taskId: first.value?.result.id,
+        },
+      });
+      expect(second.done).toBe(false);
+
+      const third = await gen.next();
+      expect(third.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: expect.stringContaining(':response:data'),
+            name: 'response.json',
+            parts: [
+              {
+                kind: 'data',
+                data: structured,
+              },
+            ],
+          },
+          contextId: first.value?.result.contextId,
+          kind: 'artifact-update',
+          lastChunk: true,
+          taskId: first.value?.result.id,
+        },
+      });
+      expect(third.done).toBe(false);
+    });
+
+    it('should stream text chunks as incremental artifact updates', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.stream.mockResolvedValue(
+        createStreamResult({
+          chunks: ['Hello, ', 'user!'],
+        }),
+      );
+
+      vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+      });
+
+      const first = await gen.next();
+      expect(first.value?.result.kind).toBe('task');
+
+      const second = await gen.next();
+      expect(second.value).toMatchObject({
+        id: requestId,
+        jsonrpc: '2.0',
+        result: {
+          kind: 'artifact-update',
+          lastChunk: false,
+          artifact: {
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Hello, ' }],
+          },
+        },
+      });
+
+      const third = await gen.next();
+      expect(third.value).toMatchObject({
+        id: requestId,
+        jsonrpc: '2.0',
+        result: {
+          kind: 'artifact-update',
+          lastChunk: true,
+          artifact: {
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'user!' }],
+          },
+        },
+      });
     });
   });
 
@@ -1620,7 +1853,11 @@ describe('A2A Handler', () => {
     it('returns SSE for streaming A2A methods', async () => {
       const mockAgent = mockMastra.getAgentById('test-agent');
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.generate.mockResolvedValue({ text: 'Hello from SSE' });
+      mockAgent.stream.mockResolvedValue(
+        createStreamResult({
+          chunks: ['Hello from SSE'],
+        }),
+      );
 
       const response = await AGENT_EXECUTION_ROUTE.handler({
         mastra: mockMastra,

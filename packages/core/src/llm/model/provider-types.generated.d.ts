@@ -2179,7 +2179,6 @@ export type ProviderModelsMap = {
     'hy3-preview-free',
     'kimi-k2.5',
     'kimi-k2.6',
-    'ling-2.6-flash-free',
     'minimax-m2.5',
     'minimax-m2.5-free',
     'minimax-m2.7',
@@ -2956,6 +2955,7 @@ export type ProviderModelsMap = {
     'qwen2.5-vl-72b-instruct',
     'qwen3-32b',
     'qwen3-coder-30b-a3b-instruct',
+    'qwen3.5-9b',
   ];
   readonly friendli: readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -3169,6 +3169,7 @@ export type ProviderModelsMap = {
     'inception/mercury-2',
     'inception/mercury-coder-small',
     'inception/mercury-edit-2',
+    'interfaze/interfaze-beta',
     'kwaipilot/kat-coder-pro-v1',
     'kwaipilot/kat-coder-pro-v2',
     'meituan/longcat-flash-chat',
