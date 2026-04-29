@@ -198,6 +198,28 @@ export class MastraTUI {
           continue;
         }
 
+        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
+        this.state.pendingImages = [];
+
+        // Show the user message in the TUI right away — before any async work
+        // (thread creation, hooks, sending) so the UI feels instant even when
+        // GC pauses or I/O slow things down.
+        const messageId = `user-${Date.now()}`;
+        addUserMessage(this.state, {
+          id: messageId,
+          role: 'user',
+          content: [
+            { type: 'text', text: content },
+            ...(images?.map(img => ({
+              type: 'image' as const,
+              data: img.data,
+              mimeType: img.mimeType,
+            })) ?? []),
+          ],
+          createdAt: new Date(),
+        });
+        this.state.ui.requestRender();
+
         // Create thread lazily on first message (may load last-used model)
         if (this.state.pendingNewThread) {
           await this.state.harness.createThread();
@@ -214,25 +236,6 @@ export class MastraTUI {
         if (!allowed) {
           continue;
         }
-
-        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
-        this.state.pendingImages = [];
-
-        // Add user message to chat immediately
-        addUserMessage(this.state, {
-          id: `user-${Date.now()}`,
-          role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...(images?.map(img => ({
-              type: 'image' as const,
-              data: img.data,
-              mimeType: img.mimeType,
-            })) ?? []),
-          ],
-          createdAt: new Date(),
-        });
-        this.state.ui.requestRender();
 
         // Normal send — fire and forget; events handle the rest
         this.fireMessage(content, images);
