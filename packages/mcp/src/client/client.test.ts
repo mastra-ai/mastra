@@ -2108,6 +2108,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
         if (!clientCapabilities.roots && initializedSent) {
           const finish = () => {
             settled = true;
+            clearTimeout(timeout);
             proc.kill();
             resolve(stderrChunks.join(''));
           };
@@ -2140,12 +2141,13 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       proc.on('error', reject);
       proc.on('exit', () => {
         if (!settled) {
+          clearTimeout(timeout);
           resolve(stderrChunks.join(''));
         }
       });
 
       // Timeout after 25 seconds
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         settled = true;
         proc.kill();
         resolve(stderrChunks.join(''));
