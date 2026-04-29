@@ -150,7 +150,7 @@ function hasConfiguredProcessor(
       steps?: Record<string, unknown>;
       stepGraph?: Array<{ type: string; step?: unknown; steps?: Array<{ step?: unknown }> }>;
     };
-    const isWorkflowLike = isProcessorWorkflow(processor) || Boolean(maybeWorkflow.steps || maybeWorkflow.stepGraph);
+    const isWorkflowLike = isProcessorWorkflow(processor);
 
     const workflowSteps = [
       ...Object.values(maybeWorkflow.steps ?? {}),
@@ -2959,7 +2959,7 @@ export class Agent<
             }
           }
 
-          nextTools = { ...(nextTools ?? {}), ...convertedTools };
+          nextTools = convertedTools;
         }
       } catch (error) {
         if (error instanceof TripWire) {

@@ -47,6 +47,17 @@ class CustomOnDemandSkillDiscoveryProcessor implements Processor<'custom-skill-d
   }
 }
 
+class CustomOnDemandProcessorWithStepsField implements Processor<'custom-skill-discovery-with-steps'> {
+  readonly id = 'custom-skill-discovery-with-steps' as const;
+  readonly name = 'Custom Skill Discovery Processor With Steps';
+  readonly providesSkillDiscovery: Processor['providesSkillDiscovery'] = 'on-demand';
+  readonly steps = {};
+
+  async processInput(args: ProcessInputArgs) {
+    return args.messages;
+  }
+}
+
 class CollidingSkillSearchIdProcessor implements Processor<'skill-search'> {
   readonly id = 'skill-search' as const;
   readonly name = 'User Processor Named Skill Search';
@@ -352,6 +363,28 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       const prompt = JSON.stringify(capturedPrompt);
       expect(prompt).toContain('To discover available skills, call search_skills');
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('Skills are NOT tools');
+    });
+
+    it('should not treat a processor-owned steps field as a workflow', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [new CustomOnDemandProcessorWithStepsField()],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).not.toContain('skill');
+      expect(toolNames).not.toContain('skill_search');
+
+      const prompt = JSON.stringify(capturedPrompt);
       expect(prompt).not.toContain('<available_skills>');
       expect(prompt).not.toContain('Skills are NOT tools');
     });
