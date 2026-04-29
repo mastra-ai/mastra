@@ -58,7 +58,9 @@ reviews:
     labels: []
     drafts: false
     base_branches: []
-    ignore_usernames: []
+    ignore_usernames:
+      - daneatmastra
+      - 'dane-ai-mastra[bot]'
   finishing_touches:
     docstrings:
       enabled: true
