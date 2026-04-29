@@ -9,15 +9,15 @@
     "start": "mastra start"
   },
   "dependencies": {
-    "ai": "5.1.0-beta.28",
-    "mastra": "latest",
-    "@ai-sdk/openai": "^2.0.103",
     "@mastra/core": "latest",
-    "@mastra/loggers": "latest",
-    "@mastra/memory": "latest",
-    "@mastra/libsql": "latest",
     "@mastra/editor": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "ai": "^5.0.179",
+    "mastra": "latest",
+    "msw": "^2.13.6",
     "zod": "^4.3.6"
   },
   "devDependencies": {
