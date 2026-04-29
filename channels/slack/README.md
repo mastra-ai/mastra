@@ -14,30 +14,29 @@ const myAgent = new Agent({
   name: 'My Agent',
   model: 'openai/gpt-4.1',
   instructions: 'You are a helpful assistant.',
-  channels: {
-    slack: {
-      name: 'My Bot',
-      description: 'An AI assistant',
-      iconUrl: 'https://example.com/my-bot-icon.png', // Optional: 512x512 PNG
-      slashCommands: [
-        { command: '/ask', prompt: 'Answer: {{text}}' },
-        { command: '/help', prompt: 'List your capabilities.' },
-      ],
-    },
-  },
+});
+
+const slack = new SlackChannel({
+  appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
+  // For local dev, set SLACK_BASE_URL to your tunnel URL
+  // In production, this is auto-derived from server config
+  baseUrl: process.env.SLACK_BASE_URL,
 });
 
 const mastra = new Mastra({
   agents: { myAgent },
-  channels: {
-    slack: new SlackChannel({
-      configToken: process.env.SLACK_APP_CONFIG_TOKEN!,
-      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
-      // For local dev, set SLACK_BASE_URL to your tunnel URL
-      // In production, this is auto-derived from server config
-      baseUrl: process.env.SLACK_BASE_URL,
-    }),
-  },
+  channels: { slack },
+});
+
+// Connect an agent to Slack (creates app, returns OAuth URL)
+const { authorizationUrl } = await slack.connect('my-agent', {
+  name: 'My Bot',
+  description: 'An AI assistant',
+  iconUrl: 'https://example.com/my-bot-icon.png',
+  slashCommands: [
+    { command: '/ask', prompt: 'Answer: {{text}}' },
+    { command: '/help', prompt: 'List your capabilities.' },
+  ],
 });
 ```
 
@@ -64,16 +63,14 @@ const mastra = new Mastra({
 `SlackChannel` automatically uses Mastra's storage if configured. Just add `storage` to your Mastra config:
 
 ```ts
-import { InMemoryStore } from '@mastra/core/storage';
-// Or for persistence across restarts: import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore } from '@mastra/libsql';
 
 const mastra = new Mastra({
   agents: { myAgent },
-  storage: new InMemoryStore(),  // Or LibSQLStore, PostgresStore, etc.
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
   channels: {
     slack: new SlackChannel({
-      configToken: process.env.SLACK_APP_CONFIG_TOKEN,
-      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+      appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
     }),
   },
 });
@@ -82,53 +79,49 @@ const mastra = new Mastra({
 When Mastra has storage configured, `SlackChannel` automatically:
 - Persists rotated config tokens (so you don't need fresh tokens after restart)
 - Persists Slack app installations
-- Detects config changes and updates manifests
+- Detects config changes (e.g., agent renames) and updates manifests on startup
 
 Without storage, data is lost on restart and apps are recreated.
 
 ## How It Works
 
-1. On startup, `SlackChannel` auto-provisions a Slack app for each agent that has `channels.slack` config
-2. The console logs an OAuth URL - visit it to install the app to your workspace
-3. After installation, slash commands route to your agent and responses are sent back to Slack
-4. Tokens auto-rotate every 12 hours and are saved to storage
+1. Register a `SlackChannel` on your `Mastra` instance
+2. Call `slack.connect(agentId)` to provision a Slack app and get an OAuth URL
+3. Visit the OAuth URL to install the app to your Slack workspace
+4. After installation, messages and slash commands route to your agent
+5. Tokens auto-rotate every 12 hours and are saved to storage
 
 ## Slash Commands
 
 Commands use prompt templates with variable substitution:
 
 ```ts
-channels: {
-  slack: {
-    slashCommands: [
-      {
-        command: '/ask',
-        description: 'Ask the AI a question',
-        prompt: 'Answer this question: {{text}}',
-      },
-      {
-        command: '/summarize',
-        description: 'Summarize content',
-        prompt: 'Summarize the following in 2-3 sentences: {{text}}',
-      },
-    ],
-  },
-}
+await slack.connect('my-agent', {
+  slashCommands: [
+    {
+      command: '/ask',
+      description: 'Ask the AI a question',
+      prompt: 'Answer this question: {{text}}',
+    },
+    {
+      command: '/summarize',
+      description: 'Summarize content',
+      prompt: 'Summarize the following in 2-3 sentences: {{text}}',
+    },
+  ],
+});
 ```
 
 Available variables: `{{text}}`, `{{userId}}`, `{{channelId}}`, `{{teamId}}`
 
 ## App Icons
 
-Each agent can have its own Slack app icon:
+Each agent's Slack app can have its own icon:
 
 ```ts
-channels: {
-  slack: {
-    iconUrl: 'https://example.com/my-bot-avatar.png',
-    // ...
-  },
-}
+await slack.connect('my-agent', {
+  iconUrl: 'https://example.com/my-bot-avatar.png',
+});
 ```
 
 The image should be:
@@ -138,24 +131,10 @@ The image should be:
 
 The icon is uploaded automatically when the Slack app is created.
 
-## Custom Storage
-
-For advanced use cases, you can provide a custom `SlackStorage` implementation:
+## Disconnecting
 
 ```ts
-import { SlackStorage, SlackInstallation, PendingInstallation } from '@mastra/slack';
-
-class MySlackStorage implements SlackStorage {
-  async saveInstallation(installation: SlackInstallation): Promise<void> { ... }
-  async getInstallation(agentId: string): Promise<SlackInstallation | null> { ... }
-  async getInstallationByWebhookId(webhookId: string): Promise<SlackInstallation | null> { ... }
-  // ... etc
-}
-
-new SlackChannel({
-  storage: new MySlackStorage(),
-  // ...
-});
+await slack.disconnect('my-agent');
 ```
 
-This bypasses Mastra's built-in storage and gives you full control.
+This deletes the Slack app and removes the local installation record.

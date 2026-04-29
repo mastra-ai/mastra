@@ -10,8 +10,8 @@
  * import { SlackChannel } from '@mastra/slack';
  *
  * const slack = new SlackChannel({
- *   configToken: process.env.SLACK_APP_CONFIG_TOKEN,
- *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+ *   appConfigToken: process.env.SLACK_APP_CONFIG_TOKEN,
+ *   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  *   baseUrl: process.env.BASE_URL,
  * });
  *

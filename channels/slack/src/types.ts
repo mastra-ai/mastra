@@ -13,15 +13,15 @@ export interface SlackChannelConfig {
    * Slack App Configuration Token for programmatic app creation.
    * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
    * 
-   * Optional if you have a valid refreshToken - will rotate to get a fresh token on startup.
+   * Optional if you have a valid appConfigRefreshToken - will rotate to get a fresh token on startup.
    */
-  configToken?: string;
+  appConfigToken?: string;
 
   /**
    * Slack App Configuration Refresh Token.
    * Used for automatic token rotation.
    */
-  refreshToken: string;
+  appConfigRefreshToken: string;
 
   /**
    * Base URL for webhook callbacks.
@@ -41,7 +41,7 @@ export interface SlackChannelConfig {
    * Called when config tokens are rotated.
    * Persist these to your database/env to avoid re-authentication.
    */
-  onTokenRotation?: (tokens: { configToken: string; refreshToken: string }) => Promise<void>;
+  onTokenRotation?: (tokens: { appConfigToken: string; appConfigRefreshToken: string }) => Promise<void>;
 
   /**
    * Custom storage for installations.

@@ -60,8 +60,8 @@ function hashConfig(
  * import { SlackChannel } from '@mastra/slack';
  *
  * const slack = new SlackChannel({
- *   configToken: process.env.SLACK_APP_CONFIG_TOKEN,
- *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+ *   appConfigToken: process.env.SLACK_APP_CONFIG_TOKEN,
+ *   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  * });
  *
  * const mastra = new Mastra({
@@ -95,8 +95,8 @@ export class SlackChannel implements MastraChannel {
 
   constructor(config: SlackChannelConfig) {
     // At minimum we need a refresh token to rotate and get fresh tokens
-    if (!config.refreshToken) {
-      throw new Error('SlackChannel requires refreshToken. Get one at https://api.slack.com/apps');
+    if (!config.appConfigRefreshToken) {
+      throw new Error('SlackChannel requires appConfigRefreshToken. Get one at https://api.slack.com/apps');
     }
 
     this.#channelConfig = config;
@@ -104,16 +104,16 @@ export class SlackChannel implements MastraChannel {
     this.#baseUrl = config.baseUrl; // Optional at construction, required for connect()
 
     // Create manifest client with storage-backed token rotation
-    // configToken can be empty - we'll rotate on first use to get a fresh one
+    // appConfigToken can be empty - we'll rotate on first use to get a fresh one
     this.#manifestClient = new SlackManifestClient({
-      configToken: config.configToken ?? '',
-      refreshToken: config.refreshToken,
+      appConfigToken: config.appConfigToken ?? '',
+      appConfigRefreshToken: config.appConfigRefreshToken,
       onTokenRotation: async tokens => {
         // Persist rotated tokens to storage (encrypted)
         await this.#saveConfigTokens(
           this.#encryptConfigTokens({
-            configToken: tokens.configToken,
-            refreshToken: tokens.refreshToken,
+            appConfigToken: tokens.appConfigToken,
+            appConfigRefreshToken: tokens.appConfigRefreshToken,
             updatedAt: new Date(),
           }),
         );
@@ -252,8 +252,8 @@ export class SlackChannel implements MastraChannel {
 
     return {
       ...tokens,
-      configToken: encrypt(tokens.configToken, key),
-      refreshToken: encrypt(tokens.refreshToken, key),
+      appConfigToken: encrypt(tokens.appConfigToken, key),
+      appConfigRefreshToken: encrypt(tokens.appConfigRefreshToken, key),
     };
   }
 
@@ -266,8 +266,8 @@ export class SlackChannel implements MastraChannel {
 
     return {
       ...tokens,
-      configToken: decrypt(tokens.configToken, key),
-      refreshToken: decrypt(tokens.refreshToken, key),
+      appConfigToken: decrypt(tokens.appConfigToken, key),
+      appConfigRefreshToken: decrypt(tokens.appConfigRefreshToken, key),
     };
   }
 
@@ -449,8 +449,8 @@ export class SlackChannel implements MastraChannel {
     await storage.saveConfig({
       platform: PLATFORM,
       data: {
-        configToken: tokens.configToken,
-        refreshToken: tokens.refreshToken,
+        appConfigToken: tokens.appConfigToken,
+        appConfigRefreshToken: tokens.appConfigRefreshToken,
       },
       updatedAt: tokens.updatedAt,
     });
@@ -541,8 +541,8 @@ export class SlackChannel implements MastraChannel {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);
       this.#manifestClient.setTokens({
-        configToken: storedTokens.configToken,
-        refreshToken: storedTokens.refreshToken,
+        appConfigToken: storedTokens.appConfigToken,
+        appConfigRefreshToken: storedTokens.appConfigRefreshToken,
       });
     }
 
@@ -752,7 +752,7 @@ export class SlackChannel implements MastraChannel {
    */
   async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult> {
     if (!this.#manifestClient) {
-      throw new Error('Slack manifest client not configured. Provide configToken and refreshToken.');
+      throw new Error('Slack manifest client not configured. Provide appConfigToken and appConfigRefreshToken.');
     }
 
     const baseUrl = this.#getBaseUrl();
@@ -800,7 +800,9 @@ export class SlackChannel implements MastraChannel {
     // Set app icon if provided
     if (config.iconUrl) {
       try {
-        await this.#manifestClient.setAppIcon(appCredentials.appId, config.iconUrl);
+        const iconResponse = await fetch(config.iconUrl);
+        const iconData = await iconResponse.arrayBuffer();
+        await this.#manifestClient.setAppIcon(appCredentials.appId, iconData);
       } catch (error) {
         // Log but don't fail app creation if icon upload fails
         console.warn(`[Slack] Failed to set app icon for "${agentId}":`, error);
