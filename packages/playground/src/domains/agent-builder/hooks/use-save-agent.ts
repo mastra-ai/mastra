@@ -82,7 +82,7 @@ export function useSaveAgent({
     async (values: AgentBuilderEditFormValues) => {
       const params = formValuesToSaveParams(values, availableAgentTools, availableSkills);
       const workspaceField = params.workspace ? { workspace: params.workspace } : {};
-      const browserField = params.browser !== undefined ? { browser: params.browser } : {};
+      const browserField = { browser: params.browser };
       const metadataField = params.metadata ? { metadata: params.metadata } : {};
 
       try {

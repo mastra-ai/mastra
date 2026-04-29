@@ -36,6 +36,24 @@ import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
 
+/**
+ * Resolve a `browser` field that may be a boolean shorthand from the UI.
+ * - `true`  → look up the admin's builder default browser config
+ * - `false` → `null` (explicit clear)
+ * - object/null/undefined → pass through unchanged
+ */
+function resolveBrowserField(browser: unknown, mastra: { getEditor?: () => unknown }): unknown {
+  if (browser === true) {
+    const editor = mastra.getEditor?.() as any;
+    const defaultBrowser = editor?.getBuilder?.()?.getConfiguration?.()?.agent?.browser;
+    return defaultBrowser ?? undefined;
+  }
+  if (browser === false) {
+    return null;
+  }
+  return browser;
+}
+
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'name',
   'description',
@@ -313,6 +331,8 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
+      const resolvedBrowser = resolveBrowserField(browser, mastra);
+
       const input = {
         id,
         authorId,
@@ -334,7 +354,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
-        browser,
+        browser: resolvedBrowser,
         requestContextSchema,
       } as StorageCreateAgentInput;
 
@@ -468,6 +488,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         }
       }
 
+      // Resolve boolean browser shorthand from the UI
+      const resolvedBrowser = resolveBrowserField(browser, mastra);
+
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
@@ -492,7 +515,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
-        browser,
+        browser: resolvedBrowser,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 

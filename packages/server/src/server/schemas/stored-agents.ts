@@ -283,9 +283,9 @@ const snapshotConfigSchema = z.object({
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
   browser: z
-    .union([conditionalFieldSchema(browserRefSchema), z.null()])
+    .union([conditionalFieldSchema(browserRefSchema), z.boolean(), z.null()])
     .optional()
-    .describe('Browser configuration — static, conditional, or null to disable browser'),
+    .describe('Browser configuration — object config, true (apply default), false/null (disable)'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -411,9 +411,9 @@ export const storedAgentSchema = z.object({
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
   browser: z
-    .union([conditionalFieldSchema(browserRefSchema), z.null()])
+    .union([conditionalFieldSchema(browserRefSchema), z.boolean(), z.null()])
     .optional()
-    .describe('Browser configuration — static, conditional, or null to disable browser'),
+    .describe('Browser configuration — object config, true (apply default), false/null (disable)'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()

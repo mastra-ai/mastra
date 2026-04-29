@@ -1222,6 +1222,8 @@ export interface CreateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -1253,6 +1255,8 @@ export interface UpdateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
