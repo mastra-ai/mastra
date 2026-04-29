@@ -10,7 +10,9 @@ npm install @mastra/clickhouse
 
 ## Prerequisites
 
-- Clickhouse server (version 21.12 or higher recommended)
+- Clickhouse server (version 23.3 or higher recommended)
+  - Lightweight `DELETE FROM` requires ClickHouse 22.8+ with `allow_experimental_lightweight_delete = 1` (for 22.8–23.2), or 23.3+ where it is generally available.
+  - The `deleteTask` and `deleteTasks` methods use `DELETE FROM` on the background tasks table — ensure your server supports lightweight delete before using those operations.
 - Node.js 22.13.0 or later
 
 ## Usage
@@ -128,7 +130,6 @@ The store uses different table engines for different types of data:
 
 ### Operations Not Currently Supported
 
-- `deleteMessages(messageIds)`: Message deletion is not supported in ClickHouse
 - AI Observability (traces/spans): Not currently supported
 
 ## Data Types
