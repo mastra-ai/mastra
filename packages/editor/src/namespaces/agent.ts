@@ -1396,9 +1396,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * Looks up the provider by ID in the editor's browser registry.
    * Only supports `type: 'inline'` refs (config is embedded in the agent snapshot).
    */
-  private async resolveStoredBrowser(
-    browserRef: StorageBrowserRef | undefined,
-  ): Promise<MastraBrowser | undefined> {
+  private async resolveStoredBrowser(browserRef: StorageBrowserRef | undefined): Promise<MastraBrowser | undefined> {
     if (!browserRef) return undefined;
 
     if (browserRef.type === 'inline') {
