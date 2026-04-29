@@ -171,11 +171,6 @@ describe('Scorer Utils', () => {
     });
   });
 
-  /**
-   * When using a reasoning model, the reasoning text
-   * should be available in the scorer's preprocess function. Currently, there's
-   * no utility function to extract reasoning text from the run output.
-   */
   describe('Reasoning text extraction', () => {
     it('should extract reasoning from content.reasoning field', () => {
       const messageWithReasoning: MastraDBMessage = {
@@ -192,8 +187,6 @@ describe('Scorer Utils', () => {
 
       const output: ScorerRunOutputForAgent = [messageWithReasoning];
 
-      // Currently there's no function to get reasoning - this test documents the missing functionality
-      // We need a getReasoningFromRunOutput function similar to getAssistantMessageFromRunOutput
       const reasoning = getReasoningFromRunOutput(output);
 
       expect(reasoning).toBe('Let me think about this step by step...');
