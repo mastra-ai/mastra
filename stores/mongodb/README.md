@@ -135,7 +135,6 @@ const vectorDB = new MongoDBVector({
 
 - Vector similarity search with cosine, euclidean, and dotproduct metrics (Atlas Search)
 - Metadata filtering with MongoDB-style query syntax
-- Minimum score threshold for queries
 - Automatic UUID generation for vectors
 - Collection (index) management: create, list, describe, delete
 - Atlas Search readiness checks for reliable testing
