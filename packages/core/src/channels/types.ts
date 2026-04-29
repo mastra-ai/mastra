@@ -85,27 +85,28 @@ export interface ChannelConnectImmediate {
 export type ChannelConnectResult = ChannelConnectOAuth | ChannelConnectDeepLink | ChannelConnectImmediate;
 
 // =============================================================================
-// MastraChannel interface
+// ChannelProvider interface
 // =============================================================================
 
 /**
- * Interface for Mastra channel implementations (e.g., SlackChannel, DiscordChannel).
+ * Interface for channel provider implementations (e.g., SlackProvider, DiscordProvider).
  *
- * Channels manage platform-specific integrations including:
- * - OAuth flows and credential management
+ * A channel provider manages the full lifecycle of a platform integration:
+ * - App provisioning and OAuth flows
  * - Webhook routing and event handling
- * - Message formatting and delivery
+ * - Adapter creation and agent wiring
+ * - Manifest synchronization and credential management
  *
  * @example
  * ```ts
  * const mastra = new Mastra({
  *   channels: {
- *     slack: new SlackChannel({ ... }),
+ *     slack: new SlackProvider({ ... }),
  *   },
  * });
  * ```
  */
-export interface MastraChannel {
+export interface ChannelProvider {
   /** Unique identifier for this channel type (e.g., 'slack', 'discord'). */
   readonly id: string;
 

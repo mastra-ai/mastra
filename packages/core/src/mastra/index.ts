@@ -6,7 +6,7 @@ import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
-import type { MastraChannel } from '../channels';
+import type { ChannelProvider } from '../channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -126,7 +126,7 @@ export interface Config<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
-  TChannels extends Record<string, MastraChannel> = Record<string, MastraChannel>,
+  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -304,11 +304,11 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { SlackChannel } from '@mastra/slack';
+   * import { SlackProvider } from '@mastra/slack';
    *
    * new Mastra({
    *   channels: {
-   *     slack: new SlackChannel({
+   *     slack: new SlackProvider({
    *       configToken: process.env.SLACK_APP_CONFIG_TOKEN,
    *       refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
    *     }),
@@ -366,7 +366,7 @@ export class Mastra<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
-  TChannels extends Record<string, MastraChannel> = Record<string, MastraChannel>,
+  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -469,22 +469,22 @@ export class Mastra<
   }
 
   /**
-   * Gets a registered platform channel by its key.
+   * Gets a registered channel provider by its key.
    *
    * @example
    * ```typescript
-   * import { SlackChannel } from '@mastra/slack';
-   * const slack = mastra.getPlatformChannel<SlackChannel>('slack');
+   * import { SlackProvider } from '@mastra/slack';
+   * const slack = mastra.getChannelProvider<SlackProvider>('slack');
    * ```
    */
-  public getPlatformChannel<T extends MastraChannel = MastraChannel>(key: string): T | undefined {
+  public getChannelProvider<T extends ChannelProvider = ChannelProvider>(key: string): T | undefined {
     return this.#channels?.[key] as T | undefined;
   }
 
   /**
-   * Gets all registered platform channels.
+   * Gets all registered channel providers.
    */
-  public getPlatformChannels(): Record<string, MastraChannel> | undefined {
+  public getChannelProviders(): Record<string, ChannelProvider> | undefined {
     return this.#channels;
   }
 

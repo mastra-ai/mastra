@@ -515,7 +515,7 @@ export class Agent<
 
   /**
    * Sets the AgentChannels instance for this agent.
-   * Used by MastraChannel implementations to inject the channels they create.
+   * Used by ChannelProvider implementations to inject the channels they create.
    * @internal
    */
   setChannels(agentChannels: AgentChannels): void {

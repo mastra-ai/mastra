@@ -17,7 +17,7 @@ export type {
   ChannelConnectResult,
   ChannelInstallationInfo,
   ChannelPlatformInfo,
-  MastraChannel,
+  ChannelProvider,
   ThreadHistoryMessage,
 } from './types';
 

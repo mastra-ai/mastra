@@ -7,7 +7,7 @@ Slack integration for Mastra agents. Handles app creation, OAuth, slash commands
 ```ts
 import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
-import { SlackChannel } from '@mastra/slack';
+import { SlackProvider } from '@mastra/slack';
 
 const myAgent = new Agent({
   id: 'my-agent',
@@ -16,7 +16,7 @@ const myAgent = new Agent({
   instructions: 'You are a helpful assistant.',
 });
 
-const slack = new SlackChannel({
+const slack = new SlackProvider({
   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
   // For local dev, set SLACK_BASE_URL to your tunnel URL
   // In production, this is auto-derived from server config
@@ -61,7 +61,7 @@ const { authorizationUrl } = await slack.connect('my-agent', {
 
 ## Storage & Persistence
 
-`SlackChannel` automatically uses Mastra's storage if configured. Just add `storage` to your Mastra config:
+`SlackProvider` automatically uses Mastra's storage if configured. Just add `storage` to your Mastra config:
 
 ```ts
 import { LibSQLStore } from '@mastra/libsql';
@@ -70,14 +70,14 @@ const mastra = new Mastra({
   agents: { myAgent },
   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
   channels: {
-    slack: new SlackChannel({
+    slack: new SlackProvider({
       appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
     }),
   },
 });
 ```
 
-When Mastra has storage configured, `SlackChannel` automatically:
+When Mastra has storage configured, `SlackProvider` automatically:
 
 - Persists rotated config tokens (so you don't need fresh tokens after restart)
 - Persists Slack app installations
@@ -87,7 +87,7 @@ Without storage, data is lost on restart and apps are recreated.
 
 ## How It Works
 
-1. Register a `SlackChannel` on your `Mastra` instance
+1. Register a `SlackProvider` on your `Mastra` instance
 2. Call `slack.connect(agentId)` to provision a Slack app and get an OAuth URL
 3. Visit the OAuth URL to install the app to your Slack workspace
 4. After installation, messages and slash commands route to your agent

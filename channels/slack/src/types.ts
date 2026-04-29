@@ -6,9 +6,9 @@ import type { SlackInstallation } from './schemas';
 // =============================================================================
 
 /**
- * Configuration for SlackChannel at the Mastra level.
+ * Configuration for SlackProvider at the Mastra level.
  */
-export interface SlackChannelConfig {
+export interface SlackProviderConfig {
   /**
    * Slack App Configuration Token for programmatic app creation.
    * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
@@ -153,7 +153,7 @@ export interface SlackConnectOptions {
   /**
    * URL to redirect to after successful OAuth completion.
    * Typically set by the Studio UI to return to the agent page.
-   * Defaults to `SlackChannelConfig.redirectPath` or `/`.
+   * Defaults to `SlackProviderConfig.redirectPath` or `/`.
    */
   redirectUrl?: string;
 }

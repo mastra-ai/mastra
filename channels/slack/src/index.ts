@@ -7,9 +7,9 @@
  * ```ts
  * import { Agent } from '@mastra/core/agent';
  * import { Mastra } from '@mastra/core/mastra';
- * import { SlackChannel } from '@mastra/slack';
+ * import { SlackProvider } from '@mastra/slack';
  *
- * const slack = new SlackChannel({
+ * const slack = new SlackProvider({
  *   appConfigToken: process.env.SLACK_APP_CONFIG_TOKEN,
  *   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  *   baseUrl: process.env.BASE_URL,
@@ -32,7 +32,7 @@
  * @packageDocumentation
  */
 
-export { SlackChannel } from './channel';
+export { SlackProvider } from './provider';
 export { SlackManifestClient } from './client';
 export { verifySlackRequest, parseSlackFormBody } from './crypto';
 export { buildManifest, DEFAULT_BOT_SCOPES, DEFAULT_BOT_EVENTS } from './manifest';
@@ -55,7 +55,7 @@ export {
 } from './schemas';
 
 export type {
-  SlackChannelConfig,
+  SlackProviderConfig,
   SlackConnectOptions,
   SlackAppManifest,
   SlashCommandConfig,

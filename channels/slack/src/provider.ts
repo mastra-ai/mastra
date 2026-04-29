@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
 import {
-  type MastraChannel,
+  type ChannelProvider,
   type ChannelPlatformInfo,
   type ChannelInstallationInfo,
   type ChannelConnectResult,
@@ -23,7 +23,7 @@ import {
   type SlackConfigTokens,
   type StoredSlashCommand,
 } from './schemas';
-import type { SlackChannelConfig, SlashCommandConfig, SlackConnectOptions } from './types';
+import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions } from './types';
 
 const PLATFORM = 'slack';
 
@@ -57,10 +57,9 @@ function hashConfig(
  *
  * @example
  * ```ts
- * import { SlackChannel } from '@mastra/slack';
+ * import { SlackProvider } from '@mastra/slack';
  *
- * const slack = new SlackChannel({
- *   appConfigToken: process.env.SLACK_APP_CONFIG_TOKEN,
+ * const slack = new SlackProvider({
  *   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  * });
  *
@@ -79,9 +78,9 @@ function hashConfig(
  * }
  * ```
  */
-export class SlackChannel implements MastraChannel {
+export class SlackProvider implements ChannelProvider {
   readonly id = 'slack';
-  readonly #channelConfig: SlackChannelConfig;
+  readonly #channelConfig: SlackProviderConfig;
   #storage!: ChannelsStorage;
   #storageResolved = false;
   readonly #manifestClient: SlackManifestClient;
@@ -96,10 +95,10 @@ export class SlackChannel implements MastraChannel {
   #baseUrl?: string;
   #initialized = false;
 
-  constructor(config: SlackChannelConfig) {
+  constructor(config: SlackProviderConfig) {
     // At minimum we need a refresh token to rotate and get fresh tokens
     if (!config.appConfigRefreshToken) {
-      throw new Error('SlackChannel requires appConfigRefreshToken. Get one at https://api.slack.com/apps');
+      throw new Error('SlackProvider requires appConfigRefreshToken. Get one at https://api.slack.com/apps');
     }
 
     this.#channelConfig = config;
@@ -525,7 +524,7 @@ export class SlackChannel implements MastraChannel {
    */
   async initialize(): Promise<void> {
     if (!this.#mastra) {
-      throw new Error('SlackChannel not attached to Mastra. Call __attach() first.');
+      throw new Error('SlackProvider not attached to Mastra. Call __attach() first.');
     }
 
     // Prevent double initialization
@@ -661,7 +660,7 @@ export class SlackChannel implements MastraChannel {
 
   /**
    * Create AgentChannels for an agent with the Slack adapter.
-   * SlackChannel owns the AgentChannels lifecycle for platform-managed agents.
+   * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
     const agentChannels = new AgentChannels({
@@ -757,7 +756,7 @@ export class SlackChannel implements MastraChannel {
     const baseUrl = this.#getBaseUrl();
     if (!baseUrl) {
       throw new Error(
-        'SlackChannel baseUrl not set. Configure studioHost/studioProtocol/studioPort in Mastra server config, or call setBaseUrl().',
+        'SlackProvider baseUrl not set. Configure studioHost/studioProtocol/studioPort in Mastra server config, or call setBaseUrl().',
       );
     }
 
@@ -1067,7 +1066,7 @@ export class SlackChannel implements MastraChannel {
 
     const baseUrl = this.#getBaseUrl();
     if (!baseUrl) {
-      throw new Error('SlackChannel baseUrl not available during OAuth callback');
+      throw new Error('SlackProvider baseUrl not available during OAuth callback');
     }
 
     try {

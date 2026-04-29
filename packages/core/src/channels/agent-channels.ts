@@ -366,7 +366,7 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
-  /** Platforms whose routes are managed externally (e.g., by SlackChannel). */
+  /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
   private externallyManagedPlatforms: Set<string> = new Set();
 
   constructor(config: ChannelConfig) {
@@ -418,7 +418,7 @@ export class AgentChannels {
   /**
    * Register an adapter dynamically.
    * When `managesRoutes` is true, AgentChannels will NOT create webhook routes for this platform
-   * (the MastraChannel handles routing and calls handleWebhookEvent directly).
+   * (the ChannelProvider handles routing and calls handleWebhookEvent directly).
    * @internal
    */
   __registerAdapter(
@@ -712,7 +712,7 @@ export class AgentChannels {
   /**
    * Returns API routes for receiving webhook events from each adapter.
    * One POST route per adapter at `/api/agents/{agentId}/channels/{platform}/webhook`.
-   * Skips platforms that are externally managed (e.g., by SlackChannel).
+   * Skips platforms that are externally managed (e.g., by SlackProvider).
    */
   getWebhookRoutes(): ApiRoute[] {
     if (!this.agent) return [];
@@ -721,7 +721,7 @@ export class AgentChannels {
     const routes: ApiRoute[] = [];
 
     for (const platform of Object.keys(this.adapters)) {
-      // Skip platforms where routes are managed externally (e.g., SlackChannel)
+      // Skip platforms where routes are managed externally (e.g., SlackProvider)
       if (this.externallyManagedPlatforms.has(platform)) {
         continue;
       }
@@ -772,8 +772,8 @@ export class AgentChannels {
   }
 
   /**
-   * Handle a webhook event from an external source (e.g., SlackChannel).
-   * Use this when a MastraChannel manages its own routes but wants AgentChannels
+   * Handle a webhook event from an external source (e.g., SlackProvider).
+   * Use this when a ChannelProvider manages its own routes but wants AgentChannels
    * to process the actual message handling (threading, agent responses, etc.).
    *
    * @param platform - The platform name (e.g., 'slack')
