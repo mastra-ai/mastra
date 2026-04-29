@@ -593,7 +593,7 @@ export class SlackChannel implements MastraChannel {
 
     // Create/get AgentChannels and register the adapter
     if (agent && this.#mastra) {
-      const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
+      const agentChannels = this.#createAgentChannels(agent, adapter);
       await agentChannels.initialize(this.#mastra);
     }
   }
@@ -661,25 +661,15 @@ export class SlackChannel implements MastraChannel {
   }
 
   /**
-   * Get or create AgentChannels for an agent.
+   * Create AgentChannels for an agent with the Slack adapter.
    * SlackChannel owns the AgentChannels lifecycle for platform-managed agents.
    */
-  #getOrCreateAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
-    let agentChannels = agent.getChannels() as AgentChannels | null;
-
-    if (!agentChannels) {
-      // Create AgentChannels with Slack adapter
-      agentChannels = new AgentChannels({
-        adapters: { slack: adapter },
-        userName: agent.name,
-      });
-      // Inject into the agent
-      agent.setChannels(agentChannels);
-    } else if (!agentChannels.hasAdapter('slack')) {
-      // AgentChannels exists but doesn't have slack adapter
-      agentChannels.__registerAdapter('slack', adapter, { adapter }, { managesRoutes: true });
-    }
-
+  #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
+    const agentChannels = new AgentChannels({
+      adapters: { slack: adapter },
+      userName: agent.name,
+    });
+    agent.setChannels(agentChannels);
     return agentChannels;
   }
 
@@ -1183,7 +1173,7 @@ export class SlackChannel implements MastraChannel {
         signingSecret: installation.signingSecret,
         userName: displayName,
       });
-    const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
+    const agentChannels = this.#createAgentChannels(agent, adapter);
 
     // Ensure initialized
     await agentChannels.initialize(this.#mastra);
