@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-// import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 
 /**
@@ -14,14 +13,8 @@ export const slackDemoAgent = new Agent({
   name: 'Slack Demo Agent',
   instructions: `You are a helpful assistant available in Slack.
 Keep your responses concise and formatted for Slack (use *bold*, _italic_, \`code\`, etc).`,
-  description: 'This is a description.',
-  model: 'openai/gpt-5.4',
-  // workspace: new Workspace({
-  //   sandbox: new LocalSandbox({
-  //     workingDirectory: './workspace',
-  //   }),
-  //   filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  // }),
+  description: 'A demo agent that can be connected to Slack.',
+  model: 'openai/gpt-4.1',
   memory: new Memory({
     options: {
       observationalMemory: true,

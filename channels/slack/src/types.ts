@@ -35,8 +35,6 @@ export interface SlackChannelConfig {
    */
   baseUrl?: string;
 
-
-
   /**
    * Custom storage for installations.
    * Defaults to using Mastra's ChannelsStorage from the global storage.

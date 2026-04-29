@@ -91,11 +91,6 @@ export class SlackManifestClient {
     // Ensure tokens are fresh
     await this.rotateToken();
 
-    // Debug: log manifest for troubleshooting
-    if (process.env.DEBUG_SLACK_MANIFEST) {
-
-    }
-
     const response = await fetch(`${SLACK_API_BASE}/apps.manifest.create`, {
       method: 'POST',
       headers: {
