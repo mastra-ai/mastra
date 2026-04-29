@@ -1,6 +1,4 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   DirectoryNotEmptyError,
   DirectoryNotFoundError,
@@ -9,8 +7,10 @@ import {
   IsDirectoryError,
   StaleFileError,
   WorkspaceReadOnlyError,
-} from '../errors';
-import { GoogleDriveFilesystem } from './google-drive-filesystem';
+} from '@mastra/core/workspace';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { GoogleDriveFilesystem } from './index';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 

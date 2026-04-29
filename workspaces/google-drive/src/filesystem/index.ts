@@ -1,31 +1,30 @@
 import { createSign } from 'node:crypto';
-import type { RequestContext } from '../../request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import {
   DirectoryNotEmptyError,
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
   IsDirectoryError,
+  MastraFilesystem,
   NotDirectoryError,
   StaleFileError,
   WorkspaceReadOnlyError,
-} from '../errors';
-import type { ProviderStatus } from '../lifecycle';
-import type { InstructionsOption } from '../types';
-import { resolveInstructions } from '../utils';
+} from '@mastra/core/workspace';
 import type {
   CopyOptions,
   FileContent,
   FileEntry,
   FileStat,
   FilesystemInfo,
+  InstructionsOption,
   ListOptions,
+  MastraFilesystemOptions,
+  ProviderStatus,
   ReadOptions,
   RemoveOptions,
   WriteOptions,
-} from './filesystem';
-import { MastraFilesystem } from './mastra-filesystem';
-import type { MastraFilesystemOptions } from './mastra-filesystem';
+} from '@mastra/core/workspace';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
@@ -35,6 +34,24 @@ const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 // the user explicitly opened via a picker, so a folder shared with the service account would
 // be invisible and return 404 on access.
 const DEFAULT_SCOPES = ['https://www.googleapis.com/auth/drive'];
+
+/**
+ * Resolve an instructions override against default instructions.
+ *
+ * - `undefined` → return default
+ * - `string` → return the string as-is
+ * - `function` → call with { defaultInstructions, requestContext }
+ */
+function resolveInstructions(
+  override: InstructionsOption | undefined,
+  getDefault: () => string,
+  requestContext?: RequestContext,
+): string {
+  if (typeof override === 'string') return override;
+  const defaultInstructions = getDefault();
+  if (override === undefined) return defaultInstructions;
+  return override({ defaultInstructions, requestContext });
+}
 
 export interface GoogleDriveServiceAccount {
   clientEmail: string;
