@@ -40,7 +40,7 @@ export default function AgentBuilderAgentsPage() {
   const agents = data?.agents ?? [];
 
   const body = (() => {
-    if (isLoading) {
+    if (isCurrentUserLoading || isLoading || (!data && !error)) {
       return <AgentBuilderListSkeleton />;
     }
 

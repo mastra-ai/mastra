@@ -130,6 +130,21 @@ describe('AgentBuilderAgentsPage', () => {
     expect(requestCount).toBe(0);
   });
 
+  it('renders the skeleton (not the empty state) while the current user is loading', async () => {
+    isCurrentUserLoading = true;
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents`, () => {
+        return HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false });
+      }),
+    );
+
+    renderPage();
+
+    await act(() => new Promise(resolve => setTimeout(resolve, 0)));
+    expect(screen.queryByText('No agents yet')).toBeNull();
+    expect(screen.queryByText('Create an agent')).toBeNull();
+  });
+
   it('omits authorId when no current user is available', async () => {
     currentUser = undefined;
     let capturedSearch: URLSearchParams | null = null;
