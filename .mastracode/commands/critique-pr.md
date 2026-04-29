@@ -5,42 +5,6 @@ The current branch should be checked out in the same branch as the PR but you wi
 
 RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments,checksStatus
 
-## GitHub API Notes
-
-GitHub has separate rate-limit buckets for GraphQL and REST. Some `gh pr` commands use GraphQL, so they can fail with a GraphQL rate-limit error even when REST API calls still have quota.
-
-When posting a PR-level comment or review note and a GraphQL-backed command fails, use the REST issues comments API instead:
-
-```bash
-# Write the intended comment body to a file first.
-cat > /tmp/pr-comment.md <<'EOF'
-Comment body here.
-EOF
-
-# Post a PR-level comment via REST. PRs are issues for this endpoint.
-body=$(jq -Rs . /tmp/pr-comment.md)
-gh api repos/:owner/:repo/issues/<PR_NUMBER>/comments \
-  -X POST \
-  -H 'Content-Type: application/json' \
-  --input - <<EOF
-{"body":$body}
-EOF
-```
-
-If the wrong body is posted, patch the comment with REST:
-
-```bash
-body=$(jq -Rs . /tmp/pr-comment.md)
-gh api repos/:owner/:repo/issues/comments/<COMMENT_ID> \
-  -X PATCH \
-  -H 'Content-Type: application/json' \
-  --input - <<EOF
-{"body":$body}
-EOF
-```
-
-Use `gh api rate_limit --jq '.rate'` to check REST quota.
-
 ## Review Process
 
 ### Stage 1: Understand the Context
@@ -120,3 +84,39 @@ How these changes fit into and affect the overall system architecture.
 ```
 
 After you've finished and written the .md file, give the user a TLDR containing the most important points. After the TLDR explain concisely your main concerns, and just note that you don't have any concerns if you don't.
+
+## Posting a PR Review Comment (Optional)
+
+Offer to post a PR review comment if the user wants one. First align on the contents of the review comment, then follow this guidance for posting:
+
+GitHub has separate rate-limit buckets for GraphQL and REST. Some `gh pr` commands use GraphQL, so they can fail with a GraphQL rate-limit error even when REST API calls still have quota. When that happens, use the REST issues comments API instead:
+
+```bash
+# Write the intended comment body to a file first.
+cat > /tmp/pr-comment.md <<'EOF'
+Comment body here.
+EOF
+
+# Post a PR-level comment via REST. PRs are issues for this endpoint.
+body=$(jq -Rs . /tmp/pr-comment.md)
+gh api repos/:owner/:repo/issues/<PR_NUMBER>/comments \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --input - <<EOF
+{"body":$body}
+EOF
+```
+
+If the wrong body is posted, patch the comment with REST:
+
+```bash
+body=$(jq -Rs . /tmp/pr-comment.md)
+gh api repos/:owner/:repo/issues/comments/<COMMENT_ID> \
+  -X PATCH \
+  -H 'Content-Type: application/json' \
+  --input - <<EOF
+{"body":$body}
+EOF
+```
+
+Use `gh api rate_limit --jq '.rate'` to check REST quota.
