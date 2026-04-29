@@ -22,7 +22,7 @@ Here's a quick start to run the docs locally
 
 ### Remark
 
-To lint markdown files according to remark rules (e.g. enforcing consistent heading levels, list markers, etc.), you can use `remark`:
+To lint Markdown files according to remark rules (e.g. enforcing consistent heading levels, list markers, etc.), you can use `remark`:
 
 ```bash
 pnpm run lint:remark

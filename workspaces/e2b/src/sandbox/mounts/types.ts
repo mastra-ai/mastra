@@ -4,15 +4,16 @@
 
 import type { Sandbox } from 'e2b';
 
-export const LOG_PREFIX = '[@mastra/e2b]';
-
+import type { E2BAzureBlobMountConfig } from './azure';
 import type { E2BGCSMountConfig } from './gcs';
 import type { E2BS3MountConfig } from './s3';
+
+export const LOG_PREFIX = '[@mastra/e2b]';
 
 /**
  * Union of mount configs supported by E2B sandbox.
  */
-export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig;
+export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig | E2BAzureBlobMountConfig;
 
 /**
  * Context for mount operations.

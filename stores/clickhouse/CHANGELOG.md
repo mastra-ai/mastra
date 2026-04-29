@@ -1,5 +1,27 @@
 # @mastra/clickhouse
 
+## 1.5.2
+
+### Patch Changes
+
+- Changed ClickHouse background task deletes to use lightweight `DELETE FROM` instead of `ALTER TABLE ... DELETE` mutations with `mutations_sync`. This makes deleted rows immediately invisible to subsequent reads without forcing part rewrites for each delete. ([#15902](https://github.com/mastra-ai/mastra/pull/15902))
+
+  Improved bulk background task deletion to push filtering into ClickHouse instead of fetching all matching task IDs into Node.js memory first. This avoids unnecessary network transfer and out-of-memory risk when deleting large result sets. As a safety guard, calling `deleteTasks` with no filters is now a no-op — use `dangerouslyClearAll` to wipe the table.
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+
+## 1.5.2-alpha.0
+
+### Patch Changes
+
+- Changed ClickHouse background task deletes to use lightweight `DELETE FROM` instead of `ALTER TABLE ... DELETE` mutations with `mutations_sync`. This makes deleted rows immediately invisible to subsequent reads without forcing part rewrites for each delete. ([#15902](https://github.com/mastra-ai/mastra/pull/15902))
+
+  Improved bulk background task deletion to push filtering into ClickHouse instead of fetching all matching task IDs into Node.js memory first. This avoids unnecessary network transfer and out-of-memory risk when deleting large result sets. As a safety guard, calling `deleteTasks` with no filters is now a no-op — use `dangerouslyClearAll` to wipe the table.
+
+- Updated dependencies [[`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1-alpha.1
+
 ## 1.5.1
 
 ### Patch Changes

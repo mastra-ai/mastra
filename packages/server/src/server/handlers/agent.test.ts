@@ -423,6 +423,87 @@ describe('Agent Handlers', () => {
         modelList: undefined,
       });
     });
+
+    it("should still list other agents when one agent's dynamic instructions throws", async () => {
+      const healthyAgent = makeMockAgent({
+        name: 'agent-b',
+        description: 'Healthy agent',
+        instructions: 'healthy instructions',
+      });
+
+      // Simulate the MRE: a dynamic instructions callback that throws when the
+      // active request context doesn't satisfy the agent's expected shape.
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: () => {
+          throw new Error("Cannot destructure property 'name' of 'requestContext.get(...)' as it is undefined.");
+        },
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({
+        agents: {
+          'agent-a': throwingAgent,
+          'agent-b': healthyAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+        requestContext,
+      });
+
+      // The handler must resolve and include both agents — the throwing agent
+      // should be returned with `instructions: undefined`.
+      expect(result['agent-a']).toBeDefined();
+      expect(result['agent-a'].name).toBe('agent-a');
+      expect(result['agent-a'].instructions).toBeUndefined();
+
+      expect(result['agent-b']).toBeDefined();
+      expect(result['agent-b'].name).toBe('agent-b');
+      expect(result['agent-b'].instructions).toBe('healthy instructions');
+    });
+
+    it('should still list other agents when an agent throws from a non-instructions dynamic getter', async () => {
+      const healthyAgent = makeMockAgent({
+        name: 'agent-b',
+        description: 'Healthy agent',
+        instructions: 'healthy instructions',
+      });
+
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: 'agent-a instructions',
+      });
+      vi.spyOn(throwingAgent, 'getLLM').mockImplementation(async () => {
+        throw new Error('boom from getLLM');
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({
+        agents: {
+          'agent-a': throwingAgent,
+          'agent-b': healthyAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+        requestContext,
+      });
+
+      // The throwing agent is still listed with safe defaults; the healthy
+      // agent is unaffected.
+      expect(result['agent-a']).toBeDefined();
+      expect(result['agent-a'].name).toBe('agent-a');
+      expect(result['agent-a'].instructions).toBe('agent-a instructions');
+      expect(result['agent-a'].provider).toBeUndefined();
+      expect(result['agent-a'].modelId).toBeUndefined();
+
+      expect(result['agent-b']).toBeDefined();
+      expect(result['agent-b'].provider).toBe('openai.chat');
+      expect(result['agent-b'].modelId).toBe('gpt-4o');
+    });
   });
 
   describe('getAgentByIdHandler', () => {

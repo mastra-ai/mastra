@@ -223,7 +223,7 @@ export abstract class Bundler extends MastraBundler {
       },
       { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
     );
-    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
+    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
 
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 

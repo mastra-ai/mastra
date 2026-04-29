@@ -6,12 +6,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
-import {
-  MastraMemory,
-  extractWorkingMemoryContent,
-  filterSystemReminderMessages,
-  removeWorkingMemoryTags,
-} from '@mastra/core/memory';
+import { MastraMemory } from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -91,6 +86,105 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 };
 
+/*
+ * Compatibility note: the working-memory and system-reminder helpers below are
+ * intentionally copied from @mastra/core instead of imported from
+ * @mastra/core/memory. @mastra/memory's peer range permits older core versions
+ * that do not export these newer helper names, and importing them can crash a
+ * published memory build during ESM instantiation before user code runs.
+ *
+ * Until v2 can tighten the peer contract, keep these copies manually in sync
+ * with packages/core/src/memory/working-memory-utils.ts and
+ * packages/core/src/memory/system-reminders.ts. Those source files also carry
+ * compatibility notes that point back here.
+ */
+const WORKING_MEMORY_START_TAG = '<working_memory>';
+const WORKING_MEMORY_END_TAG = '</working_memory>';
+const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function extractWorkingMemoryTags(text: string): string[] | null {
+  const results: string[] = [];
+  let pos = 0;
+
+  while (pos < text.length) {
+    const start = text.indexOf(WORKING_MEMORY_START_TAG, pos);
+    if (start === -1) break;
+
+    const end = text.indexOf(WORKING_MEMORY_END_TAG, start + WORKING_MEMORY_START_TAG.length);
+    if (end === -1) break;
+
+    results.push(text.substring(start, end + WORKING_MEMORY_END_TAG.length));
+    pos = end + WORKING_MEMORY_END_TAG.length;
+  }
+
+  return results.length > 0 ? results : null;
+}
+
+export function removeWorkingMemoryTags(text: string): string {
+  let result = '';
+  let pos = 0;
+
+  while (pos < text.length) {
+    const start = text.indexOf(WORKING_MEMORY_START_TAG, pos);
+    if (start === -1) {
+      result += text.substring(pos);
+      break;
+    }
+
+    result += text.substring(pos, start);
+
+    const end = text.indexOf(WORKING_MEMORY_END_TAG, start + WORKING_MEMORY_START_TAG.length);
+    if (end === -1) {
+      result += text.substring(start);
+      break;
+    }
+
+    pos = end + WORKING_MEMORY_END_TAG.length;
+  }
+
+  return result;
+}
+
+export function extractWorkingMemoryContent(text: string): string | null {
+  const start = text.indexOf(WORKING_MEMORY_START_TAG);
+  if (start === -1) return null;
+
+  const contentStart = start + WORKING_MEMORY_START_TAG.length;
+  const end = text.indexOf(WORKING_MEMORY_END_TAG, contentStart);
+  if (end === -1) return null;
+
+  return text.substring(contentStart, end);
+}
+
+function isSystemReminderMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'user' || !isRecord(message.content)) {
+    return false;
+  }
+
+  const metadata = message.content.metadata;
+  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
+    return true;
+  }
+
+  const firstTextPart = message.content.parts.find(part => part.type === 'text');
+  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
+}
+
+function filterSystemReminderMessages(
+  messages: MastraDBMessage[],
+  includeSystemReminders?: boolean,
+): MastraDBMessage[] {
+  if (includeSystemReminders) {
+    return messages;
+  }
+
+  return messages.filter(message => !isSystemReminderMessage(message));
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -102,7 +196,6 @@ function normalizeObservationalMemoryConfig(
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
-export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
