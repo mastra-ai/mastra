@@ -228,7 +228,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
         // Check if we should continue
         const shouldContinue = state.lastStepResult?.isContinued === true;
-        const underMaxSteps = state.iterationCount < maxSteps;
+        const runMaxSteps = state.options?.maxSteps ?? maxSteps;
+        const underMaxSteps = state.iterationCount < runMaxSteps;
 
         return shouldContinue && underMaxSteps;
       })
