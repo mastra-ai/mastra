@@ -25,8 +25,14 @@ vi.mock('@/domains/agent-builder/hooks/use-save-agent', () => ({
   useSaveAgent: () => ({ save: saveMock, isSaving: false }),
 }));
 
+const builderFeatures = { tools: false, memory: false, workflows: false, agents: false, skills: false, avatarUpload: false };
+
 vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentFeatures: () => ({ tools: false, memory: false, workflows: false, agents: false, skills: false }),
+  useBuilderAgentFeatures: () => builderFeatures,
+}));
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
+  useBuilderAgentFeatures: () => builderFeatures,
 }));
 
 vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
@@ -41,8 +47,9 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter
   useStarterUserMessage: () => undefined,
 }));
 
+const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({ data: storedAgent, isLoading: false }));
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
-  useStoredAgent: () => ({ data: storedAgent, isLoading: false }),
+  useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
 }));
 
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
@@ -79,8 +86,8 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-conte
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
-vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
-  AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,
+vi.mock('@/domains/builder', () => ({
+  useBuilderModelPolicy: () => ({ active: false }),
 }));
 
 vi.mock('@mastra/react', async () => {
@@ -109,6 +116,7 @@ describe('AgentBuilderAgentEdit', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     saveMock.mockClear();
+    useStoredAgentMock.mockClear();
     storedAgent = null;
     currentUser = { id: 'current-user' };
     isCurrentUserLoading = false;
@@ -170,6 +178,28 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
 
+    it('reads the latest draft so freshly saved edits appear', () => {
+      renderAt();
+      expect(useStoredAgentMock).toHaveBeenCalledWith(
+        'agent-123',
+        expect.objectContaining({ status: 'draft', enabled: true }),
+      );
+    });
+
+    it('saves edits made in the configure panel', async () => {
+      const { getByTestId } = renderAt();
+      fireEvent.change(getByTestId('agent-configure-name'), { target: { value: 'Updated name' } });
+      fireEvent.change(getByTestId('agent-configure-description'), { target: { value: 'Updated description' } });
+
+      fireEvent.click(getByTestId('agent-builder-edit-save'));
+
+      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
+      expect(saveMock).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Updated name',
+        description: 'Updated description',
+      }));
+    });
+
     it('waits for the current user before redirecting an owned agent', () => {
       storedAgent = {
         id: 'agent-123',
@@ -185,7 +215,7 @@ describe('AgentBuilderAgentEdit', () => {
 
       const { queryByTestId } = renderAt();
 
-      expect(queryByTestId('stub-configure-panel')).toBeNull();
+      expect(queryByTestId('agent-configure-name')).toBeNull();
       expect(navigateMock).not.toHaveBeenCalled();
     });
 
@@ -212,7 +242,7 @@ describe('AgentBuilderAgentEdit', () => {
     it('navigates to the agents list in create mode', () => {
       const { getByLabelText } = renderAt();
       fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents');
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
 
     it('navigates to the agents list in edit mode', () => {
@@ -226,7 +256,7 @@ describe('AgentBuilderAgentEdit', () => {
       };
       const { getByLabelText } = renderAt();
       fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents');
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
   });
 });

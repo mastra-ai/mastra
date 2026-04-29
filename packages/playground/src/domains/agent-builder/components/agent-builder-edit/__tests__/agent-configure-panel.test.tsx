@@ -22,9 +22,10 @@ const capturedInstructionsProps: Array<{ onChange: (next: string) => void; promp
 vi.mock('../details/instructions-detail', () => ({
   InstructionsDetail: (props: { prompt: string; onChange: (next: string) => void; editable: boolean }) => {
     capturedInstructionsProps.push(props);
-    return <div data-testid="instructions-detail-stub" />;
+    return <textarea data-testid="instructions-detail-textarea" readOnly={!props.editable} value={props.prompt} />;
   },
 }));
+
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
 
@@ -318,5 +319,75 @@ describe('AgentConfigurePanel disabled propagation', () => {
 
     expect(nameInput.disabled).toBe(false);
     expect(instructionsRow.disabled).toBe(false);
+  });
+
+  it('uses the same controls in read-only mode but disables mutations', () => {
+    capturedInstructionsProps.length = 0;
+    const onActiveDetailChange = vi.fn();
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel
+          editable={false}
+          activeDetail="instructions"
+          onActiveDetailChange={onActiveDetailChange}
+          availableAgentTools={[{ id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' }]}
+          agent={{
+            id: 'agent-1',
+            name: 'Published agent',
+            description: 'Published description',
+            systemPrompt: 'Published instructions',
+            visibility: 'public',
+          }}
+        />
+      </FormWrapper>,
+    );
+
+    const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
+    const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
+
+    expect(nameInput.value).toBe('Published agent');
+    expect(descInput.value).toBe('Published description');
+    expect(nameInput.disabled).toBe(true);
+    expect(descInput.disabled).toBe(true);
+    expect(instructionsRow.disabled).toBe(false);
+    expect(screen.getByTestId('instructions-detail-textarea')).toHaveProperty('readOnly', true);
+
+    fireEvent.click(instructionsRow);
+    expect(onActiveDetailChange).toHaveBeenCalledWith(null);
+
+    const toolsRow = screen.getByTestId('agent-preview-tools-button') as HTMLButtonElement;
+    expect(toolsRow.disabled).toBe(false);
+    fireEvent.click(toolsRow);
+    expect(onActiveDetailChange).toHaveBeenCalledWith('tools');
+
+    const latest = capturedInstructionsProps[capturedInstructionsProps.length - 1];
+    expect(latest.editable).toBe(false);
+    expect(latest.prompt).toBe('Published instructions');
+
+    act(() => {
+      latest.onChange('Blocked read-only update');
+    });
+
+    expect(formMethodsRef!.getValues('instructions')).toBe('Draft instructions');
+
+    cleanup();
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel
+          editable={false}
+          activeDetail="tools"
+          onActiveDetailChange={() => {}}
+          availableAgentTools={[{ id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' }]}
+          agent={{
+            id: 'agent-1',
+            name: 'Published agent',
+            systemPrompt: 'Published instructions',
+          }}
+        />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByRole('checkbox')).toHaveProperty('disabled', true);
   });
 });

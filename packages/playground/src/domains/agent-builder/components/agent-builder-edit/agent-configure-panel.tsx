@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Avatar, cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
+import { cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
 import { ChevronRight, Cpu, FileText, Plus, Sparkles, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -12,7 +12,6 @@ import { ModelDetail } from './details/model-detail';
 import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
 import { useBuilderModelPolicy } from '@/domains/builder';
-import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 
 export interface AgentConfig {
   id: string;
@@ -35,63 +34,57 @@ interface BaseProps {
   disabled?: boolean;
 }
 
-type AgentConfigurePanelProps =
-  | (BaseProps & { editable?: true; agent?: AgentConfig })
-  | (BaseProps & { editable: false; agent: AgentConfig });
+type AgentConfigurePanelProps = BaseProps & {
+  editable?: boolean;
+  agent?: AgentConfig;
+};
 
-export function AgentConfigurePanel(props: AgentConfigurePanelProps) {
-  const {
-    availableAgentTools = [],
-    availableSkills = [],
-    isLoading = false,
-    activeDetail = null,
-    onActiveDetailChange = () => {},
-    disabled = false,
-  } = props;
-
+export function AgentConfigurePanel({
+  availableAgentTools = [],
+  availableSkills = [],
+  isLoading = false,
+  activeDetail = null,
+  onActiveDetailChange = () => {},
+  disabled = false,
+  editable = true,
+  agent,
+}: AgentConfigurePanelProps) {
   if (isLoading) {
     return <AgentConfigurePanelSkeleton />;
   }
 
-  const editable = props.editable !== false;
-
-  return editable ? (
-    <EditableConfigurePanel
+  return (
+    <ConfigurePanelContent
+      agent={agent}
       availableAgentTools={availableAgentTools}
       availableSkills={availableSkills}
       activeDetail={activeDetail}
       onActiveDetailChange={onActiveDetailChange}
+      editable={editable}
       disabled={disabled}
-    />
-  ) : (
-    <ReadOnlyConfigurePanel
-      agent={props.agent!}
-      availableAgentTools={availableAgentTools}
-      availableSkills={availableSkills}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
     />
   );
 }
 
 interface ConfigurePanelContentProps {
+  agent?: AgentConfig;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
   activeDetail: ActiveDetail;
   onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-interface EditableConfigurePanelProps extends ConfigurePanelContentProps {
+  editable: boolean;
   disabled?: boolean;
 }
 
-function EditableConfigurePanel({
+function ConfigurePanelContent({
+  agent,
   availableAgentTools,
   availableSkills,
   activeDetail,
   onActiveDetailChange,
+  editable,
   disabled = false,
-}: EditableConfigurePanelProps) {
+}: ConfigurePanelContentProps) {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,9 +96,21 @@ function EditableConfigurePanel({
   const draftAvatarUrl = formMethods.watch('avatarUrl');
   const draftModel = useWatch({ control: formMethods.control, name: 'model' });
 
-  const setDraftName = (value: string) => formMethods.setValue('name', value);
-  const setDraftDescription = (value: string) => formMethods.setValue('description', value);
-  const setDraftInstructions = (value: string) => formMethods.setValue('instructions', value);
+  const mutationsDisabled = disabled || !editable;
+  const panelName = editable ? draftName : (agent?.name ?? draftName);
+  const panelDescription = editable ? draftDescription : (agent?.description ?? draftDescription);
+  const panelInstructions = editable ? draftInstructions : (agent?.systemPrompt ?? draftInstructions);
+  const panelAvatarUrl = editable ? draftAvatarUrl : (agent?.avatarUrl ?? draftAvatarUrl);
+
+  const setDraftName = (value: string) => {
+    if (!mutationsDisabled) formMethods.setValue('name', value, { shouldDirty: true });
+  };
+  const setDraftDescription = (value: string) => {
+    if (!mutationsDisabled) formMethods.setValue('description', value, { shouldDirty: true });
+  };
+  const setDraftInstructions = (value: string) => {
+    if (!mutationsDisabled) formMethods.setValue('instructions', value, { shouldDirty: true });
+  };
 
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
   const totalToolsCount = availableAgentTools.length;
@@ -122,7 +127,7 @@ function EditableConfigurePanel({
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (!file || mutationsDisabled) return;
 
     try {
       const { dataUrl } = await downscaleImageToDataUrl(file);
@@ -132,7 +137,7 @@ function EditableConfigurePanel({
     }
   };
 
-  const instructionsDescription = formatInstructionsPreview(draftInstructions);
+  const instructionsDescription = formatInstructionsPreview(panelInstructions);
   const modelRowVisible = features.model || policy.active;
   const modelDescription = formatModelDescription(draftModel, policy);
 
@@ -146,70 +151,70 @@ function EditableConfigurePanel({
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
           <div className="flex flex-col gap-3 px-6">
-            <div className="flex items-center gap-4">
-              {features.avatarUpload ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={disabled}
-                    className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
-                    aria-label="Upload avatar"
-                    data-testid="agent-configure-avatar-trigger"
-                  >
-                    {draftAvatarUrl ? (
-                      <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                        {(draftName[0] ?? 'A').toUpperCase()}
-                      </span>
-                    )}
-                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Plus className="h-5 w-5 text-neutral5" />
-                    </span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarFile}
-                    className="hidden"
-                    data-testid="agent-configure-avatar-input"
-                  />
-                </>
-              ) : (
-                <div
-                  className="h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 flex items-center justify-center"
-                  data-testid="agent-configure-avatar-display"
+            {features.avatarUpload ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={mutationsDisabled}
+                  className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Upload avatar"
+                  data-testid="agent-configure-avatar-trigger"
                 >
-                  {draftAvatarUrl ? (
-                    <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
+                  {panelAvatarUrl ? (
+                    <img src={panelAvatarUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                      {(draftName[0] ?? 'A').toUpperCase()}
+                      {(panelName[0] ?? 'A').toUpperCase()}
                     </span>
                   )}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <TextFieldBlock
-                  name="agent-name"
-                  label="Name"
-                  value={draftName}
-                  placeholder="Untitled agent"
-                  onChange={e => setDraftName(e.target.value)}
-                  disabled={disabled}
-                  testId="agent-configure-name"
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Plus className="h-5 w-5 text-neutral5" />
+                  </span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFile}
+                  className="hidden"
+                  data-testid="agent-configure-avatar-input"
                 />
+              </>
+            ) : (
+              <div
+                className="h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 flex items-center justify-center"
+                data-testid="agent-configure-avatar-display"
+              >
+                {panelAvatarUrl ? (
+                  <img src={panelAvatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
+                    {(panelName[0] ?? 'A').toUpperCase()}
+                  </span>
+                )}
               </div>
-            </div>
+            )}
+
+            <TextFieldBlock
+              name="agent-name"
+              label="Name"
+              labelIsHidden
+              value={panelName}
+              placeholder="Untitled agent"
+              onChange={e => setDraftName(e.target.value)}
+              disabled={mutationsDisabled}
+              testId="agent-configure-name"
+            />
+
             <TextFieldBlock
               name="agent-description"
               label="Description"
-              value={draftDescription}
+              labelIsHidden
+              value={panelDescription}
               placeholder="What is this agent for?"
               onChange={e => setDraftDescription(e.target.value)}
-              disabled={disabled}
+              disabled={mutationsDisabled}
               testId="agent-configure-description"
             />
           </div>
@@ -234,95 +239,9 @@ function EditableConfigurePanel({
         activeDetail={activeDetail}
         features={features}
         modelRowVisible={modelRowVisible}
-        editable={!disabled}
-        instructionsPrompt={draftInstructions}
+        editable={!mutationsDisabled}
+        instructionsPrompt={panelInstructions}
         onInstructionsChange={setDraftInstructions}
-        onClose={closeDetail}
-        availableAgentTools={availableAgentTools}
-        availableSkills={availableSkills}
-      />
-    </div>
-  );
-}
-
-interface ReadOnlyConfigurePanelProps extends ConfigurePanelContentProps {
-  agent: AgentConfig;
-}
-
-function ReadOnlyConfigurePanel({
-  agent,
-  availableAgentTools,
-  availableSkills,
-  activeDetail,
-  onActiveDetailChange,
-}: ReadOnlyConfigurePanelProps) {
-  const features = useBuilderAgentFeatures();
-  const policy = useBuilderModelPolicy();
-  const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const draftModel = useWatch({ control: formMethods.control, name: 'model' });
-
-  const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
-  const totalToolsCount = availableAgentTools.length;
-
-  const selectedSkills = useWatch({ control: formMethods.control, name: 'skills' }) ?? {};
-  const activeSkillsCount = availableSkills.filter(skill => selectedSkills[skill.id]).length;
-  const totalSkillsCount = availableSkills.length;
-
-  const toggleDetail = (next: ActiveDetail) => {
-    onActiveDetailChange(activeDetail === next ? null : next);
-  };
-  const closeDetail = () => onActiveDetailChange(null);
-
-  const instructionsDescription = formatInstructionsPreview(agent.systemPrompt);
-  const modelRowVisible = features.model || policy.active;
-  const modelDescription = formatModelDescription(draftModel, policy);
-
-  return (
-    <div
-      className={cn(
-        'grid h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden agent-builder-detail-grid',
-        activeDetail ? 'grid-cols-[320px_calc(100%-320px)]' : 'grid-cols-[320px_0px]',
-      )}
-    >
-      <div className="flex h-full min-w-0 flex-col">
-        <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-          <div className="flex flex-col gap-1 px-6">
-            <div className="flex items-center gap-3">
-              <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
-              <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
-                {agent.name}
-              </Txt>
-            </div>
-            {agent.description && (
-              <Txt variant="ui-sm" className="text-neutral3" data-testid="agent-configure-description-view">
-                {agent.description}
-              </Txt>
-            )}
-            <VisibilityBadge visibility={agent.visibility} authorId={agent.authorId} />
-          </div>
-
-          <ConfigRows
-            features={features}
-            instructionsDescription={instructionsDescription}
-            modelRowVisible={modelRowVisible}
-            modelDescription={modelDescription}
-            activeToolsCount={activeToolsCount}
-            totalToolsCount={totalToolsCount}
-            activeSkillsCount={activeSkillsCount}
-            totalSkillsCount={totalSkillsCount}
-            activeDetail={activeDetail}
-            toggleDetail={toggleDetail}
-          />
-        </div>
-      </div>
-
-      <DetailPane
-        activeDetail={activeDetail}
-        features={features}
-        modelRowVisible={modelRowVisible}
-        editable={false}
-        instructionsPrompt={agent.systemPrompt}
-        onInstructionsChange={() => {}}
         onClose={closeDetail}
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}

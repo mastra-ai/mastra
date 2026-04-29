@@ -32,7 +32,7 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
   const features = useBuilderAgentFeatures();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });

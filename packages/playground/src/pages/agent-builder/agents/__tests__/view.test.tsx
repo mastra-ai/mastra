@@ -40,11 +40,12 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
 }));
 
+const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({
+  data: storedAgent,
+  isLoading: false,
+}));
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
-  useStoredAgent: () => ({
-    data: storedAgent,
-    isLoading: false,
-  }),
+  useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
 }));
 
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
@@ -96,6 +97,7 @@ const renderAt = (path = '/agent-builder/agents/agent-123/view') =>
 describe('AgentBuilderAgentView', () => {
   beforeEach(() => {
     navigateMock.mockReset();
+    useStoredAgentMock.mockClear();
     storedAgent = {
       id: 'agent-123',
       name: 'My Agent',
@@ -128,5 +130,13 @@ describe('AgentBuilderAgentView', () => {
     const { getByTestId } = renderAt();
     fireEvent.click(getByTestId('agent-builder-view-edit'));
     expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/edit', { viewTransition: true });
+  });
+
+  it('reads the latest draft so freshly saved edits appear', () => {
+    renderAt();
+    expect(useStoredAgentMock).toHaveBeenCalledWith(
+      'agent-123',
+      expect.objectContaining({ status: 'draft' }),
+    );
   });
 });

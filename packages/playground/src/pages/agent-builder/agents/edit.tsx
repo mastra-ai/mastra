@@ -38,7 +38,10 @@ export default function AgentBuilderAgentEdit() {
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, {
+    status: 'draft',
+    enabled: !fromStarter,
+  });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
