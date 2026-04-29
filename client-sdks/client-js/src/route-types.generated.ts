@@ -6967,10 +6967,12 @@ export type GetAuthCapabilities_Response =
               provider: string;
               text: string;
               icon?: string | undefined;
+              description?: string | undefined;
               url: string;
             }
           | undefined;
         signUpEnabled?: boolean | undefined;
+        description?: string | undefined;
       } | null;
       user: {
         id: string;
@@ -6999,10 +7001,12 @@ export type GetAuthCapabilities_Response =
               provider: string;
               text: string;
               icon?: string | undefined;
+              description?: string | undefined;
               url: string;
             }
           | undefined;
         signUpEnabled?: boolean | undefined;
+        description?: string | undefined;
       } | null;
     };
 
