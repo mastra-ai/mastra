@@ -264,7 +264,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
-      args.abort(`PII detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`PII detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
     }
   }
 
@@ -730,7 +730,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
-      return abort(`PII detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`PII detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
     }
   }
 

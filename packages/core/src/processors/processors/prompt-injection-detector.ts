@@ -200,7 +200,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
-      args.abort(`Prompt injection detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Prompt injection detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
     }
   }
 
