@@ -514,6 +514,63 @@ describe('MastraModelOutput', () => {
       expect(finishPayload?.totalUsage?.outputTokens).toBe(50);
     });
 
+    it('should sum cacheCreationInputTokens across multi-step Anthropic runs', async () => {
+      // Regression for PR #14674: per-step cacheWrite must be summed, not overwritten.
+      const runId = 'test-run';
+      const stepUsages = [
+        {
+          inputTokens: 4557,
+          outputTokens: 113,
+          totalTokens: 4670,
+          cachedInputTokens: 3584,
+          cacheCreationInputTokens: 967,
+        },
+        {
+          inputTokens: 4848,
+          outputTokens: 117,
+          totalTokens: 4965,
+          cachedInputTokens: 4551,
+          cacheCreationInputTokens: 296,
+        },
+        {
+          inputTokens: 8557,
+          outputTokens: 1270,
+          totalTokens: 9827,
+          cachedInputTokens: 4551,
+          cacheCreationInputTokens: 4005,
+        },
+      ];
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, stepUsages[0]),
+        createStepFinishChunk(runId, undefined, stepUsages[1]),
+        createStepFinishChunk(runId, undefined, stepUsages[2]),
+        createFinishChunk(runId, undefined, stepUsages[2]),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBe(17962);
+      expect(finishPayload?.totalUsage?.outputTokens).toBe(1500);
+      expect(finishPayload?.totalUsage?.cachedInputTokens).toBe(12686);
+      expect(finishPayload?.totalUsage?.cacheCreationInputTokens).toBe(5268);
+    });
+
     it('should omit raw when upstream usage has no raw field', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });
