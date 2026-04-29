@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Add `processInputStep` to `ToolCallFilter` so it filters tool calls at every step of the agentic loop, not just on initial input. Previously the filter only ran `processInput` (once before the loop), so tool call results from earlier steps accumulated in context on subsequent LLM calls.
+Add `filterAfterToolSteps` to `ToolCallFilter` so tool calls can be filtered during agentic loops after they are no longer recent. By default, `ToolCallFilter` keeps its previous behavior and only filters the initial input.
