@@ -379,8 +379,8 @@ export class SlackChannel implements MastraChannel {
         teamName: installation.teamName,
         botToken: installation.botToken,
         botUserId: installation.botUserId,
-        nameOverride: installation.nameOverride,
-        descriptionOverride: installation.descriptionOverride,
+        name: installation.name,
+        description: installation.description,
         slashCommands: installation.slashCommands,
       },
       createdAt: installation.installedAt,
@@ -427,8 +427,8 @@ export class SlackChannel implements MastraChannel {
         clientSecret: pending.clientSecret,
         signingSecret: pending.signingSecret,
         authorizationUrl: pending.authorizationUrl,
-        nameOverride: pending.nameOverride,
-        descriptionOverride: pending.descriptionOverride,
+        name: pending.name,
+        description: pending.description,
         slashCommands: pending.slashCommands,
         redirectUrl: pending.redirectUrl,
       },
@@ -574,10 +574,15 @@ export class SlackChannel implements MastraChannel {
    * Creates and injects AgentChannels into the Agent if needed.
    */
   async #activateAdapter(installation: SlackInstallation): Promise<void> {
+    // Resolve display name: override > agent name > agentId
+    const agent = this.#mastra?.getAgentById(installation.agentId);
+    const displayName = installation.name || agent?.name || installation.agentId;
+
     const adapter = createSlackAdapter({
       botToken: installation.botToken,
       botUserId: installation.botUserId,
       signingSecret: installation.signingSecret,
+      userName: displayName,
     });
     
     this.#adapters.set(installation.id, adapter);
@@ -588,7 +593,6 @@ export class SlackChannel implements MastraChannel {
     }
 
     // Create/get AgentChannels and register the adapter
-    const agent = this.#mastra?.getAgentById(installation.agentId);
     if (agent && this.#mastra) {
       const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
       await agentChannels.initialize(this.#mastra);
@@ -604,8 +608,8 @@ export class SlackChannel implements MastraChannel {
     if (!agent) return;
 
     // Resolve current values: stored overrides (from connect()) > code-defined > defaults
-    const resolvedAppName = installation.nameOverride ?? agent.name ?? installation.agentId;
-    const resolvedDescription = installation.descriptionOverride || agent.getDescription() || 'AI assistant powered by Mastra';
+    const resolvedAppName = installation.name ?? agent.name ?? installation.agentId;
+    const resolvedDescription = installation.description || agent.getDescription() || 'AI assistant powered by Mastra';
     const currentHash = hashConfig(
       { slashCommands: installation.slashCommands },
       baseUrl,
@@ -845,8 +849,8 @@ export class SlackChannel implements MastraChannel {
       clientSecret: appCredentials.clientSecret,
       signingSecret: appCredentials.signingSecret,
       authorizationUrl,
-      nameOverride: config.name,
-      descriptionOverride: config.description,
+      name: config.name,
+      description: config.description,
       slashCommands: normalizedCommands.length ? normalizedCommands : undefined,
       redirectUrl: config.redirectUrl,
       configHash,
@@ -1071,8 +1075,8 @@ export class SlackChannel implements MastraChannel {
         botUserId: tokenData.bot_user_id!,
         teamId: tokenData.team!.id,
         teamName: tokenData.team!.name,
-        nameOverride: pending.nameOverride,
-        descriptionOverride: pending.descriptionOverride,
+        name: pending.name,
+        description: pending.description,
         slashCommands: pending.slashCommands,
         installedAt: new Date(),
         configHash: pending.configHash,
@@ -1082,10 +1086,13 @@ export class SlackChannel implements MastraChannel {
       await this.#saveInstallation(encryptedInstallation);
 
       // Create SlackAdapter for this installation
+      const agent = this.#mastra?.getAgentById(pending.agentId);
+      const displayName = installation.name || agent?.name || pending.agentId;
       const adapter = createSlackAdapter({
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,
+        userName: displayName,
       });
       this.#adapters.set(installation.id, adapter);
 
@@ -1173,10 +1180,12 @@ export class SlackChannel implements MastraChannel {
     }
 
     // Get or create AgentChannels with Slack adapter
+    const displayName = installation.name || agent.name || installation.agentId;
     const adapter = this.#adapters.get(installation.id) ?? createSlackAdapter({
       botToken: installation.botToken,
       botUserId: installation.botUserId,
       signingSecret: installation.signingSecret,
+      userName: displayName,
     });
     const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
     

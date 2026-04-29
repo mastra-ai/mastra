@@ -29,8 +29,8 @@ export const SlackInstallationDataSchema = z.object({
   teamName: z.string().optional(),
   botToken: z.string(), // encrypted
   botUserId: z.string(),
-  nameOverride: z.string().optional(),
-  descriptionOverride: z.string().optional(),
+  name: z.string().optional(),
+  description: z.string().optional(),
   slashCommands: z.array(SlashCommandSchema).optional(),
 });
 
@@ -46,8 +46,8 @@ export const SlackPendingDataSchema = z.object({
   clientSecret: z.string(), // encrypted
   signingSecret: z.string(), // encrypted
   authorizationUrl: z.string(),
-  nameOverride: z.string().optional(),
-  descriptionOverride: z.string().optional(),
+  name: z.string().optional(),
+  description: z.string().optional(),
   slashCommands: z.array(SlashCommandSchema).optional(),
   redirectUrl: z.string().optional(),
 });
@@ -87,10 +87,10 @@ export interface SlackInstallation {
   teamName?: string;
   botToken: string;
   botUserId: string;
-  /** Only set if explicitly passed to connect() — overrides agent.name */
-  nameOverride?: string;
-  /** Only set if explicitly passed to connect() — overrides agent.getDescription() */
-  descriptionOverride?: string;
+  /** Explicit name passed to connect(), takes priority over agent.name */
+  name?: string;
+  /** Explicit description passed to connect(), takes priority over agent.getDescription() */
+  description?: string;
   slashCommands?: StoredSlashCommand[];
 }
 
@@ -106,10 +106,10 @@ export interface SlackPendingInstallation {
   clientSecret: string;
   signingSecret: string;
   authorizationUrl: string;
-  /** Only set if explicitly passed to connect() — overrides agent.name */
-  nameOverride?: string;
-  /** Only set if explicitly passed to connect() — overrides agent.getDescription() */
-  descriptionOverride?: string;
+  /** Explicit name passed to connect(), takes priority over agent.name */
+  name?: string;
+  /** Explicit description passed to connect(), takes priority over agent.getDescription() */
+  description?: string;
   slashCommands?: StoredSlashCommand[];
   redirectUrl?: string;
 }
