@@ -53,6 +53,7 @@ import {
 import { gatewayAgent } from './agents/gateway';
 import { Workspace } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';
+import { StagehandBrowser } from '@mastra/stagehand';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -142,6 +143,13 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+    browsers: {
+      stagehand: {
+        id: 'stagehand',
+        name: 'Stagehand Browser',
+        createBrowser: config => new StagehandBrowser(config),
+      },
     },
     builder: {
       enabled: true,

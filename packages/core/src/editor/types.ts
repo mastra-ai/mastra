@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { AgentBuilderOptions, IAgentBuilder } from '../agent-builder/ee';
+import type { MastraBrowser } from '../browser/browser';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -119,6 +120,27 @@ export interface BlobStoreProvider<TConfig = Record<string, unknown>> {
   createBlobStore(config: TConfig): BlobStore | Promise<BlobStore>;
 }
 
+/**
+ * A registered browser provider that the editor can use to hydrate
+ * stored browser configs into runtime MastraBrowser instances.
+ *
+ * Unlike filesystems/sandboxes, there are no built-in browser providers.
+ * Browser providers (e.g., @mastra/stagehand, @mastra/agent-browser) must be
+ * supplied via `MastraEditorConfig.browsers`.
+ */
+export interface BrowserProvider<TConfig = Record<string, unknown>> {
+  /** Unique provider identifier (e.g., 'stagehand', 'agent-browser') — matches `StorageBrowserConfig.provider` */
+  id: string;
+  /** Human-readable name for UI display */
+  name: string;
+  /** Short description for UI display */
+  description?: string;
+  /** JSON Schema describing the provider-specific configuration. Used by UI to render config forms. */
+  configSchema?: Record<string, unknown>;
+  /** Create a browser instance from the stored config */
+  createBrowser(config: TConfig): MastraBrowser | Promise<MastraBrowser>;
+}
+
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
@@ -144,6 +166,13 @@ export interface MastraEditorConfig {
    * @example { [s3BlobStoreProvider.id]: s3BlobStoreProvider }
    */
   blobStores?: Record<string, BlobStoreProvider>;
+  /**
+   * Browser providers for hydrating stored browser configs into runtime instances.
+   * No built-in providers exist — browser packages (e.g., @mastra/stagehand,
+   * @mastra/agent-browser) must be registered here.
+   * @example { [stagehandBrowserProvider.id]: stagehandBrowserProvider }
+   */
+  browsers?: Record<string, BrowserProvider>;
   /**
    * Configuration for the Agent Builder EE feature.
    * When present and enabled, the editor provides agent building capabilities.
