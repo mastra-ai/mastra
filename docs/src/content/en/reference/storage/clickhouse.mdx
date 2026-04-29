@@ -1,6 +1,6 @@
 ---
 title: "Reference: ClickHouse storage | Storage"
-description: Documentation for the ClickHouse storage implementation in Mastra, including the vNext observability domain for high-volume traces, logs, metrics, and scores.
+description: Documentation for the ClickHouse storage implementation in Mastra, including the vNext observability domain.
 packages:
   - "@mastra/clickhouse"
   - "@mastra/core"
@@ -8,15 +8,14 @@ packages:
 
 # ClickHouse storage
 
-[ClickHouse](https://clickhouse.com/) is a columnar database designed for high-volume analytical workloads. The `@mastra/clickhouse` package provides storage adapters for every Mastra storage domain and is the recommended backend for production observability.
+[ClickHouse](https://clickhouse.com/) is a columnar database designed for analytical workloads. The `@mastra/clickhouse` package provides storage adapters for several Mastra storage domains and is the recommended backend for production observability.
 
-ClickHouse is most commonly used as the dedicated observability backend in a [composite storage](/reference/storage/composite) setup, with another database serving the remaining domains. It can also back every Mastra domain on its own through `ClickhouseStore`.
+ClickHouse is most commonly used as the dedicated observability backend in a [composite storage](/reference/storage/composite) setup, with another database serving the remaining domains. It can also back the supported domains on its own through `ClickhouseStore`.
 
 ## When to use ClickHouse
 
-- High-volume production observability where general-purpose databases struggle with the write rate.
-- Append-heavy workloads dominated by spans, logs, and metrics.
-- Long retention windows where columnar compression keeps storage costs manageable.
+- Production observability for traces, logs, metrics, scores, and feedback.
+- Append-heavy workloads where columnar storage and compression help keep costs down.
 - Deployment platforms with ephemeral filesystems (such as [Railway](#deploying-with-railway-and-similar-platforms), Fly.io, Render, Heroku, or container schedulers) where embedded backends like DuckDB cannot persist data.
 
 For local development, [LibSQL](/reference/storage/libsql) or `@mastra/duckdb` are usually a better fit because they need no external service.
@@ -33,7 +32,7 @@ You will also need a running ClickHouse server. See [Hosting options](#hosting-o
 
 ### Observability with vNext (recommended)
 
-`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. It uses an insert-only schema backed by `ReplacingMergeTree`, supports per-signal retention, and is optimized for the volume produced by traces, logs, metrics, scores, and feedback.
+`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. It uses an insert-only schema backed by `ReplacingMergeTree` and is optimized for the volume produced by traces, logs, metrics, scores, and feedback.
 
 Compose it with another storage adapter so observability writes do not contend with your application data:
 
@@ -48,13 +47,6 @@ const observabilityStore = new ObservabilityStorageClickhouseVNext({
   url: process.env.CLICKHOUSE_URL!,
   username: process.env.CLICKHOUSE_USERNAME!,
   password: process.env.CLICKHOUSE_PASSWORD!,
-  retention: {
-    tracing: 30, // days
-    logs: 14,
-    metrics: 90,
-    scores: 180,
-    feedback: 365,
-  },
 })
 
 export const mastra = new Mastra({
@@ -83,7 +75,7 @@ export const mastra = new Mastra({
 
 ### Observability with the legacy domain
 
-`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that have not migrated to the vNext schema. The configuration shape is the same as the vNext class, minus the `retention` option.
+`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that have not migrated to the vNext schema. The configuration shape is the same as the vNext class.
 
 ```typescript
 import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
@@ -99,7 +91,7 @@ New projects should use `ObservabilityStorageClickhouseVNext` instead.
 
 ### Full storage with `ClickhouseStore`
 
-`ClickhouseStore` implements every Mastra storage domain (memory, workflows, scores, agents, observability, background tasks). Use it when you want a single backend for the whole application. For most observability deployments, the composite setup above is preferable because it isolates observability writes from primary application data.
+`ClickhouseStore` implements the `memory`, `workflows`, `scores`, and `observability` domains. Use it when you want a single backend for the supported domains. For most observability deployments, the composite setup above is preferable because it isolates observability writes from primary application data.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -197,58 +189,7 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
 
 ### Observability domain options
 
-`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore`. The vNext class adds a `retention` option:
-
-<PropertiesTable
-  content={[
-  {
-    name: 'retention',
-    type: 'RetentionConfig',
-    description:
-      'Per-signal retention in whole-day increments. Each value is applied as a ClickHouse `TTL` on the underlying table at init time. Omit a key to keep that signal indefinitely.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'tracing',
-            type: 'number',
-            description: 'Retention for span events and trace roots, in days.',
-            isOptional: true,
-          },
-          {
-            name: 'logs',
-            type: 'number',
-            description: 'Retention for log events, in days.',
-            isOptional: true,
-          },
-          {
-            name: 'metrics',
-            type: 'number',
-            description: 'Retention for metric events, in days.',
-            isOptional: true,
-          },
-          {
-            name: 'scores',
-            type: 'number',
-            description: 'Retention for score events, in days.',
-            isOptional: true,
-          },
-          {
-            name: 'feedback',
-            type: 'number',
-            description: 'Retention for feedback events, in days.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-]}
-/>
-
-Retention is applied with `ALTER TABLE ... MODIFY TTL`, so changing a value and restarting the application updates the policy in place.
+`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`).
 
 ## Hosting options
 
@@ -300,7 +241,6 @@ export const mastra = new Mastra({
         url: process.env.CLICKHOUSE_URL!,
         username: process.env.CLICKHOUSE_USERNAME!,
         password: process.env.CLICKHOUSE_PASSWORD!,
-        retention: { tracing: 14, logs: 7, metrics: 30 },
       }),
     },
   }),
@@ -336,11 +276,9 @@ If you manage storage outside of `Mastra`, call `init()` explicitly:
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 
 const observability = new ObservabilityStorageClickhouseVNext({
-  client: {
-    url: process.env.CLICKHOUSE_URL!,
-    username: process.env.CLICKHOUSE_USERNAME!,
-    password: process.env.CLICKHOUSE_PASSWORD!,
-  },
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
 })
 
 await observability.init()
@@ -353,8 +291,7 @@ In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()
 ClickHouse is the recommended backend for production observability:
 
 - **Insert-only strategy**: `DefaultExporter` writes completed spans in batches without per-span updates, which is the highest-throughput strategy available.
-- **Per-signal retention**: vNext applies independent TTLs for traces, logs, metrics, scores, and feedback.
-- **Columnar compression**: Span attributes and log payloads typically compress 5x to 20x compared to the same data in row-oriented databases.
+- **Columnar compression**: Span attributes and log payloads compress well compared to the same data in row-oriented databases.
 
 For the full strategy matrix and production guidance, see the [`DefaultExporter` reference](/docs/observability/tracing/exporters/default#storage-provider-support).
 

@@ -19,7 +19,7 @@ Three categories of metrics are emitted automatically:
 
 Metrics require an OLAP-capable store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
 
-For local development, use [DuckDB](https://duckdb.org/) through `@mastra/duckdb`. For production, use [ClickHouse](/reference/storage/clickhouse), which scales to high-volume metric writes and supports per-signal retention.
+For local development, use [DuckDB](https://duckdb.org/) through `@mastra/duckdb`. For production, use [ClickHouse](https://clickhouse.com/) through `@mastra/clickhouse`.
 
 :::
 
