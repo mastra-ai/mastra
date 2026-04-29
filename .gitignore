@@ -64,5 +64,6 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
-.mastracode/
+.mastracode/*
+!.mastracode/commands/
 /packages/core/__recordings__
