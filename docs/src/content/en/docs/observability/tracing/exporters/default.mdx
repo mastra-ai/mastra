@@ -10,7 +10,7 @@ packages:
 The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
 
 :::warning[Production Observability]
-Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, we recommend using **ClickHouse** for the observability storage domain via [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
+Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, route the observability storage domain to [ClickHouse](/reference/storage/clickhouse) through [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
 :::
 
 ## Configuration
@@ -123,7 +123,7 @@ If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects
 
 | Storage Provider | Preferred Strategy | Supported Strategies | Recommended Use |
 | - | - | - | - |
-| **ClickHouse** (`@mastra/clickhouse`) | insert-only | insert-only | Production (high-volume) |
+| **[ClickHouse](/reference/storage/clickhouse)** | insert-only | insert-only | Production (high-volume) |
 | **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[MSSQL](/reference/storage/mssql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[MongoDB](/reference/storage/mongodb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
@@ -152,7 +152,7 @@ Observability data grows quickly in production environments. A single agent inte
 
 ### Recommended: ClickHouse for High-Volume Production
 
-[ClickHouse](/reference/storage/composite#specialized-storage-for-observability) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
+[ClickHouse](/reference/storage/clickhouse) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
 
 - **Optimized for writes**: Handles millions of inserts per second
 - **Efficient compression**: Reduces storage costs for trace data

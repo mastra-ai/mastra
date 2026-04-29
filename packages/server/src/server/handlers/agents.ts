@@ -451,23 +451,29 @@ interface SerializedAgentDefinition {
 async function getSerializedAgentDefinition({
   agent,
   requestContext,
+  logger,
 }: {
   agent: Agent;
   requestContext: RequestContext;
+  logger?: ReturnType<Context['mastra']['getLogger']>;
 }): Promise<Record<string, SerializedAgentDefinition>> {
   let serializedAgentAgents: Record<string, SerializedAgentDefinition> = {};
 
   if ('listAgents' in agent) {
-    const agents = await agent.listAgents({ requestContext });
-    serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
-      (acc, [key, agent]) => {
-        return {
-          ...acc,
-          [key]: { id: agent.id, name: agent.name },
-        };
-      },
-      {},
-    );
+    try {
+      const agents = await agent.listAgents({ requestContext });
+      serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
+        (acc, [key, agent]) => {
+          return {
+            ...acc,
+            [key]: { id: agent.id, name: agent.name },
+          };
+        },
+        {},
+      );
+    } catch (error) {
+      logger?.warn('Error getting sub-agents for agent', { agentName: agent.name, error });
+    }
   }
   return serializedAgentAgents;
 }
@@ -485,21 +491,63 @@ async function formatAgentList({
   requestContext: RequestContext;
   partial?: boolean;
 }): Promise<SerializedAgentWithId> {
+  const logger = mastra.getLogger();
+
   const description = agent.getDescription();
-  const instructions = await agent.getInstructions({ requestContext });
-  const tools = await agent.listTools({ requestContext });
-  const llm = await agent.getLLM({ requestContext });
-  const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
-  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
-  const defaultOptions = await agent.getDefaultOptions({ requestContext });
+
+  // Per-agent dynamic getters can throw (e.g. when their callbacks destructure
+  // fields from `requestContext` that aren't present under the active preset).
+  // Wrap each independent getter so a single failure doesn't abort the whole
+  // serialization — the agent will still be listed with safe defaults, and the
+  // failure is logged so the user can see what went wrong in `mastra dev`.
+  let instructions: SystemMessage | undefined;
+  try {
+    instructions = await agent.getInstructions({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting instructions for agent', { agentName: agent.name, error });
+  }
+
+  let tools: Record<string, SerializedToolInput> = {};
+  try {
+    tools = await agent.listTools({ requestContext });
+  } catch (error) {
+    logger.warn('Error listing tools for agent', { agentName: agent.name, error });
+  }
+
+  let llm: Awaited<ReturnType<Agent['getLLM']>> | undefined;
+  try {
+    llm = await agent.getLLM({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
+  }
+
+  let defaultGenerateOptionsLegacy: Awaited<ReturnType<Agent['getDefaultGenerateOptionsLegacy']>> | undefined;
+  try {
+    defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default generate options for agent', { agentName: agent.name, error });
+  }
+
+  let defaultStreamOptionsLegacy: Awaited<ReturnType<Agent['getDefaultStreamOptionsLegacy']>> | undefined;
+  try {
+    defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default stream options for agent', { agentName: agent.name, error });
+  }
+
+  let defaultOptions: Awaited<ReturnType<Agent['getDefaultOptions']>> | undefined;
+  try {
+    defaultOptions = await agent.getDefaultOptions({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default options for agent', { agentName: agent.name, error });
+  }
+
   const serializedAgentTools = await getSerializedAgentTools(tools, partial);
 
   let serializedAgentWorkflows: Record<
     string,
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
-
-  const logger = mastra.getLogger();
 
   if ('listWorkflows' in agent) {
     try {
@@ -519,7 +567,7 @@ async function formatAgentList({
     }
   }
 
-  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
+  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext, logger });
 
   // Get and serialize only user-configured processors (excludes memory-derived processors)
   // This ensures the UI only shows processors explicitly configured by the user
@@ -550,7 +598,13 @@ async function formatAgentList({
   }
 
   const model = llm?.getModel();
-  const models = await agent.getModelList(requestContext);
+
+  let models: Awaited<ReturnType<Agent['getModelList']>> | undefined;
+  try {
+    models = await agent.getModelList(requestContext);
+  } catch (error) {
+    logger.warn('Error getting model list for agent', { agentName: agent.name, error });
+  }
   const modelList = models?.map(md => ({
     ...md,
     model: {
@@ -872,7 +926,12 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       // Apply stored config overrides to code-defined agents before serializing
       const editor = mastra.getEditor?.();
-      const serializedCodeAgentsMap = await Promise.all(
+      const logger = mastra.getLogger();
+      // Use `Promise.allSettled` so that one agent's catastrophic serialization
+      // failure (e.g. an unhandled throw from a user-supplied dynamic config
+      // callback) cannot reject the entire response. Failing agents are logged
+      // and skipped, matching the existing stored-agent loop below.
+      const serializedCodeAgentsMap = await Promise.allSettled(
         Object.entries(codeAgents).map(async ([id, agent]) => {
           let mergedAgent = agent;
           if (editor) {
@@ -886,13 +945,17 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }),
       );
 
-      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
-        (acc, { id, ...rest }) => {
-          acc[id] = { id, ...rest };
-          return acc;
-        },
-        {},
-      );
+      const serializedAgents: Record<string, SerializedAgentWithId> = {};
+      for (let i = 0; i < serializedCodeAgentsMap.length; i++) {
+        const settled = serializedCodeAgentsMap[i]!;
+        if (settled.status === 'fulfilled') {
+          const { id, ...rest } = settled.value;
+          serializedAgents[id] = { id, ...rest };
+        } else {
+          const agentId = Object.keys(codeAgents)[i];
+          logger.warn('Failed to serialize agent', { agentId, error: settled.reason });
+        }
+      }
 
       // Also fetch and include stored agents
       try {

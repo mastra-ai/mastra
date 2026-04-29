@@ -1,5 +1,17 @@
 # mastracode
 
+## 0.16.1-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#15770](https://github.com/mastra-ai/mastra/pull/15770))
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.71` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.71) (from `^3.0.58`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.53` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.53) (from `^3.0.41`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.168` ↗︎](https://www.npmjs.com/package/ai/v/6.0.168) (from `^6.0.116`, in `dependencies`)
+- Updated dependencies [[`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/observability@1.10.2-alpha.0
+  - @mastra/core@1.29.1-alpha.1
+
 ## 0.16.1-alpha.1
 
 ### Patch Changes

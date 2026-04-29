@@ -1,5 +1,11 @@
 # @mastra/editor
 
+## 0.7.21-alpha.1
+
+### Patch Changes
+
+- Fixed template variable interpolation for arrays and objects. Previously, using {{products}} where products is an array of objects would render as [object Object],[object Object]. Now arrays and objects are automatically JSON-stringified, so {{products}} correctly renders the full JSON representation. ([#15927](https://github.com/mastra-ai/mastra/pull/15927))
+
 ## 0.7.21-alpha.0
 
 ### Patch Changes

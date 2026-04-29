@@ -3,6 +3,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
+let closeHandler: (() => void) | undefined;
+
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    createWriteStream: vi.fn(() => ({
+      on: vi.fn((event: string, callback: () => void) => {
+        if (event === 'close') {
+          closeHandler = callback;
+        }
+      }),
+    })),
+  };
+});
+
 describe('getMastraVersion', () => {
   let tmpDir: string;
 
@@ -73,10 +89,18 @@ vi.mock('@clack/prompts', () => ({
   isCancel: vi.fn(() => false),
   cancel: vi.fn(),
   spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  outro: vi.fn(),
 }));
 
 vi.mock('archiver', () => ({
-  default: vi.fn(),
+  default: vi.fn(() => ({
+    on: vi.fn(),
+    pipe: vi.fn(),
+    glob: vi.fn(),
+    finalize: vi.fn(async () => {
+      closeHandler?.();
+    }),
+  })),
 }));
 
 vi.mock('node:fs/promises', async importOriginal => {
@@ -94,7 +118,7 @@ vi.mock('node:fs/promises', async importOriginal => {
         const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
         throw err;
       }
-      return (actual.readFile as (path: string) => Promise<string>)(path);
+      return Buffer.from('zip-data');
     }),
   };
 });
@@ -116,12 +140,22 @@ vi.mock('./platform-api.js', () => ({
 }));
 
 vi.mock('./project-config.js', () => ({
+  getProjectConfigToSave: vi.fn((projectId, projectName, projectSlug, organizationId, projectConfig) => ({
+    projectId,
+    projectName,
+    projectSlug,
+    organizationId,
+    ...(projectConfig?.disablePlatformObservability !== undefined
+      ? { disablePlatformObservability: projectConfig.disablePlatformObservability }
+      : {}),
+  })),
   loadProjectConfig: vi.fn().mockResolvedValue(null),
   saveProjectConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
 beforeEach(() => {
   vi.resetAllMocks();
+  closeHandler = undefined;
 });
 
 afterEach(() => {
@@ -390,6 +424,145 @@ describe('readEnvVars', () => {
 });
 
 describe('deployAction', () => {
+  it('passes disablePlatformObservability to uploadDeploy and preserves it when saving config', async () => {
+    const { access, readdir, readFile, stat } = await import('node:fs/promises');
+    const { fetchOrgs } = await import('../auth/api.js');
+    const { getCurrentOrgId, getToken } = await import('../auth/credentials.js');
+    const { fetchProjects, createProject, uploadDeploy, pollDeploy } = await import('./platform-api.js');
+    const { loadProjectConfig, saveProjectConfig } = await import('./project-config.js');
+
+    vi.mocked(getToken).mockResolvedValue('test-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org-1');
+    vi.mocked(access).mockResolvedValue(undefined);
+    vi.mocked(stat).mockResolvedValue({ size: 1024 } as Awaited<ReturnType<typeof stat>>);
+    vi.mocked(fetchOrgs).mockResolvedValue([{ id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true }]);
+    vi.mocked(fetchProjects).mockResolvedValue([]);
+    vi.mocked(createProject).mockResolvedValue({
+      id: 'proj-1',
+      name: 'my-app',
+      slug: 'my-app',
+      organizationId: 'org-1',
+      latestDeployId: null,
+      latestDeployStatus: null,
+      instanceUrl: null,
+      createdAt: null,
+      updatedAt: null,
+    });
+    vi.mocked(uploadDeploy).mockResolvedValue({ id: 'deploy-1', status: 'starting' });
+    vi.mocked(pollDeploy).mockResolvedValue({
+      id: 'deploy-1',
+      status: 'running',
+      instanceUrl: 'https://example.com',
+      error: null,
+    });
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-2',
+      projectId: 'old-proj',
+      projectName: 'old-app',
+      projectSlug: 'old-app',
+      disablePlatformObservability: true,
+    });
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { deployAction } = await import('./deploy.js');
+
+    await expect(
+      deployAction(undefined, { yes: true, skipBuild: true, org: 'org-1', project: 'my-app' }),
+    ).resolves.toBeUndefined();
+
+    expect(saveProjectConfig).toHaveBeenCalledWith(
+      expect.any(String),
+      {
+        projectId: 'proj-1',
+        projectName: 'my-app',
+        projectSlug: 'my-app',
+        organizationId: 'org-1',
+        disablePlatformObservability: true,
+      },
+      undefined,
+    );
+    expect(uploadDeploy).toHaveBeenCalledWith(
+      'test-token',
+      'org-1',
+      'proj-1',
+      expect.any(Buffer),
+      expect.objectContaining({
+        projectName: 'my-app',
+        envVars: { API_KEY: 'test' },
+        disablePlatformObservability: true,
+      }),
+    );
+  });
+
+  it('sends disablePlatformObservability false when config omits it', async () => {
+    const { access, readdir, readFile, stat } = await import('node:fs/promises');
+    const { fetchOrgs } = await import('../auth/api.js');
+    const { getCurrentOrgId, getToken } = await import('../auth/credentials.js');
+    const { fetchProjects, uploadDeploy, pollDeploy } = await import('./platform-api.js');
+    const { loadProjectConfig } = await import('./project-config.js');
+
+    vi.mocked(getToken).mockResolvedValue('test-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org-1');
+    vi.mocked(access).mockResolvedValue(undefined);
+    vi.mocked(stat).mockResolvedValue({ size: 1024 } as Awaited<ReturnType<typeof stat>>);
+    vi.mocked(fetchOrgs).mockResolvedValue([{ id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true }]);
+    vi.mocked(fetchProjects).mockResolvedValue([
+      {
+        id: 'proj-1',
+        name: 'my-app',
+        slug: 'my-app',
+        organizationId: 'org-1',
+        latestDeployId: null,
+        latestDeployStatus: null,
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+    vi.mocked(uploadDeploy).mockResolvedValue({ id: 'deploy-1', status: 'starting' });
+    vi.mocked(pollDeploy).mockResolvedValue({
+      id: 'deploy-1',
+      status: 'running',
+      instanceUrl: 'https://example.com',
+      error: null,
+    });
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-1',
+      projectId: 'proj-1',
+      projectName: 'my-app',
+      projectSlug: 'my-app',
+    });
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { deployAction } = await import('./deploy.js');
+
+    await expect(deployAction(undefined, { yes: true, skipBuild: true })).resolves.toBeUndefined();
+
+    expect(uploadDeploy).toHaveBeenCalledWith(
+      'test-token',
+      'org-1',
+      'proj-1',
+      expect.any(Buffer),
+      expect.objectContaining({
+        projectName: 'my-app',
+        envVars: { API_KEY: 'test' },
+        disablePlatformObservability: false,
+      }),
+    );
+  });
+
   it('throws when headless mode missing required env vars', async () => {
     process.env.MASTRA_API_TOKEN = 'headless-token';
     // Missing MASTRA_ORG_ID and MASTRA_PROJECT_ID
