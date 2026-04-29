@@ -29,12 +29,15 @@ describe('parseChangelog', () => {
     '- Old bugfix from previous release. ([#15500](https://github.com/mastra-ai/mastra/pull/15500))',
   ].join('\n');
 
-  it('extracts entries for a specific version', () => {
+  it('produces the expected exact output for the sample changelog', () => {
     const result = parseChangelog(SAMPLE_CHANGELOG, '0.16.0');
-    expect(result).not.toBeNull();
-    expect(result).toContain('Added evals system');
-    expect(result).toContain('Fixed task lists');
-    expect(result).toContain('custom model string');
+    expect(result).toBe(
+      [
+        '  • Added evals system for MastraCode.',
+        '  • Fixed task lists leaking across threads.',
+        '  • Allow typing a custom model string in `/om`.',
+      ].join('\n'),
+    );
   });
 
   it('does not include entries from other versions', () => {
