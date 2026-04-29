@@ -170,7 +170,7 @@ const AgentBuilderAgentViewReady = ({
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
           ) : undefined
         }
-        chat={<AgentChatPanelChat hasBrowser={hasBrowser} />}
+        chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
         configure={
           <ConfigurePanelConnected
             editable={false}
@@ -181,7 +181,7 @@ const AgentBuilderAgentViewReady = ({
             onActiveDetailChange={setActiveDetail}
           />
         }
-        browserOverlay={hasBrowser ? <BrowserViewPanel /> : undefined}
+        browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
       />
     </AgentChatPanelProvider>
   );

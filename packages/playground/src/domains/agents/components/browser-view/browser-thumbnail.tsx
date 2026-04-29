@@ -8,6 +8,8 @@ import { BrowserViewFrame } from './browser-view-frame';
 
 interface BrowserThumbnailProps {
   agentName?: string;
+  /** Hide the "Open in sidebar" button (e.g. when no sidebar is available) */
+  hideSidebar?: boolean;
 }
 
 /**
@@ -17,7 +19,7 @@ interface BrowserThumbnailProps {
  * - Collapsed: Small thumbnail bar (click to expand)
  * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
  */
-export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
+export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: BrowserThumbnailProps) {
   const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, closeBrowser } = useBrowserSession();
   const { toolCalls } = useBrowserToolCalls();
   const imgRef = useRef<HTMLImageElement>(null);
@@ -153,15 +155,17 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </IconButton>
-                <IconButton
-                  variant="light"
-                  size="sm"
-                  tooltip="Open in sidebar"
-                  onClick={handleOpenSidebar}
-                  className="bg-surface1/80 backdrop-blur-sm"
-                >
-                  <PanelRight className="h-3.5 w-3.5" />
-                </IconButton>
+                {!hideSidebar && (
+                  <IconButton
+                    variant="light"
+                    size="sm"
+                    tooltip="Open in sidebar"
+                    onClick={handleOpenSidebar}
+                    className="bg-surface1/80 backdrop-blur-sm"
+                  >
+                    <PanelRight className="h-3.5 w-3.5" />
+                  </IconButton>
+                )}
                 <IconButton
                   variant="light"
                   size="sm"
