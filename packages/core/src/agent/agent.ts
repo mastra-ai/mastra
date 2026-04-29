@@ -336,7 +336,7 @@ export class Agent<
         config.channels.adapters &&
         Object.keys(config.channels.adapters).length > 0
       ) {
-        // Legacy ChannelConfig with adapters
+        // ChannelConfig with adapters — direct adapter configuration
         const channelConfig = config.channels as ChannelConfig;
         this.#agentChannels = new AgentChannels({
           ...channelConfig,
@@ -508,21 +508,14 @@ export class Agent<
   /**
    * Returns the AgentChannels instance that manages all channel adapters.
    * Returns null if no channels are configured.
-   *
-   * For legacy AgentChannels, returns the AgentChannels instance.
-   * For platform channel configs, returns the raw config record.
    */
-  getChannels(): AgentChannels | ChannelConfig | null {
-    if (this.#agentChannels) {
-      return this.#agentChannels;
-    }
-    return this.#config.channels ?? null;
+  getChannels(): AgentChannels | null {
+    return this.#agentChannels;
   }
 
   /**
    * Returns the AgentChannels instance, or null if not configured.
-   * Use this when you specifically need the AgentChannels object
-   * (not the raw config).
+   * @internal Used by MastraChannel implementations.
    */
   get agentChannels(): AgentChannels | null {
     return this.#agentChannels;
