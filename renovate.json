@@ -134,6 +134,16 @@
       "automerge": true
     },
     {
+      "groupName": "Memory integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/memory/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "memory-integration-tests-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
       "matchPackageNames": ["typescript", "/^@typescript-eslint//", "typescript-eslint"],
