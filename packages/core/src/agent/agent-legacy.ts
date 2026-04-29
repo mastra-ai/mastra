@@ -102,6 +102,7 @@ export interface AgentLegacyCapabilities {
       writableStream?: WritableStream<ChunkType>;
       methodType: AgentMethodType;
       memoryConfig?: MemoryConfigInternal;
+      inputProcessors?: InputProcessorOrWorkflow[];
     } & ObservabilityContext,
   ): Promise<Record<string, CoreTool>>;
 
@@ -127,9 +128,15 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
+      inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      tools?: Record<string, CoreTool>;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
     },
   ): Promise<{
     messageList: MessageList;
+    tools?: Record<string, CoreTool>;
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -231,6 +238,7 @@ export class AgentLegacyHandler {
     writableStream,
     methodType,
     tracingOptions,
+    inputProcessors,
     ...rest
   }: {
     instructions: AgentInstructions;
@@ -246,6 +254,7 @@ export class AgentLegacyHandler {
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingOptions?: TracingOptions;
+    inputProcessors?: InputProcessorOrWorkflow[];
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     return {
@@ -285,7 +294,7 @@ export class AgentLegacyHandler {
 
         const threadId = thread?.id;
 
-        const convertedTools = await this.capabilities.convertTools({
+        let convertedTools = await this.capabilities.convertTools({
           toolsets,
           clientTools,
           threadId,
@@ -296,6 +305,7 @@ export class AgentLegacyHandler {
           writableStream,
           methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
           memoryConfig,
+          inputProcessors,
         });
 
         let messageList = new MessageList({
@@ -314,6 +324,7 @@ export class AgentLegacyHandler {
             requestContext,
             ...innerObservabilityContext,
             messageList,
+            inputProcessorOverrides: inputProcessors,
           });
           // Run processInputStep for step 0 (legacy path compatibility)
           if (!tripwire) {
@@ -322,7 +333,15 @@ export class AgentLegacyHandler {
               ...innerObservabilityContext,
               messageList,
               stepNumber: 0,
+              inputProcessorOverrides: inputProcessors,
+              tools: convertedTools,
+              runId,
+              threadId,
+              resourceId,
             });
+            if (inputStepResult.tools) {
+              convertedTools = inputStepResult.tools;
+            }
             if (inputStepResult.tripwire) {
               return {
                 messageObjects: [],
@@ -406,6 +425,7 @@ export class AgentLegacyHandler {
           requestContext,
           ...innerObservabilityContext,
           messageList,
+          inputProcessorOverrides: inputProcessors,
         });
         messageList = processedMessageList;
 
@@ -419,7 +439,15 @@ export class AgentLegacyHandler {
             ...innerObservabilityContext,
             messageList,
             stepNumber: 0,
+            inputProcessorOverrides: inputProcessors,
+            tools: convertedTools,
+            runId,
+            threadId,
+            resourceId,
           });
+          if (inputStepResult.tools) {
+            convertedTools = inputStepResult.tools;
+          }
           if (inputStepResult.tripwire) {
             return {
               convertedTools,
@@ -735,6 +763,7 @@ export class AgentLegacyHandler {
       tracingOptions,
       savePerStep,
       writableStream,
+      inputProcessors,
       ...args
     } = options;
 
@@ -789,6 +818,7 @@ export class AgentLegacyHandler {
       writableStream,
       methodType,
       tracingOptions,
+      inputProcessors,
       ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
     });
 
