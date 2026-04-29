@@ -1,3 +1,4 @@
+import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -20,6 +21,7 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import {
   assertReadAccess,
   assertWriteAccess,
@@ -457,6 +459,14 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
+
+      // Enforce admin model allowlist (Phase 6) before persisting.
+      if (model !== undefined) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
+        }
+      }
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation

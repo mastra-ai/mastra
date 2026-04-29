@@ -27,7 +27,8 @@
     "@mastra/observability": "beta",
     "@mastra/voice-openai": "beta",
     "@mastra/ai-sdk": "beta",
-    "@mastra/editor": "beta"
+    "@mastra/editor": "beta",
+    "@mastra/auth-workos": "beta"
   },
   "devDependencies": {
     "mastra": "link:../../packages/cli",
@@ -35,6 +36,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@mastra/auth-workos": "link:../../auth/workos",
       "@mastra/core": "link:../../packages/core",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",

@@ -1,11 +1,12 @@
 import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
-import { LibraryIcon } from 'lucide-react';
+import { LibraryIcon, StarIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useLinkComponent } from '@/lib/framework';
 
 const links: NavLink[] = [
   { name: 'My agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
+  { name: 'Favorites', url: '/agent-builder/favorite', icon: <StarIcon />, isOnMastraPlatform: true },
   { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon />, isOnMastraPlatform: true },
 ];
 

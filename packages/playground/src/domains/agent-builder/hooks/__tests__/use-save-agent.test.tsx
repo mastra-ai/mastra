@@ -6,7 +6,7 @@ import { renderHook, act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { useSaveAgent } from '../use-save-agent';
@@ -22,6 +22,16 @@ vi.mock('@mastra/playground-ui', async () => {
 });
 
 const BASE_URL = 'http://localhost:4111';
+
+// Default: no admin builder configured. Tests that need a specific policy
+// override this with `server.use(...)` before exercising the hook.
+beforeEach(() => {
+  server.use(
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+      HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+    ),
+  );
+});
 
 const renderSave = ({
   agentId,
@@ -231,5 +241,91 @@ describe('useSaveAgent persists tools and agents on save', () => {
 
     expect(capturedBody).toBeTruthy();
     expect(capturedBody.workflows).toEqual({ 'wf-1': {} });
+  });
+
+  it('writes selected model on update', async () => {
+    let capturedBody: any = null;
+    server.use(
+      http.patch(`${BASE_URL}/api/stored/agents/existing-id`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'existing-id' });
+      }),
+    );
+
+    const { hook } = renderSave({
+      agentId: 'existing-id',
+      mode: 'edit',
+      availableAgentTools: [],
+      defaultValues: {
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: {},
+        agents: {},
+        workflows: {},
+        skills: {},
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+    });
+
+    await act(async () => {
+      await hook.current.save({
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: {},
+        agents: {},
+        workflows: {},
+        skills: {},
+        model: { provider: 'openai', name: 'gpt-4o' },
+      });
+    });
+
+    expect(capturedBody).toBeTruthy();
+    expect(capturedBody.model).toEqual({ provider: 'openai', name: 'gpt-4o' });
+  });
+
+  it('sends an empty tools record when a previously-selected tool is deselected on update', async () => {
+    let capturedBody: any = null;
+    server.use(
+      http.patch(`${BASE_URL}/api/stored/agents/existing-id`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'existing-id' });
+      }),
+    );
+
+    const availableAgentTools: AgentTool[] = [
+      { id: 'tool-a', name: 'tool-a', description: 'Tool A desc', isChecked: false, type: 'tool' },
+    ];
+
+    const { hook } = renderSave({
+      agentId: 'existing-id',
+      mode: 'edit',
+      availableAgentTools,
+      defaultValues: {
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: { 'tool-a': false },
+        agents: {},
+        workflows: {},
+        skills: {},
+      },
+    });
+
+    await act(async () => {
+      await hook.current.save({
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: { 'tool-a': false },
+        agents: {},
+        workflows: {},
+        skills: {},
+      });
+    });
+
+    expect(capturedBody).toBeTruthy();
+    expect(capturedBody.tools).toEqual({});
   });
 });

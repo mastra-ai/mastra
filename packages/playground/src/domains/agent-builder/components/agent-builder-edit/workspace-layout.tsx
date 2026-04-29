@@ -46,8 +46,7 @@ export const WorkspaceLayout = ({
           <IconButton
             variant="ghost"
             tooltip="Agents list"
-            className="rounded-full"
-            onClick={() => navigate(`/agent-builder/agents`)}
+            onClick={() => navigate(`/agent-builder/agents`, { viewTransition: true })}
           >
             <ArrowLeftIcon />
           </IconButton>
@@ -57,14 +56,14 @@ export const WorkspaceLayout = ({
           {modeAction}
           {primaryAction}
           <IconButton
+            variant="ghost"
             tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
-            className="rounded-full"
             onClick={() => setExpanded(prev => !prev)}
             aria-pressed={expanded}
           >
             <div
               className={cn(
-                'size-4 border border-current rounded-lg grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
+                'size-4 border border-current rounded-md grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
                 expanded ? 'grid-cols-[1fr_40%]' : 'grid-cols-[1fr_10%]',
               )}
             >

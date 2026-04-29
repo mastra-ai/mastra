@@ -36,6 +36,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { RequestContext } from '@mastra/core/request-context';
+import { assertModelAllowed, builderToModelPolicy } from '@mastra/core/agent-builder/ee';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
@@ -52,8 +53,32 @@ import { EditorMCPNamespace } from './mcp';
 const BUILDER_DEFAULT_FIELDS = ['memory', 'workspace', 'browser'] as const;
 
 /**
+ * Shape of `configuration.agent.models.default` entries (mirrors
+ * `DefaultModelEntry` from `@mastra/core/agent-builder/ee` without the type-level
+ * narrowing — this file only cares about the runtime shape).
+ */
+type DefaultModelEntryRuntime = {
+  kind?: 'custom';
+  provider: string;
+  modelId: string;
+};
+
+/**
+ * Convert the admin's `DefaultModelEntry` (`{ provider, modelId }`) into the
+ * stored `StorageModelConfig` (`{ provider, name }`) used by every agent record.
+ */
+function defaultModelToStored(entry: DefaultModelEntryRuntime): StorageModelConfig {
+  return { provider: entry.provider, name: entry.modelId };
+}
+
+/**
  * Apply builder defaults to agent creation input.
  * Only applies for fields where input is `undefined` (not `null` — null is explicit disable).
+ *
+ * `model` is special-cased: it is NOT in `BUILDER_DEFAULT_FIELDS` because the
+ * stored shape (`{ provider, name }`) differs from the admin-config shape
+ * (`{ provider, modelId }`). It also must never overwrite a conditional model
+ * already present on `input`.
  */
 function applyBuilderDefaults(
   input: StorageCreateAgentInput,
@@ -66,6 +91,17 @@ function applyBuilderDefaults(
   for (const field of BUILDER_DEFAULT_FIELDS) {
     if (input[field] === undefined && builderAgentConfig[field] !== undefined) {
       (defaults as Record<string, unknown>)[field] = builderAgentConfig[field];
+    }
+  }
+
+  // Seed `model` from the admin's `models.default` only when input omits it.
+  // Conditional models are preserved verbatim (they are objects but not the
+  // admin-config shape, and the user's intent always wins).
+  if (input.model === undefined) {
+    const models = (builderAgentConfig.models ?? undefined) as { default?: DefaultModelEntryRuntime } | undefined;
+    const adminDefault = models?.default;
+    if (adminDefault && typeof adminDefault.provider === 'string' && typeof adminDefault.modelId === 'string') {
+      (defaults as Record<string, unknown>).model = defaultModelToStored(adminDefault);
     }
   }
 
@@ -150,11 +186,24 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   async create(input: StorageCreateAgentInput): Promise<Agent> {
     let finalInput = input;
+    let policyAllowed: Parameters<typeof assertModelAllowed>[0];
+    let policyActive = false;
 
     if (this.editor.hasEnabledBuilderConfig()) {
       const builder = await this.editor.resolveBuilder();
       const agentConfig = builder?.getConfiguration()?.agent;
       finalInput = applyBuilderDefaults(input, agentConfig);
+
+      // Phase 6 enforcement: assert resolved model passes the active allowlist.
+      const policy = builderToModelPolicy(builder);
+      if (policy.active) {
+        policyActive = true;
+        policyAllowed = policy.allowed;
+      }
+    }
+
+    if (policyActive && finalInput.model !== undefined) {
+      assertModelAllowed(policyAllowed, finalInput.model as Parameters<typeof assertModelAllowed>[1]);
     }
 
     return super.create(finalInput);
@@ -1253,6 +1302,16 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       authorId: options.authorId,
       visibility: options.visibility,
     };
+
+    // Phase 6 enforcement: a previously-valid source model may now be outside
+    // the current allowlist. Reject the clone before persisting.
+    if (this.editor.hasEnabledBuilderConfig()) {
+      const builder = await this.editor.resolveBuilder();
+      const policy = builderToModelPolicy(builder);
+      if (policy.active) {
+        assertModelAllowed(policy.allowed, model);
+      }
+    }
 
     const adapter = await this.getStorageAdapter();
     await adapter.create(createInput);

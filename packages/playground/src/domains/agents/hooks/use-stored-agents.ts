@@ -1,6 +1,7 @@
 import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isModelNotAllowedError } from '@/domains/builder';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { enabled?: boolean }) => {
@@ -44,6 +45,15 @@ export const useStoredAgentMutations = (agentId?: string) => {
   const queryClient = useQueryClient();
   const { requestContext } = usePlaygroundStore();
 
+  // If the server rejects with HTTP 422 + MODEL_NOT_ALLOWED the admin policy
+  // has likely changed under us — refresh the cached settings so the UI
+  // re-renders against the latest server truth.
+  const invalidateBuilderSettingsOnPolicyReject = (err: unknown) => {
+    if (isModelNotAllowedError(err)) {
+      void queryClient.invalidateQueries({ queryKey: ['builder-settings'] });
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params),
     onSuccess: created => {
@@ -55,6 +65,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
       void queryClient.invalidateQueries({ queryKey: ['stored-agent', created.id] });
       void queryClient.invalidateQueries({ queryKey: ['agent', created.id] });
     },
+    onError: invalidateBuilderSettingsOnPolicyReject,
   });
 
   const updateMutation = useMutation({
@@ -72,6 +83,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
         void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       }
     },
+    onError: invalidateBuilderSettingsOnPolicyReject,
   });
 
   const deleteMutation = useMutation({

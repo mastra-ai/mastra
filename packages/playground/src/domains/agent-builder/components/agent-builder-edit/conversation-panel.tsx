@@ -15,6 +15,8 @@ import { useInitialMessage } from './hooks/use-initial-message';
 import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-chat-context';
 import { StreamChatProvider } from './stream-chat-provider';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
+import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/builder';
+import { useAllModels, useLLMProviders } from '@/domains/llm';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProviderProps {
@@ -30,6 +32,7 @@ interface ConversationPanelProviderProps {
 }
 
 const BUILDER_AGENT_ID = 'builder-agent';
+const getBuilderThreadId = (agentId: string) => `agent-builder-${agentId}`;
 
 export const ConversationPanelProvider = ({
   initialUserMessage,
@@ -42,9 +45,10 @@ export const ConversationPanelProvider = ({
   agentId,
   children,
 }: ConversationPanelProviderProps) => {
+  const builderThreadId = getBuilderThreadId(agentId);
   const { data, isLoading: isConversationLoading } = useAgentMessages({
     agentId: BUILDER_AGENT_ID,
-    threadId: agentId,
+    threadId: builderThreadId,
     memory: !isFreshThread,
   });
 
@@ -56,12 +60,20 @@ export const ConversationPanelProvider = ({
   const storedMessages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
+  const { data: dataProviders, isLoading: areLLMProvidersLoading } = useLLMProviders();
+  const llmProviders = dataProviders?.providers || [];
+  const allModels = useAllModels(llmProviders);
+  const modelPolicy = useBuilderModelPolicy();
+  const filteredModels = useBuilderFilteredModels(allModels, modelPolicy);
+  const availableModels = features.model ? filteredModels : [];
+  const initialMessageToolsReady = toolsReady && (!features.model || !areLLMProvidersLoading);
 
   const agentBuilderTool = useAgentBuilderTool({
     features,
     availableAgentTools,
     availableWorkspaces,
     availableSkills,
+    availableModels,
   });
   const createSkillTool = useCreateSkillTool({ availableWorkspaces });
   const clientTools = useMemo(
@@ -72,13 +84,13 @@ export const ConversationPanelProvider = ({
   return (
     <StreamChatProvider
       agentId={BUILDER_AGENT_ID}
-      threadId={agentId}
+      threadId={builderThreadId}
       initialMessages={v5Messages}
       clientTools={clientTools}
     >
       <ConversationInitialMessage
         initialUserMessage={initialUserMessage}
-        toolsReady={toolsReady}
+        toolsReady={initialMessageToolsReady}
         isConversationLoading={isConversationLoading}
         hasExistingConversation={hasExistingConversation}
       />
@@ -169,7 +181,8 @@ const ConversationComposer = () => {
       placeholder="Tell the builder what to change…"
       inputTestId="agent-builder-conversation-input"
       submitTestId="agent-builder-conversation-submit"
-      viewTransitionName="agent-builder-prompt"
+      containerTestId="agent-builder-conversation-composer"
+      tone="info"
     />
   );
 };

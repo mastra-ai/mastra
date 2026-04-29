@@ -16,6 +16,7 @@ import {
   GENERATE_AGENT_ROUTE,
   getSerializedAgentTools,
   UPDATE_AGENT_MODEL_ROUTE,
+  RESET_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
   STREAM_GENERATE_LEGACY_ROUTE,
@@ -752,6 +753,154 @@ describe('Agent Handlers', () => {
     });
   });
 
+  describe('Phase 8a: model-route allowlist enforcement', () => {
+    function makeBuilderEditor(opts: {
+      allowed?: Array<{ provider: string; modelId?: string; kind?: 'known' | 'custom' }>;
+    }) {
+      const allowed = opts.allowed?.map(a => ({
+        kind: a.kind ?? ('known' as const),
+        provider: a.provider,
+        ...(a.modelId !== undefined ? { modelId: a.modelId } : {}),
+      }));
+      return {
+        hasEnabledBuilderConfig: () => true,
+        resolveBuilder: async () => ({
+          enabled: true,
+          getFeatures: () => ({ agent: { model: true } }),
+          getConfiguration: () => ({ agent: { models: { allowed } } }),
+        }),
+      };
+    }
+
+    function attachEditorToMastra(mastra: Mastra, editor: ReturnType<typeof makeBuilderEditor> | undefined) {
+      (mastra as unknown as { getEditor: () => unknown }).getEditor = () => editor;
+    }
+
+    describe('UPDATE_AGENT_MODEL_ROUTE', () => {
+      it('rejects with 422 + MODEL_NOT_ALLOWED when target model is outside the allowlist', async () => {
+        attachEditorToMastra(mockMastra, makeBuilderEditor({ allowed: [{ provider: 'openai' }] }));
+
+        let caught: HTTPException | undefined;
+        try {
+          await UPDATE_AGENT_MODEL_ROUTE.handler({
+            ...createTestServerContext({ mastra: mockMastra }),
+            agentId: 'test-agent',
+            modelId: 'claude-opus-4-7',
+            provider: 'anthropic',
+          });
+        } catch (e) {
+          caught = e as HTTPException;
+        }
+
+        expect(caught).toBeInstanceOf(HTTPException);
+        expect(caught?.status).toBe(422);
+        const body = await caught!.getResponse().json();
+        expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
+        expect(body.error.attempted).toMatchObject({ provider: 'anthropic', modelId: 'claude-opus-4-7' });
+      });
+
+      it('accepts an allowed wildcard provider entry', async () => {
+        attachEditorToMastra(mockMastra, makeBuilderEditor({ allowed: [{ provider: 'openai' }] }));
+
+        const result = await UPDATE_AGENT_MODEL_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'test-agent',
+          modelId: 'gpt-4o-mini',
+          provider: 'openai',
+        });
+        expect(result).toEqual({ message: 'Agent model updated' });
+      });
+
+      it('passes through when no editor is configured', async () => {
+        attachEditorToMastra(mockMastra, undefined);
+
+        const result = await UPDATE_AGENT_MODEL_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'test-agent',
+          modelId: 'claude-opus-4-7',
+          provider: 'anthropic',
+        });
+        expect(result).toEqual({ message: 'Agent model updated' });
+      });
+    });
+
+    describe('RESET_AGENT_MODEL_ROUTE', () => {
+      it('rejects when the original model is no longer in the allowlist', async () => {
+        attachEditorToMastra(mockMastra, makeBuilderEditor({ allowed: [{ provider: 'anthropic' }] }));
+
+        let caught: HTTPException | undefined;
+        try {
+          await RESET_AGENT_MODEL_ROUTE.handler({
+            ...createTestServerContext({ mastra: mockMastra }),
+            agentId: 'test-agent',
+          });
+        } catch (e) {
+          caught = e as HTTPException;
+        }
+
+        expect(caught).toBeInstanceOf(HTTPException);
+        expect(caught?.status).toBe(422);
+        const body = await caught!.getResponse().json();
+        expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
+      });
+
+      it('accepts reset when original model is in the allowlist', async () => {
+        // The mock agent's resolved provider is "openai.chat" (AI SDK provider id), not the
+        // registered "openai" entry, so we have to declare it as a custom provider.
+        attachEditorToMastra(mockMastra, makeBuilderEditor({ allowed: [{ kind: 'custom', provider: 'openai.chat' }] }));
+
+        const result = await RESET_AGENT_MODEL_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'test-agent',
+        });
+        expect(result).toEqual({ message: 'Agent model reset to original' });
+      });
+    });
+
+    describe('UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE', () => {
+      it('rejects 422 when the new entry is outside the allowlist', async () => {
+        attachEditorToMastra(mockMastra, makeBuilderEditor({ allowed: [{ provider: 'openai' }] }));
+
+        const agent = mockMastra.getAgentById('test-multi-model-agent');
+        const modelList = await agent.getModelList();
+        const targetId = modelList![0].id;
+
+        let caught: HTTPException | undefined;
+        try {
+          await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+            ...createTestServerContext({ mastra: mockMastra }),
+            agentId: 'test-multi-model-agent',
+            modelConfigId: targetId,
+            model: { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          });
+        } catch (e) {
+          caught = e as HTTPException;
+        }
+
+        expect(caught).toBeInstanceOf(HTTPException);
+        expect(caught?.status).toBe(422);
+        const body = await caught!.getResponse().json();
+        expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
+      });
+
+      it('skips enforcement when body does not change provider/modelId', async () => {
+        attachEditorToMastra(mockMastra, makeBuilderEditor({ allowed: [{ provider: 'anthropic' }] }));
+
+        const agent = mockMastra.getAgentById('test-multi-model-agent');
+        const modelList = await agent.getModelList();
+        const targetId = modelList![0].id;
+
+        const result = await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'test-multi-model-agent',
+          modelConfigId: targetId,
+          maxRetries: 5,
+        });
+        expect(result).toMatchObject({ message: 'Model updated in model list' });
+      });
+    });
+  });
+
   describe('enhanceInstructionsHandler', () => {
     it('should enhance instructions and return structured output', async () => {
       // Set OPENAI_API_KEY so isProviderConnected returns true
@@ -787,6 +936,52 @@ describe('Agent Handlers', () => {
       } finally {
         generateSpy.mockRestore();
         // Restore original env var
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      }
+    });
+
+    it('rejects with 400 when the only connected model is outside the admin allowlist', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      // Allow only anthropic — agent's openai model must be filtered out by the
+      // policy-aware findConnectedModel, even though OPENAI_API_KEY is set.
+      const editor = {
+        hasEnabledBuilderConfig: () => true,
+        resolveBuilder: async () => ({
+          enabled: true,
+          getFeatures: () => ({ agent: { model: true } }),
+          getConfiguration: () => ({
+            agent: { models: { allowed: [{ kind: 'known' as const, provider: 'anthropic' }] } },
+          }),
+        }),
+      };
+      (mockMastra as unknown as { getEditor: () => unknown }).getEditor = () => editor;
+
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+
+      try {
+        let caught: HTTPException | undefined;
+        try {
+          await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+            ...createTestServerContext({ mastra: mockMastra }),
+            agentId: 'test-agent',
+            instructions: 'You are a helpful assistant.',
+            comment: 'Make it more specific',
+          });
+        } catch (e) {
+          caught = e as HTTPException;
+        }
+
+        expect(caught).toBeInstanceOf(HTTPException);
+        expect(caught?.status).toBe(400);
+        expect(generateSpy).not.toHaveBeenCalled();
+      } finally {
+        generateSpy.mockRestore();
         if (originalEnv === undefined) {
           delete process.env.OPENAI_API_KEY;
         } else {

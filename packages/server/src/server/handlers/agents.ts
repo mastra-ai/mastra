@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import { assertModelAllowed, isModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -55,6 +56,7 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import {
   assertExecuteAccess,
   assertReadAccess,
@@ -1976,6 +1978,12 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
 
+      // Enforce admin model allowlist (Phase 6) before swapping in-memory.
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+      if (policy.active) {
+        assertModelAllowed(policy.allowed, newModel);
+      }
+
       // Update the model in-memory only (for temporary testing)
       // This allows users to test different models without persisting
       // To save permanently, users should use the Edit agent dialog
@@ -2003,6 +2011,19 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
       await assertStoredAgentWriteAccess({ mastra, agentId, requestContext, action: 'edit' });
 
       const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // Enforce admin model allowlist (Phase 6) BEFORE reset: if the original
+      // model is no longer permitted by the current allowlist, reject loudly
+      // rather than silently restoring a disallowed model.
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+      if (policy.active) {
+        const original = agent.__getOriginalModel();
+        // Dynamic functions can't be statically validated; runtime defense
+        // (Phase 7) is the safety net for those.
+        if (typeof original !== 'function') {
+          assertModelAllowed(policy.allowed, original as Parameters<typeof assertModelAllowed>[1]);
+        }
+      }
 
       agent.__resetToOriginalModel();
 
@@ -2035,6 +2056,9 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
+      // Reorder does not introduce new models, so no static allowlist check
+      // is needed here. Phase 7 runtime defense still validates the active
+      // model at execution time.
       agent.reorderModels(reorderedModelIds);
 
       return { message: 'Model list reordered' };
@@ -2073,6 +2097,17 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const newModel =
         bodyModel?.modelId && bodyModel?.provider ? `${bodyModel.provider}/${bodyModel.modelId}` : modelConfig.model;
+
+      // Enforce admin model allowlist (Phase 6) when the caller supplies a new
+      // provider/model pair. If the body keeps the existing model, we skip —
+      // existing models predate any allowlist toggle and Phase 7 catches
+      // stale-disallowed runs at execution time.
+      if (bodyModel?.modelId && bodyModel?.provider) {
+        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+        if (policy.active) {
+          assertModelAllowed(policy.allowed, newModel);
+        }
+      }
 
       const updated = {
         ...modelConfig,
@@ -2140,15 +2175,22 @@ Return your response as JSON with exactly these two fields:
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
 // Helper to find the first model with a connected provider
-async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+async function findConnectedModel(
+  agent: Agent,
+  policy?: Awaited<ReturnType<typeof resolveBuilderModelPolicy>>,
+): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+  const allowed = policy?.active ? policy.allowed : undefined;
+  const isPermitted = (model: { provider: string; modelId: string }) =>
+    isModelAllowed(allowed, { provider: model.provider, modelId: model.modelId });
+
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
-    // Find the first enabled model with a connected provider
+    // Find the first enabled model with a connected provider that is allowed by policy
     for (const modelConfig of modelList) {
       if (modelConfig.enabled !== false) {
         const model = modelConfig.model;
-        if (isProviderConnected(model.provider)) {
+        if (isProviderConnected(model.provider) && isPermitted(model)) {
           return model;
         }
       }
@@ -2158,7 +2200,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
 
   // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (isProviderConnected(defaultModel.provider)) {
+  if (isProviderConnected(defaultModel.provider) && isPermitted(defaultModel)) {
     return defaultModel;
   }
   return null;
@@ -2177,18 +2219,21 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment, requestContext }) => {
+  handler: async ({ mastra, agentId, requestContext, instructions, comment }) => {
     try {
       await assertStoredAgentReadAccess({ mastra, agentId, requestContext });
 
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent);
+      // Find the first model with a connected provider AND permitted by the
+      // Agent Builder allowlist (so enhance never picks a model the runtime
+      // would reject with MODEL_NOT_ALLOWED).
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
+      const model = await findConnectedModel(agent, policy);
       if (!model) {
         throw new HTTPException(400, {
           message:
-            'No model with a configured API key found. Please set the required environment variable for your model provider.',
+            'No model with a configured API key found that is permitted by the current model policy. Please set an environment variable for an allowed provider, or update the Agent Builder model policy.',
         });
       }
 

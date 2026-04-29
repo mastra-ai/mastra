@@ -2,7 +2,22 @@ import type { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelP
 import { useMastraClient } from '@mastra/react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { isModelNotAllowedError } from '@/domains/builder';
 import { usePlaygroundStore } from '@/store/playground-store';
+
+const handleModelMutationError = (queryClient: ReturnType<typeof useQueryClient>, fallbackMessage: string) => {
+  return (err: unknown) => {
+    const details = isModelNotAllowedError(err);
+    if (details) {
+      toast.error(details.message);
+      // Refresh policy + agent so the UI re-renders with the latest server truth.
+      void queryClient.invalidateQueries({ queryKey: ['builder-settings'] });
+      return;
+    }
+    console.error(fallbackMessage, err);
+  };
+};
 
 export const useAgents = (options?: { enabled?: boolean }) => {
   const client = useMastraClient();
@@ -24,9 +39,7 @@ export const useUpdateAgentModel = (agentId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
-    onError: err => {
-      console.error('Error updating model', err);
-    },
+    onError: handleModelMutationError(queryClient, 'Error updating model'),
   });
 };
 
@@ -39,9 +52,7 @@ export const useReorderModelList = (agentId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
-    onError: err => {
-      console.error('Error reordering model list', err);
-    },
+    onError: handleModelMutationError(queryClient, 'Error reordering model list'),
   });
 };
 
@@ -55,9 +66,7 @@ export const useUpdateModelInModelList = (agentId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
-    onError: err => {
-      console.error('Error updating model in model list', err);
-    },
+    onError: handleModelMutationError(queryClient, 'Error updating model in model list'),
   });
 };
 
@@ -70,8 +79,6 @@ export const useResetAgentModel = (agentId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
-    onError: err => {
-      console.error('Error resetting model', err);
-    },
+    onError: handleModelMutationError(queryClient, 'Error resetting model'),
   });
 };

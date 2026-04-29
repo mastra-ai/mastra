@@ -10,7 +10,9 @@ type StarContext = {
 
 const applyStarToAgent = (agent: StoredAgentResponse, starred: boolean): StoredAgentResponse => {
   const currentCount = agent.starCount ?? 0;
-  const nextCount = starred ? currentCount + (agent.isStarred ? 0 : 1) : Math.max(0, currentCount - (agent.isStarred ? 1 : 0));
+  const nextCount = starred
+    ? currentCount + (agent.isStarred ? 0 : 1)
+    : Math.max(0, currentCount - (agent.isStarred ? 1 : 0));
   return { ...agent, isStarred: starred, starCount: nextCount };
 };
 
@@ -54,7 +56,10 @@ export const useToggleStoredAgentStar = (agentId?: string) => {
 
       // Optimistically patch detail
       if (previousDetail) {
-        queryClient.setQueryData<StoredAgentResponse>(['stored-agent', agentId], applyStarToAgent(previousDetail, starred));
+        queryClient.setQueryData<StoredAgentResponse>(
+          ['stored-agent', agentId],
+          applyStarToAgent(previousDetail, starred),
+        );
       }
 
       return { previousDetail, previousLists };

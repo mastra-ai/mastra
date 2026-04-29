@@ -1,4 +1,5 @@
-import { Breadcrumb, Crumb, Skeleton } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb, Icon, Skeleton } from '@mastra/playground-ui';
+import { MessageCircleIcon, SlidersHorizontalIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { Link } from 'react-router';
@@ -12,9 +13,17 @@ export interface AgentBuilderBreadcrumbProps {
   creating?: boolean;
 }
 
-const MODE_LABELS: Record<WorkspaceMode, string> = {
-  build: 'Edit configuration',
-  test: 'Chat',
+const MODE_META: Record<WorkspaceMode, { label: string; Icon: typeof MessageCircleIcon; iconTestId: string }> = {
+  build: {
+    label: 'Edit configuration',
+    Icon: SlidersHorizontalIcon,
+    iconTestId: 'agent-builder-mode-icon-build',
+  },
+  test: {
+    label: 'Chat',
+    Icon: MessageCircleIcon,
+    iconTestId: 'agent-builder-mode-icon-test',
+  },
 };
 
 const AgentsLink = (props: ComponentProps<typeof Link>) => <Link {...props} viewTransition />;
@@ -43,6 +52,7 @@ export const AgentBuilderBreadcrumb = ({
   }
 
   const displayName = name && name.trim() ? name : 'Untitled';
+  const modeMeta = mode ? MODE_META[mode] : null;
 
   return (
     <div className={className} data-testid="agent-builder-breadcrumb">
@@ -57,9 +67,15 @@ export const AgentBuilderBreadcrumb = ({
             displayName
           )}
         </Crumb>
-        {mode && (
+        {modeMeta && (
           <Crumb as="span" isCurrent data-testid="agent-builder-mode-crumb">
-            {MODE_LABELS[mode]}
+            <Icon size="sm">
+              <modeMeta.Icon aria-hidden="true" data-testid={modeMeta.iconTestId} />
+            </Icon>
+
+            <span className="font-semibold" data-testid="agent-builder-mode-label">
+              {modeMeta.label}
+            </span>
           </Crumb>
         )}
       </Breadcrumb>

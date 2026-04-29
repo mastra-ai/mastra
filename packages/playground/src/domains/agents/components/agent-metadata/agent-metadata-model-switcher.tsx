@@ -1,8 +1,10 @@
 import type { UpdateModelParams } from '@mastra/client-js';
+import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Alert, AlertDescription, AlertTitle, Button, Spinner } from '@mastra/playground-ui';
-import { RotateCcw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Lock, RotateCcw, TriangleAlert } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
+import { useBuilderModelPolicy } from '@/domains/builder';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
@@ -31,8 +33,9 @@ export const AgentMetadataModelSwitcher = ({
   const [modelOpen, setModelOpen] = useState(false);
 
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
+  const policy = useBuilderModelPolicy();
 
-  const providers = dataProviders?.providers || [];
+  const providers = useMemo(() => dataProviders?.providers || [], [dataProviders]);
 
   // Update local state when default props change (e.g., after reset)
   useEffect(() => {
@@ -127,6 +130,7 @@ export const AgentMetadataModelSwitcher = ({
     updateModel,
     providerOpen,
     modelOpen,
+    providers,
   ]);
 
   if (providersLoading) {
@@ -159,6 +163,32 @@ export const AgentMetadataModelSwitcher = ({
   };
 
   const currentProvider = findProviderById(providers, currentModelProvider);
+
+  // Admin locked the picker — surface a non-interactive chip instead.
+  if (policy.active && policy.pickerVisible === false) {
+    const lockedLabel =
+      policy.default && policy.default.provider && policy.default.modelId
+        ? `${policy.default.provider}/${policy.default.modelId}`
+        : selectedProvider && selectedModel
+          ? `${selectedProvider}/${selectedModel}`
+          : 'Locked by admin';
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
+        data-testid="agent-metadata-model-locked"
+      >
+        <Lock className="h-4 w-4 shrink-0 text-neutral3" />
+        <span className="truncate text-ui-sm text-neutral6">{lockedLabel}</span>
+        <span className="ml-auto shrink-0 text-ui-xs text-neutral3">Set by admin</span>
+      </div>
+    );
+  }
+
+  const stale =
+    Boolean(currentModelProvider && selectedModel) &&
+    policy.active &&
+    policy.allowed !== undefined &&
+    !isModelAllowed(policy.allowed, { provider: currentModelProvider, modelId: selectedModel });
 
   return (
     <div className="@container">
@@ -193,6 +223,21 @@ export const AgentMetadataModelSwitcher = ({
           <RotateCcw className="w-3.5 h-3.5" />
         </Button>
       </div>
+
+      {stale && (
+        <div className="pt-2 p-2" data-testid="agent-metadata-model-stale-warning">
+          <Alert variant="warning">
+            <AlertTitle as="h5">Model not allowed</AlertTitle>
+            <AlertDescription as="p">
+              <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
+                {selectedProvider}/{selectedModel}
+              </code>{' '}
+              is no longer allowed by the admin policy. Pick a different model to save changes.
+              <TriangleAlert className="inline ml-1 h-3 w-3 shrink-0" />
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Show warning if selected provider is not connected */}
       {currentProvider && !currentProvider.connected && (
