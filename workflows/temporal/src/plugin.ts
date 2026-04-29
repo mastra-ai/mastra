@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { SimplePlugin } from '@temporalio/plugin';
-import type { WorkerOptions } from '@temporalio/worker';
+import type { WorkerOptions, WorkerPlugin } from '@temporalio/worker';
 import type { TemporalActivityBinding } from './transforms/activities';
 import { buildTemporalActivitiesModule } from './transforms/activities';
 import { buildTemporalWorkflowModule } from './transforms/workflows';
@@ -25,22 +24,10 @@ function getActivityBindingsPath(outputDir: string): string {
   return path.join(outputDir, ACTIVITY_BINDINGS_FILE_NAME);
 }
 
-export interface MastraPluginOptions {
-  /** Persist transformed modules and emitted workflow bundles for debugging. */
-  debug?: boolean;
-}
-
-export class MastraPlugin extends SimplePlugin {
-  private compiledActivitiesModule: Promise<Record<string, unknown>> | null = null;
-  private compiledEntryPath: string | null = null;
-  private compiledActivitiesPath: string | null = null;
-  private activityBindings: TemporalActivityBinding[] | null = null;
-
-  constructor(_options: MastraPluginOptions = {}) {
-    super({
-      name: 'Mastra',
-    });
-  }
+export class MastraPlugin implements WorkerPlugin {
+  #prebuildPath: string | null = null;
+  #compiledActivitiesModule: Promise<Record<string, unknown>> | null = null;
+  name = 'Mastra';
 
   async #bundleMastra(entryFile: string, projectRoot: string, outputDirectory: string): Promise<string> {
     const { BuildBundler } = await import('./mastra-deployer');
@@ -55,19 +42,19 @@ export class MastraPlugin extends SimplePlugin {
     return path.join(outputDirectory, 'output', 'index.mjs');
   }
 
-  async prebuild({ entryFile, projectRoot = process.cwd() }: { entryFile: string; projectRoot?: string }): Promise<{
-    workflowBundle: WorkerOptions['workflowBundle'];
-  }> {
+  async prebuild({
+    entryFile,
+    projectRoot = process.cwd(),
+  }: {
+    entryFile: string;
+    projectRoot?: string;
+  }): Promise<ReturnType<typeof this.getTemporalWorkerOptions>> {
     const temporalOutputDir = path.resolve(projectRoot, CACHE_PATH);
     const compiledEntryPath = await this.#bundleMastra(entryFile, projectRoot, temporalOutputDir);
 
-    const workflowOutputPath = await buildTemporalWorkflowModule(
-      compiledEntryPath,
-      temporalOutputDir,
-      WORKFLOW_FILE_NAME,
-    );
+    await buildTemporalWorkflowModule(compiledEntryPath, temporalOutputDir, WORKFLOW_FILE_NAME);
 
-    const { outputPath: activitiesOutputPath, activityBindings } = await buildTemporalActivitiesModule(
+    const { activityBindings } = await buildTemporalActivitiesModule(
       compiledEntryPath,
       temporalOutputDir,
       ACTIVITIES_FILE_NAME,
@@ -75,38 +62,13 @@ export class MastraPlugin extends SimplePlugin {
 
     await writeFile(getActivityBindingsPath(temporalOutputDir), JSON.stringify(activityBindings, null, 2), 'utf8');
 
-    this.compiledActivitiesModule = null;
-    this.compiledEntryPath = workflowOutputPath;
-    this.compiledActivitiesPath = activitiesOutputPath;
-    this.activityBindings = activityBindings;
-
-    return {
-      workflowBundle: {
-        codePath: workflowOutputPath,
-      },
-    };
+    this.#prebuildPath = temporalOutputDir;
+    return this.getTemporalWorkerOptions(temporalOutputDir);
   }
 
-  private getInitializedState(outputDir: string): {
-    compiledEntryPath: string;
-    compiledActivitiesPath: string;
-    activityBindings: TemporalActivityBinding[];
-  } {
-    const compiledEntryPath = this.compiledEntryPath ?? getGeneratedWorkflowModulePath(outputDir);
-    const compiledActivitiesPath = this.compiledActivitiesPath ?? getGeneratedActivitiesModulePath(outputDir);
-    const activityBindings = this.activityBindings ?? this.loadActivityBindings(getActivityBindingsPath(outputDir));
-
-    return {
-      compiledEntryPath,
-      compiledActivitiesPath,
-      activityBindings,
-    };
-  }
-
-  private loadActivityBindings(activityBindingsPath: string): TemporalActivityBinding[] {
+  #loadActivityBindings(activityBindingsPath: string): TemporalActivityBinding[] {
     try {
       const bindings = JSON.parse(readFileSync(activityBindingsPath, 'utf8')) as TemporalActivityBinding[];
-      this.activityBindings = bindings;
       return bindings;
     } catch (error) {
       throw new Error(`MastraPlugin.prebuild() must be called before use, or ${activityBindingsPath} must exist`, {
@@ -115,31 +77,31 @@ export class MastraPlugin extends SimplePlugin {
     }
   }
 
-  private loadCompiledActivitiesModule(activitiesModulePath: string): Promise<Record<string, unknown>> {
-    if (this.compiledActivitiesModule) {
-      return this.compiledActivitiesModule;
+  #loadCompiledActivitiesModule(activitiesModulePath: string): Promise<Record<string, unknown>> {
+    if (this.#compiledActivitiesModule) {
+      return this.#compiledActivitiesModule;
     }
 
     const modulePromise = import(`${pathToFileURL(activitiesModulePath).href}?t=${Date.now()}`) as Promise<
       Record<string, unknown>
     >;
 
-    this.compiledActivitiesModule = modulePromise;
+    this.#compiledActivitiesModule = modulePromise;
     return modulePromise;
   }
 
-  configureWorker(options: WorkerOptions): WorkerOptions {
-    const temporalOutputDir = path.resolve(process.cwd(), CACHE_PATH);
-    const { compiledActivitiesPath, activityBindings } = this.getInitializedState(temporalOutputDir);
-    const generatedActivities = Object.assign({}, options.activities) as Record<string, unknown>;
-
+  #generateActivityBindings(
+    activityBindings: TemporalActivityBinding[],
+    compiledActivitiesPath: string,
+  ): Record<string, (...args: unknown[]) => Promise<unknown>> {
+    const generatedActivities: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     for (const binding of activityBindings) {
       if (generatedActivities[binding.stepId]) {
         continue;
       }
 
       generatedActivities[binding.stepId] = async (...args: unknown[]) => {
-        const activityModule = await this.loadCompiledActivitiesModule(compiledActivitiesPath);
+        const activityModule = await this.#loadCompiledActivitiesModule(compiledActivitiesPath);
         const activity = activityModule[binding.exportName];
 
         if (typeof activity !== 'function') {
@@ -150,10 +112,38 @@ export class MastraPlugin extends SimplePlugin {
       };
     }
 
+    return generatedActivities;
+  }
+
+  getTemporalWorkerOptions(temporalOutputDir: string): {
+    // workflowBundle: WorkerOptions['workflowBundle'];
+    workflowsPath: WorkerOptions['workflowsPath'];
+    activities: WorkerOptions['activities'];
+  } {
+    const workflowOutputPath = getGeneratedWorkflowModulePath(temporalOutputDir);
+    const activitiesOutputPath = getGeneratedActivitiesModulePath(temporalOutputDir);
+    const activityBindings = this.#loadActivityBindings(getActivityBindingsPath(temporalOutputDir));
+
     return {
-      ...options,
-      workflowsPath: getGeneratedWorkflowModulePath(temporalOutputDir),
-      activities: generatedActivities,
+      workflowsPath: workflowOutputPath,
+      // workflowBundle: {
+      //   codePath: workflowOutputPath,
+      //   sourceMapPath: `${workflowOutputPath}.map`,
+      // },
+      activities: this.#generateActivityBindings(activityBindings, activitiesOutputPath),
     };
+  }
+
+  configureWorker(options: WorkerOptions): WorkerOptions {
+    const augmentedOptions = Object.assign({}, options);
+    if (this.#prebuildPath) {
+      Object.assign(augmentedOptions, this.getTemporalWorkerOptions(this.#prebuildPath));
+    } else {
+      if (!options.workflowsPath || !options.activities) {
+        throw new Error('MastraPlugin.prebuild() must be called before use');
+      }
+    }
+
+    return augmentedOptions;
   }
 }
