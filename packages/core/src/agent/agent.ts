@@ -3697,7 +3697,21 @@ export class Agent<
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
-                result = { text: generateResult.text, usage: generateResult.usage };
+                const subAgentToolResultsLegacy = generateResult.toolResults?.map((toolResult: any) => ({
+                  toolName: toolResult.toolName,
+                  toolCallId: toolResult.toolCallId,
+                  result: toolResult.result,
+                  args: toolResult.args,
+                  isError: toolResult.isError,
+                }));
+
+                result = {
+                  text: generateResult.text,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults: subAgentToolResultsLegacy,
+                  usage: generateResult.usage,
+                };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
