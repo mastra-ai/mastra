@@ -124,6 +124,16 @@
       "automerge": true
     },
     {
+      "groupName": "Playground kitchen-sink",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/playground/e2e/kitchen-sink/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "kitchen-sink-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
       "matchPackageNames": ["typescript", "/^@typescript-eslint//", "typescript-eslint"],
