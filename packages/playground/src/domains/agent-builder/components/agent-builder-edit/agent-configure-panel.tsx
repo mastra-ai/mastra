@@ -206,7 +206,6 @@ function ConfigurePanelContent({
                 onChange={e => setDraftName(e.target.value)}
                 disabled={mutationsDisabled}
                 testId="agent-configure-name"
-                className="[&_input]:border-none"
               />
 
               <TextFieldBlock
@@ -218,7 +217,6 @@ function ConfigurePanelContent({
                 onChange={e => setDraftDescription(e.target.value)}
                 disabled={mutationsDisabled}
                 testId="agent-configure-description"
-                className="[&_input]:border-none"
               />
             </div>
           </div>

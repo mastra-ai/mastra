@@ -6,7 +6,16 @@ import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const navigateMock = vi.fn();
-let storedAgent = {
+type StoredAgentMock = {
+  id: string;
+  name: string;
+  instructions: string;
+  tools: Record<string, unknown> | unknown[];
+  agents: Record<string, unknown> | unknown[];
+  workflows: Record<string, unknown> | unknown[];
+  visibility: string;
+};
+let storedAgent: StoredAgentMock = {
   id: 'agent-123',
   name: 'My Agent',
   instructions: 'Do things',
@@ -32,8 +41,9 @@ vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
   useStoredSkills: () => ({ data: { skills: [] }, isPending: false }),
 }));
 
+const useAvailableAgentToolsMock = vi.fn((..._args: unknown[]) => [] as unknown[]);
 vi.mock('@/domains/agent-builder/hooks/use-available-agent-tools', () => ({
-  useAvailableAgentTools: () => [],
+  useAvailableAgentTools: (...args: unknown[]) => useAvailableAgentToolsMock(...args),
 }));
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
@@ -98,6 +108,7 @@ describe('AgentBuilderAgentView', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     useStoredAgentMock.mockClear();
+    useAvailableAgentToolsMock.mockClear();
     storedAgent = {
       id: 'agent-123',
       name: 'My Agent',
@@ -138,5 +149,49 @@ describe('AgentBuilderAgentView', () => {
       'agent-123',
       expect.objectContaining({ status: 'draft' }),
     );
+  });
+
+  it('re-syncs the form when the stored agent refetches with new data', () => {
+    storedAgent = {
+      id: 'agent-123',
+      name: 'My Agent',
+      instructions: 'Do things',
+      tools: { 'tool-a': {} },
+      agents: [],
+      workflows: [],
+      visibility: 'public',
+    };
+
+    const { rerender } = renderAt();
+
+    const initialSelectedTools = useAvailableAgentToolsMock.mock.calls.at(-1)?.[0] as
+      | { selectedTools?: Record<string, boolean> }
+      | undefined;
+    expect(initialSelectedTools?.selectedTools).toEqual({ 'tool-a': true });
+
+    storedAgent = {
+      id: 'agent-123',
+      name: 'My Agent',
+      instructions: 'Do things',
+      tools: { 'tool-b': {} },
+      agents: [],
+      workflows: [],
+      visibility: 'public',
+    };
+
+    rerender(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={['/agent-builder/agents/agent-123/view']}>
+          <Routes>
+            <Route path="/agent-builder/agents/:id/view" element={<AgentBuilderAgentView />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+
+    const refreshedSelectedTools = useAvailableAgentToolsMock.mock.calls.at(-1)?.[0] as
+      | { selectedTools?: Record<string, boolean> }
+      | undefined;
+    expect(refreshedSelectedTools?.selectedTools).toEqual({ 'tool-b': true });
   });
 });
