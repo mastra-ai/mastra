@@ -2,8 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTool } from '../../../types/agent-tool';
 import { buildAgentBuilderToolSchema } from '../build-tool-schema';
 
-const allOff = { tools: false, memory: false, workflows: false, agents: false, skills: false };
-const allOn = { tools: true, memory: false, workflows: false, agents: false, skills: false };
+const allOff = {
+  tools: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  avatarUpload: false,
+  skills: false,
+  model: false,
+  stars: false,
+};
+const allOn = { ...allOff, tools: true };
 
 describe('buildAgentBuilderToolSchema', () => {
   it('exposes name and instructions as required and omits tools when its flag is off', () => {
@@ -86,5 +95,27 @@ describe('buildAgentBuilderToolSchema', () => {
     expect(schema.safeParse({ name: 'N', instructions: 'I', workspaceId: 'ws-1' }).success).toBe(true);
     expect(schema.safeParse({ name: 'N', instructions: 'I', workspaceId: 'unknown' }).success).toBe(false);
     expect(schema.safeParse({ name: 'N', instructions: 'I' }).success).toBe(true);
+  });
+
+  it('exposes model only when available models exist and constrains exact provider/model pairs', () => {
+    const emptySchema = buildAgentBuilderToolSchema(allOff, [], []);
+    expect(emptySchema.shape.model).toBeUndefined();
+
+    const schema = buildAgentBuilderToolSchema({ ...allOff, model: true }, [], [], [], [
+      { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
+      { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
+    ]);
+
+    expect(schema.shape.model).toBeDefined();
+    expect(schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } }).success).toBe(
+      true,
+    );
+    expect(
+      schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'claude-opus-4-7' } })
+        .success,
+    ).toBe(false);
+    expect(schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'unknown' } }).success).toBe(
+      false,
+    );
   });
 });

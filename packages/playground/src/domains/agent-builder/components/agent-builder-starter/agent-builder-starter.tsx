@@ -72,7 +72,7 @@ export const AgentBuilderStarter = () => {
         <form onSubmit={handleSubmit}>
           <div
             className="starter-prompt rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
-            style={{ viewTransitionName: 'agent-builder-prompt' }}
+            style={{ viewTransitionName: 'chat-composer' }}
           >
             <Textarea
               ref={textareaRef}

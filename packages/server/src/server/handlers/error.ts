@@ -1,3 +1,5 @@
+import { isModelNotAllowedError } from '@mastra/core/agent-builder/ee';
+
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
@@ -34,6 +36,27 @@ export function formatZodError(
 
 // Helper to handle errors consistently
 export function handleError(error: unknown, defaultMessage: string): never {
+  if (isModelNotAllowedError(error)) {
+    const body = {
+      error: {
+        code: error.code,
+        message: error.message,
+        allowed: error.allowed,
+        attempted: error.attempted,
+        offendingLabel: error.offendingLabel,
+      },
+    };
+    const res = new Response(JSON.stringify(body), {
+      status: 422,
+      headers: { 'content-type': 'application/json' },
+    });
+    throw new HTTPException(422, {
+      res,
+      message: error.message,
+      cause: error,
+    });
+  }
+
   const apiError = error as ApiError;
 
   const apiErrorStatus = apiError.status || apiError.details?.status || 500;

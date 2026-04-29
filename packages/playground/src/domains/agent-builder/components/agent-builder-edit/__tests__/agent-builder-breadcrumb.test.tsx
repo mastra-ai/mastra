@@ -70,4 +70,34 @@ describe('AgentBuilderBreadcrumb', () => {
     expect(screen.queryByText('Agents')).toBeNull();
     expect(screen.queryByText('Support agent')).toBeNull();
   });
+
+  it('renders chat mode with icon and label without mode color styling', () => {
+    render(
+      <FormWrapper>
+        <AgentBuilderBreadcrumb mode="test" />
+      </FormWrapper>,
+    );
+
+    const crumb = screen.getByTestId('agent-builder-mode-crumb');
+    const label = screen.getByTestId('agent-builder-mode-label');
+    expect(screen.getByTestId('agent-builder-mode-icon-test')).toBeTruthy();
+    expect(label.textContent).toBe('Chat');
+    expect(label.className).toContain('font-semibold');
+    expect(crumb.className).not.toContain('text-accent1');
+  });
+
+  it('renders edit configuration mode with icon and label without mode color styling', () => {
+    render(
+      <FormWrapper>
+        <AgentBuilderBreadcrumb mode="build" />
+      </FormWrapper>,
+    );
+
+    const crumb = screen.getByTestId('agent-builder-mode-crumb');
+    const label = screen.getByTestId('agent-builder-mode-label');
+    expect(screen.getByTestId('agent-builder-mode-icon-build')).toBeTruthy();
+    expect(label.textContent).toBe('Edit configuration');
+    expect(label.className).toContain('font-semibold');
+    expect(crumb.className).not.toContain('text-test');
+  });
 });

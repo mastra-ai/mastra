@@ -6,6 +6,7 @@ import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
 import { ProviderLogo } from './provider-logo';
+import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
 
 export interface LLMProvidersProps {
   value: string;
@@ -16,6 +17,7 @@ export interface LLMProvidersProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
+  disabled?: boolean;
 }
 
 export const LLMProviders = ({
@@ -27,11 +29,15 @@ export const LLMProviders = ({
   open,
   onOpenChange,
   container,
+  disabled,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const providers = dataProviders?.providers || [];
+  const allProviders = dataProviders?.providers || [];
 
-  // Sort providers: connected -> popular -> alphabetical
+  // Apply admin model policy first (drops disallowed providers entirely),
+  // then sort: connected -> popular -> alphabetical
+  const policy = useBuilderModelPolicy();
+  const providers = useBuilderFilteredProviders(allProviders, policy);
   const sortedProviders = useFilteredProviders(providers, '', false);
 
   // Create provider options with icons
@@ -90,6 +96,7 @@ export const LLMProviders = ({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
+      disabled={disabled}
     />
   );
 };

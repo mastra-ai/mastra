@@ -31,10 +31,11 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
             return <ToolExecutionMessage key={key} />;
           }
 
-          case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
-            const toolsAdded = part.input.tools ?? [];
-            return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
-          }
+          // TMP removed to see how it behaves
+          // case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
+          //   const toolsAdded = part.input.tools ?? [];
+          //   return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
+          // }
 
           default: {
             return null;

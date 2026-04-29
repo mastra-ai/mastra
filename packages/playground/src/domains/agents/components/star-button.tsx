@@ -1,7 +1,8 @@
+import { Button, cn } from '@mastra/playground-ui';
 import { Star } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { useToggleStoredAgentStar } from '../hooks/use-stored-agent-star';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { cn } from '@/lib/utils';
 
 export interface StarButtonProps {
   agentId: string;
@@ -13,9 +14,9 @@ export interface StarButtonProps {
   showCount?: boolean;
 }
 
-const sizes = {
-  sm: { icon: 14, text: 'text-xs', padding: 'px-1.5 py-0.5 gap-1' },
-  md: { icon: 16, text: 'text-sm', padding: 'px-2 py-1 gap-1.5' },
+const iconSizes = {
+  sm: 14,
+  md: 16,
 } as const;
 
 /**
@@ -36,33 +37,35 @@ export const StarButton = ({
 
   if (!features.stars) return null;
 
-  const config = sizes[size];
   const label = isStarred ? 'Unstar agent' : 'Star agent';
+  const starText = starCount === 1 ? 'Star' : 'Stars';
 
   return (
-    <button
+    <Button
       type="button"
+      variant="default"
+      size={size}
       aria-pressed={isStarred}
       aria-label={label}
       title={label}
       disabled={toggle.isPending}
-      onClick={event => {
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         event.stopPropagation();
         toggle.mutate({ starred: !isStarred });
       }}
-      className={cn(
-        'inline-flex items-center rounded-md border border-transparent text-neutral3 transition-colors',
-        'hover:bg-surface3 hover:text-neutral6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
-        'disabled:opacity-60 disabled:cursor-not-allowed',
-        isStarred && 'text-accent3',
-        config.padding,
-        config.text,
-        className,
-      )}
+      className={cn('shrink-0 cursor-pointer', className)}
     >
-      <Star size={config.icon} className={cn('shrink-0', isStarred && 'fill-current')} aria-hidden />
-      {showCount && typeof starCount === 'number' && <span className="tabular-nums leading-none">{starCount}</span>}
-    </button>
+      <Star
+        size={iconSizes[size]}
+        className={cn('shrink-0', isStarred && 'fill-current text-yellow-300')}
+        aria-hidden
+      />
+      {showCount && typeof starCount === 'number' && (
+        <span className="leading-none">
+          <span className="tabular-nums">{starCount}</span> {starText}
+        </span>
+      )}
+    </Button>
   );
 };

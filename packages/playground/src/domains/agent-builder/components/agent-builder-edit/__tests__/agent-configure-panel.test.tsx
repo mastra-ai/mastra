@@ -18,13 +18,35 @@ vi.mock('../../../hooks/use-builder-agent-features', () => ({
   useBuilderAgentFeatures: () => mockUseBuilderAgentFeatures(),
 }));
 
+const mockUseBuilderModelPolicy = vi.fn(() => ({ active: false }) as { active: boolean; pickerVisible?: boolean; default?: { provider: string; modelId: string }; allowed?: unknown });
+
+vi.mock('@/domains/builder', () => ({
+  useBuilderModelPolicy: () => mockUseBuilderModelPolicy(),
+  useBuilderFilteredProviders: (providers: unknown) => providers,
+}));
+
+vi.mock('@/domains/llm', () => ({
+  LLMProviders: ({ value, disabled }: { value: string; disabled?: boolean }) => (
+    <div data-testid="llm-providers" data-disabled={disabled ? 'true' : 'false'}>
+      {value || 'no-provider'}
+    </div>
+  ),
+  LLMModels: ({ value, disabled }: { value: string; disabled?: boolean }) => (
+    <div data-testid="llm-models" data-disabled={disabled ? 'true' : 'false'}>
+      {value || 'no-model'}
+    </div>
+  ),
+  cleanProviderId: (id: string) => id,
+}));
+
 const capturedInstructionsProps: Array<{ onChange: (next: string) => void; prompt: string; editable: boolean }> = [];
 vi.mock('../details/instructions-detail', () => ({
   InstructionsDetail: (props: { prompt: string; onChange: (next: string) => void; editable: boolean }) => {
     capturedInstructionsProps.push(props);
-    return <div data-testid="instructions-detail-stub" />;
+    return <textarea data-testid="instructions-detail-textarea" readOnly={!props.editable} value={props.prompt} />;
   },
 }));
+
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
 
@@ -88,7 +110,8 @@ describe('AgentConfigurePanel feature gating', () => {
     expect(screen.queryByTestId('agent-preview-tools-button')).toBeNull();
     expect(screen.queryByTestId('agent-preview-skills-button')).toBeNull();
     expect(screen.queryByTestId('agent-preview-channels-button')).toBeNull();
-    expect(screen.queryByTestId('agent-preview-model-trigger')).toBeNull();
+    expect(screen.queryByTestId('model-detail-picker')).toBeNull();
+    expect(screen.queryByTestId('model-detail-locked-chip')).toBeNull();
     expect(screen.queryByTestId('agent-configure-save')).toBeNull();
   });
 
@@ -318,5 +341,157 @@ describe('AgentConfigurePanel disabled propagation', () => {
 
     expect(nameInput.disabled).toBe(false);
     expect(instructionsRow.disabled).toBe(false);
+  });
+
+  it('uses the same controls in read-only mode but disables mutations', () => {
+    capturedInstructionsProps.length = 0;
+    const onActiveDetailChange = vi.fn();
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel
+          editable={false}
+          activeDetail="instructions"
+          onActiveDetailChange={onActiveDetailChange}
+          availableAgentTools={[{ id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' }]}
+          agent={{
+            id: 'agent-1',
+            name: 'Published agent',
+            description: 'Published description',
+            systemPrompt: 'Published instructions',
+            visibility: 'public',
+          }}
+        />
+      </FormWrapper>,
+    );
+
+    const nameInput = screen.getByTestId('agent-configure-name') as HTMLInputElement;
+    const descInput = screen.getByTestId('agent-configure-description') as HTMLInputElement;
+    const instructionsRow = screen.getByTestId('agent-preview-edit-system-prompt') as HTMLButtonElement;
+
+    expect(nameInput.value).toBe('Published agent');
+    expect(descInput.value).toBe('Published description');
+    expect(nameInput.disabled).toBe(true);
+    expect(descInput.disabled).toBe(true);
+    expect(instructionsRow.disabled).toBe(false);
+    expect(screen.getByTestId('instructions-detail-textarea')).toHaveProperty('readOnly', true);
+
+    fireEvent.click(instructionsRow);
+    expect(onActiveDetailChange).toHaveBeenCalledWith(null);
+
+    const toolsRow = screen.getByTestId('agent-preview-tools-button') as HTMLButtonElement;
+    expect(toolsRow.disabled).toBe(false);
+    fireEvent.click(toolsRow);
+    expect(onActiveDetailChange).toHaveBeenCalledWith('tools');
+
+    const latest = capturedInstructionsProps[capturedInstructionsProps.length - 1];
+    expect(latest.editable).toBe(false);
+    expect(latest.prompt).toBe('Published instructions');
+
+    act(() => {
+      latest.onChange('Blocked read-only update');
+    });
+
+    expect(formMethodsRef!.getValues('instructions')).toBe('Draft instructions');
+
+    cleanup();
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel
+          editable={false}
+          activeDetail="tools"
+          onActiveDetailChange={() => {}}
+          availableAgentTools={[{ id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' }]}
+          agent={{
+            id: 'agent-1',
+            name: 'Published agent',
+            systemPrompt: 'Published instructions',
+          }}
+        />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByRole('checkbox')).toHaveProperty('disabled', true);
+  });
+});
+
+describe('AgentConfigurePanel inline model section', () => {
+  beforeEach(() => {
+    mockUseBuilderModelPolicy.mockReturnValue({ active: false });
+  });
+
+  afterEach(() => {
+    cleanup();
+    mockUseBuilderModelPolicy.mockReturnValue({ active: false });
+  });
+
+  it('renders the inline picker enabled when features.model is true and policy is inactive', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: false,
+      model: true,
+    });
+
+    renderPanel();
+
+    expect(screen.getByTestId('model-detail-picker')).toBeTruthy();
+    expect(screen.queryByTestId('model-detail-locked-chip')).toBeNull();
+    expect(screen.getByTestId('llm-providers').dataset.disabled).toBe('false');
+    expect(screen.getByTestId('llm-models').dataset.disabled).toBe('false');
+  });
+
+  it('renders the locked chip when policy is locked', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: false,
+      model: false,
+    });
+    mockUseBuilderModelPolicy.mockReturnValue({
+      active: true,
+      pickerVisible: false,
+      default: { provider: 'openai', modelId: 'gpt-4o' },
+    });
+
+    renderPanel();
+
+    const chip = screen.getByTestId('model-detail-locked-chip');
+    expect(chip.textContent).toContain('openai/gpt-4o');
+    expect(screen.queryByTestId('model-detail-picker')).toBeNull();
+  });
+
+  it('keeps the inline picker but disables the selectors in view mode', () => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: false,
+      model: true,
+    });
+
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel
+          editable={false}
+          agent={{
+            id: 'agent-1',
+            name: 'Published agent',
+            systemPrompt: 'Published instructions',
+          }}
+        />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByTestId('model-detail-picker')).toBeTruthy();
+    expect(screen.getByTestId('llm-providers').dataset.disabled).toBe('true');
+    expect(screen.getByTestId('llm-models').dataset.disabled).toBe('true');
   });
 });

@@ -4,19 +4,25 @@ import type {
   StoredSkillResponse,
   StoredWorkspaceRef,
 } from '@mastra/client-js';
-import type { AgentBuilderEditFormValues } from '../schemas';
+import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 
 export interface SaveParams {
   name: string;
   description: string | undefined;
   instructions: string;
-  tools: Record<string, StoredAgentToolConfig> | undefined;
-  agents: Record<string, StoredAgentToolConfig> | undefined;
-  workflows: Record<string, StoredAgentToolConfig> | undefined;
-  skills: Record<string, StoredAgentSkillConfig> | undefined;
+  tools: Record<string, StoredAgentToolConfig>;
+  agents: Record<string, StoredAgentToolConfig>;
+  workflows: Record<string, StoredAgentToolConfig>;
+  skills: Record<string, StoredAgentSkillConfig>;
   workspace: StoredWorkspaceRef | undefined;
   visibility: 'private' | 'public';
+  /**
+   * Static model selection from the form. Conditional models are owned by code;
+   * the form never round-trips them, so this is always either `undefined` or
+   * a `{ provider, name }` pair.
+   */
+  model: AgentBuilderModel | undefined;
   metadata: Record<string, unknown> | undefined;
 }
 
@@ -62,8 +68,6 @@ export function formValuesToSaveParams(
   const workflows = buildEnabledRecord(values.workflows, workflowDescriptionById);
   const skills = buildEnabledRecord(values.skills, skillDescriptionById);
 
-  const orUndefined = (rec: Record<string, unknown>) => (Object.keys(rec).length === 0 ? undefined : rec);
-
   const workspace: StoredWorkspaceRef | undefined =
     typeof values.workspaceId === 'string' && values.workspaceId.length > 0
       ? { type: 'id', workspaceId: values.workspaceId }
@@ -77,12 +81,13 @@ export function formValuesToSaveParams(
     name: values.name,
     description,
     instructions: values.instructions,
-    tools: orUndefined(tools) as SaveParams['tools'],
-    agents: orUndefined(agents) as SaveParams['agents'],
-    workflows: orUndefined(workflows) as SaveParams['workflows'],
-    skills: orUndefined(skills) as SaveParams['skills'],
+    tools,
+    agents,
+    workflows,
+    skills: skills as Record<string, StoredAgentSkillConfig>,
     workspace,
     visibility: values.visibility ?? 'private',
+    model: values.model,
     metadata,
   };
 }

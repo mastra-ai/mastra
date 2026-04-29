@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, Spinner } from '@mastra/playground-ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -11,6 +11,7 @@ import {
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
+import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
@@ -31,7 +32,7 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
   const features = useBuilderAgentFeatures();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
@@ -77,9 +78,12 @@ const AgentBuilderAgentViewPage = ({
   workflowsData,
   storedSkillsResponse,
 }: PageProps) => {
-  const formMethods = useForm<AgentBuilderEditFormValues>({
-    defaultValues: storedAgentToFormValues(storedAgent),
-  });
+  const defaultValues = useMemo(() => storedAgentToFormValues(storedAgent), [storedAgent]);
+  const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
+
+  useEffect(() => {
+    formMethods.reset(defaultValues);
+  }, [defaultValues, formMethods]);
 
   return (
     <FormProvider {...formMethods}>
@@ -156,6 +160,7 @@ const AgentBuilderAgentViewReady = ({
         mode="test"
         defaultExpanded={false}
         detailOpen={activeDetail !== null}
+        modeAction={<VisibilitySelect disabled />}
         primaryAction={
           isOwner ? (
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />

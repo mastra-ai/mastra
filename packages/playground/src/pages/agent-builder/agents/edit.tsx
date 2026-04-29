@@ -38,17 +38,22 @@ export default function AgentBuilderAgentEdit() {
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, {
+    status: 'draft',
+    enabled: !fromStarter,
+  });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, {
-    enabled: features.skills,
-  });
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, { enabled: features.skills });
   const { data: workspacesData } = useStoredWorkspaces();
+  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
+  const isOwnershipLoading = !fromStarter && Boolean(storedAgent?.authorId) && isCurrentUserLoading;
   const isReady =
     Boolean(id) &&
     (fromStarter || !isStoredAgentLoading) &&
+    !isOwnershipLoading &&
     (!features.tools || !isToolsPending) &&
     (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
@@ -63,9 +68,6 @@ export default function AgentBuilderAgentEdit() {
     () => storedSkillsResponse?.skills ?? [],
     [storedSkillsResponse],
   );
-
-  const { data: currentUser } = useCurrentUser();
-  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
 

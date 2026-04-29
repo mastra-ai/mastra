@@ -2,6 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { z } from 'zod-v4';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../types/agent-tool';
+import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
 
 interface AvailableWorkspace {
   id: string;
@@ -15,6 +16,7 @@ export function buildAgentBuilderToolSchema(
   availableAgentTools: AgentTool[],
   availableWorkspaces: AvailableWorkspace[],
   availableSkills: StoredSkillResponse[] = [],
+  availableModels: ModelInfo[] = [],
 ): z.ZodObject<Record<string, z.ZodType>> {
   const toolIds = availableAgentTools.map(t => t.id);
   const workspaceIds = availableWorkspaces.map(w => w.id);
@@ -71,6 +73,23 @@ export function buildAgentBuilderToolSchema(
       .describe(
         'Skills to enable on the agent. Each entry must include both the skill `id` (from the available skills list) and a concise human-readable `name`.',
       );
+  }
+
+  if (features.model && availableModels.length > 0) {
+    const modelSchemas = availableModels.map(model =>
+      z.object({
+        provider: z.literal(model.provider).describe('The provider id from the available models list.'),
+        name: z.literal(model.model).describe('The model name from the available models list.'),
+      }),
+    );
+    const modelSchema =
+      modelSchemas.length === 1
+        ? modelSchemas[0]
+        : z.union(modelSchemas as [z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>, z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>, ...z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>[]]);
+
+    shape.model = modelSchema
+      .optional()
+      .describe('Model to use for the agent. Only use a provider/name pair from the available models list.');
   }
 
   const workspaceIdSchema = workspaceIds.length > 0 ? z.enum(workspaceIds as [string, ...string[]]) : z.string();

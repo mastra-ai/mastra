@@ -1970,6 +1970,16 @@ export class Agent<
   }
 
   /**
+   * Returns the original model snapshot captured at construction. Used by
+   * server enforcement to validate reset attempts against the current
+   * allowlist without mutating runtime state.
+   * @internal
+   */
+  __getOriginalModel(): DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks {
+    return Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+  }
+
+  /**
    * Returns a snapshot of the raw field values that may be overridden by stored config.
    * Used by the editor to save/restore code defaults externally.
    * @internal

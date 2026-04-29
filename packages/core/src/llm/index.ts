@@ -77,7 +77,13 @@ export type {
 } from './model/base.types';
 export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
 export { ModelRouterLanguageModel, defaultGateways } from './model/router';
-export { GatewayRegistry, PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
+export {
+  GatewayRegistry,
+  PROVIDER_REGISTRY,
+  parseModelString,
+  getProviderConfig,
+  isProviderRegistered,
+} from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
@@ -158,3 +164,5 @@ export type { AzureOpenAIGatewayConfig, MastraGatewayConfig } from './model/gate
 export { GATEWAY_AUTH_HEADER } from './model/gateways/constants';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';
+
+export type { Provider, ModelForProvider, ModelRouterModelId } from './model';

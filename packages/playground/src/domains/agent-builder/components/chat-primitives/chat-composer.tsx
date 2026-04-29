@@ -1,5 +1,6 @@
-import { IconButton } from '@mastra/playground-ui';
+import { IconButton, cn } from '@mastra/playground-ui';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { ChatTextarea } from './chat-textarea';
 
 interface ChatComposerProps {
@@ -13,8 +14,15 @@ interface ChatComposerProps {
   placeholder?: string;
   inputTestId?: string;
   submitTestId?: string;
-  viewTransitionName?: string;
+  containerTestId?: string;
+  tone?: 'neutral' | 'success' | 'info';
 }
+
+const toneClasses = {
+  neutral: 'border-border1 focus-within:border-neutral3',
+  success: 'border-accent1Dark focus-within:border-accent1',
+  info: 'border-accent5Dark focus-within:border-accent5',
+};
 
 export const ChatComposer = ({
   draft,
@@ -27,15 +35,24 @@ export const ChatComposer = ({
   placeholder = 'Ask a follow-up…',
   inputTestId,
   submitTestId,
-  viewTransitionName,
+  containerTestId,
+  tone = 'neutral',
 }: ChatComposerProps) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className="rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors focus-within:border-neutral3"
-        style={viewTransitionName ? { viewTransitionName } : undefined}
+        className={cn('rounded-3xl border bg-surface2 px-3 pt-2.5 transition-colors', toneClasses[tone])}
+        style={{ viewTransitionName: 'chat-composer' }}
+        data-testid={containerTestId}
       >
         <ChatTextarea
+          ref={textareaRef}
           testId={inputTestId}
           placeholder={placeholder}
           value={draft}

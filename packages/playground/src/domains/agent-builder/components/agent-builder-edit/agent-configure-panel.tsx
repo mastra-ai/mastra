@@ -1,6 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Avatar, cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, Plus, Sparkles, Wrench } from 'lucide-react';
+import { ChevronRight, FileText, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -10,7 +11,8 @@ import { downscaleImageToDataUrl } from '../../utils/downscale-avatar';
 import { InstructionsDetail } from './details/instructions-detail';
 import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
-import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
+import { useBuilderModelPolicy } from '@/domains/builder';
+import { LLMModels, LLMProviders, cleanProviderId } from '@/domains/llm';
 
 export interface AgentConfig {
   id: string;
@@ -33,64 +35,59 @@ interface BaseProps {
   disabled?: boolean;
 }
 
-type AgentConfigurePanelProps =
-  | (BaseProps & { editable?: true; agent?: AgentConfig })
-  | (BaseProps & { editable: false; agent: AgentConfig });
+type AgentConfigurePanelProps = BaseProps & {
+  editable?: boolean;
+  agent?: AgentConfig;
+};
 
-export function AgentConfigurePanel(props: AgentConfigurePanelProps) {
-  const {
-    availableAgentTools = [],
-    availableSkills = [],
-    isLoading = false,
-    activeDetail = null,
-    onActiveDetailChange = () => {},
-    disabled = false,
-  } = props;
-
+export function AgentConfigurePanel({
+  availableAgentTools = [],
+  availableSkills = [],
+  isLoading = false,
+  activeDetail = null,
+  onActiveDetailChange = () => {},
+  disabled = false,
+  editable = true,
+  agent,
+}: AgentConfigurePanelProps) {
   if (isLoading) {
     return <AgentConfigurePanelSkeleton />;
   }
 
-  const editable = props.editable !== false;
-
-  return editable ? (
-    <EditableConfigurePanel
+  return (
+    <ConfigurePanelContent
+      agent={agent}
       availableAgentTools={availableAgentTools}
       availableSkills={availableSkills}
       activeDetail={activeDetail}
       onActiveDetailChange={onActiveDetailChange}
+      editable={editable}
       disabled={disabled}
-    />
-  ) : (
-    <ReadOnlyConfigurePanel
-      agent={props.agent!}
-      availableAgentTools={availableAgentTools}
-      availableSkills={availableSkills}
-      activeDetail={activeDetail}
-      onActiveDetailChange={onActiveDetailChange}
     />
   );
 }
 
 interface ConfigurePanelContentProps {
+  agent?: AgentConfig;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
   activeDetail: ActiveDetail;
   onActiveDetailChange: (next: ActiveDetail) => void;
-}
-
-interface EditableConfigurePanelProps extends ConfigurePanelContentProps {
+  editable: boolean;
   disabled?: boolean;
 }
 
-function EditableConfigurePanel({
+function ConfigurePanelContent({
+  agent,
   availableAgentTools,
   availableSkills,
   activeDetail,
   onActiveDetailChange,
+  editable,
   disabled = false,
-}: EditableConfigurePanelProps) {
+}: ConfigurePanelContentProps) {
   const features = useBuilderAgentFeatures();
+  const policy = useBuilderModelPolicy();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
@@ -99,9 +96,21 @@ function EditableConfigurePanel({
   const draftInstructions = formMethods.watch('instructions') ?? '';
   const draftAvatarUrl = formMethods.watch('avatarUrl');
 
-  const setDraftName = (value: string) => formMethods.setValue('name', value);
-  const setDraftDescription = (value: string) => formMethods.setValue('description', value);
-  const setDraftInstructions = (value: string) => formMethods.setValue('instructions', value);
+  const mutationsDisabled = disabled || !editable;
+  const panelName = editable ? draftName : (agent?.name ?? draftName);
+  const panelDescription = editable ? draftDescription : (agent?.description ?? draftDescription);
+  const panelInstructions = editable ? draftInstructions : (agent?.systemPrompt ?? draftInstructions);
+  const panelAvatarUrl = editable ? draftAvatarUrl : (agent?.avatarUrl ?? draftAvatarUrl);
+
+  const setDraftName = (value: string) => {
+    if (!mutationsDisabled) formMethods.setValue('name', value, { shouldDirty: true });
+  };
+  const setDraftDescription = (value: string) => {
+    if (!mutationsDisabled) formMethods.setValue('description', value, { shouldDirty: true });
+  };
+  const setDraftInstructions = (value: string) => {
+    if (!mutationsDisabled) formMethods.setValue('instructions', value, { shouldDirty: true });
+  };
 
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
   const totalToolsCount = availableAgentTools.length;
@@ -118,7 +127,7 @@ function EditableConfigurePanel({
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (!file || mutationsDisabled) return;
 
     try {
       const { dataUrl } = await downscaleImageToDataUrl(file);
@@ -128,7 +137,8 @@ function EditableConfigurePanel({
     }
   };
 
-  const instructionsDescription = formatInstructionsPreview(draftInstructions);
+  const instructionsDescription = formatInstructionsPreview(panelInstructions);
+  const modelSectionVisible = features.model || policy.active;
 
   return (
     <div
@@ -138,26 +148,20 @@ function EditableConfigurePanel({
       )}
     >
       <div className="flex h-full min-w-0 flex-col">
-        <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-          <div className="flex flex-col gap-3 px-6">
-            <div className="flex items-center gap-4">
+        <div className="flex-1 flex flex-col py-6 overflow-y-auto">
+          <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
+            <div className="flex items-center justify-center">
               {features.avatarUpload ? (
                 <>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={disabled}
-                    className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={mutationsDisabled}
+                    className="group relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Upload avatar"
                     data-testid="agent-configure-avatar-trigger"
                   >
-                    {draftAvatarUrl ? (
-                      <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                        {(draftName[0] ?? 'A').toUpperCase()}
-                      </span>
-                    )}
+                    <Avatar src={panelAvatarUrl} name={panelName || 'A'} size="lg" interactive />
                     <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
                       <Plus className="h-5 w-5 text-neutral5" />
                     </span>
@@ -172,40 +176,33 @@ function EditableConfigurePanel({
                   />
                 </>
               ) : (
-                <div
-                  className="h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 flex items-center justify-center"
-                  data-testid="agent-configure-avatar-display"
-                >
-                  {draftAvatarUrl ? (
-                    <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                      {(draftName[0] ?? 'A').toUpperCase()}
-                    </span>
-                  )}
+                <div data-testid="agent-configure-avatar-display">
+                  <Avatar src={panelAvatarUrl} name={panelName || 'A'} size="lg" />
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <TextFieldBlock
-                  name="agent-name"
-                  label="Name"
-                  value={draftName}
-                  placeholder="Untitled agent"
-                  onChange={e => setDraftName(e.target.value)}
-                  disabled={disabled}
-                  testId="agent-configure-name"
-                />
-              </div>
             </div>
+
+            <TextFieldBlock
+              name="agent-name"
+              label="Name"
+              value={panelName}
+              placeholder="Untitled agent"
+              onChange={e => setDraftName(e.target.value)}
+              disabled={mutationsDisabled}
+              testId="agent-configure-name"
+            />
+
             <TextFieldBlock
               name="agent-description"
               label="Description"
-              value={draftDescription}
+              value={panelDescription}
               placeholder="What is this agent for?"
               onChange={e => setDraftDescription(e.target.value)}
-              disabled={disabled}
+              disabled={mutationsDisabled}
               testId="agent-configure-description"
             />
+
+            {modelSectionVisible && <ModelSection editable={!mutationsDisabled} />}
           </div>
 
           <ConfigRows
@@ -225,88 +222,9 @@ function EditableConfigurePanel({
       <DetailPane
         activeDetail={activeDetail}
         features={features}
-        editable={!disabled}
-        instructionsPrompt={draftInstructions}
+        editable={!mutationsDisabled}
+        instructionsPrompt={panelInstructions}
         onInstructionsChange={setDraftInstructions}
-        onClose={closeDetail}
-        availableAgentTools={availableAgentTools}
-        availableSkills={availableSkills}
-      />
-    </div>
-  );
-}
-
-interface ReadOnlyConfigurePanelProps extends ConfigurePanelContentProps {
-  agent: AgentConfig;
-}
-
-function ReadOnlyConfigurePanel({
-  agent,
-  availableAgentTools,
-  availableSkills,
-  activeDetail,
-  onActiveDetailChange,
-}: ReadOnlyConfigurePanelProps) {
-  const features = useBuilderAgentFeatures();
-  const formMethods = useFormContext<AgentBuilderEditFormValues>();
-
-  const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
-  const totalToolsCount = availableAgentTools.length;
-
-  const selectedSkills = useWatch({ control: formMethods.control, name: 'skills' }) ?? {};
-  const activeSkillsCount = availableSkills.filter(skill => selectedSkills[skill.id]).length;
-  const totalSkillsCount = availableSkills.length;
-
-  const toggleDetail = (next: ActiveDetail) => {
-    onActiveDetailChange(activeDetail === next ? null : next);
-  };
-  const closeDetail = () => onActiveDetailChange(null);
-
-  const instructionsDescription = formatInstructionsPreview(agent.systemPrompt);
-
-  return (
-    <div
-      className={cn(
-        'grid h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden agent-builder-detail-grid',
-        activeDetail ? 'grid-cols-[320px_calc(100%-320px)]' : 'grid-cols-[320px_0px]',
-      )}
-    >
-      <div className="flex h-full min-w-0 flex-col">
-        <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-          <div className="flex flex-col gap-1 px-6">
-            <div className="flex items-center gap-3">
-              <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
-              <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
-                {agent.name}
-              </Txt>
-            </div>
-            {agent.description && (
-              <Txt variant="ui-sm" className="text-neutral3" data-testid="agent-configure-description-view">
-                {agent.description}
-              </Txt>
-            )}
-            <VisibilityBadge visibility={agent.visibility} authorId={agent.authorId} />
-          </div>
-
-          <ConfigRows
-            features={features}
-            instructionsDescription={instructionsDescription}
-            activeToolsCount={activeToolsCount}
-            totalToolsCount={totalToolsCount}
-            activeSkillsCount={activeSkillsCount}
-            totalSkillsCount={totalSkillsCount}
-            activeDetail={activeDetail}
-            toggleDetail={toggleDetail}
-          />
-        </div>
-      </div>
-
-      <DetailPane
-        activeDetail={activeDetail}
-        features={features}
-        editable={false}
-        instructionsPrompt={agent.systemPrompt}
-        onInstructionsChange={() => {}}
         onClose={closeDetail}
         availableAgentTools={availableAgentTools}
         availableSkills={availableSkills}
@@ -321,6 +239,102 @@ function formatInstructionsPreview(instructions: string): string {
   if (trimmed.length > 80) return `${trimmed.slice(0, 80).trimEnd()}…`;
   return trimmed;
 }
+
+interface ModelSectionProps {
+  editable: boolean;
+}
+
+function ModelSection({ editable }: ModelSectionProps) {
+  const { setValue, watch } = useFormContext<AgentBuilderEditFormValues>();
+  const policy = useBuilderModelPolicy();
+
+  const model = watch('model');
+  const provider = model?.provider ?? '';
+  const modelId = model?.name ?? '';
+
+  const locked = policy.active && policy.pickerVisible === false;
+  const stale =
+    Boolean(provider && modelId) &&
+    policy.active &&
+    policy.allowed !== undefined &&
+    !isModelAllowed(policy.allowed, { provider: cleanProviderId(provider), modelId });
+
+  const handleProviderSelect = (next: string) => {
+    const cleaned = cleanProviderId(next);
+    setValue('model', { provider: cleaned, name: '' }, { shouldDirty: true });
+  };
+
+  const handleModelSelect = (next: string) => {
+    setValue('model', { provider: cleanProviderId(provider), name: next }, { shouldDirty: true });
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {locked ? (
+        <LockedModelChip provider={policy.default?.provider ?? provider} modelId={policy.default?.modelId ?? modelId} />
+      ) : (
+        <div className="grid gap-2 text-neutral4 min-w-0" data-testid="model-detail-picker">
+          <label className="text-ui-smd text-neutral3 flex justify-between items-center">Model</label>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex-1 basis-0 min-w-0">
+              <LLMProviders
+                value={provider}
+                onValueChange={handleProviderSelect}
+                disabled={!editable}
+                className="w-full !min-w-0"
+              />
+            </div>
+            <div className="flex-1 basis-0 min-w-0">
+              <LLMModels
+                llmId={provider}
+                value={modelId}
+                onValueChange={handleModelSelect}
+                disabled={!editable}
+                className="w-full !min-w-0"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stale && !locked && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
+          data-testid="model-detail-stale-warning"
+          role="alert"
+        >
+          <TriangleAlertIcon className="h-4 w-4 shrink-0 mt-0.5" />
+          <Txt variant="ui-xs">
+            <span className="font-medium">
+              {provider}/{modelId}
+            </span>{' '}
+            is no longer allowed by the admin policy. Pick a different model to save changes.
+          </Txt>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ModelChipProps {
+  provider: string;
+  modelId: string;
+}
+
+const LockedModelChip = ({ provider, modelId }: ModelChipProps) => (
+  <div
+    className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
+    data-testid="model-detail-locked-chip"
+  >
+    <LockIcon className="h-4 w-4 shrink-0 text-neutral3" />
+    <Txt variant="ui-sm" className="font-medium text-neutral6 truncate">
+      {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
+    </Txt>
+    <Txt variant="ui-xs" className="ml-auto shrink-0 text-neutral3">
+      Set by admin
+    </Txt>
+  </div>
+);
 
 interface ConfigRowsProps {
   features: ReturnType<typeof useBuilderAgentFeatures>;
@@ -346,11 +360,11 @@ function ConfigRows({
   disabled = false,
 }: ConfigRowsProps) {
   return (
-    <div className="flex flex-col divide-y divide-border1 border-t border-border1">
+    <div className="flex flex-col">
       <ConfigRow
         icon={<FileText className="h-4 w-4" />}
         label="Instructions"
-        description={instructionsDescription}
+        value={instructionsDescription}
         isActive={activeDetail === 'instructions'}
         onClick={() => toggleDetail('instructions')}
         disabled={disabled}
@@ -360,7 +374,6 @@ function ConfigRows({
         <ConfigRow
           icon={<Wrench className="h-4 w-4" />}
           label="Tools"
-          description="External actions your agent can take"
           count={activeToolsCount}
           total={totalToolsCount}
           isActive={activeDetail === 'tools'}
@@ -373,7 +386,6 @@ function ConfigRows({
         <ConfigRow
           icon={<Sparkles className="h-4 w-4" />}
           label="Skills"
-          description="Reusable capabilities your agent can use"
           count={activeSkillsCount}
           total={totalSkillsCount}
           isActive={activeDetail === 'skills'}
@@ -433,7 +445,7 @@ function DetailPane({
 interface ConfigRowProps {
   icon: React.ReactNode;
   label: string;
-  description: string;
+  value?: string;
   count?: number;
   total?: number;
   isActive?: boolean;
@@ -445,7 +457,7 @@ interface ConfigRowProps {
 const ConfigRow = ({
   icon,
   label,
-  description,
+  value,
   count,
   total,
   isActive = false,
@@ -470,16 +482,16 @@ const ConfigRow = ({
     >
       {icon}
     </span>
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <Txt variant="ui-sm" className="font-medium text-neutral6">
-        {label}
+    <Txt variant="ui-sm" className="shrink-0 font-medium text-neutral6">
+      {label}
+    </Txt>
+    {value !== undefined && (
+      <Txt variant="ui-sm" className="ml-auto min-w-0 truncate text-neutral3">
+        {value}
       </Txt>
-      <Txt variant="ui-xs" className="truncate text-neutral3">
-        {description}
-      </Txt>
-    </div>
+    )}
     {count !== undefined && total !== undefined && (
-      <Txt variant="ui-sm" className="shrink-0 tabular-nums text-neutral3">
+      <Txt variant="ui-sm" className={cn('shrink-0 tabular-nums text-neutral3', value === undefined && 'ml-auto')}>
         {count} / {total}
       </Txt>
     )}
@@ -505,14 +517,12 @@ const AgentConfigurePanelSkeleton = () => (
           <Skeleton className="h-9 w-full" />
         </div>
       </div>
-      <div className="flex flex-col divide-y divide-border1 border-t border-border1">
+      <div className="flex flex-col">
         {[0, 1, 2].map(i => (
           <div key={i} className="flex items-center gap-3 px-6 py-4">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-40" />
-            </div>
+            <Skeleton className="h-4 w-20 shrink-0" />
+            <Skeleton className="ml-auto h-4 w-24" />
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
           </div>
         ))}

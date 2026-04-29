@@ -65,12 +65,22 @@ describe('formValuesToSaveParams', () => {
     expect(result.agents).toEqual({ 'agent-x': { description: 'Agent X desc' } });
   });
 
-  it('returns undefined for tools/agents/workflows when their resolved record is empty', () => {
+  it('returns empty records for tools/agents/workflows when their resolved record is empty', () => {
     const result = formValuesToSaveParams(baseValues, []);
 
-    expect(result.tools).toBeUndefined();
-    expect(result.agents).toBeUndefined();
-    expect(result.workflows).toBeUndefined();
+    expect(result.tools).toEqual({});
+    expect(result.agents).toEqual({});
+    expect(result.workflows).toEqual({});
+  });
+
+  it('returns an empty tools record when a previously-selected tool is toggled off', () => {
+    const availableAgentTools: AgentTool[] = [
+      { id: 'tool-a', name: 'Tool A', description: 'Tool A desc', isChecked: false, type: 'tool' },
+    ];
+
+    const result = formValuesToSaveParams({ ...baseValues, tools: { 'tool-a': false } }, availableAgentTools);
+
+    expect(result.tools).toEqual({});
   });
 
   it('builds a workflow entry with description when the available workflow has one', () => {
@@ -143,10 +153,10 @@ describe('formValuesToSaveParams', () => {
     expect(result.skills).toEqual({ 'skill-a': {} });
   });
 
-  it('returns undefined skills when nothing is selected', () => {
+  it('returns an empty skills record when nothing is selected', () => {
     const result = formValuesToSaveParams(baseValues, [], [buildSkill('skill-a', 'Skill A desc')]);
 
-    expect(result.skills).toBeUndefined();
+    expect(result.skills).toEqual({});
   });
 
   it('omits disabled skills from the resulting record', () => {

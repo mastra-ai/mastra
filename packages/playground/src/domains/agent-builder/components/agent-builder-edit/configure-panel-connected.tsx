@@ -18,24 +18,10 @@ type ConfigurePanelConnectedProps =
 export const ConfigurePanelConnected = (props: ConfigurePanelConnectedProps) => {
   const isRunning = useStreamRunning();
 
-  if (props.editable) {
-    return (
-      <AgentConfigurePanel
-        editable
-        availableAgentTools={props.availableAgentTools}
-        availableSkills={props.availableSkills}
-        isLoading={false}
-        activeDetail={props.activeDetail}
-        onActiveDetailChange={props.onActiveDetailChange}
-        disabled={isRunning}
-      />
-    );
-  }
-
   return (
     <AgentConfigurePanel
-      agent={props.agent}
-      editable={false}
+      agent={'agent' in props ? props.agent : undefined}
+      editable={props.editable}
       isLoading={false}
       availableAgentTools={props.availableAgentTools}
       availableSkills={props.availableSkills}

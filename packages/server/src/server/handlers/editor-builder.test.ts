@@ -11,21 +11,21 @@ const createMockMastra = (editor?: Partial<IMastraEditor>) =>
   }) as any;
 
 describe('GET /editor/builder/settings', () => {
-  it('returns enabled: false when no editor configured', async () => {
+  it('returns enabled: false + inactive modelPolicy when no editor configured', async () => {
     const mastra = createMockMastra();
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
-    expect(result).toEqual({ enabled: false });
+    expect(result).toEqual({ enabled: false, modelPolicy: { active: false } });
   });
 
-  it('returns enabled: false when editor lacks resolveBuilder', async () => {
+  it('returns enabled: false + inactive modelPolicy when editor lacks resolveBuilder', async () => {
     const mastra = createMockMastra({});
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
-    expect(result).toEqual({ enabled: false });
+    expect(result).toEqual({ enabled: false, modelPolicy: { active: false } });
   });
 
-  it('returns enabled: false when hasEnabledBuilderConfig returns false', async () => {
+  it('returns enabled: false + inactive modelPolicy when hasEnabledBuilderConfig returns false', async () => {
     const resolveBuilder = vi.fn();
     const mastra = createMockMastra({
       hasEnabledBuilderConfig: () => false,
@@ -33,21 +33,21 @@ describe('GET /editor/builder/settings', () => {
     });
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
-    expect(result).toEqual({ enabled: false });
+    expect(result).toEqual({ enabled: false, modelPolicy: { active: false } });
     expect(resolveBuilder).not.toHaveBeenCalled();
   });
 
-  it('returns enabled: false when resolveBuilder returns undefined', async () => {
+  it('returns enabled: false + inactive modelPolicy when resolveBuilder returns undefined', async () => {
     const mastra = createMockMastra({
       hasEnabledBuilderConfig: () => true,
       resolveBuilder: vi.fn().mockResolvedValue(undefined),
     });
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
-    expect(result).toEqual({ enabled: false });
+    expect(result).toEqual({ enabled: false, modelPolicy: { active: false } });
   });
 
-  it('returns builder settings when builder is enabled', async () => {
+  it('returns builder settings + derived modelPolicy when builder is enabled (no model slice)', async () => {
     const mockBuilder: IAgentBuilder = {
       enabled: true,
       getFeatures: () => ({ agent: { tools: true, memory: true } }),
@@ -63,10 +63,41 @@ describe('GET /editor/builder/settings', () => {
       enabled: true,
       features: { agent: { tools: true, memory: true } },
       configuration: { agent: { maxTokens: 4096 } },
+      modelPolicy: { active: false },
     });
   });
 
-  it('returns only enabled: false when builder.enabled is false (no features/config exposed)', async () => {
+  it('returns active modelPolicy with allowed + default when configured', async () => {
+    const mockBuilder: IAgentBuilder = {
+      enabled: true,
+      getFeatures: () => ({ agent: { model: true } }),
+      getConfiguration: () => ({
+        agent: {
+          models: {
+            allowed: [{ provider: 'openai' }],
+            default: { provider: 'openai', modelId: 'gpt-4o-mini' },
+          },
+        },
+      }),
+    };
+    const mastra = createMockMastra({
+      hasEnabledBuilderConfig: () => true,
+      resolveBuilder: vi.fn().mockResolvedValue(mockBuilder),
+    });
+    const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
+
+    expect(result).toMatchObject({
+      enabled: true,
+      modelPolicy: {
+        active: true,
+        pickerVisible: true,
+        allowed: [{ provider: 'openai' }],
+        default: { provider: 'openai', modelId: 'gpt-4o-mini' },
+      },
+    });
+  });
+
+  it('returns enabled: false + inactive modelPolicy when builder.enabled is false', async () => {
     const mockBuilder: IAgentBuilder = {
       enabled: false,
       getFeatures: () => ({ agent: { tools: true } }),
@@ -79,7 +110,7 @@ describe('GET /editor/builder/settings', () => {
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
     // Should NOT expose features/config when disabled
-    expect(result).toEqual({ enabled: false });
+    expect(result).toEqual({ enabled: false, modelPolicy: { active: false } });
   });
 
   it('throws HTTPException when resolveBuilder throws', async () => {

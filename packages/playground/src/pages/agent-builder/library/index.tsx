@@ -13,9 +13,9 @@ import {
 import { LibraryIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
-  AgentBuilderLibraryList,
-  AgentBuilderLibraryListSkeleton,
-} from '@/domains/agent-builder/components/agent-builder-library/agent-builder-library-list';
+  AgentBuilderList,
+  AgentBuilderListSkeleton,
+} from '@/domains/agent-builder/components/agent-builder-list/agent-builder-list';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 
 export default function AgentBuilderLibraryPage() {
@@ -28,7 +28,7 @@ export default function AgentBuilderLibraryPage() {
 
   const body = (() => {
     if (isLoading) {
-      return <AgentBuilderLibraryListSkeleton />;
+      return <AgentBuilderListSkeleton rowTestId="library-skeleton-row" />;
     }
 
     if (error) {
@@ -65,7 +65,7 @@ export default function AgentBuilderLibraryPage() {
       );
     }
 
-    return <AgentBuilderLibraryList agents={agents} search={search} />;
+    return <AgentBuilderList agents={agents} search={search} rowTestId="library-agent-row" />;
   })();
 
   return (

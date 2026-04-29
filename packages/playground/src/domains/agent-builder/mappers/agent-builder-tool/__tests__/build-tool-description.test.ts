@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTool } from '../../../types/agent-tool';
 import { buildAgentBuilderToolDescription } from '../build-tool-description';
 
-const allOff = { tools: false, skills: false, memory: false, workflows: false, agents: false };
+const allOff = {
+  tools: false,
+  skills: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  avatarUpload: false,
+  model: false,
+  stars: false,
+};
 
 describe('buildAgentBuilderToolDescription', () => {
   it('lists name, description, instructions, and workspaceId by default', () => {
@@ -98,5 +107,17 @@ describe('buildAgentBuilderToolDescription', () => {
     expect(description).toContain('Primary');
     expect(description).toContain('ws-2');
     expect(description).toContain('Secondary');
+  });
+
+  it('mentions model and lists available provider/model pairs when models are available', () => {
+    const description = buildAgentBuilderToolDescription({ ...allOff, model: true }, [], [], [], [
+      { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
+      { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
+    ]);
+
+    expect(description).toContain('model');
+    expect(description).toContain('Available models');
+    expect(description).toContain('provider: openai (OpenAI), name: gpt-4o');
+    expect(description).toContain('provider: anthropic (Anthropic), name: claude-opus-4-7');
   });
 });

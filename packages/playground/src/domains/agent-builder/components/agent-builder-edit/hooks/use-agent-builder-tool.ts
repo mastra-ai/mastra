@@ -10,6 +10,8 @@ import { buildAgentBuilderToolSchema } from '@/domains/agent-builder/mappers/age
 import { routeToolInputToFormKeys } from '@/domains/agent-builder/mappers/agent-builder-tool/route-tool-input';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
+import { cleanProviderId } from '@/domains/llm';
+import type { ModelInfo } from '@/domains/llm';
 
 export const AGENT_BUILDER_TOOL_NAME = 'agentBuilderTool';
 
@@ -23,6 +25,7 @@ interface UseAgentBuilderToolArgs {
   availableAgentTools: AgentTool[];
   availableWorkspaces?: AvailableWorkspace[];
   availableSkills?: StoredSkillResponse[];
+  availableModels?: ModelInfo[];
 }
 
 export function useAgentBuilderTool({
@@ -30,6 +33,7 @@ export function useAgentBuilderTool({
   availableAgentTools,
   availableWorkspaces = [],
   availableSkills = [],
+  availableModels = [],
 }: UseAgentBuilderToolArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const { tools: toolsEnabled, skills: skillsEnabled } = features;
@@ -43,8 +47,15 @@ export function useAgentBuilderTool({
           availableAgentTools,
           availableWorkspaces,
           availableSkills,
+          availableModels,
         ),
-        inputSchema: buildAgentBuilderToolSchema(features, availableAgentTools, availableWorkspaces, availableSkills),
+        inputSchema: buildAgentBuilderToolSchema(
+          features,
+          availableAgentTools,
+          availableWorkspaces,
+          availableSkills,
+          availableModels,
+        ),
         outputSchema: z.object({ success: z.boolean() }),
         execute: async (inputData: any) => {
           if (typeof inputData?.name === 'string') {
@@ -72,6 +83,18 @@ export function useAgentBuilderTool({
             }
             formMethods.setValue('skills', skills, { shouldDirty: true });
           }
+          if (
+            typeof inputData?.model?.provider === 'string' &&
+            inputData.model.provider.length > 0 &&
+            typeof inputData.model.name === 'string' &&
+            inputData.model.name.length > 0
+          ) {
+            formMethods.setValue(
+              'model',
+              { provider: cleanProviderId(inputData.model.provider), name: inputData.model.name },
+              { shouldDirty: true },
+            );
+          }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
             formMethods.setValue('workspaceId', inputData.workspaceId);
           }
@@ -79,7 +102,7 @@ export function useAgentBuilderTool({
           return { success: true };
         },
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills affects the schema/description (matches prior behavior)
-    [formMethods, toolsEnabled, skillsEnabled, availableAgentTools, availableWorkspaces, availableSkills],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills affects feature-gated schema/description fields
+    [formMethods, toolsEnabled, skillsEnabled, availableAgentTools, availableWorkspaces, availableSkills, availableModels],
   );
 }
