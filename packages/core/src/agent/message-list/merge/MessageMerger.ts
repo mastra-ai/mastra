@@ -62,15 +62,6 @@ export class MessageMerger {
       return false;
     }
 
-    if (
-      messageSource === 'response' &&
-      isLatestFromMemory &&
-      !agentNetworkAppend &&
-      latestMessage.id !== incomingMessage.id
-    ) {
-      return false;
-    }
-
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =
       latestMessage.role === 'assistant' &&

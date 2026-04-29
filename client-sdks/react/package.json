@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.2.30-alpha.6",
+  "version": "0.2.31-alpha.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -59,8 +59,8 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/react": "^2.0.156",
-    "@assistant-ui/react": "^0.12.22",
+    "@ai-sdk/react": "^2.0.181",
+    "@assistant-ui/react": "^0.12.26",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.16.0-alpha.6",
+  "version": "0.16.1-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -57,8 +57,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
-    "@ai-sdk/openai": "^3.0.41",
+    "@ai-sdk/anthropic": "^3.0.71",
+    "@ai-sdk/openai": "^3.0.53",
     "@ast-grep/napi": "^0.42.0",
     "@mariozechner/pi-tui": "^0.60.0",
     "@mastra/agent-browser": "workspace:*",
@@ -72,7 +72,7 @@
     "@mastra/pg": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
-    "ai": "^6.0.116",
+    "ai": "^6.0.168",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",

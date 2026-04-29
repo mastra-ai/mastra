@@ -1,5 +1,18 @@
 # create-mastra
 
+## 1.7.1-alpha.1
+
+## 1.7.1-alpha.0
+
+## 1.7.0
+
+### Patch Changes
+
+- Removed Prettier from the CLI install path so generated project setup no longer pulls in the prettier dependency. ([#15711](https://github.com/mastra-ai/mastra/pull/15711))
+
+- Improved `create-mastra` package size by reducing runtime dependency overhead. ([#15721](https://github.com/mastra-ai/mastra/pull/15721))
+  This decreases install surface while preserving existing CLI behavior.
+
 ## 1.7.0-alpha.6
 
 ## 1.7.0-alpha.5

@@ -8,6 +8,7 @@ export interface PromptContext {
   projectName: string;
   gitBranch?: string;
   platform: string;
+  commonBinaries?: { name: string; path: string | null }[];
   date: string;
   mode: string;
   modelId?: string;
@@ -16,13 +17,15 @@ export interface PromptContext {
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
+  const commonBinaries = formatCommonBinaries(ctx.commonBinaries);
+
   return `You are Mastra Code, an interactive CLI coding agent that helps users with software engineering tasks.
 
 # Environment
 Working directory: ${ctx.projectPath}
 Project: ${ctx.projectName}
 ${ctx.gitBranch ? `Git branch: ${ctx.gitBranch}` : 'Not a git repository'}
-Platform: ${ctx.platform}
+Platform: ${ctx.platform}${commonBinaries ? `\nCommon binaries: ${commonBinaries}` : ''}
 Date: ${ctx.date}
 Current mode: ${ctx.mode}
 
@@ -137,4 +140,10 @@ Only if all are "no" → THEN ask the user
 - Use tool calls for actions (editing files, running commands, searching, etc.). Use text for communication — talk to the user in text, not via tools, except for communication tools like \`submit_plan\`, \`ask_user\`, and \`task_write\`.
 - Prioritize technical accuracy over validating the user's beliefs. Be direct and objective. Respectful correction is more valuable than false agreement.
 `;
+}
+
+function formatCommonBinaries(binaries: PromptContext['commonBinaries']): string {
+  if (!binaries?.length) return '';
+
+  return binaries.map(binary => `${binary.name}: ${binary.path ?? 'not found'}`).join(', ');
 }

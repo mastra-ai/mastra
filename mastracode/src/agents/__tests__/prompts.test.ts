@@ -84,4 +84,28 @@ describe('buildFullPrompt', () => {
     expect(prompt).not.toContain('<autonomy_and_persistence>');
     expect(prompt).not.toContain('<coding_behavior>');
   });
+
+  it('includes common binary availability in environment details', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      commonBinaries: [
+        { name: 'python', path: null },
+        { name: 'python3', path: '/usr/bin/python3' },
+      ],
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('Common binaries: python: not found, python3: /usr/bin/python3');
+  });
 });

@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.7.0-alpha.6",
+  "version": "1.7.1-alpha.1",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -38,9 +38,9 @@
     "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --ignore-workspace --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.12.22",
-    "@assistant-ui/react-markdown": "^0.12.8",
-    "@assistant-ui/react-syntax-highlighter": "^0.12.8",
+    "@assistant-ui/react": "^0.12.26",
+    "@assistant-ui/react-markdown": "^0.12.11",
+    "@assistant-ui/react-syntax-highlighter": "^0.12.9",
     "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",

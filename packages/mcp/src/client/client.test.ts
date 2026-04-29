@@ -2041,13 +2041,19 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const stderrChunks: string[] = [];
+      let settled = false;
+      let ready = false;
 
       const proc = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       proc.stderr.on('data', data => {
-        stderrChunks.push(data.toString());
+        const chunk = data.toString();
+        stderrChunks.push(chunk);
+        if (chunk.includes('Secure MCP Filesystem Server running on stdio')) {
+          ready = true;
+        }
       });
 
       let responseBuffer = '';
@@ -2086,6 +2092,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
                 // Wait for server to process roots and log
                 setTimeout(() => {
+                  settled = true;
                   proc.kill();
                   resolve(stderrChunks.join(''));
                 }, 1000);
@@ -2099,10 +2106,17 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
         // If no roots capability, kill after initialized
         if (!clientCapabilities.roots && initializedSent) {
-          setTimeout(() => {
+          const finish = () => {
+            settled = true;
+            clearTimeout(timeout);
             proc.kill();
             resolve(stderrChunks.join(''));
-          }, 1000);
+          };
+          if (ready) {
+            setTimeout(finish, 1000);
+          } else {
+            setTimeout(finish, 3000);
+          }
         }
       });
 
@@ -2125,9 +2139,16 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       }, 500);
 
       proc.on('error', reject);
+      proc.on('exit', () => {
+        if (!settled) {
+          clearTimeout(timeout);
+          resolve(stderrChunks.join(''));
+        }
+      });
 
       // Timeout after 25 seconds
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
+        settled = true;
         proc.kill();
         resolve(stderrChunks.join(''));
       }, 25000);

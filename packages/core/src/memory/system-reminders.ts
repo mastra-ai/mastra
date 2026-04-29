@@ -1,5 +1,13 @@
 import type { MastraDBMessage } from '../agent/message-list';
 
+/*
+ * Compatibility note: @mastra/memory intentionally copies the helpers in this
+ * file into packages/memory/src/index.ts instead of importing them. Its peer
+ * range permits older core versions that do not export these newer names, and
+ * importing them can crash published memory builds during ESM instantiation.
+ * Until v2 can tighten that peer contract, keep both sides manually in sync.
+ */
+
 const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
