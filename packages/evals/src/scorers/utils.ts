@@ -10,6 +10,27 @@ import type {
 } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 
+export type ScorerRunInputForLLMJudge =
+  | ScorerRunInputForAgent
+  | string
+  | {
+      inputMessages?: unknown[];
+      messages?: unknown[];
+      prompt?: string;
+      [key: string]: unknown;
+    };
+
+export type ScorerRunOutputForLLMJudge =
+  | ScorerRunOutputForAgent
+  | string
+  | unknown[]
+  | {
+      text?: string;
+      content?: unknown;
+      role?: string;
+      [key: string]: unknown;
+    };
+
 /**
  * Extracts text content from a MastraDBMessage or ModelMessage-like object.
  *

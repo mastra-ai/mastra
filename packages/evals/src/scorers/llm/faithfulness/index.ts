@@ -2,6 +2,7 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
   createFaithfulnessAnalyzePrompt,
   createFaithfulnessExtractPrompt,
@@ -31,7 +32,7 @@ export function createFaithfulnessScorer({
   model: MastraModelConfig;
   options?: FaithfulnessMetricOptions;
 }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'faithfulness-scorer',
     name: 'Faithfulness Scorer',
     description: 'A scorer that evaluates the faithfulness of an LLM output to an input',

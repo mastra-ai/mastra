@@ -1,4 +1,4 @@
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
+import type { ScorerRunInputForAgent } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import {
   getCombinedSystemPrompt,
   roundToTwoDecimals,
 } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { PROMPT_ALIGNMENT_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface PromptAlignmentOptions {
@@ -80,7 +81,7 @@ export function createPromptAlignmentScorerLLM({
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'prompt-alignment-scorer',
     name: 'Prompt Alignment (LLM)',
     description: 'Evaluates how well the agent response aligns with the intent and requirements of the user prompt',
@@ -94,7 +95,7 @@ export function createPromptAlignmentScorerLLM({
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run }) => {
         const userPrompt = getUserMessageFromRunInput(run.input) ?? '';
-        const systemPrompt = getCombinedSystemPrompt(run.input) ?? '';
+        const systemPrompt = getCombinedSystemPrompt(run.input as ScorerRunInputForAgent) ?? '';
         const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Validation based on evaluation mode
@@ -176,7 +177,7 @@ export function createPromptAlignmentScorerLLM({
       description: 'Generate human-readable explanation of prompt alignment evaluation',
       createPrompt: ({ run, results, score }) => {
         const userPrompt = getUserMessageFromRunInput(run.input) ?? '';
-        const systemPrompt = getCombinedSystemPrompt(run.input) ?? '';
+        const systemPrompt = getCombinedSystemPrompt(run.input as ScorerRunInputForAgent) ?? '';
         const analysis = results.analyzeStepResult;
 
         if (!analysis) {

@@ -3,6 +3,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/co
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
   createContextRelevancePrompt,
   createContextPrecisionReasonPrompt,
@@ -39,7 +40,7 @@ export function createContextPrecisionScorer({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'context-precision-scorer',
     name: 'Context Precision Scorer',
     description:
@@ -58,7 +59,9 @@ export function createContextPrecisionScorer({
         const output = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Get context either from options or extractor
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = options.contextExtractor
+          ? options.contextExtractor(run.input as ScorerRunInputForAgent, run.output as ScorerRunOutputForAgent)
+          : options.context!;
 
         if (context.length === 0) {
           throw new Error('No context available for evaluation');
@@ -115,7 +118,9 @@ export function createContextPrecisionScorer({
         const output = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Get context either from options or extractor (same as in analyze)
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = options.contextExtractor
+          ? options.contextExtractor(run.input as ScorerRunInputForAgent, run.output as ScorerRunOutputForAgent)
+          : options.context!;
 
         return createContextPrecisionReasonPrompt({
           input,

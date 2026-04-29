@@ -3,6 +3,7 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { CONTEXT_RELEVANCE_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface ContextRelevanceOptions {
@@ -51,7 +52,7 @@ export function createContextRelevanceScorerLLM({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'context-relevance-scorer',
     name: 'Context Relevance (LLM)',
     description: 'Evaluates how relevant and useful the provided context was for generating the agent response',
@@ -69,7 +70,9 @@ export function createContextRelevanceScorerLLM({
         const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Get context either from options or extractor
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = options.contextExtractor
+          ? options.contextExtractor(run.input as ScorerRunInputForAgent, run.output as ScorerRunOutputForAgent)
+          : options.context!;
 
         if (context.length === 0) {
           // Create a minimal prompt that will trigger empty context handling
@@ -92,7 +95,9 @@ export function createContextRelevanceScorerLLM({
       const evaluations = results.analyzeStepResult?.evaluations || [];
 
       // Check if this is the "no context" case
-      const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+      const context = options.contextExtractor
+        ? options.contextExtractor(run.input as ScorerRunInputForAgent, run.output as ScorerRunOutputForAgent)
+        : options.context!;
       if (context.length === 0) {
         // Default score when no context is available
         // Return 1.0 since the agent had to work without any context
@@ -167,7 +172,9 @@ export function createContextRelevanceScorerLLM({
         const userQuery = getUserMessageFromRunInput(run.input) ?? '';
 
         // Check if this is the "no context" case
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = options.contextExtractor
+          ? options.contextExtractor(run.input as ScorerRunInputForAgent, run.output as ScorerRunOutputForAgent)
+          : options.context!;
         if (context.length === 0) {
           // Return a special reason for no context
           return `No context was available for evaluation. The agent response was generated without any supporting context. Score: ${score}`;
