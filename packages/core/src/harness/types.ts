@@ -114,6 +114,23 @@ export interface HarnessSubagent {
    * tools are visible.
    */
   allowedWorkspaceTools?: string[];
+
+  /**
+   * Default "forked" mode for this subagent type. When `true`, invocations
+   * inherit the parent agent's conversation context: the parent thread is
+   * cloned and the subagent runs on the fork with the parent agent's
+   * instructions and tools, preserving prompt-cache prefix.
+   *
+   * The parent's `instructions`, `tools`, `allowedHarnessTools`,
+   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
+   * are ignored when a run is forked — the parent agent is used as-is.
+   *
+   * Callers can override per-invocation by passing `forked` in the tool
+   * input. Forked subagents require memory to be configured on the Harness.
+   *
+   * @default false
+   */
+  forked?: boolean;
 }
 
 /**
@@ -482,6 +499,7 @@ export interface ActiveSubagentState {
   agentType: string;
   task: string;
   modelId?: string;
+  forked?: boolean;
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
@@ -820,7 +838,7 @@ export type HarnessEvent =
       plan: string;
     }
   | { type: 'plan_approved' }
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
+  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
       type: 'subagent_tool_start';

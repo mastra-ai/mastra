@@ -15,14 +15,14 @@ For setup instructions, see the [Metrics overview](/docs/observability/metrics/o
 
 Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and (for model generation spans) reads token usage data. No manual instrumentation is needed.
 
-Metrics are routed through an internal event bus to the `DefaultExporter`, which batches and flushes them to storage. Only DuckDB and in-memory storage backends support metrics persistence today.
+Metrics are routed through an internal event bus to the `DefaultExporter`, which batches and flushes them to storage.
 
 ### What affects whether a metric is available
 
 Two conditions must be true for a metric to reach storage:
 
 1. `DefaultExporter` is configured as an exporter.
-1. The storage backend supports metrics (`DuckDB` or `InMemory`).
+1. The storage backend supports metrics (ClickHouse, DuckDB, or in-memory).
 
 If metrics aren't appearing, see [troubleshooting](#troubleshooting).
 

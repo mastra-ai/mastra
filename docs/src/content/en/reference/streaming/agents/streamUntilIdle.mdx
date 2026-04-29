@@ -7,7 +7,7 @@ packages:
 
 # Agent.streamUntilIdle()
 
-**Added in:** `@mastra/core@1.28.0`
+**Added in:** `@mastra/core@1.29.0`
 
 `streamUntilIdle()` streams an agent's response and keeps the stream open until every background task dispatched during the run completes. When a task finishes, its result is written to memory and the agentic loop re-enters automatically so the LLM can react to it. The stream closes once no tasks are running and no completions are queued.
 

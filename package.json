@@ -123,7 +123,7 @@
     },
     "patchedDependencies": {
       "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",
-      "fetch-to-node@2.1.0": "patches/fetch-to-node@2.1.0.patch"
+      "tsup@8.5.1": "patches/tsup@8.5.1.patch"
     }
   },
   "license": "Apache-2.0",

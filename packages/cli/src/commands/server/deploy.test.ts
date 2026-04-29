@@ -87,6 +87,15 @@ vi.mock('../../utils/run-build.js', () => ({
 }));
 
 vi.mock('../studio/project-config.js', () => ({
+  getProjectConfigToSave: vi.fn((projectId, projectName, projectSlug, organizationId, projectConfig) => ({
+    projectId,
+    projectName,
+    projectSlug,
+    organizationId,
+    ...(projectConfig?.disablePlatformObservability !== undefined
+      ? { disablePlatformObservability: projectConfig.disablePlatformObservability }
+      : {}),
+  })),
   loadProjectConfig: vi.fn().mockResolvedValue(null),
   saveProjectConfig: vi.fn().mockResolvedValue(undefined),
 }));
@@ -317,11 +326,70 @@ describe('readEnvVars (server deploy)', () => {
 describe('serverDeployAction', () => {
   beforeEach(async () => {
     const { access } = await import('node:fs/promises');
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+
     vi.mocked(access).mockResolvedValue(undefined);
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
   });
 
   afterEach(() => {
     vi.resetModules();
+  });
+
+  it('passes disablePlatformObservability to uploadServerDeploy and preserves it when saving config', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { fetchOrgs } = await import('../auth/api.js');
+    const { getCurrentOrgId, getToken } = await import('../auth/credentials.js');
+    const { fetchServerProjects, uploadServerDeploy, pollServerDeploy } = await import('./platform-api.js');
+    const { loadProjectConfig, saveProjectConfig } = await import('../studio/project-config.js');
+
+    vi.mocked(getToken).mockResolvedValue('test-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org-1');
+    vi.mocked(fetchOrgs).mockResolvedValue([{ id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true }]);
+    vi.mocked(fetchServerProjects).mockResolvedValue([]);
+    vi.mocked(pollServerDeploy).mockResolvedValue({
+      id: 'deploy-1',
+      status: 'running',
+      instanceUrl: 'https://example.com',
+      error: null,
+    });
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-2',
+      projectId: 'old-proj',
+      projectName: 'old-app',
+      projectSlug: 'old-app',
+      disablePlatformObservability: true,
+    });
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+
+    await expect(
+      serverDeployAction(undefined, { yes: true, skipBuild: true, org: 'org-1', project: 'my-app' }),
+    ).resolves.toBeUndefined();
+
+    expect(saveProjectConfig).toHaveBeenCalledWith(
+      expect.any(String),
+      {
+        projectId: 'my-app',
+        projectName: 'my-app',
+        projectSlug: 'my-app',
+        organizationId: 'org-1',
+        disablePlatformObservability: true,
+      },
+      undefined,
+    );
+    expect(uploadServerDeploy).toHaveBeenCalledWith('test-token', 'org-1', 'my-app', expect.any(Buffer), {
+      projectName: 'my-app',
+      envVars: { API_KEY: 'test' },
+      disablePlatformObservability: true,
+    });
   });
 
   it('throws when headless mode is missing required env vars and flags', async () => {
@@ -353,6 +421,7 @@ describe('serverDeployAction', () => {
 
     const { readdir, readFile } = await import('node:fs/promises');
     const { loadProjectConfig } = await import('../studio/project-config.js');
+    const { uploadServerDeploy } = await import('./platform-api.js');
     vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
       ReturnType<typeof readdir>
     >);
@@ -370,6 +439,11 @@ describe('serverDeployAction', () => {
     const { serverDeployAction } = await import('./deploy.js');
 
     await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
+    expect(uploadServerDeploy).toHaveBeenCalledWith('test-token', 'org-1', 'proj-1', expect.any(Buffer), {
+      projectName: 'my-app',
+      envVars: { API_KEY: 'test' },
+      disablePlatformObservability: false,
+    });
   });
 
   it('uses project config in headless mode without fetching orgs', async () => {
