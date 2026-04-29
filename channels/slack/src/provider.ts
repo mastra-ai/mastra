@@ -66,7 +66,7 @@ function hashConfig(
  *
  * // Or configure later (e.g., credentials from UI or vault)
  * const slack = new SlackProvider();
- * slack.configure({ refreshToken: 'xoxe-1-...' });
+ * await slack.configure({ refreshToken: 'xoxe-1-...' });
  *
  * const mastra = new Mastra({
  *   agents: { myAgent },
@@ -121,20 +121,25 @@ export class SlackProvider implements ChannelProvider {
    * @example
    * ```ts
    * const slack = new SlackProvider();
-   * // Provide credentials:
-   * slack.configure({ refreshToken: 'xoxe-1-...' });
+   * // Provide credentials (persists to storage immediately):
+   * await slack.configure({ refreshToken: 'xoxe-1-...' });
    * // Clear credentials and stored tokens:
    * await slack.configure(null);
    * ```
    */
-  configure(credentials: { refreshToken: string; token?: string }): void;
-  configure(credentials: null): Promise<void>;
-  configure(credentials: { refreshToken: string; token?: string } | null): void | Promise<void> {
+  async configure(credentials: { refreshToken: string; token?: string } | null): Promise<void> {
     if (credentials === null) {
       this.#manifestClient = undefined;
       return this.#deleteConfigTokens();
     }
     this.#initManifestClient(credentials.token ?? '', credentials.refreshToken);
+    await this.#saveConfigTokens(
+      this.#encryptConfigTokens({
+        token: credentials.token ?? '',
+        refreshToken: credentials.refreshToken,
+        updatedAt: new Date(),
+      }),
+    );
   }
 
   /**

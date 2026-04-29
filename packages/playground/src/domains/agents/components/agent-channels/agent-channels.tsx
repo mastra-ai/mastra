@@ -1,4 +1,4 @@
-import { Button, Skeleton, StatusBadge, Txt } from '@mastra/playground-ui';
+import { Button, Skeleton, StatusBadge, Txt, toast } from '@mastra/playground-ui';
 import {
   useChannelPlatforms,
   useChannelInstallations,
@@ -67,12 +67,19 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
               break;
           }
         },
+        onError: (err: Error & { body?: { error?: string } }) => {
+          toast.error(err.body?.error || err.message || 'Failed to connect channel');
+        },
       },
     );
   };
 
   const handleDisconnect = () => {
-    disconnect(agentId);
+    disconnect(agentId, {
+      onError: (err: Error & { body?: { error?: string } }) => {
+        toast.error(err.body?.error || err.message || 'Failed to disconnect channel');
+      },
+    });
   };
 
   return (

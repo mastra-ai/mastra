@@ -7,7 +7,7 @@ import { DuckDBStore } from '@mastra/duckdb';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
-import { mastraAuth, rbacProvider } from './auth';
+// import { mastraAuth, rbacProvider } from './auth';
 
 import {
   agentThatHarassesYou,
@@ -122,8 +122,7 @@ export const mastra = new Mastra({
   }),
   channels: {
     slack: new SlackProvider({
-      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
-      baseUrl: process.env.SLACK_BASE_URL,
+      baseUrl: process.env.MASTRA_BASE_URL,
     }),
   },
   // server: {
