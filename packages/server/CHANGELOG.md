@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.29.1-alpha.1
+
+### Patch Changes
+
+- Fixed `GET /agents` returning 500 when one agent throws while resolving dynamic configuration under the active request context. ([#15911](https://github.com/mastra-ai/mastra/pull/15911))
+  The route now still returns the rest of the agent list and falls back to safe defaults for the failing agent instead of failing the whole response.
+- Updated dependencies [[`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1-alpha.1
+
 ## 1.29.1-alpha.0
 
 ### Patch Changes

@@ -133,10 +133,18 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "@mastra_agent-builder-15770-dependencies",
+    "agents-list-resilient-instructions",
+    "anthropic-cache-write-aggregation",
     "automated-provider-registry-20260429-010458",
     "blue-socks-spend",
     "brown-animals-shine",
     "green-birds-knock",
-    "red-boxes-write"
+    "mastracode-15770-dependencies",
+    "modern-worms-sit",
+    "red-boxes-write",
+    "revert-observability-utils-getorcreatespan",
+    "smart-jeans-pump",
+    "swift-jokes-say"
   ]
 }
