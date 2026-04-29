@@ -364,8 +364,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               };
             }
           }
-        } else if (isResumeToolCall) {
-          await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
         //this is to avoid passing resume data to the tool if it's not needed
@@ -392,6 +390,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           workspace: _internal?.stepWorkspace,
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
+          // Let tools that read thread history mid-stream (e.g. forked subagents
+          // cloning the parent thread) drain the save queue so the store reflects
+          // the latest user/assistant messages before they read.
+          flushMessages:
+            _internal?.saveQueueManager && _internal?.threadId
+              ? () => _internal.saveQueueManager!.flushMessages(messageList, _internal.threadId, _internal.memoryConfig)
+              : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
               controller.enqueue({
@@ -503,12 +508,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
         // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
         // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        const needsRunIdLookup =
-          resumeDataToPassToToolOptions &&
-          (isAgentTool || isWorkflowTool) &&
-          (!isResumeToolCall || !args.suspendedToolRunId);
+        const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
         if (needsRunIdLookup) {
           let suspendedToolRunId = '';
+          const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
 
@@ -520,16 +523,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               break;
             }
 
-            const dataToolSuspendedParts = message.content.parts?.filter(
-              part =>
-                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                !(part.data as any).resumed,
-            );
-            if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-              const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
-              if (foundTool) {
-                suspendedToolRunId = (foundTool as any).data.runId;
-                break;
+            if (shouldUsePartsFallback) {
+              const dataToolSuspendedParts = message.content.parts?.filter(
+                part =>
+                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                  !(part.data as any).resumed,
+              );
+              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+                const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
+                if (foundTool) {
+                  suspendedToolRunId = (foundTool as any).data.runId;
+                  break;
+                }
               }
             }
           }
@@ -537,6 +542,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
           }
+        }
+
+        if (!toolRequiresApproval && isResumeToolCall) {
+          await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
         if (args === null || args === undefined) {
