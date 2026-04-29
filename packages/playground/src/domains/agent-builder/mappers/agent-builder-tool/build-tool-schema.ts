@@ -98,6 +98,13 @@ export function buildAgentBuilderToolSchema(
       .describe('Model to use for the agent. Only use a provider/name pair from the available models list.');
   }
 
+  if (features.browser) {
+    shape.browserEnabled = z
+      .boolean()
+      .optional()
+      .describe('Whether to enable browser access for this agent. Set to true to let the agent browse the web.');
+  }
+
   const workspaceIdSchema = workspaceIds.length > 0 ? z.enum(workspaceIds as [string, ...string[]]) : z.string();
   shape.workspaceId = workspaceIdSchema
     .optional()

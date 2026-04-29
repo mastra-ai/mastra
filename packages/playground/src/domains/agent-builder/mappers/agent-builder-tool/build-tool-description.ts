@@ -24,6 +24,7 @@ export function buildAgentBuilderToolDescription(
   if (features.tools) descriptionParts.push('tools');
   if (skillsAvailable) descriptionParts.push('skills');
   if (modelsAvailable) descriptionParts.push('model');
+  if (features.browser) descriptionParts.push('browserEnabled');
   descriptionParts.push('workspaceId');
 
   const availableToolsBlock =

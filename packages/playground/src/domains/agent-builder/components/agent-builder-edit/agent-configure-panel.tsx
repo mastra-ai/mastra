@@ -215,7 +215,7 @@ function ConfigurePanelContent({
             totalSkillsCount={totalSkillsCount}
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
-            disabled={disabled}
+            disabled={mutationsDisabled}
           />
         </div>
       </div>
