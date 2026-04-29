@@ -89,6 +89,22 @@ describe('useBuilderFilteredProviders', () => {
     const { result } = renderHook(() => useBuilderFilteredProviders(providers, policy));
     expect(result.current).toEqual([]);
   });
+
+  it('combines provider wildcard with specific modelId narrowing for the same allowlist', () => {
+    const policy: BuilderModelPolicy = {
+      active: true,
+      pickerVisible: true,
+      allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
+    };
+    const { result } = renderHook(() => useBuilderFilteredProviders(providers, policy));
+    expect(result.current).toHaveLength(2);
+    expect(result.current.map(p => p.id)).toEqual(['openai', 'anthropic']);
+    const openai = result.current.find(p => p.id === 'openai');
+    const anthropic = result.current.find(p => p.id === 'anthropic');
+    expect(openai?.models).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    expect(anthropic?.models).toEqual(['claude-opus-4-7']);
+    expect(result.current.find(p => p.id === 'acme/gateway')).toBeUndefined();
+  });
 });
 
 describe('useBuilderFilteredModels', () => {
@@ -122,5 +138,21 @@ describe('useBuilderFilteredModels', () => {
     };
     const { result } = renderHook(() => useBuilderFilteredModels(allModels, policy));
     expect(result.current).toEqual([{ provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' }]);
+  });
+
+  it('intersects with combined provider-wildcard + specific-modelId allowlist', () => {
+    const policy: BuilderModelPolicy = {
+      active: true,
+      pickerVisible: true,
+      allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
+    };
+    const { result } = renderHook(() => useBuilderFilteredModels(allModels, policy));
+    expect(result.current).toEqual([
+      { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
+      { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o-mini' },
+      { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
+    ]);
+    expect(result.current.find(m => m.model === 'claude-haiku-4-5')).toBeUndefined();
+    expect(result.current.find(m => m.model === 'acme-mini')).toBeUndefined();
   });
 });
