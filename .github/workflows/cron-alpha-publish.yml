@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   alpha-version:
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Initial checkout
@@ -104,4 +104,6 @@ jobs:
         run: |
           git add -A
           git commit -m "chore: version packages"
-          git push
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
