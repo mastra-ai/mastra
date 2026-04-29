@@ -88,7 +88,7 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
   readonly id = 'skill-search';
   readonly name = 'Skill Search Processor';
   readonly description = 'Enables on-demand skill discovery and loading via search';
-  readonly providesSkillDiscovery = 'on-demand' as const;
+  readonly providesSkillDiscovery: Processor['providesSkillDiscovery'] = 'on-demand';
 
   private readonly workspace: Workspace;
   private readonly searchConfig: { topK: number; minScore: number };
