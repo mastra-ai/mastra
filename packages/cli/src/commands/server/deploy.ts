@@ -372,9 +372,7 @@ export async function serverDeployAction(
   const deployResult = await uploadServerDeploy(token, orgId, projectId, zipBuffer, {
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
-    ...(projectConfig?.disablePlatformObservability !== undefined
-      ? { disablePlatformObservability: projectConfig.disablePlatformObservability }
-      : {}),
+    disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 

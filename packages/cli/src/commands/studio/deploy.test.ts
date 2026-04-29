@@ -500,6 +500,69 @@ describe('deployAction', () => {
     );
   });
 
+  it('sends disablePlatformObservability false when config omits it', async () => {
+    const { access, readdir, readFile, stat } = await import('node:fs/promises');
+    const { fetchOrgs } = await import('../auth/api.js');
+    const { getCurrentOrgId, getToken } = await import('../auth/credentials.js');
+    const { fetchProjects, uploadDeploy, pollDeploy } = await import('./platform-api.js');
+    const { loadProjectConfig } = await import('./project-config.js');
+
+    vi.mocked(getToken).mockResolvedValue('test-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org-1');
+    vi.mocked(access).mockResolvedValue(undefined);
+    vi.mocked(stat).mockResolvedValue({ size: 1024 } as Awaited<ReturnType<typeof stat>>);
+    vi.mocked(fetchOrgs).mockResolvedValue([{ id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true }]);
+    vi.mocked(fetchProjects).mockResolvedValue([
+      {
+        id: 'proj-1',
+        name: 'my-app',
+        slug: 'my-app',
+        organizationId: 'org-1',
+        latestDeployId: null,
+        latestDeployStatus: null,
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+    vi.mocked(uploadDeploy).mockResolvedValue({ id: 'deploy-1', status: 'starting' });
+    vi.mocked(pollDeploy).mockResolvedValue({
+      id: 'deploy-1',
+      status: 'running',
+      instanceUrl: 'https://example.com',
+      error: null,
+    });
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-1',
+      projectId: 'proj-1',
+      projectName: 'my-app',
+      projectSlug: 'my-app',
+    });
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { deployAction } = await import('./deploy.js');
+
+    await expect(deployAction(undefined, { yes: true, skipBuild: true })).resolves.toBeUndefined();
+
+    expect(uploadDeploy).toHaveBeenCalledWith(
+      'test-token',
+      'org-1',
+      'proj-1',
+      expect.any(Buffer),
+      expect.objectContaining({
+        projectName: 'my-app',
+        envVars: { API_KEY: 'test' },
+        disablePlatformObservability: false,
+      }),
+    );
+  });
+
   it('throws when headless mode missing required env vars', async () => {
     process.env.MASTRA_API_TOKEN = 'headless-token';
     // Missing MASTRA_ORG_ID and MASTRA_PROJECT_ID

@@ -455,9 +455,7 @@ export async function deployAction(
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
-    ...(projectConfig?.disablePlatformObservability !== undefined
-      ? { disablePlatformObservability: projectConfig.disablePlatformObservability }
-      : {}),
+    disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

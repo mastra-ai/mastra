@@ -421,6 +421,7 @@ describe('serverDeployAction', () => {
 
     const { readdir, readFile } = await import('node:fs/promises');
     const { loadProjectConfig } = await import('../studio/project-config.js');
+    const { uploadServerDeploy } = await import('./platform-api.js');
     vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
       ReturnType<typeof readdir>
     >);
@@ -438,6 +439,11 @@ describe('serverDeployAction', () => {
     const { serverDeployAction } = await import('./deploy.js');
 
     await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
+    expect(uploadServerDeploy).toHaveBeenCalledWith('test-token', 'org-1', 'proj-1', expect.any(Buffer), {
+      projectName: 'my-app',
+      envVars: { API_KEY: 'test' },
+      disablePlatformObservability: false,
+    });
   });
 
   it('uses project config in headless mode without fetching orgs', async () => {
