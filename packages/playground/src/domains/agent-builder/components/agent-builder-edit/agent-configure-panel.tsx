@@ -300,11 +300,11 @@ function ConfigRows({
   disabled = false,
 }: ConfigRowsProps) {
   return (
-    <div className="flex flex-col divide-y divide-border1 border-t border-border1">
+    <div className="flex flex-col">
       <ConfigRow
         icon={<FileText className="h-4 w-4" />}
         label="Instructions"
-        description={instructionsDescription}
+        value={instructionsDescription}
         isActive={activeDetail === 'instructions'}
         onClick={() => toggleDetail('instructions')}
         disabled={disabled}
@@ -314,7 +314,7 @@ function ConfigRows({
         <ConfigRow
           icon={<Cpu className="h-4 w-4" />}
           label="Model"
-          description={modelDescription}
+          value={modelDescription}
           isActive={activeDetail === 'model'}
           onClick={() => toggleDetail('model')}
           disabled={disabled}
@@ -325,7 +325,6 @@ function ConfigRows({
         <ConfigRow
           icon={<Wrench className="h-4 w-4" />}
           label="Tools"
-          description="External actions your agent can take"
           count={activeToolsCount}
           total={totalToolsCount}
           isActive={activeDetail === 'tools'}
@@ -338,7 +337,6 @@ function ConfigRows({
         <ConfigRow
           icon={<Sparkles className="h-4 w-4" />}
           label="Skills"
-          description="Reusable capabilities your agent can use"
           count={activeSkillsCount}
           total={totalSkillsCount}
           isActive={activeDetail === 'skills'}
@@ -401,7 +399,7 @@ function DetailPane({
 interface ConfigRowProps {
   icon: React.ReactNode;
   label: string;
-  description: string;
+  value?: string;
   count?: number;
   total?: number;
   isActive?: boolean;
@@ -413,7 +411,7 @@ interface ConfigRowProps {
 const ConfigRow = ({
   icon,
   label,
-  description,
+  value,
   count,
   total,
   isActive = false,
@@ -428,7 +426,7 @@ const ConfigRow = ({
     data-testid={testId}
     aria-pressed={isActive}
     className={cn(
-      'group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3',
+      'group flex items-center gap-3 px-6 py-2 text-left transition-colors hover:bg-surface3',
       isActive && 'bg-surface3',
       disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent',
     )}
@@ -438,16 +436,16 @@ const ConfigRow = ({
     >
       {icon}
     </span>
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <Txt variant="ui-sm" className="font-medium text-neutral6">
-        {label}
+    <Txt variant="ui-sm" className="shrink-0 font-medium text-neutral6">
+      {label}
+    </Txt>
+    {value !== undefined && (
+      <Txt variant="ui-sm" className="ml-auto min-w-0 truncate text-neutral3">
+        {value}
       </Txt>
-      <Txt variant="ui-xs" className="truncate text-neutral3">
-        {description}
-      </Txt>
-    </div>
+    )}
     {count !== undefined && total !== undefined && (
-      <Txt variant="ui-sm" className="shrink-0 tabular-nums text-neutral3">
+      <Txt variant="ui-sm" className={cn('shrink-0 tabular-nums text-neutral3', value === undefined && 'ml-auto')}>
         {count} / {total}
       </Txt>
     )}
@@ -473,14 +471,12 @@ const AgentConfigurePanelSkeleton = () => (
           <Skeleton className="h-9 w-full" />
         </div>
       </div>
-      <div className="flex flex-col divide-y divide-border1 border-t border-border1">
+      <div className="flex flex-col">
         {[0, 1, 2].map(i => (
-          <div key={i} className="flex items-center gap-3 px-6 py-4">
+          <div key={i} className="flex items-center gap-3 px-6 py-2">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-40" />
-            </div>
+            <Skeleton className="h-4 w-20 shrink-0" />
+            <Skeleton className="ml-auto h-4 w-24" />
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
           </div>
         ))}
