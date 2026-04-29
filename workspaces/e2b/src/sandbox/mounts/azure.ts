@@ -59,6 +59,8 @@ interface ParsedConnectionString {
   accountKey?: string;
   sasToken?: string;
   endpoint?: string;
+  endpointSuffix?: string;
+  protocol?: string;
 }
 
 function parseConnectionString(cs: string): ParsedConnectionString {
@@ -73,6 +75,11 @@ function parseConnectionString(cs: string): ParsedConnectionString {
     else if (key === 'AccountKey') out.accountKey = value;
     else if (key === 'SharedAccessSignature') out.sasToken = value;
     else if (key === 'BlobEndpoint') out.endpoint = value;
+    else if (key === 'EndpointSuffix') out.endpointSuffix = value;
+    else if (key === 'DefaultEndpointsProtocol') out.protocol = value;
+  }
+  if (!out.endpoint && out.accountName) {
+    out.endpoint = `${out.protocol || 'https'}://${out.accountName}.blob.${out.endpointSuffix || 'core.windows.net'}`;
   }
   return out;
 }
@@ -209,7 +216,6 @@ function buildBlobfuseConfig(
     'attr_cache:',
     '  timeout-sec: 7200',
     'azstorage:',
-    '  type: block',
     `  mode: ${auth.mode}`,
     `  account-name: ${yamlString(auth.accountName)}`,
     `  container: ${yamlString(container)}`,

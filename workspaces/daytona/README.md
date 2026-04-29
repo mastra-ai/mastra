@@ -349,7 +349,7 @@ await daytona.snapshot.create(
 );
 ```
 
-If you use Azure Blob mounts, also pre-install `blobfuse2` in the snapshot using Azure's supported package for your base image.
+If you use Azure Blob mounts, also pre-install `blobfuse2` in the snapshot using Azure's supported package for your base image. See Azure's [BlobFuse2 installation guide](https://learn.microsoft.com/en-us/azure/storage/blobs/blobfuse2-how-to-deploy) for supported install options.
 
 Then use the snapshot name in your sandbox config:
 

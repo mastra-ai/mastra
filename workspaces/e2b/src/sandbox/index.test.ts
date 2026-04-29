@@ -986,6 +986,7 @@ describe('E2BSandbox Azure Blob Mount Configuration', () => {
     expect(yaml).toContain('account-key: "a-secret-key"');
     expect(yaml).toContain('container: "test-container"');
     expect(yaml).toContain('read-only: false');
+    expect(yaml).not.toContain('  type: block');
   });
 
   it('SAS token auth writes mode: sas with sas field (no account-key)', async () => {
@@ -1065,6 +1066,30 @@ describe('E2BSandbox Azure Blob Mount Configuration', () => {
     expect(yaml).toContain('account-name: "fromstring"');
     expect(yaml).toContain('account-key: "keyvalue"');
     expect(yaml).toContain('endpoint: "https://fromstring.blob.core.windows.net"');
+  });
+
+  it('connection string synthesizes endpoint from EndpointSuffix when BlobEndpoint is omitted', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-azure-cs-suffix',
+      name: 'AzureBlobFilesystem',
+      provider: 'azure-blob',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'azure-blob',
+        container: 'cs-container',
+        connectionString:
+          'DefaultEndpointsProtocol=https;AccountName=fromstring;AccountKey=keyvalue;EndpointSuffix=core.usgovcloudapi.net',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/azure-cs-suffix');
+
+    const yaml = findWrittenConfig();
+    expect(yaml).toBeDefined();
+    expect(yaml).toContain('endpoint: "https://fromstring.blob.core.usgovcloudapi.net"');
   });
 
   it('readOnly writes read-only: true in config', async () => {

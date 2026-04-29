@@ -59,6 +59,8 @@ interface ParsedConnectionString {
   accountKey?: string;
   sasToken?: string;
   endpoint?: string;
+  endpointSuffix?: string;
+  protocol?: string;
 }
 
 function parseConnectionString(cs: string): ParsedConnectionString {
@@ -73,6 +75,11 @@ function parseConnectionString(cs: string): ParsedConnectionString {
     else if (key === 'AccountKey') out.accountKey = value;
     else if (key === 'SharedAccessSignature') out.sasToken = value;
     else if (key === 'BlobEndpoint') out.endpoint = value;
+    else if (key === 'EndpointSuffix') out.endpointSuffix = value;
+    else if (key === 'DefaultEndpointsProtocol') out.protocol = value;
+  }
+  if (!out.endpoint && out.accountName) {
+    out.endpoint = `${out.protocol || 'https'}://${out.accountName}.blob.${out.endpointSuffix || 'core.windows.net'}`;
   }
   return out;
 }
@@ -209,7 +216,6 @@ function buildBlobfuseConfig(
     'attr_cache:',
     '  timeout-sec: 7200',
     'azstorage:',
-    '  type: block',
     `  mode: ${auth.mode}`,
     `  account-name: ${yamlString(auth.accountName)}`,
     `  container: ${yamlString(container)}`,
@@ -240,6 +246,16 @@ export async function mountAzure(
   const prefix = config.prefix ? validatePrefix(config.prefix) : undefined;
 
   const quotedMountPath = shellQuote(mountPath);
+
+  const curlCheck = await run('which curl 2>/dev/null || echo "not found"', 30_000);
+  if (curlCheck.stdout.includes('not found')) {
+    const curlInstall = await run('sudo apt-get update -qq 2>&1 && sudo apt-get install -y curl 2>&1', 120_000);
+    if (curlInstall.exitCode !== 0) {
+      throw new Error(
+        `Failed to install curl for Azure Blob reachability check: ${curlInstall.stderr || curlInstall.stdout}`,
+      );
+    }
+  }
 
   // Verify network reachability to the blob endpoint. Daytona's restricted tiers
   // block traffic to azure.com domains, which would otherwise hang the mount.
