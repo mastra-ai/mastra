@@ -309,8 +309,8 @@ export interface Config<
    * new Mastra({
    *   channels: {
    *     slack: new SlackChannel({
-   *       configToken: process.env.SLACK_CONFIG_TOKEN,
-   *       refreshToken: process.env.SLACK_CONFIG_REFRESH_TOKEN,
+   *       configToken: process.env.SLACK_APP_CONFIG_TOKEN,
+   *       refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
    *     }),
    *   },
    * });

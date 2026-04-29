@@ -31,8 +31,8 @@ const mastra = new Mastra({
   agents: { myAgent },
   channels: {
     slack: new SlackChannel({
-      configToken: process.env.SLACK_CONFIG_TOKEN!,
-      refreshToken: process.env.SLACK_CONFIG_REFRESH_TOKEN!,
+      configToken: process.env.SLACK_APP_CONFIG_TOKEN!,
+      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
       // For local dev, set SLACK_BASE_URL to your tunnel URL
       // In production, this is auto-derived from server config
       baseUrl: process.env.SLACK_BASE_URL,
@@ -52,8 +52,8 @@ const mastra = new Mastra({
 
 3. **Add to .env**:
    ```
-   SLACK_CONFIG_TOKEN=xoxe.xoxp-...
-   SLACK_CONFIG_REFRESH_TOKEN=xoxe-1-...
+   SLACK_APP_CONFIG_TOKEN=xoxe.xoxp-...
+   SLACK_APP_CONFIG_REFRESH_TOKEN=xoxe-1-...
    SLACK_BASE_URL=https://abc123.trycloudflare.com
    ```
 
@@ -72,8 +72,8 @@ const mastra = new Mastra({
   storage: new InMemoryStore(),  // Or LibSQLStore, PostgresStore, etc.
   channels: {
     slack: new SlackChannel({
-      configToken: process.env.SLACK_CONFIG_TOKEN,
-      refreshToken: process.env.SLACK_CONFIG_REFRESH_TOKEN,
+      configToken: process.env.SLACK_APP_CONFIG_TOKEN,
+      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
     }),
   },
 });

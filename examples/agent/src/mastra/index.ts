@@ -13,8 +13,8 @@ export const mastra = new Mastra({
   }),
   channels: {
     slack: new SlackChannel({
-      refreshToken: process.env.SLACK_CONFIG_REFRESH_TOKEN!,
-      // baseUrl: process.env.SLACK_BASE_URL,
+      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
+      baseUrl: process.env.SLACK_BASE_URL,
     }),
   },
 });
