@@ -27,7 +27,7 @@ import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useWorkspaces } from '@/domains/workspace/hooks';
+import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
@@ -45,7 +45,7 @@ export default function AgentBuilderAgentEdit() {
   const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, {
     enabled: features.skills,
   });
-  const { data: workspacesData } = useWorkspaces();
+  const { data: workspacesData } = useStoredWorkspaces();
   const isReady =
     Boolean(id) &&
     (fromStarter || !isStoredAgentLoading) &&

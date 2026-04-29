@@ -1,6 +1,16 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, cn, Input, SideDialog, Txt } from '@mastra/playground-ui';
-import { AlertTriangle, Globe, Lock } from 'lucide-react';
+import {
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SideDialog,
+  Txt,
+} from '@mastra/playground-ui';
+import { AlertTriangle, Globe, LockIcon } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useCreateSkill } from '../../hooks/use-create-skill';
@@ -8,7 +18,8 @@ import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation'
 import { createInitialStructure, updateRootFolderName } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
 import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
-import { useWorkspaces, useWorkspaceInfo } from '@/domains/workspace/hooks';
+import { useWorkspaceInfo } from '@/domains/workspace/hooks';
+import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 export interface SkillEditDialogProps {
   isOpen: boolean;
@@ -25,7 +36,7 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
   const [files, setFiles] = useState<InMemoryFileNode[]>([]);
   const prevNameRef = useRef('');
   const createSkill = useCreateSkill();
-  const { data: workspacesData } = useWorkspaces();
+  const { data: workspacesData } = useStoredWorkspaces();
   const { data: builderSettings } = useBuilderSettings();
   const workspaceOptions = useMemo(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
@@ -135,34 +146,25 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
               <Txt as="label" variant="ui-xs" className="text-neutral3">
                 Visibility
               </Txt>
-              <div className="inline-flex rounded-lg border border-border1 bg-surface1 p-0.5 w-fit">
-                <button
-                  type="button"
-                  onClick={() => setVisibility('private')}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
-                    visibility === 'private'
-                      ? 'bg-surface3 text-neutral6 shadow-sm'
-                      : 'text-neutral3 hover:text-neutral5',
-                  )}
-                >
-                  <Lock className="h-3 w-3" />
-                  Private
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVisibility('public')}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-xs font-medium transition-colors',
-                    visibility === 'public'
-                      ? 'bg-surface3 text-neutral6 shadow-sm'
-                      : 'text-neutral3 hover:text-neutral5',
-                  )}
-                >
-                  <Globe className="h-3 w-3" />
-                  Public
-                </button>
-              </div>
+              <Select value={visibility} onValueChange={next => setVisibility(next as 'private' | 'public')}>
+                <SelectTrigger size="sm" aria-label="Visibility" className="w-fit">
+                  <SelectValue placeholder="Visibility" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">
+                    <span className="flex items-center gap-2">
+                      <LockIcon className="h-3.5 w-3.5" />
+                      Private
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="public">
+                    <span className="flex items-center gap-2">
+                      <Globe className="h-3.5 w-3.5" />
+                      Public
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>

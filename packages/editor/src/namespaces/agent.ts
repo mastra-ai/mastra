@@ -147,6 +147,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
   /**
    * Create a new agent, applying builder defaults for fields not specified in input.
+   * Also ensures the referenced workspace (if any) is persisted as a stored workspace.
    */
   async create(input: StorageCreateAgentInput): Promise<Agent> {
     let finalInput = input;
@@ -157,7 +158,67 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       finalInput = applyBuilderDefaults(input, agentConfig);
     }
 
+    // Ensure the workspace referenced by the agent exists in stored workspaces
+    await this.ensureStoredWorkspace(finalInput.workspace as StorageWorkspaceRef | undefined);
+
     return super.create(finalInput);
+  }
+
+  /**
+   * Ensure a workspace reference is persisted in the DB.
+   *
+   * For `type: 'id'`: looks up the runtime workspace, serializes its config,
+   * and creates a stored workspace record if one doesn't already exist.
+   *
+   * For `type: 'inline'`: derives a deterministic ID from the config and
+   * persists it as a stored workspace if one doesn't already exist.
+   */
+  private async ensureStoredWorkspace(workspaceRef: StorageWorkspaceRef | undefined): Promise<void> {
+    if (!workspaceRef) return;
+
+    const workspaceNs = this.editor.workspace;
+    if (!workspaceNs) return;
+
+    try {
+      if (workspaceRef.type === 'id') {
+        // Check if already stored in DB
+        const existing = await workspaceNs.getById(workspaceRef.workspaceId);
+        if (existing) return;
+
+        // Not in DB — look up the runtime workspace and serialize it
+        const runtimeWorkspace = this.mastra?.getWorkspaceById(workspaceRef.workspaceId);
+        if (!runtimeWorkspace) {
+          this.logger?.warn(
+            `[ensureStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in runtime registry, cannot persist`,
+          );
+          return;
+        }
+
+        const snapshot = workspaceNs.snapshotFromWorkspace(runtimeWorkspace);
+        await workspaceNs.create({
+          id: workspaceRef.workspaceId,
+          ...snapshot,
+        });
+        this.logger?.debug(`[ensureStoredWorkspace] Persisted runtime workspace '${workspaceRef.workspaceId}' to DB`);
+      } else if (workspaceRef.type === 'inline') {
+        // Derive a deterministic ID from the inline config
+        const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
+        const workspaceId = `inline-${configHash}`;
+
+        // Check if already stored in DB
+        const existing = await workspaceNs.getById(workspaceId);
+        if (existing) return;
+
+        await workspaceNs.create({
+          id: workspaceId,
+          ...workspaceRef.config,
+        });
+        this.logger?.debug(`[ensureStoredWorkspace] Persisted inline workspace '${workspaceId}' to DB`);
+      }
+    } catch (error) {
+      // Don't fail agent creation if workspace persistence fails
+      this.logger?.warn('[ensureStoredWorkspace] Failed to persist workspace', { error });
+    }
   }
 
   protected override onCacheEvict(id: string): void {
@@ -1293,16 +1354,29 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hydrateOptions = skillSource ? { skillSource } : undefined;
 
     if (workspaceRef.type === 'id') {
-      // Look up the stored workspace by ID and hydrate it to a runtime Workspace
+      // Try DB first — stored workspaces are the source of truth
       const resolved = await workspaceNs.getById(workspaceRef.workspaceId);
-      if (!resolved) {
-        this.logger?.warn(
-          `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in storage, skipping`,
-        );
-        return undefined;
+      if (resolved) {
+        return workspaceNs.hydrateSnapshotToWorkspace(workspaceRef.workspaceId, resolved, hydrateOptions);
       }
-      // getById returns StorageResolvedWorkspaceType — we need to hydrate it
-      return workspaceNs.hydrateSnapshotToWorkspace(workspaceRef.workspaceId, resolved, hydrateOptions);
+
+      // Not in DB — fall back to runtime registry (code-defined workspaces)
+      try {
+        const runtimeWorkspace = this.mastra?.getWorkspaceById(workspaceRef.workspaceId);
+        if (runtimeWorkspace) {
+          this.logger?.debug(
+            `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' found in runtime registry (not in DB)`,
+          );
+          return runtimeWorkspace;
+        }
+      } catch {
+        // getWorkspaceById throws if not found — that's expected
+      }
+
+      this.logger?.warn(
+        `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in storage or runtime registry, skipping`,
+      );
+      return undefined;
     }
 
     if (workspaceRef.type === 'inline') {

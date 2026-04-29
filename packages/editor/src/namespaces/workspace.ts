@@ -1,4 +1,4 @@
-import { Workspace } from '@mastra/core/workspace';
+import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
 import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource } from '@mastra/core/workspace';
 import type { WorkspaceConfig } from '@mastra/core/workspace';
 import type {
@@ -9,6 +9,7 @@ import type {
   StorageResolvedWorkspaceType,
   StorageListWorkspacesResolvedOutput,
   StorageWorkspaceSnapshotType,
+  StorageWorkspaceToolsConfig,
   StorageFilesystemConfig,
   StorageSandboxConfig,
 } from '@mastra/core/storage';
@@ -141,6 +142,69 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
     }
 
     return new Workspace(config);
+  }
+
+  /**
+   * Serialize a runtime Workspace instance into a StorageWorkspaceSnapshotType.
+   * The reverse of hydrateSnapshotToWorkspace — extracts provider IDs and config
+   * from live filesystem/sandbox instances so the workspace can be persisted to the DB.
+   */
+  snapshotFromWorkspace(workspace: Workspace): StorageWorkspaceSnapshotType {
+    const snapshot: StorageWorkspaceSnapshotType = {
+      name: workspace.name,
+    };
+
+    const fs = workspace.filesystem;
+    if (fs) {
+      if (fs instanceof CompositeFilesystem) {
+        // Workspace uses mounts — serialize each mounted filesystem
+        const mounts: Record<string, StorageFilesystemConfig> = {};
+        for (const [mountPath, mountedFs] of fs.mounts) {
+          mounts[mountPath] = this.serializeFilesystem(mountedFs);
+        }
+        snapshot.mounts = mounts;
+      } else {
+        // Single filesystem
+        snapshot.filesystem = this.serializeFilesystem(fs);
+      }
+    }
+
+    const sandbox = workspace.sandbox;
+    if (sandbox) {
+      snapshot.sandbox = {
+        provider: sandbox.provider,
+        config: {},
+      };
+    }
+
+    const tools = workspace.getToolsConfig();
+    if (tools) {
+      // Only serialize static boolean values — runtime functions can't be stored
+      const storageTools: StorageWorkspaceToolsConfig = {};
+      if (typeof tools.enabled === 'boolean') storageTools.enabled = tools.enabled;
+      if (typeof tools.requireApproval === 'boolean') storageTools.requireApproval = tools.requireApproval;
+      if (Object.keys(storageTools).length > 0) {
+        snapshot.tools = storageTools;
+      }
+    }
+
+    return snapshot;
+  }
+
+  /**
+   * Serialize a runtime WorkspaceFilesystem into a StorageFilesystemConfig.
+   * Uses getInfo() metadata when available, falls back to provider ID only.
+   */
+  private serializeFilesystem(fs: WorkspaceFilesystem): StorageFilesystemConfig {
+    const info = typeof fs.getInfo === 'function' ? fs.getInfo() : undefined;
+    // getInfo() can return a Promise — but for serialization we only support sync results.
+    // LocalFilesystem.getInfo() is sync. Async providers will fall back to empty config.
+    const metadata = info && typeof info === 'object' && 'metadata' in info ? (info as any).metadata : {};
+    return {
+      provider: fs.provider,
+      config: metadata ?? {},
+      readOnly: fs.readOnly,
+    };
   }
 
   /**

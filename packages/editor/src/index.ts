@@ -135,6 +135,40 @@ export class MastraEditor implements IMastraEditor {
     if (!this.__logger) {
       this.__logger = mastra.getLogger();
     }
+
+    // Fire-and-forget: persist builder default workspace to DB if configured
+    this.ensureBuilderWorkspaces().catch(err => {
+      this.__logger?.warn('[MastraEditor] Failed to persist builder default workspace on startup', { error: err });
+    });
+  }
+
+  /**
+   * Ensure the builder default workspace is persisted to the DB.
+   * Called automatically on startup when the editor registers with Mastra.
+   * Goes through the normal create() path so hydration validates that
+   * all providers (filesystem, sandbox) are properly registered.
+   */
+  private async ensureBuilderWorkspaces(): Promise<void> {
+    if (!this.hasEnabledBuilderConfig()) return;
+
+    const builder = await this.resolveBuilder();
+    const agentConfig = builder?.getConfiguration()?.agent;
+    const workspaceRef = agentConfig?.workspace as { type: string; workspaceId?: string } | undefined;
+    if (!workspaceRef || workspaceRef.type !== 'id' || !workspaceRef.workspaceId) return;
+
+    // Already persisted?
+    const existing = await this.workspace.getById(workspaceRef.workspaceId);
+    if (existing) return;
+
+    const runtimeWorkspace = this.__mastra?.getWorkspaceById(workspaceRef.workspaceId);
+    if (!runtimeWorkspace) return;
+
+    const snapshot = this.workspace.snapshotFromWorkspace(runtimeWorkspace);
+    await this.workspace.create({
+      id: workspaceRef.workspaceId,
+      ...snapshot,
+    });
+    this.__logger?.info(`[MastraEditor] Persisted builder workspace '${workspaceRef.workspaceId}' to DB`);
   }
 
   /**

@@ -148,6 +148,9 @@ import type {
   AwaitBufferStatusResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
+  ListStoredWorkspacesParams,
+  ListStoredWorkspacesResponse,
+  StoredWorkspaceResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
   DatasetRecord,
@@ -1502,6 +1505,35 @@ export class MastraClient extends BaseResource {
    */
   public getWorkspace(workspaceId: string): Workspace {
     return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Stored Workspaces
+  // ============================================================================
+
+  /**
+   * Lists stored workspace configurations from the database
+   * @param params - Optional filter and pagination parameters
+   * @returns Promise containing paginated list of stored workspaces
+   */
+  public listStoredWorkspaces(params?: ListStoredWorkspacesParams): Promise<ListStoredWorkspacesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.perPage) searchParams.set('perPage', String(params.perPage));
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+    if (params?.orderBy?.field) searchParams.set('orderBy[field]', params.orderBy.field);
+    if (params?.orderBy?.direction) searchParams.set('orderBy[direction]', params.orderBy.direction);
+    const qs = searchParams.toString();
+    return this.request(`/stored/workspaces${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a specific stored workspace by ID
+   * @param id - The workspace ID
+   * @returns Promise containing the stored workspace
+   */
+  public getStoredWorkspace(id: string): Promise<StoredWorkspaceResponse> {
+    return this.request(`/stored/workspaces/${encodeURIComponent(id)}`);
   }
 
   // ============================================================================

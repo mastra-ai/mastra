@@ -144,6 +144,14 @@ export const mastra = new Mastra({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },
+    sandboxes: {
+      daytona: {
+        id: 'daytona',
+        name: 'Daytona Sandbox',
+        description: 'Remote sandbox powered by Daytona',
+        createSandbox: () => new DaytonaSandbox(),
+      },
+    },
     builder: {
       enabled: true,
       features: {
