@@ -59,7 +59,7 @@ export type SlackPendingData = z.infer<typeof SlackPendingDataSchema>;
 // =============================================================================
 
 export const SlackConfigDataSchema = z.object({
-  appConfigToken: z.string(), // encrypted
+  appConfigToken: z.string().optional(), // encrypted; may be absent — will rotate on first use
   appConfigRefreshToken: z.string(), // encrypted
 });
 
@@ -115,7 +115,7 @@ export interface SlackPendingInstallation {
 }
 
 export interface SlackConfigTokens {
-  appConfigToken: string;
+  appConfigToken?: string;
   appConfigRefreshToken: string;
   updatedAt: Date;
 }

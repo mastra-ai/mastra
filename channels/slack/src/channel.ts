@@ -251,7 +251,7 @@ export class SlackChannel implements MastraChannel {
 
     return {
       ...tokens,
-      appConfigToken: encrypt(tokens.appConfigToken, key),
+      appConfigToken: tokens.appConfigToken ? encrypt(tokens.appConfigToken, key) : undefined,
       appConfigRefreshToken: encrypt(tokens.appConfigRefreshToken, key),
     };
   }
@@ -265,7 +265,7 @@ export class SlackChannel implements MastraChannel {
 
     return {
       ...tokens,
-      appConfigToken: decrypt(tokens.appConfigToken, key),
+      appConfigToken: tokens.appConfigToken ? decrypt(tokens.appConfigToken, key) : undefined,
       appConfigRefreshToken: decrypt(tokens.appConfigRefreshToken, key),
     };
   }
@@ -540,7 +540,7 @@ export class SlackChannel implements MastraChannel {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);
       this.#manifestClient.setTokens({
-        appConfigToken: storedTokens.appConfigToken,
+        appConfigToken: storedTokens.appConfigToken ?? '',
         appConfigRefreshToken: storedTokens.appConfigRefreshToken,
       });
     }
