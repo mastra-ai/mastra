@@ -33,6 +33,7 @@ import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '..
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
+import type { OutputWriter } from '../workflows';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
 import type {
@@ -133,6 +134,9 @@ export interface AgentLegacyCapabilities {
       runId?: string;
       threadId?: string;
       resourceId?: string;
+      outputWriter?: OutputWriter;
+      autoResumeSuspendedTools?: boolean;
+      backgroundTaskEnabled?: boolean;
     },
   ): Promise<{
     messageList: MessageList;

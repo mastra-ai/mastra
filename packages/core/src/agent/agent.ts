@@ -170,8 +170,7 @@ function hasConfiguredProcessor(
       return predicate({
         ...(processor as Processor),
         id: processorId,
-        providesSkillDiscovery:
-          (processor as Processor).providesSkillDiscovery ?? (processorId === 'skill-search' ? 'on-demand' : undefined),
+        providesSkillDiscovery: (processor as Processor).providesSkillDiscovery,
       } as Processor);
     }
 
@@ -186,9 +185,10 @@ function hasConfiguredProcessor(
       }
 
       const processorId = stepId.slice('processor:'.length);
+      const workflowStep = step as { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
       return predicate({
         id: processorId,
-        providesSkillDiscovery: processorId === 'skill-search' ? 'on-demand' : undefined,
+        providesSkillDiscovery: workflowStep.providesSkillDiscovery,
       } as Processor);
     });
   });
@@ -2864,6 +2864,9 @@ export class Agent<
       runId?: string;
       threadId?: string;
       resourceId?: string;
+      outputWriter?: OutputWriter;
+      autoResumeSuspendedTools?: boolean;
+      backgroundTaskEnabled?: boolean;
     },
   ): Promise<{
     messageList: MessageList;
@@ -2885,6 +2888,9 @@ export class Agent<
       runId,
       threadId,
       resourceId,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -2915,10 +2921,14 @@ export class Agent<
         });
         if (result.tools) {
           const workspace = await this.getWorkspace({ requestContext });
+          const memory = await this.getMemory({ requestContext });
+          const mastraProxy = this.#mastra
+            ? createMastraProxy({ mastra: this.#mastra, logger: this.logger })
+            : undefined;
           const convertedTools: Record<string, CoreTool> = {};
 
           for (const [name, tool] of Object.entries(result.tools)) {
-            if (isMastraTool(tool)) {
+            if (isMastraTool(tool) || isProviderTool(tool)) {
               convertedTools[name] = makeCoreTool(
                 tool as unknown as ToolToConvert,
                 {
@@ -2927,24 +2937,29 @@ export class Agent<
                   threadId,
                   resourceId,
                   logger: this.logger,
+                  mastra: mastraProxy as MastraUnion | undefined,
+                  memory,
                   agentName: this.name,
                   agentId: this.id,
                   requestContext,
                   ...observabilityContext,
                   model: await this.getModel({ requestContext }),
+                  outputWriter,
                   tracingPolicy: this.#options?.tracingPolicy,
                   requireApproval: (tool as any).requireApproval,
                   backgroundConfig: (tool as any).background,
                   workspace,
                 },
                 undefined,
+                autoResumeSuspendedTools,
+                backgroundTaskEnabled,
               );
             } else {
               convertedTools[name] = tool as CoreTool;
             }
           }
 
-          nextTools = convertedTools;
+          nextTools = { ...(nextTools ?? {}), ...convertedTools };
         }
       } catch (error) {
         if (error instanceof TripWire) {

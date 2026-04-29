@@ -37,6 +37,25 @@ class PassthroughProcessor implements Processor<'passthrough'> {
   }
 }
 
+class CustomOnDemandSkillDiscoveryProcessor implements Processor<'custom-skill-discovery'> {
+  readonly id = 'custom-skill-discovery' as const;
+  readonly name = 'Custom Skill Discovery Processor';
+  readonly providesSkillDiscovery: Processor['providesSkillDiscovery'] = 'on-demand';
+
+  async processInput(args: ProcessInputArgs) {
+    return args.messages;
+  }
+}
+
+class CollidingSkillSearchIdProcessor implements Processor<'skill-search'> {
+  readonly id = 'skill-search' as const;
+  readonly name = 'User Processor Named Skill Search';
+
+  async processInput(args: ProcessInputArgs) {
+    return args.messages;
+  }
+}
+
 // Mock skill data
 const mockSkill: Skill = {
   name: 'test-skill',
@@ -337,6 +356,28 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       expect(prompt).not.toContain('Skills are NOT tools');
     });
 
+    it('should not infer on-demand mode from a user processor id collision', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [new CollidingSkillSearchIdProcessor()],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
+      expect(toolNames).toContain('skill_read');
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).toContain('<available_skills>');
+      expect(prompt).toContain('Skills are NOT tools');
+    });
+
     it('should preserve skill activation tools when SkillsProcessor is explicitly configured', async () => {
       const agent = new Agent({
         id: 'test-agent',
@@ -396,6 +437,38 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       const prompt = JSON.stringify(capturedPrompt);
       expect(prompt).toContain('To discover available skills, call search_skills');
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('Skills are NOT tools');
+    });
+
+    it('should preserve on-demand discovery metadata for workflow-wrapped custom processors', async () => {
+      const skillSearchWorkflow = createWorkflow({
+        id: 'custom-skill-discovery-workflow',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(new CustomOnDemandSkillDiscoveryProcessor()))
+        .commit();
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [skillSearchWorkflow],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).not.toContain('skill');
+      expect(toolNames).not.toContain('skill_search');
+
+      const prompt = JSON.stringify(capturedPrompt);
       expect(prompt).not.toContain('<available_skills>');
       expect(prompt).not.toContain('Skills are NOT tools');
     });
