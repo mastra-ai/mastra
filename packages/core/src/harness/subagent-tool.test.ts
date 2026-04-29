@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RequestContext } from '../request-context';
+import { getInternalToolExecutionHints, setInternalToolExecutionHints } from '../tools/internal-execution-hints';
 
 // We need to mock Agent before importing tools.ts.
 const { mockStream, MockAgent, mockCreateWorkspaceTools } = vi.hoisted(() => {
@@ -932,13 +933,17 @@ describe('createSubagentTool forked subagent behavior', () => {
     const submitPlan = { id: 'submit_plan', description: 'Submit plan', execute: vi.fn() } as any;
     const originalSubagentExecute = vi.fn();
     const inputSchemaSentinel = { type: 'object', properties: { agentType: { type: 'string' } } };
-    const subagentTool = {
-      id: 'subagent',
-      description: 'Dispatch a subagent',
-      inputSchema: inputSchemaSentinel,
-      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
-      execute: originalSubagentExecute,
-    } as any;
+    const internalExecutionHints = { bypassGlobalToolApproval: true, safeForConcurrentExecution: true };
+    const subagentTool = setInternalToolExecutionHints(
+      {
+        id: 'subagent',
+        description: 'Dispatch a subagent',
+        inputSchema: inputSchemaSentinel,
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        execute: originalSubagentExecute,
+      } as any,
+      internalExecutionHints,
+    );
     const userTool = { id: 'view', description: 'View', execute: vi.fn() } as any;
 
     const getParentToolsets = vi.fn().mockResolvedValue({
@@ -993,6 +998,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(stubResult.isError).toBe(true);
     expect(stubResult.content).toMatch(/maximum allowed subagent nesting level/i);
     expect(originalSubagentExecute).not.toHaveBeenCalled();
+    expect(getInternalToolExecutionHints(patchedSubagent)).toBe(internalExecutionHints);
 
     // The patched copy must not mutate the parent's toolset object — the same
     // toolset is reused across requests, so any mutation would persist.

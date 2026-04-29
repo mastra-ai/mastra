@@ -4,7 +4,7 @@ import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
-import { setInternalToolExecutionHints } from '../tools/internal-execution-hints';
+import { getInternalToolExecutionHints, setInternalToolExecutionHints } from '../tools/internal-execution-hints';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
@@ -813,7 +813,10 @@ function patchSubagentToolForFork(tool: unknown): any {
   // object, provider-defined tool). `Object.assign` on a fresh object keeps
   // own enumerable props; that is enough for the toolset-merge layer to
   // serialize the same schema/description into the model request.
-  return Object.assign({}, tool as Record<string, unknown>, { execute: stubExecute });
+  const patchedTool = Object.assign({}, tool as Record<string, unknown>, { execute: stubExecute });
+  const internalExecutionHints = getInternalToolExecutionHints(tool);
+
+  return internalExecutionHints ? setInternalToolExecutionHints(patchedTool, internalExecutionHints) : patchedTool;
 }
 
 /**
