@@ -153,6 +153,40 @@ function collectStepBindings(program: t.Program): Map<string, string> {
   return stepBindings;
 }
 
+function collectWorkflowBindings(program: t.Program, filePath: string): Map<string, string> {
+  const workflowBindings = new Map<string, string>();
+
+  for (const statement of program.body) {
+    if (
+      !t.isVariableDeclaration(statement) &&
+      !(t.isExportNamedDeclaration(statement) && t.isVariableDeclaration(statement.declaration))
+    ) {
+      continue;
+    }
+
+    const declarationStatement = t.isVariableDeclaration(statement)
+      ? statement
+      : (statement.declaration as t.VariableDeclaration);
+
+    for (const declaration of declarationStatement.declarations) {
+      if (!t.isIdentifier(declaration.id) || !declaration.init) {
+        continue;
+      }
+
+      const workflowChain = parseWorkflowChain(declaration.init);
+      const [workflowConfig] = workflowChain?.createWorkflowCall.arguments ?? [];
+      if (!workflowChain || !workflowConfig || !t.isObjectExpression(workflowConfig)) {
+        continue;
+      }
+
+      const { workflowId } = getWorkflowIdMetadata(workflowConfig, declaration.id.name, filePath);
+      workflowBindings.set(declaration.id.name, toWorkflowType(workflowId));
+    }
+  }
+
+  return workflowBindings;
+}
+
 /**
  * Accepts the few AST node shapes we allow as "step references" in workflow chains
  * and normalizes them to a single step id string.
@@ -184,41 +218,51 @@ function rewriteChainMethod(
   filePath: string,
   workflowName: string,
   stepBindings: Map<string, string>,
-): t.Expression[] {
+  workflowBindings: Map<string, string>,
+): { name: string; args: t.Expression[] } {
   const argNode = (index: number): t.Node | undefined => method.args[index];
+  const rewritten = (args: t.Expression[], name = method.name) => ({ name, args });
 
   // Each case translates an AST representation of a builder call into the exact
   // argument list expected by our lightweight runtime helper.
   switch (method.name) {
     case 'then': {
-      const name = getWorkflowStepName(argNode(0), stepBindings);
+      const arg = argNode(0);
+      if (t.isIdentifier(arg)) {
+        const workflowType = workflowBindings.get(arg.name);
+        if (workflowType) {
+          return rewritten([t.stringLiteral(workflowType)], 'thenWorkflow');
+        }
+      }
+
+      const name = getWorkflowStepName(arg, stepBindings);
       if (!name) {
         throw new Error(
-          `.then() in ${workflowName} (${filePath}) must take a step identifier (inline createStep calls are not supported)`,
+          `.then() in ${workflowName} (${filePath}) must take a step or workflow identifier (inline createStep calls are not supported)`,
         );
       }
-      return [t.stringLiteral(name)];
+      return rewritten([t.stringLiteral(name)]);
     }
 
     case 'sleep': {
       const arg = argNode(0);
       if (t.isNumericLiteral(arg)) {
-        return [t.cloneNode(arg, true)];
+        return rewritten([t.cloneNode(arg, true)]);
       }
       const name = getWorkflowStepName(arg, stepBindings);
       if (!name) {
         throw new Error(`.sleep() in ${workflowName} (${filePath}) must be a numeric literal or an identifier`);
       }
-      return [t.stringLiteral(name)];
+      return rewritten([t.stringLiteral(name)]);
     }
 
     case 'sleepUntil': {
       const arg = argNode(0);
       if (t.isNewExpression(arg) && t.isIdentifier(arg.callee) && arg.callee.name === 'Date') {
-        return [t.cloneNode(arg, true)];
+        return rewritten([t.cloneNode(arg, true)]);
       }
       if (t.isStringLiteral(arg) || t.isNumericLiteral(arg)) {
-        return [t.cloneNode(arg, true)];
+        return rewritten([t.cloneNode(arg, true)]);
       }
       const name = getWorkflowStepName(arg, stepBindings);
       if (!name) {
@@ -226,7 +270,7 @@ function rewriteChainMethod(
           `.sleepUntil() in ${workflowName} (${filePath}) must be a Date, string/number literal, or an identifier`,
         );
       }
-      return [t.stringLiteral(name)];
+      return rewritten([t.stringLiteral(name)]);
     }
 
     case 'parallel': {
@@ -238,7 +282,7 @@ function rewriteChainMethod(
       if (names.some(n => !n)) {
         throw new Error(`Unable to determine step names inside .parallel() in ${workflowName} (${filePath})`);
       }
-      return [t.arrayExpression(names.map(n => t.stringLiteral(n!)))];
+      return rewritten([t.arrayExpression(names.map(n => t.stringLiteral(n!)))]);
     }
 
     case 'branch': {
@@ -261,7 +305,7 @@ function rewriteChainMethod(
         }
         return t.arrayExpression([t.stringLiteral(condName), t.stringLiteral(stepName)]);
       });
-      return [t.arrayExpression(pairs)];
+      return rewritten([t.arrayExpression(pairs)]);
     }
 
     case 'dowhile':
@@ -271,7 +315,7 @@ function rewriteChainMethod(
       if (!stepName || !condName) {
         throw new Error(`.${method.name}() in ${workflowName} (${filePath}) must take (step, condition) identifiers`);
       }
-      return [t.stringLiteral(stepName), t.stringLiteral(condName)];
+      return rewritten([t.stringLiteral(stepName), t.stringLiteral(condName)]);
     }
 
     case 'foreach': {
@@ -284,11 +328,11 @@ function rewriteChainMethod(
       if (optsArg && t.isExpression(optsArg)) {
         args.push(t.cloneNode(optsArg, true));
       }
-      return args;
+      return rewritten(args);
     }
 
     case 'commit':
-      return [];
+      return rewritten([]);
 
     default:
       throw new Error(`Unsupported workflow chain method .${method.name}() in ${workflowName} (${filePath})`);
@@ -313,14 +357,18 @@ function createTemporalWorkflowStatements(
   filePath: string,
   includeCommit: boolean,
   stepBindings: Map<string, string>,
+  workflowBindings: Map<string, string>,
 ): t.Statement[] {
   // Start from `createWorkflow(<static id>)` and rebuild the chain one call at a time
   // using normalized arguments from `rewriteChainMethod`.
   let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), [t.cloneNode(workflowId, true)]);
 
   for (const method of methods) {
-    const newArgs = rewriteChainMethod(method, filePath, exportName, stepBindings);
-    expression = t.callExpression(t.memberExpression(expression, t.identifier(method.name)), newArgs);
+    const rewrittenMethod = rewriteChainMethod(method, filePath, exportName, stepBindings, workflowBindings);
+    expression = t.callExpression(
+      t.memberExpression(expression, t.identifier(rewrittenMethod.name)),
+      rewrittenMethod.args,
+    );
   }
 
   if (includeCommit && !methods.some(m => m.name === 'commit')) {
@@ -417,10 +465,11 @@ interface WorkflowTransformState {
   inlineExportedWorkflowNames: Set<string>;
   strippedNames: Set<string>;
   stepBindings: Map<string, string>;
+  workflowBindings: Map<string, string>;
   workflowExports: TemporalWorkflowExport[];
 }
 
-function createWorkflowTransformState(program: t.Program): WorkflowTransformState {
+function createWorkflowTransformState(program: t.Program, filePath: string): WorkflowTransformState {
   return {
     statements: [...createTemporalWorkflowHelperStatements()],
     workflowNames: new Set<string>(),
@@ -428,6 +477,7 @@ function createWorkflowTransformState(program: t.Program): WorkflowTransformStat
     inlineExportedWorkflowNames: new Set<string>(),
     strippedNames: new Set<string>(),
     stepBindings: collectStepBindings(program),
+    workflowBindings: collectWorkflowBindings(program, filePath),
     workflowExports: [],
   };
 }
@@ -595,6 +645,7 @@ function rewriteWorkflowVariableDeclaration(
         filePath,
         state.committedWorkflowNames.has(declaration.id.name),
         state.stepBindings,
+        state.workflowBindings,
       ),
     );
   }
@@ -676,7 +727,7 @@ export async function buildTemporalWorkflowModule(
         name: 'temporal-workflow-transform',
         transform(code, id) {
           const ast = parseModule(id, code);
-          const state = createWorkflowTransformState(ast.program);
+          const state = createWorkflowTransformState(ast.program, id);
           collectWorkflowTransformMetadata(ast.program, state);
           for (const statement of ast.program.body) {
             // We rewrite only the top-level workflow declarations/exports and keep unrelated

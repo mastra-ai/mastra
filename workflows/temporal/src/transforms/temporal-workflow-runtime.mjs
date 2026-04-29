@@ -1,4 +1,4 @@
-import { proxyActivities, log, sleep } from '@temporalio/workflow';
+import { executeChild, proxyActivities, log, sleep } from '@temporalio/workflow';
 
 export class TemporalExecutionEngine {
   startToCloseTimeout;
@@ -32,6 +32,14 @@ export class TemporalExecutionEngine {
         log.info('step', { stepId: entry.step.id });
         const out = await this.activityHandle[entry.step.id]({ inputData });
         stepResults[entry.step.id] = out;
+        return out;
+      }
+
+      case 'childWorkflow': {
+        log.info('childWorkflow', { workflowType: entry.workflowType });
+        const childResult = await executeChild(entry.workflowType, { args: [{ inputData }] });
+        const out = childResult?.result ?? childResult;
+        stepResults[entry.workflowType] = out;
         return out;
       }
 
@@ -167,6 +175,13 @@ export function createWorkflow(workflowId) {
         step: {
           id: stepId,
         },
+      });
+      return workflow;
+    },
+    thenWorkflow(workflowType) {
+      stepFlow.push({
+        type: 'childWorkflow',
+        workflowType,
       });
       return workflow;
     },

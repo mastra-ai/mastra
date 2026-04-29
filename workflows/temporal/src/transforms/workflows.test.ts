@@ -45,6 +45,21 @@ describe('workflow transform', () => {
     expect(result).not.toContain('const customName =');
   });
 
+  it('rewrites nested workflow references as child workflow calls', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({}) });
+      const subWorkflow = createWorkflow({ id: 'fetch-weather' }).then(fetchWeather);
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(subWorkflow);
+    `);
+
+    expect(result).toContain('const fetchWeatherWorkflow =');
+    expect(result).toContain('const weatherWorkflow =');
+    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow")');
+    expect(result).not.toContain('.then("subWorkflow")');
+  });
+
   it('injects the helper runtime from the dedicated module into transformed output', async () => {
     const output = await transform(`
       import { createWorkflow } from '@mastra/core/workflows';
@@ -53,6 +68,7 @@ describe('workflow transform', () => {
     `);
 
     expect(output).toContain('@temporalio/workflow');
+    expect(output).toContain('executeChild');
     expect(output).toContain('proxyActivities');
     expect(output).toContain('log');
     expect(output).toContain('sleep');

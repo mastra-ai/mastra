@@ -151,6 +151,20 @@ describe('@mastra/temporal transform exports', () => {
     expect(output).not.toContain("from 'zod'");
   });
 
+  it('rewrites nested workflow references as child workflow calls', async () => {
+    const workflowOutput = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({}) });
+      const subWorkflow = createWorkflow({ id: 'fetch-weather' }).then(fetchWeather);
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(subWorkflow);
+    `);
+    expect(workflowOutput).toContain('const fetchWeatherWorkflow =');
+    expect(workflowOutput).toContain('const weatherWorkflow =');
+    expect(workflowOutput).toContain('.thenWorkflow("fetchWeatherWorkflow")');
+    expect(workflowOutput).not.toContain('.then("subWorkflow")');
+  });
+
   it('keeps only the workflow id from createWorkflow config', async () => {
     const output = await transform(`
       import { z } from 'zod';
