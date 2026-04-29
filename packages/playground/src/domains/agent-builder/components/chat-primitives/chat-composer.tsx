@@ -13,7 +13,6 @@ interface ChatComposerProps {
   placeholder?: string;
   inputTestId?: string;
   submitTestId?: string;
-  viewTransitionName?: string;
 }
 
 export const ChatComposer = ({
@@ -27,13 +26,12 @@ export const ChatComposer = ({
   placeholder = 'Ask a follow-up…',
   inputTestId,
   submitTestId,
-  viewTransitionName,
 }: ChatComposerProps) => {
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
         className="rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors focus-within:border-neutral3"
-        style={viewTransitionName ? { viewTransitionName } : undefined}
+        style={{ viewTransitionName: 'chat-composer' }}
       >
         <ChatTextarea
           testId={inputTestId}

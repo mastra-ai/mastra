@@ -6,6 +6,15 @@ import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const navigateMock = vi.fn();
+let storedAgent = {
+  id: 'agent-123',
+  name: 'My Agent',
+  instructions: 'Do things',
+  tools: [],
+  agents: [],
+  workflows: [],
+  visibility: 'public',
+};
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual<typeof ReactRouter>('react-router');
@@ -33,14 +42,7 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
 
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: () => ({
-    data: {
-      id: 'agent-123',
-      name: 'My Agent',
-      instructions: 'Do things',
-      tools: [],
-      agents: [],
-      workflows: [],
-    },
+    data: storedAgent,
     isLoading: false,
   }),
 }));
@@ -94,6 +96,15 @@ const renderAt = (path = '/agent-builder/agents/agent-123/view') =>
 describe('AgentBuilderAgentView', () => {
   beforeEach(() => {
     navigateMock.mockReset();
+    storedAgent = {
+      id: 'agent-123',
+      name: 'My Agent',
+      instructions: 'Do things',
+      tools: [],
+      agents: [],
+      workflows: [],
+      visibility: 'public',
+    };
   });
 
   afterEach(() => {
@@ -104,6 +115,13 @@ describe('AgentBuilderAgentView', () => {
     const { getByTestId } = renderAt();
     const button = getByTestId('agent-builder-view-edit');
     expect(button.textContent).toContain('Edit configuration');
+  });
+
+  it('shows the current visibility as disabled', () => {
+    const { getByTestId } = renderAt();
+    const trigger = getByTestId('agent-builder-visibility-trigger');
+    expect(trigger.textContent).toContain('Public');
+    expect(trigger.hasAttribute('disabled')).toBe(true);
   });
 
   it('navigates to the edit page when the edit button is clicked', () => {

@@ -43,6 +43,8 @@ export function AgentBuilderLibraryList({ agents, search }: AgentBuilderLibraryL
     );
   }
 
+  console.log('BROOOH');
+
   return (
     <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
       {filtered.map(agent => (

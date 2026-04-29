@@ -18,6 +18,8 @@ vi.mock('react-router', async () => {
 });
 
 let storedAgent: unknown = null;
+let currentUser: { id: string } | null | undefined = { id: 'current-user' };
+let isCurrentUserLoading = false;
 
 vi.mock('@/domains/agent-builder/hooks/use-save-agent', () => ({
   useSaveAgent: () => ({ save: saveMock, isSaving: false }),
@@ -60,7 +62,7 @@ vi.mock('@/domains/workspace/hooks', () => ({
 }));
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'current-user' } }),
+  useCurrentUser: () => ({ data: currentUser, isLoading: isCurrentUserLoading }),
 }));
 
 // Heavy panels not under test — replace with dumb stubs.
@@ -97,6 +99,7 @@ const renderAt = (path = '/agent-builder/agents/agent-123/edit') =>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/agent-builder/agents/:id/edit" element={<AgentBuilderAgentEdit />} />
+          <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
         </Routes>
       </MemoryRouter>
     </TooltipProvider>,
@@ -107,6 +110,8 @@ describe('AgentBuilderAgentEdit', () => {
     navigateMock.mockReset();
     saveMock.mockClear();
     storedAgent = null;
+    currentUser = { id: 'current-user' };
+    isCurrentUserLoading = false;
   });
 
   afterEach(() => {
@@ -163,6 +168,43 @@ describe('AgentBuilderAgentEdit', () => {
       await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(navigateMock).toHaveBeenCalled());
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+    });
+
+    it('waits for the current user before redirecting an owned agent', () => {
+      storedAgent = {
+        id: 'agent-123',
+        name: 'Existing',
+        instructions: 'Do things',
+        tools: [],
+        agents: [],
+        workflows: [],
+        authorId: 'current-user',
+      };
+      isCurrentUserLoading = true;
+      currentUser = undefined;
+
+      const { queryByTestId } = renderAt();
+
+      expect(queryByTestId('stub-configure-panel')).toBeNull();
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    it('redirects non-owners to the view page after current user loads', () => {
+      storedAgent = {
+        id: 'agent-123',
+        name: 'Existing',
+        instructions: 'Do things',
+        tools: [],
+        agents: [],
+        workflows: [],
+        authorId: 'another-user',
+      };
+      currentUser = { id: 'current-user' };
+
+      const { getByTestId } = renderAt();
+
+      expect(getByTestId('view-page')).not.toBeNull();
+      expect(navigateMock).not.toHaveBeenCalled();
     });
   });
 

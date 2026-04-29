@@ -46,9 +46,13 @@ export default function AgentBuilderAgentEdit() {
     enabled: features.skills,
   });
   const { data: workspacesData } = useWorkspaces();
+  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
+  const isOwnershipLoading = !fromStarter && Boolean(storedAgent?.authorId) && isCurrentUserLoading;
   const isReady =
     Boolean(id) &&
     (fromStarter || !isStoredAgentLoading) &&
+    !isOwnershipLoading &&
     (!features.tools || !isToolsPending) &&
     (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
@@ -63,9 +67,6 @@ export default function AgentBuilderAgentEdit() {
     () => storedSkillsResponse?.skills ?? [],
     [storedSkillsResponse],
   );
-
-  const { data: currentUser } = useCurrentUser();
-  const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
 

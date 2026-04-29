@@ -11,6 +11,7 @@ import {
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
+import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
@@ -154,6 +155,7 @@ const AgentBuilderAgentViewReady = ({
         mode="test"
         defaultExpanded={false}
         detailOpen={activeDetail !== null}
+        modeAction={<VisibilitySelect disabled />}
         primaryAction={
           isOwner ? (
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />

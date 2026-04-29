@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentChatPanel } from '../agent-chat-panel';
 
 const sentMessages: Array<{ message: string; threadId?: string }> = [];
+const agentMessagesCalls: Array<{ agentId: string; threadId: string; memory?: boolean }> = [];
 const chatState: { isRunning: boolean; messages: unknown[] } = { isRunning: false, messages: [] };
 
 vi.mock('@mastra/react', () => ({
@@ -22,7 +23,10 @@ vi.mock('@mastra/react', () => ({
 }));
 
 vi.mock('@/hooks/use-agent-messages', () => ({
-  useAgentMessages: () => ({ data: { messages: [] }, isLoading: false }),
+  useAgentMessages: (options: { agentId: string; threadId: string; memory?: boolean }) => {
+    agentMessagesCalls.push(options);
+    return { data: { messages: [] }, isLoading: false };
+  },
 }));
 
 const renderPanel = () =>
@@ -37,6 +41,7 @@ const renderPanel = () =>
 describe('AgentChatPanel', () => {
   beforeEach(() => {
     sentMessages.length = 0;
+    agentMessagesCalls.length = 0;
     chatState.isRunning = false;
     chatState.messages = [];
   });
@@ -59,8 +64,15 @@ describe('AgentChatPanel', () => {
     expect(input.disabled).toBe(true);
   });
 
-  it('forwards the trimmed draft and threadId through send', () => {
+  it('loads and sends runtime agent messages on the raw agent thread', () => {
     const { getByTestId } = renderPanel();
+
+    expect(agentMessagesCalls[0]).toMatchObject({
+      agentId: 'agent-test',
+      threadId: 'agent-test',
+      memory: true,
+    });
+
     const input = getByTestId('agent-builder-agent-chat-input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '  hello world  ' } });
     const submit = getByTestId('agent-builder-agent-chat-submit');

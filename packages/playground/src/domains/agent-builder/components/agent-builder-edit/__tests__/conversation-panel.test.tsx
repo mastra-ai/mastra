@@ -18,23 +18,31 @@ type Features = {
   skills: boolean;
 };
 
-const sentMessages: Array<{ message: string; clientTools: Record<string, any> }> = [];
+const sentMessages: Array<{ message: string; threadId?: string; clientTools: Record<string, any> }> = [];
+const agentMessagesCalls: Array<{ agentId: string; threadId: string; memory?: boolean }> = [];
+const chatCalls: Array<{ agentId: string }> = [];
 const chatState = { isRunning: false };
 
 vi.mock('@mastra/react', () => ({
-  useChat: () => ({
-    messages: [],
-    isRunning: chatState.isRunning,
-    setMessages: () => {},
-    sendMessage: (payload: { message: string; clientTools: Record<string, any> }) => {
-      sentMessages.push(payload);
-    },
-  }),
+  useChat: (options: { agentId: string }) => {
+    chatCalls.push(options);
+    return {
+      messages: [],
+      isRunning: chatState.isRunning,
+      setMessages: () => {},
+      sendMessage: (payload: { message: string; threadId?: string; clientTools: Record<string, any> }) => {
+        sentMessages.push(payload);
+      },
+    };
+  },
   useMastraClient: () => ({}),
 }));
 
 vi.mock('@/hooks/use-agent-messages', () => ({
-  useAgentMessages: () => ({ data: { messages: [] }, isLoading: false }),
+  useAgentMessages: (options: { agentId: string; threadId: string; memory?: boolean }) => {
+    agentMessagesCalls.push(options);
+    return { data: { messages: [] }, isLoading: false };
+  },
 }));
 
 vi.mock('@/domains/agents/hooks/use-create-skill', () => ({
@@ -100,12 +108,29 @@ const allOn: Features = { tools: true, memory: false, workflows: false, agents: 
 describe('ConversationPanel agent-builder client tool', () => {
   beforeEach(() => {
     sentMessages.length = 0;
+    agentMessagesCalls.length = 0;
+    chatCalls.length = 0;
     formMethodsRef = null;
     chatState.isRunning = false;
   });
 
   afterEach(() => {
     cleanup();
+  });
+
+  it('loads and sends builder messages on a prefixed builder thread', () => {
+    renderPanel(allOff);
+
+    expect(agentMessagesCalls[0]).toMatchObject({
+      agentId: 'builder-agent',
+      threadId: 'agent-builder-agent-test',
+      memory: true,
+    });
+    expect(chatCalls[0]).toMatchObject({ agentId: 'builder-agent' });
+    expect(sentMessages[0]).toMatchObject({
+      message: 'hello',
+      threadId: 'agent-builder-agent-test',
+    });
   });
 
   it('always exposes name and instructions as required fields when both feature flags are off', () => {
@@ -394,6 +419,8 @@ describe('ConversationPanel agent-builder client tool', () => {
 describe('ConversationPanel chat busy/done state', () => {
   beforeEach(() => {
     sentMessages.length = 0;
+    agentMessagesCalls.length = 0;
+    chatCalls.length = 0;
     formMethodsRef = null;
     chatState.isRunning = false;
   });

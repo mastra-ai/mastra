@@ -30,6 +30,7 @@ interface ConversationPanelProviderProps {
 }
 
 const BUILDER_AGENT_ID = 'builder-agent';
+const getBuilderThreadId = (agentId: string) => `agent-builder-${agentId}`;
 
 export const ConversationPanelProvider = ({
   initialUserMessage,
@@ -42,9 +43,10 @@ export const ConversationPanelProvider = ({
   agentId,
   children,
 }: ConversationPanelProviderProps) => {
+  const builderThreadId = getBuilderThreadId(agentId);
   const { data, isLoading: isConversationLoading } = useAgentMessages({
     agentId: BUILDER_AGENT_ID,
-    threadId: agentId,
+    threadId: builderThreadId,
     memory: !isFreshThread,
   });
 
@@ -72,7 +74,7 @@ export const ConversationPanelProvider = ({
   return (
     <StreamChatProvider
       agentId={BUILDER_AGENT_ID}
-      threadId={agentId}
+      threadId={builderThreadId}
       initialMessages={v5Messages}
       clientTools={clientTools}
     >
@@ -169,7 +171,6 @@ const ConversationComposer = () => {
       placeholder="Tell the builder what to change…"
       inputTestId="agent-builder-conversation-input"
       submitTestId="agent-builder-conversation-submit"
-      viewTransitionName="agent-builder-prompt"
     />
   );
 };
