@@ -63,7 +63,7 @@ export const WorkspaceLayout = ({
           >
             <div
               className={cn(
-                'size-4 border border-current rounded-lg grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
+                'size-4 border border-current rounded-md grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
                 expanded ? 'grid-cols-[1fr_40%]' : 'grid-cols-[1fr_10%]',
               )}
             >

@@ -54,9 +54,13 @@ export const StarButton = ({
         event.stopPropagation();
         toggle.mutate({ starred: !isStarred });
       }}
-      className={cn('shrink-0', isStarred && 'text-accent6 [&>svg]:opacity-100', className)}
+      className={cn('shrink-0 cursor-pointer', className)}
     >
-      <Star size={iconSizes[size]} className={cn('shrink-0', isStarred && 'fill-current')} aria-hidden />
+      <Star
+        size={iconSizes[size]}
+        className={cn('shrink-0', isStarred && 'fill-current text-yellow-300')}
+        aria-hidden
+      />
       {showCount && typeof starCount === 'number' && (
         <span className="leading-none">
           <span className="tabular-nums">{starCount}</span> {starText}
