@@ -43,7 +43,8 @@ export class SlackManifestClient {
 
   /**
    * Rotate the configuration tokens.
-   * Slack config tokens expire after 12 hours and must be rotated.
+   * Slack config access tokens expire after 12 hours; the refresh token is single-use
+   * and each rotation returns a new access token + refresh token pair.
    */
   async rotateToken(): Promise<void> {
     const response = await fetch(`${SLACK_API_BASE}/tooling.tokens.rotate`, {
@@ -66,8 +67,8 @@ export class SlackManifestClient {
     if (!data.ok) {
       if (data.error === 'invalid_refresh_token') {
         throw new Error(
-          'Slack refresh token expired. Get fresh tokens from https://api.slack.com/apps > "Your App Configuration Tokens". ' +
-          'Slack config tokens expire after 12 hours of inactivity.',
+          'Slack refresh token is invalid. Get fresh tokens from https://api.slack.com/apps > "Your App Configuration Tokens". ' +
+          'This can happen if storage was lost or the token was already used.',
         );
       }
       throw new Error(`Token rotation failed: ${data.error}`);

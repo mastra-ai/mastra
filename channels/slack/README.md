@@ -56,7 +56,7 @@ const { authorizationUrl } = await slack.connect('my-agent', {
    SLACK_BASE_URL=https://abc123.trycloudflare.com
    ```
 
-> ⚠️ **Token Expiration**: Slack config tokens expire after 12 hours. Tokens auto-rotate and are persisted to storage. The `.env` tokens are only used as the initial seed. If your server is offline for >12 hours without persisted storage, you'll need fresh tokens from the Slack dashboard.
+> ⚠️ **Token Rotation**: Slack config access tokens expire after 12 hours, but the refresh token does not expire (it's single-use — each rotation returns a new pair). Tokens auto-rotate and are persisted to storage, so the `.env` values are only used as the initial seed. If you lose your persisted storage (e.g., DB wipe), you'll need fresh tokens from the Slack dashboard.
 
 ## Storage & Persistence
 
@@ -89,7 +89,7 @@ Without storage, data is lost on restart and apps are recreated.
 2. Call `slack.connect(agentId)` to provision a Slack app and get an OAuth URL
 3. Visit the OAuth URL to install the app to your Slack workspace
 4. After installation, messages and slash commands route to your agent
-5. Tokens auto-rotate every 12 hours and are saved to storage
+5. Config access tokens auto-rotate (they expire every 12 hours) and are saved to storage
 
 ## Slash Commands
 
