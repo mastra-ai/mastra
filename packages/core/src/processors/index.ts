@@ -305,6 +305,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
  * This is distinct from network errors or retryable server errors (which are handled by p-retry).
  */
 export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** Prompt-only messages used for the failed model call, when input processors changed the model context. */
+  modelContextMessages?: MastraDBMessage[];
   /** The error that occurred during the LLM API call */
   error: unknown;
   /** The current step number (0-indexed) */
@@ -327,6 +329,8 @@ export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends Proces
 export type ProcessAPIErrorResult = {
   /** Whether to retry the LLM call after applying modifications */
   retry: boolean;
+  /** Replace the prompt-only messages used for the retry without mutating canonical history. */
+  modelContextMessages?: MastraDBMessage[];
 };
 
 /**
@@ -554,6 +558,17 @@ export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
+export {
+  createPromptOnlyMessageList,
+  normalizePromptOnlyMessages,
+  snapshotMessageList,
+  stripPromptOnlySystemMessages,
+} from './prompt-view';
+export {
+  validateAndFormatProcessInputResult,
+  validateAndFormatProcessInputStepResult,
+  validateProcessorResultExclusivity,
+} from './validate-result';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

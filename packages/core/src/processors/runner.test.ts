@@ -141,6 +141,64 @@ describe('ProcessorRunner', () => {
       expect(result.modelContextMessages).toEqual([trimmedPromptMessage]);
     });
 
+    it('should isolate prompt-only messages from later deep mutations', async () => {
+      const canonicalMessage = createMessage('canonical input', 'user');
+
+      messageList.add([canonicalMessage], 'user');
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'prompt-only-from-canonical',
+            processInput: async ({ messages }) => ({
+              modelContextMessages: messages,
+            }),
+          },
+          {
+            id: 'deep-mutator',
+            processInput: async ({ messages }) => {
+              (messages[0]!.content.parts![0] as TextPart).text = 'mutated prompt-only input';
+              return undefined;
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const result = await runner.runInputProcessors(messageList);
+
+      expect((result.messageList.get.input.db()[0]!.content.parts![0] as TextPart).text).toBe('canonical input');
+      expect((result.modelContextMessages![0]!.content.parts![0] as TextPart).text).toBe('mutated prompt-only input');
+    });
+
+    it('should treat an empty modelContextMessages array as an intentional prompt-only clear', async () => {
+      const canonicalMessage = createMessage('canonical input', 'user');
+      const promptOnlyMessage = createMessage('prompt-only input', 'user');
+
+      messageList.add([canonicalMessage], 'user');
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'prompt-only',
+            processInput: async () => ({ modelContextMessages: [promptOnlyMessage] }),
+          },
+          {
+            id: 'clear-prompt-only',
+            processInput: async () => ({ modelContextMessages: [] }),
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const result = await runner.runInputProcessors(messageList);
+
+      expect(result.messageList.get.input.db()).toEqual([canonicalMessage]);
+      expect(result.modelContextMessages).toEqual([]);
+    });
+
     it('should reject processInput results that return messages and modelContextMessages together', async () => {
       messageList.add([createMessage('canonical input', 'user')], 'user');
       runner = new ProcessorRunner({
@@ -2623,6 +2681,44 @@ describe('ProcessorRunner', () => {
         }),
       );
       expect(result).toEqual({ retry: true });
+    });
+
+    it('should pass and update prompt-only model context for API-error retries', async () => {
+      const executedPromptMessage = createMessage('executed prompt-only input', 'user');
+      const repairedPromptMessage = createMessage('repaired prompt-only input', 'user');
+      const processAPIError = vi.fn().mockReturnValue({
+        retry: true,
+        modelContextMessages: [repairedPromptMessage],
+      });
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'error-handler', processAPIError }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const canonicalInputMessage = createMessage('canonical input', 'user');
+      messageList.add(canonicalInputMessage, 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: [executedPromptMessage],
+        modelContextMessages: [executedPromptMessage],
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(processAPIError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [executedPromptMessage],
+          modelContextMessages: [executedPromptMessage],
+        }),
+      );
+      expect(result).toEqual({ retry: true, modelContextMessages: [repairedPromptMessage] });
+      expect(messageList.get.input.db()).toEqual([canonicalInputMessage]);
     });
 
     it('should skip processors that do not implement processAPIError', async () => {

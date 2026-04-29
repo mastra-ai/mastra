@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type {
   JSONValue,
@@ -13,7 +14,14 @@ import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastr
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
-import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/processors';
+import {
+  createPromptOnlyMessageList,
+  MessageHistory,
+  normalizePromptOnlyMessages,
+  SemanticRecall,
+  snapshotMessageList,
+  WorkingMemory,
+} from '@mastra/core/processors';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -115,17 +123,6 @@ function applyMessagesToMessageList(messages: MastraDBMessage[], messageList: Me
       messageList.add(message, check.getSource(message) || 'input');
     }
   }
-}
-
-function createPromptOnlyMessageList(messageList: MessageList, messages: MastraDBMessage[]): MessageList {
-  const promptMessageList = new MessageList().deserialize(messageList.serialize());
-  promptMessageList.clear.all.db();
-  promptMessageList.replaceAllSystemMessages(messageList.getAllSystemMessages());
-  promptMessageList.add(
-    messages.filter(message => message.role !== 'system'),
-    'input',
-  );
-  return promptMessageList;
 }
 
 /**
@@ -296,26 +293,65 @@ interface ProcessorMiddlewareState {
   tripwire?: boolean;
   reason?: string;
   originalInputCount?: number;
+  originalPromptRunId?: string;
 }
 
-const originalPromptsByState = new WeakMap<ProcessorMiddlewareState, LanguageModelV2Prompt>();
+const ORIGINAL_PROMPT_CLEANUP_TIMEOUT_MS = 30 * 60 * 1000;
+const originalPromptsByRunId = new Map<string, LanguageModelV2Prompt>();
+const originalPromptCleanupsByRunId = new Map<
+  string,
+  {
+    abortListener?: () => void;
+    abortSignal?: AbortSignal;
+    timeout: ReturnType<typeof setTimeout>;
+  }
+>();
 
-function storeOriginalPrompt(processorState: ProcessorMiddlewareState, prompt: LanguageModelV2Prompt): void {
-  originalPromptsByState.set(processorState, prompt);
+function storeOriginalPrompt(prompt: LanguageModelV2Prompt, options?: { abortSignal?: AbortSignal }): string {
+  const runId = randomUUID();
+  originalPromptsByRunId.set(runId, prompt);
+
+  const cleanup = () => deleteOriginalPrompt({ originalPromptRunId: runId });
+  const abortSignal = options?.abortSignal;
+  let abortListener: (() => void) | undefined;
+
+  if (abortSignal) {
+    if (abortSignal.aborted) {
+      cleanup();
+      return runId;
+    }
+
+    abortListener = cleanup;
+    abortSignal.addEventListener('abort', abortListener, { once: true });
+  }
+
+  const timeout = setTimeout(cleanup, ORIGINAL_PROMPT_CLEANUP_TIMEOUT_MS);
+  timeout.unref?.();
+  originalPromptCleanupsByRunId.set(runId, { abortListener, abortSignal, timeout });
+
+  return runId;
 }
 
 function getOriginalPrompt(processorState?: ProcessorMiddlewareState): LanguageModelV2Prompt | undefined {
-  return processorState ? originalPromptsByState.get(processorState) : undefined;
+  return processorState?.originalPromptRunId
+    ? originalPromptsByRunId.get(processorState.originalPromptRunId)
+    : undefined;
 }
 
 function deleteOriginalPrompt(processorState?: ProcessorMiddlewareState): void {
-  if (processorState) {
-    originalPromptsByState.delete(processorState);
-  }
-}
+  const runId = processorState?.originalPromptRunId;
+  if (runId) {
+    originalPromptsByRunId.delete(runId);
 
-function snapshotMessageList(messageList: MessageList): string {
-  return JSON.stringify(messageList.serialize());
+    const cleanup = originalPromptCleanupsByRunId.get(runId);
+    if (cleanup) {
+      clearTimeout(cleanup.timeout);
+      if (cleanup.abortListener) {
+        cleanup.abortSignal?.removeEventListener('abort', cleanup.abortListener);
+      }
+      originalPromptCleanupsByRunId.delete(runId);
+    }
+  }
 }
 
 function assertPromptOnlyMessageListMutation({
@@ -356,6 +392,8 @@ function serializeProcessorState(
   if (processorState.reason !== undefined) serialized.reason = processorState.reason;
   if (processorState.originalInputCount !== undefined)
     serialized.originalInputCount = processorState.originalInputCount;
+  if (processorState.originalPromptRunId !== undefined)
+    serialized.originalPromptRunId = processorState.originalPromptRunId;
   return serialized;
 }
 
@@ -608,11 +646,11 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 processorId: processor.id,
                 messageList,
                 snapshotBefore: snapshotBeforeProcessor,
-                promptOnlyAlreadyActive: !!modelContextMessages,
+                promptOnlyAlreadyActive: modelContextMessages !== undefined,
                 returnedPromptOnly: false,
               });
-              if (modelContextMessages) {
-                modelContextMessages = result;
+              if (modelContextMessages !== undefined) {
+                modelContextMessages = normalizePromptOnlyMessages(result);
               } else {
                 applyMessagesToMessageList(result, messageList);
               }
@@ -626,7 +664,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 processorId: processor.id,
                 messageList,
                 snapshotBefore: snapshotBeforeProcessor,
-                promptOnlyAlreadyActive: !!modelContextMessages,
+                promptOnlyAlreadyActive: modelContextMessages !== undefined,
                 returnedPromptOnly: false,
               });
             } else if (result) {
@@ -639,17 +677,17 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 processorId: processor.id,
                 messageList,
                 snapshotBefore: snapshotBeforeProcessor,
-                promptOnlyAlreadyActive: !!modelContextMessages,
-                returnedPromptOnly: !!result.modelContextMessages,
+                promptOnlyAlreadyActive: modelContextMessages !== undefined,
+                returnedPromptOnly: 'modelContextMessages' in result,
               });
               if (result.systemMessages) {
                 messageList.replaceAllSystemMessages(result.systemMessages);
               }
-              if (result.modelContextMessages) {
-                modelContextMessages = result.modelContextMessages;
+              if ('modelContextMessages' in result) {
+                modelContextMessages = normalizePromptOnlyMessages(result.modelContextMessages ?? []);
               } else if (result.messages) {
-                if (modelContextMessages) {
-                  modelContextMessages = result.messages;
+                if (modelContextMessages !== undefined) {
+                  modelContextMessages = normalizePromptOnlyMessages(result.messages);
                 } else {
                   applyMessagesToMessageList(result.messages, messageList);
                 }
@@ -659,7 +697,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 processorId: processor.id,
                 messageList,
                 snapshotBefore: snapshotBeforeProcessor,
-                promptOnlyAlreadyActive: !!modelContextMessages,
+                promptOnlyAlreadyActive: modelContextMessages !== undefined,
                 returnedPromptOnly: false,
               });
             }
@@ -687,9 +725,13 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       const originalPrompt: LanguageModelV2Prompt = messageList.get.all.aiV5
         .prompt()
         .map(aiV5ModelMessageToV2PromptMessage);
-      const promptMessageList = modelContextMessages
-        ? createPromptOnlyMessageList(messageList, modelContextMessages)
-        : messageList;
+      const promptMessageList =
+        modelContextMessages !== undefined
+          ? createPromptOnlyMessageList({
+              canonicalMessageList: messageList,
+              modelContextMessages,
+            })
+          : messageList;
       const newPrompt: LanguageModelV2Prompt = promptMessageList.get.all.aiV5
         .prompt()
         .map(aiV5ModelMessageToV2PromptMessage);
@@ -697,10 +739,12 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         ...(params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined),
         originalInputCount,
       };
-      const serializedProcessorState = serializeProcessorState(processorState);
       if (outputProcessors.length) {
-        storeOriginalPrompt(serializedProcessorState, originalPrompt);
+        processorState.originalPromptRunId = storeOriginalPrompt(originalPrompt, {
+          abortSignal: (params as { abortSignal?: AbortSignal }).abortSignal,
+        });
       }
+      const serializedProcessorState = serializeProcessorState(processorState);
 
       return {
         ...params,
@@ -748,7 +792,10 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       // so output processors don't re-persist them.
       const originalInputCount =
         processorState?.originalInputCount ?? params.prompt.filter(m => m.role !== 'system').length;
-      const promptForOutputProcessors = getOriginalPrompt(processorState) ?? params.prompt;
+      const promptForOutputProcessors = getOriginalPrompt(processorState);
+      if (!promptForOutputProcessors) {
+        throw new Error('Mastra processor middleware missing original prompt for output processors.');
+      }
       const nonSystemTotal = promptForOutputProcessors.filter(m => m.role !== 'system').length;
       const memoryCount = nonSystemTotal - originalInputCount;
 
@@ -962,7 +1009,11 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             // Tag historical messages as 'memory' so output processors don't re-persist them.
             const flushOriginalInputCount =
               processorState?.originalInputCount ?? params.prompt.filter(m => m.role !== 'system').length;
-            const promptForOutputProcessors = getOriginalPrompt(processorState) ?? params.prompt;
+            const promptForOutputProcessors = getOriginalPrompt(processorState);
+            if (!promptForOutputProcessors) {
+              cleanupOriginalPrompt();
+              throw new Error('Mastra processor middleware missing original prompt for output processors.');
+            }
             const flushNonSystemTotal = promptForOutputProcessors.filter(m => m.role !== 'system').length;
             const flushMemoryCount = flushNonSystemTotal - flushOriginalInputCount;
 

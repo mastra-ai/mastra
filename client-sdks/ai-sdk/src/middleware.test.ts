@@ -20,7 +20,7 @@ import type {
 import { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createProcessorMiddleware, withMastra } from './middleware';
 
@@ -236,6 +236,168 @@ describe('withMastra middleware', () => {
       const outputTexts = messagesSeenByOutputProcessor.map(getDbMessageText);
       expect(outputTexts).toContain('canonical input');
       expect(outputTexts).not.toContain('prompt-only input');
+    });
+
+    it('should keep original prompt state when provider options are cloned before output processing', async () => {
+      const promptOnlyMessage = createDbMessage('prompt-only input');
+      let messagesSeenByOutputProcessor: MastraDBMessage[] = [];
+
+      const middleware = createProcessorMiddleware({
+        inputProcessors: [
+          {
+            id: 'prompt-only',
+            async processInput() {
+              return { modelContextMessages: [promptOnlyMessage] };
+            },
+          },
+        ],
+        outputProcessors: [
+          {
+            id: 'output-capture',
+            async processOutputResult(args) {
+              messagesSeenByOutputProcessor = args.messages;
+              return args.messageList;
+            },
+          },
+        ],
+      });
+
+      const transformedParams = await (middleware as any).transformParams({
+        params: {
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'canonical input' }] }],
+          providerOptions: {},
+        },
+      });
+      const clonedParams = {
+        ...transformedParams,
+        providerOptions: structuredClone(transformedParams.providerOptions),
+      };
+
+      await (middleware as any).wrapGenerate({
+        params: clonedParams,
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'OK' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const outputTexts = messagesSeenByOutputProcessor.map(getDbMessageText);
+      expect(outputTexts).toContain('canonical input');
+      expect(outputTexts).not.toContain('prompt-only input');
+    });
+
+    it('should throw instead of falling back to transformed prompt when original prompt state is missing', async () => {
+      const middleware = createProcessorMiddleware({
+        outputProcessors: [
+          {
+            id: 'output-capture',
+            async processOutputResult(args) {
+              return args.messageList;
+            },
+          },
+        ],
+      });
+
+      await expect(
+        (middleware as any).wrapGenerate({
+          params: {
+            prompt: [{ role: 'user', content: [{ type: 'text', text: 'transformed prompt' }] }],
+            providerOptions: {
+              mastraProcessors: {
+                originalInputCount: 1,
+                originalPromptRunId: 'missing-run-id',
+              },
+            },
+          },
+          doGenerate: async () => ({
+            content: [{ type: 'text', text: 'OK' }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          }),
+        }),
+      ).rejects.toThrow('missing original prompt');
+    });
+
+    it('should clean up original prompt state when the request aborts before output processing', async () => {
+      const abortController = new AbortController();
+      const middleware = createProcessorMiddleware({
+        outputProcessors: [
+          {
+            id: 'output-capture',
+            async processOutputResult(args) {
+              return args.messageList;
+            },
+          },
+        ],
+      });
+
+      const transformedParams = await (middleware as any).transformParams({
+        params: {
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'canonical input' }] }],
+          providerOptions: {},
+          abortSignal: abortController.signal,
+        },
+      });
+
+      abortController.abort();
+
+      await expect(
+        (middleware as any).wrapGenerate({
+          params: transformedParams,
+          doGenerate: async () => ({
+            content: [{ type: 'text', text: 'OK' }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          }),
+        }),
+      ).rejects.toThrow('missing original prompt');
+    });
+
+    it('should bound original prompt state lifetime when output processing is abandoned', async () => {
+      vi.useFakeTimers();
+      try {
+        const middleware = createProcessorMiddleware({
+          outputProcessors: [
+            {
+              id: 'output-capture',
+              async processOutputResult(args) {
+                return args.messageList;
+              },
+            },
+          ],
+        });
+
+        const transformedParams = await (middleware as any).transformParams({
+          params: {
+            prompt: [{ role: 'user', content: [{ type: 'text', text: 'canonical input' }] }],
+            providerOptions: {},
+          },
+        });
+
+        vi.advanceTimersByTime(30 * 60 * 1000);
+
+        await expect(
+          (middleware as any).wrapGenerate({
+            params: transformedParams,
+            doGenerate: async () => ({
+              content: [{ type: 'text', text: 'OK' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: [], rawSettings: {} },
+              warnings: [],
+            }),
+          }),
+        ).rejects.toThrow('missing original prompt');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should reject messageList mutation while returning prompt-only model context', async () => {

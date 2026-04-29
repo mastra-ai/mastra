@@ -27,7 +27,12 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState } from '../processors';
+import {
+  createPromptOnlyMessageList as createPromptOnlyProcessorMessageList,
+  normalizePromptOnlyMessages as stripPromptOnlySystemMessages,
+  ProcessorRunner,
+  ProcessorState,
+} from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
@@ -641,27 +646,6 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   DefaultEngineType
 > {
-  const stripPromptOnlySystemMessages = (messages: MastraDBMessage[]): MastraDBMessage[] =>
-    messages.filter(message => message.role !== 'system');
-
-  const createPromptOnlyProcessorMessageList = ({
-    canonicalMessageList,
-    modelContextMessages,
-    systemMessages,
-  }: {
-    canonicalMessageList: MessageList;
-    modelContextMessages: MastraDBMessage[];
-    systemMessages?: CoreMessage[];
-  }): MessageList => {
-    const promptOnlyMessageList = new MessageList();
-    const nonSystemMessages = stripPromptOnlySystemMessages(modelContextMessages);
-    if (nonSystemMessages.length > 0) {
-      promptOnlyMessageList.add(nonSystemMessages, 'input');
-    }
-    promptOnlyMessageList.replaceAllSystemMessages(systemMessages ?? canonicalMessageList.getAllSystemMessages());
-    return promptOnlyMessageList;
-  };
-
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -1110,7 +1094,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (result instanceof MessageList) {
-                if (passThrough.modelContextMessages) {
+                if (passThrough.modelContextMessages !== undefined) {
                   if (result !== processorMessageList) {
                     throw new MastraError({
                       category: ErrorCategory.USER,
@@ -1139,7 +1123,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
-                if (passThrough.modelContextMessages) {
+                if (passThrough.modelContextMessages !== undefined) {
                   return {
                     ...passThrough,
                     modelContextMessages: stripPromptOnlySystemMessages(result as MastraDBMessage[]),
@@ -1174,17 +1158,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 if (result.systemMessages) {
                   checkedMessageList.replaceAllSystemMessages(result.systemMessages as CoreMessage[]);
                 }
-                if (result.modelContextMessages) {
+                if ('modelContextMessages' in result) {
                   return {
                     ...passThrough,
                     modelContextMessages: stripPromptOnlySystemMessages(
-                      result.modelContextMessages as MastraDBMessage[],
+                      (result.modelContextMessages ?? []) as MastraDBMessage[],
                     ),
                     ...(result.systemMessages ? { systemMessages: result.systemMessages } : {}),
                   };
                 }
                 if (result.messages) {
-                  if (passThrough.modelContextMessages) {
+                  if (passThrough.modelContextMessages !== undefined) {
                     return {
                       ...passThrough,
                       modelContextMessages: stripPromptOnlySystemMessages(result.messages as MastraDBMessage[]),
@@ -1205,7 +1189,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   };
                 }
                 if (result.systemMessages) {
-                  return passThrough.modelContextMessages
+                  return passThrough.modelContextMessages !== undefined
                     ? {
                         ...passThrough,
                         ...(mutations.length > 0
@@ -1222,7 +1206,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                       };
                 }
               }
-              if (passThrough.modelContextMessages) {
+              if (passThrough.modelContextMessages !== undefined) {
                 return mutations.length > 0
                   ? {
                       ...passThrough,
@@ -1311,7 +1295,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
-              if (validatedResult.messages && !passThrough.modelContextMessages) {
+              if (validatedResult.messages && passThrough.modelContextMessages === undefined) {
                 ProcessorRunner.applyMessagesToMessageList(
                   validatedResult.messages,
                   checkedMessageList,
@@ -1319,15 +1303,15 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                 );
               }
-              if (validatedResult.messages && passThrough.modelContextMessages) {
+              if (validatedResult.messages && passThrough.modelContextMessages !== undefined) {
                 validatedResult.modelContextMessages = stripPromptOnlySystemMessages(validatedResult.messages);
                 delete validatedResult.messages;
               }
-              if (validatedResult.messageList && passThrough.modelContextMessages) {
+              if (validatedResult.messageList && passThrough.modelContextMessages !== undefined) {
                 validatedResult.modelContextMessages = stripPromptOnlySystemMessages(processorMessageList.get.all.db());
                 delete validatedResult.messageList;
               }
-              if (validatedResult.modelContextMessages) {
+              if (validatedResult.modelContextMessages !== undefined) {
                 validatedResult.modelContextMessages = stripPromptOnlySystemMessages(
                   validatedResult.modelContextMessages,
                 );
@@ -1344,7 +1328,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 !('modelContextMessages' in validatedResult) &&
                 mutations.length > 0
               ) {
-                if (passThrough.modelContextMessages) {
+                if (passThrough.modelContextMessages !== undefined) {
                   validatedResult.modelContextMessages = stripPromptOnlySystemMessages(
                     processorMessageList.get.all.db(),
                   );

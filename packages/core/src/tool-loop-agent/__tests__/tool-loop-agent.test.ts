@@ -786,6 +786,42 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       expect((prepareStepMessages[0] as MastraDBMessage).id).toBe('prompt-only');
     });
 
+    it('should reject prepareCall and prepareStep results that merge messages with modelContextMessages', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+
+      const agentLike = {
+        version: 'agent-v1',
+        settings: {
+          id: 'test-agent',
+          model: MODEL,
+          prepareCall: () => ({
+            messages: [canonicalMessage],
+          }),
+          prepareStep: () => ({
+            modelContextMessages: [promptOnlyMessage],
+          }),
+        },
+      };
+      const processor = new ToolLoopAgentProcessor(agentLike);
+
+      await expect(
+        processor.processInputStep({
+          messages: [canonicalMessage],
+          messageList: new MessageList().add([canonicalMessage], 'input'),
+          stepNumber: 0,
+          steps: [],
+          systemMessages: [],
+          state: {},
+          abort: (reason?: string): never => {
+            throw new Error(reason ?? 'aborted');
+          },
+          model: createCapturingMockModel() as unknown as MastraLanguageModel,
+          retryCount: 0,
+        }),
+      ).rejects.toThrow('returned both messages and modelContextMessages');
+    });
+
     it('should receive model override from prepareCall in prepareStep', async () => {
       // Create models with distinct modelIds so we can identify which one was passed
       const originalModel = new MockLanguageModelV3({

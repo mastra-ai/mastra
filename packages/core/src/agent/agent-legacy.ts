@@ -29,6 +29,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import { createPromptOnlyMessageList } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
@@ -46,17 +47,6 @@ import type {
 } from './types';
 
 import { resolveThreadIdFromArgs } from './utils';
-
-function createModelContextMessageList(messageList: MessageList, messages: MastraDBMessage[]): MessageList {
-  const contextMessageList = new MessageList().deserialize(messageList.serialize());
-  contextMessageList.clear.all.db();
-  contextMessageList.replaceAllSystemMessages(messageList.getAllSystemMessages());
-  contextMessageList.add(
-    messages.filter(message => message.role !== 'system'),
-    'input',
-  );
-  return contextMessageList;
-}
 
 /**
  * Interface for accessing Agent methods needed by the legacy handler.
@@ -359,7 +349,10 @@ export class AgentLegacyHandler {
             }
           }
           const promptMessageList = currentModelContextMessages
-            ? createModelContextMessageList(messageList, currentModelContextMessages)
+            ? createPromptOnlyMessageList({
+                canonicalMessageList: messageList,
+                modelContextMessages: currentModelContextMessages,
+              })
             : messageList;
           return {
             messageObjects: tripwire ? [] : promptMessageList.get.all.prompt(),
@@ -470,7 +463,10 @@ export class AgentLegacyHandler {
         // Messages are already processed by __runInputProcessors and __runProcessInputStep above
         // which includes memory processors (WorkingMemory, MessageHistory, OM, etc.)
         const promptMessageList = currentModelContextMessages
-          ? createModelContextMessageList(messageList, currentModelContextMessages)
+          ? createPromptOnlyMessageList({
+              canonicalMessageList: messageList,
+              modelContextMessages: currentModelContextMessages,
+            })
           : messageList;
         const processedList = promptMessageList.get.all.prompt();
 

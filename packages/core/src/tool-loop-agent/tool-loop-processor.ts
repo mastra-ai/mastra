@@ -9,6 +9,7 @@ import { isSupportedLanguageModel } from '../agent';
 import type { AgentExecutionOptions, AgentInstructions, MastraDBMessage } from '../agent';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import { validateProcessorResultExclusivity } from '../processors';
 import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
 import { getSettings as getToolLoopAgentSettings } from './utils';
 import type { ToolLoopAgentLike } from './utils';
@@ -227,7 +228,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     ) {
       throw new Error('prepareCall/prepareStep modelContextMessages must be an array when provided.');
     }
-    if (modelContextResult.modelContextMessages) {
+    if (modelContextResult.modelContextMessages !== undefined) {
       stepResult.modelContextMessages = modelContextResult.modelContextMessages as MastraDBMessage[];
     }
 
@@ -240,15 +241,10 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
   ): ProcessInputStepResult {
     const merged = { ...current, ...next };
 
-    if (next.modelContextMessages) {
-      const { messages: _messages, ...rest } = merged;
-      return rest as ProcessInputStepResult;
-    }
-
-    if (next.messages) {
-      const { modelContextMessages: _modelContextMessages, ...rest } = merged;
-      return rest as ProcessInputStepResult;
-    }
+    validateProcessorResultExclusivity({
+      result: merged,
+      processorId: this.id,
+    });
 
     return merged as ProcessInputStepResult;
   }

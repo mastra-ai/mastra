@@ -311,9 +311,9 @@ The method can return one of these types:
 ]}
 />
 
-When one processor returns `modelContextMessages`, prompt-only mode begins. Later input processors receive that prompt-only list as `messages` and through `messageList`. Canonical messages remain unchanged.
+When one processor returns `modelContextMessages`, prompt-only mode begins. Later input processors receive that prompt-only list as `messages`. The `messageList` argument still represents canonical history, and canonical messages remain unchanged.
 
-In prompt-only mode, return `messages` from a later processor to keep transforming the prompt-only list. Do not include system-role messages in `modelContextMessages`. Use `systemMessages` for system prompt changes.
+In prompt-only mode, return `messages` from a later processor to keep transforming the prompt-only list. Return `modelContextMessages: []` to clear the prompt-only non-system messages for the next model call. Do not include system-role messages in `modelContextMessages`. Use `systemMessages` for system prompt changes.
 
 ---
 
