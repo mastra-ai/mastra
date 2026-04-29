@@ -17,6 +17,7 @@ export interface LLMProvidersProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
+  disabled?: boolean;
 }
 
 export const LLMProviders = ({
@@ -28,6 +29,7 @@ export const LLMProviders = ({
   open,
   onOpenChange,
   container,
+  disabled,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const allProviders = dataProviders?.providers || [];
@@ -94,6 +96,7 @@ export const LLMProviders = ({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
+      disabled={disabled}
     />
   );
 };
