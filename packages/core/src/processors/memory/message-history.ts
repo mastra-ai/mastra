@@ -182,7 +182,10 @@ export class MessageHistory implements Processor {
 
         // Strip working memory tags from string content
         if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-          newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+          const original = newMessage.content.content;
+          const cleaned = removeWorkingMemoryTags(original);
+          // Only trim when working_memory tags were stripped, to preserve user whitespace.
+          newMessage.content.content = cleaned !== original ? cleaned.trim() : original;
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
@@ -199,9 +202,13 @@ export class MessageHistory implements Processor {
               // Strip working memory tags from text parts
               if (p.type === `text`) {
                 const text = typeof p.text === 'string' ? p.text : '';
+                const cleaned = removeWorkingMemoryTags(text);
+                // Only trim when working_memory tags were stripped, to preserve token-boundary
+                // whitespace (e.g., " access", " to") emitted by buildMessagesFromChunks when
+                // each text-start/text-end span produces its own text part.
                 return {
                   ...p,
-                  text: removeWorkingMemoryTags(text).trim(),
+                  text: cleaned !== text ? cleaned.trim() : text,
                 };
               }
               return p;

@@ -653,6 +653,61 @@ describe('MessageHistory', () => {
       );
     });
 
+    it('should preserve token-boundary whitespace in text parts without stripping working_memory tags from other parts (regression #15880)', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      // Stream chunks emit text parts split at token boundaries; buildMessagesFromChunks (#15454)
+      // stores one part per text-start/text-end span. Pre-fix, every part was unconditionally
+      // trimmed, dropping the leading spaces that carry word boundaries.
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'I have' },
+              { type: 'text', text: ' access' },
+              { type: 'text', text: ' to <working_memory>internal</working_memory> two' },
+              { type: 'text', text: ' skills' },
+            ],
+          },
+          id: 'msg-streaming-parts',
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList().add(messages, `input`);
+      await processor.processOutputResult({
+        messageList,
+        messages,
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedParts = ((mockStorage.saveMessages as any).mock.calls[0][0].messages[0].content as any).parts;
+      expect(savedParts.map((p: any) => p.text)).toEqual([
+        'I have',
+        ' access',
+        'to  two',
+        ' skills',
+      ]);
+    });
+
     it('should update thread metadata', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
