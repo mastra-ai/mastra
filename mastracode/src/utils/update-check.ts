@@ -152,6 +152,89 @@ export function isNewerVersion(current: string, latest: string): boolean {
   return lPatch > cPatch;
 }
 
+/** Max entries to show in the changelog summary. */
+const MAX_CHANGELOG_ENTRIES = 10;
+
+/**
+ * Fetch the CHANGELOG.md for a specific published version from the npm CDN
+ * and extract a human-readable summary of changes.
+ * Returns null if the fetch fails or the changelog can't be parsed.
+ */
+export async function fetchChangelog(version: string): Promise<string | null> {
+  try {
+    const url = `https://unpkg.com/${PACKAGE_NAME}@${version}/CHANGELOG.md`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const text = await res.text();
+    return parseChangelog(text, version);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract the changelog section for a specific version and format it
+ * as a concise bullet list suitable for terminal display.
+ */
+export function parseChangelog(markdown: string, version: string): string | null {
+  const versionHeader = `## ${version}`;
+  const startIdx = markdown.indexOf(versionHeader);
+  if (startIdx === -1) return null;
+
+  const afterHeader = startIdx + versionHeader.length;
+  const nextHeaderIdx = markdown.indexOf('\n## ', afterHeader);
+  const section = nextHeaderIdx === -1 ? markdown.slice(afterHeader) : markdown.slice(afterHeader, nextHeaderIdx);
+
+  const lines = section.split('\n');
+  const entries: string[] = [];
+  let skipIndented = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]!;
+    const trimmed = raw.trim();
+
+    // Only match top-level entries (no leading whitespace before "- ")
+    const isTopLevel = raw === trimmed && trimmed.startsWith('- ');
+    if (!isTopLevel) {
+      // Skip indented sub-items (e.g. dependency list entries)
+      if (skipIndented && /^\s+-\s/.test(raw)) continue;
+      skipIndented = false;
+      continue;
+    }
+
+    // Skip dependency update entries and their sub-items
+    if (/^- Updated dependenc/i.test(trimmed)) {
+      skipIndented = true;
+      continue;
+    }
+    skipIndented = false;
+
+    let entry = trimmed.slice(2);
+    // Strip markdown links: [text](url) → text
+    entry = entry.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    // Strip PR references like (#15760)
+    entry = entry.replace(/\s*\(#\d+\)\s*/g, ' ');
+    // Strip commit SHA references like (`abc123`)
+    entry = entry.replace(/\s*\(`[a-f0-9]+`\)\s*/g, ' ');
+    // Take only the first sentence for long entries
+    const sentenceEnd = entry.search(/\.\s/);
+    if (sentenceEnd !== -1 && sentenceEnd < 100) {
+      entry = entry.slice(0, sentenceEnd + 1);
+    } else if (entry.length > 120) {
+      entry = entry.slice(0, 117).trimEnd() + '…';
+    }
+    entry = entry.trim();
+    if (entry) entries.push(entry);
+    if (entries.length >= MAX_CHANGELOG_ENTRIES) break;
+  }
+
+  if (entries.length === 0) return null;
+  return entries.map(e => `  • ${e}`).join('\n');
+}
+
 /**
  * Run the appropriate global install command to update mastracode.
  * Returns true on success, false on failure.

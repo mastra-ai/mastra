@@ -25,6 +25,7 @@ import {
 } from '../onboarding/settings.js';
 import {
   detectPackageManager,
+  fetchChangelog,
   fetchLatestVersion,
   getInstallCommand,
   isNewerVersion,
@@ -1051,11 +1052,11 @@ export class MastraTUI {
       return;
     }
 
-    const pm = await detectPackageManager();
+    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
   }
 
   /**
@@ -1065,11 +1066,18 @@ export class MastraTUI {
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
+    changelog: string | null,
   ): Promise<void> {
+    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
+    if (changelog) {
+      question += `\n\nWhat's new:\n${changelog}`;
+    }
+    question += `\n\nWould you like to update now?`;
+
     return new Promise<void>(resolve => {
       const questionComponent = new AskQuestionInlineComponent(
         {
-          question: `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}). Would you like to update now?`,
+          question,
           options: [
             { label: 'Yes', description: 'Update and restart' },
             { label: 'No', description: 'Skip this version' },
