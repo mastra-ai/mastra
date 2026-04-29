@@ -379,11 +379,7 @@ describe('A2A Handler', () => {
 
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.stream.mockResolvedValue(
-        createStreamResult({
-          chunks: [agentResponseText],
-        }),
-      );
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
       const requestContext = new RequestContext();
       await handleMessageSend({
@@ -470,11 +466,7 @@ describe('A2A Handler', () => {
 
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.stream.mockResolvedValue(
-        createStreamResult({
-          chunks: [agentResponseText],
-        }),
-      );
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
       const requestContext = new RequestContext();
       await handleMessageSend({
