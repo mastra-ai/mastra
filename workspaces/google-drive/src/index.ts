@@ -4,9 +4,5 @@
  * A filesystem implementation backed by a Google Drive folder.
  */
 
-export {
-  GoogleDriveFilesystem,
-  type GoogleDriveFilesystemOptions,
-  type GoogleDriveServiceAccount,
-} from './filesystem';
+export { GoogleDriveFilesystem, type GoogleDriveFilesystemOptions, type GoogleDriveServiceAccount } from './filesystem';
 export { googleDriveFilesystemProvider } from './provider';
