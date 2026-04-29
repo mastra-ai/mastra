@@ -21,7 +21,7 @@
     "@mastra/libsql": "*",
     "@mastra/mcp": "*",
     "mastra": "*",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.0"
   },
   "pnpm": {
