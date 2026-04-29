@@ -263,7 +263,11 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
         'Returns a list of matching skills with their names and descriptions. ' +
         'After finding a useful skill, use load_skill to load its instructions.',
       inputSchema: z.object({
-        query: z.string().describe('Search keywords (e.g., "api design", "testing", "deployment")'),
+        query: z
+          .string()
+          .trim()
+          .min(1, 'Query is required')
+          .describe('Search keywords (e.g., "api design", "testing", "deployment")'),
       }),
       outputSchema: z.object({
         results: z.array(

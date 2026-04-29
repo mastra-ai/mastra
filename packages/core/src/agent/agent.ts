@@ -145,7 +145,53 @@ function hasConfiguredProcessor(
   processors: InputProcessorOrWorkflow[],
   predicate: (processor: Processor) => boolean,
 ): boolean {
-  return processors.some(processor => !isProcessorWorkflow(processor) && predicate(processor));
+  return processors.some(processor => {
+    const maybeWorkflow = processor as {
+      steps?: Record<string, unknown>;
+      stepGraph?: Array<{ type: string; step?: unknown; steps?: Array<{ step?: unknown }> }>;
+    };
+    const isWorkflowLike = isProcessorWorkflow(processor) || Boolean(maybeWorkflow.steps || maybeWorkflow.stepGraph);
+
+    const workflowSteps = [
+      ...Object.values(maybeWorkflow.steps ?? {}),
+      ...(maybeWorkflow.stepGraph ?? []).flatMap(entry => {
+        if (entry.type === 'step') {
+          return entry.step ? [entry.step] : [];
+        }
+        return entry.steps?.map(stepEntry => stepEntry.step).filter(Boolean) ?? [];
+      }),
+    ];
+
+    if (!isWorkflowLike || workflowSteps.length === 0) {
+      const processorId =
+        typeof (processor as Processor).id === 'string' && (processor as Processor).id.startsWith('processor:')
+          ? (processor as Processor).id.slice('processor:'.length)
+          : (processor as Processor).id;
+      return predicate({
+        ...(processor as Processor),
+        id: processorId,
+        providesSkillDiscovery:
+          (processor as Processor).providesSkillDiscovery ?? (processorId === 'skill-search' ? 'on-demand' : undefined),
+      } as Processor);
+    }
+
+    return workflowSteps.some(step => {
+      if (isProcessorWorkflow(step)) {
+        return hasConfiguredProcessor([step], predicate);
+      }
+
+      const stepId = typeof (step as { id?: unknown }).id === 'string' ? (step as { id: string }).id : undefined;
+      if (!stepId?.startsWith('processor:')) {
+        return false;
+      }
+
+      const processorId = stepId.slice('processor:'.length);
+      return predicate({
+        id: processorId,
+        providesSkillDiscovery: processorId === 'skill-search' ? 'on-demand' : undefined,
+      } as Processor);
+    });
+  });
 }
 
 function hasEagerSkillsProcessor(processors: InputProcessorOrWorkflow[]): boolean {

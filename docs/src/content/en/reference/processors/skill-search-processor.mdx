@@ -9,12 +9,14 @@ packages:
 
 The `SkillSearchProcessor` is an **input processor** that enables on-demand skill discovery and loading. Instead of injecting all skill metadata into the system prompt upfront (like `SkillsProcessor`), it gives the agent two meta-tools (`search_skills` and `load_skill`) that let it find and load skills on demand. This reduces context token usage when workspaces have many skills.
 
-When you attach `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
+By default, when you attach only `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
 
 - It does not auto-add the default eager `SkillsProcessor`.
 - It exposes `search_skills` and `load_skill` for discovery and instruction loading.
 - It does not expose the overlapping `skill` and `skill_search` tools.
 - It still exposes `skill_read` so the agent can read supporting skill files such as references, scripts, and assets.
+
+If you explicitly configure `SkillsProcessor` alongside `SkillSearchProcessor`, the agent preserves the eager `skill` and `skill_search` tools as an opt-in path.
 
 ## Usage example
 

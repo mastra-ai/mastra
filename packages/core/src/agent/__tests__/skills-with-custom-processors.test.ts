@@ -11,10 +11,12 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
+import { ProcessorStepSchema } from '../../processors/index';
 import type { Processor, ProcessInputArgs } from '../../processors/index';
 import { SkillSearchProcessor } from '../../processors/processors/skill-search';
 import { SkillsProcessor } from '../../processors/processors/skills';
 import { createTool } from '../../tools';
+import { createStep, createWorkflow } from '../../workflows/workflow';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import { Agent } from '../index';
@@ -317,6 +319,77 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
           new SkillsProcessor({ workspace: mockWorkspace }),
           new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 }),
         ],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).toContain('search_skills');
+      expect(toolNames).toContain('load_skill');
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).toContain('<available_skills>');
+      expect(prompt).toContain('Skills are NOT tools');
+      expect(prompt).toContain('To discover available skills, call search_skills');
+    });
+
+    it('should apply on-demand mode when SkillSearchProcessor is wrapped in a processor workflow', async () => {
+      const skillSearchWorkflow = createWorkflow({
+        id: 'skill-search-workflow',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })))
+        .commit();
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [skillSearchWorkflow],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('search_skills');
+      expect(toolNames).toContain('load_skill');
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).not.toContain('skill');
+      expect(toolNames).not.toContain('skill_search');
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).toContain('To discover available skills, call search_skills');
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('Skills are NOT tools');
+    });
+
+    it('should preserve skill activation tools when SkillsProcessor is explicitly configured in a processor workflow', async () => {
+      const skillWorkflow = createWorkflow({
+        id: 'skill-workflow',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(new SkillsProcessor({ workspace: mockWorkspace })))
+        .then(createStep(new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })))
+        .commit();
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [skillWorkflow],
       });
 
       await agent.generate('Hello');
