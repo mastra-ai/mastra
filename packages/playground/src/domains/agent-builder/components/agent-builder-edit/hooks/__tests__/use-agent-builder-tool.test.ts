@@ -6,21 +6,39 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
+import type { ModelInfo } from '@/domains/llm';
 import { useAgentBuilderTool } from '../use-agent-builder-tool';
 
 vi.mock('../../../../hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => ({ tools: true, memory: false, workflows: false, agents: true, skills: true }),
+  useBuilderAgentFeatures: () => ({
+    tools: true,
+    memory: false,
+    workflows: false,
+    agents: true,
+    avatarUpload: false,
+    skills: true,
+    model: true,
+    stars: false,
+  }),
 }));
 
-const features = { tools: true, memory: false, workflows: false, agents: true, skills: true } as const;
+const features = {
+  tools: true,
+  memory: false,
+  workflows: false,
+  agents: true,
+  avatarUpload: false,
+  skills: true,
+  model: true,
+  stars: false,
+};
 
 const renderBuilderTool = (
   availableAgentTools: AgentTool[],
   options: {
-    features?:
-      | typeof features
-      | { tools: boolean; memory: boolean; workflows: boolean; agents: boolean; skills: boolean };
+    features?: typeof features;
     availableSkills?: StoredSkillResponse[];
+    availableModels?: ModelInfo[];
   } = {},
 ) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = {
@@ -41,6 +59,7 @@ const renderBuilderTool = (
         features: options.features ?? features,
         availableAgentTools,
         availableSkills: options.availableSkills,
+        availableModels: options.availableModels,
       }),
     {
       wrapper: Wrapper,
@@ -117,7 +136,7 @@ describe('useAgentBuilderTool execute routing', () => {
 
   it('ignores skills input when the feature is off', async () => {
     const availableSkills = [buildSkill('skill-a')];
-    const featuresOff = { tools: true, memory: false, workflows: false, agents: true, skills: false };
+    const featuresOff = { ...features, skills: false };
     const { tool, form } = renderBuilderTool([], { features: featuresOff, availableSkills });
 
     await tool.execute!({
@@ -148,5 +167,19 @@ describe('useAgentBuilderTool execute routing', () => {
 
     expect(form().getValues('tools')).toEqual({ 'tool-a': true });
     expect(form().getValues('workflows')).toEqual({ 'wf-1': true });
+  });
+
+  it('writes selected model to the form with a cleaned provider id', async () => {
+    const { tool, form } = renderBuilderTool([], {
+      availableModels: [{ provider: 'gateway/openai', providerName: 'OpenAI', model: 'gpt-4o' }],
+    });
+
+    await tool.execute!({
+      name: 'With model',
+      instructions: 'do things',
+      model: { provider: 'gateway/openai', name: 'gpt-4o' },
+    } as any);
+
+    expect(form().getValues('model')).toEqual({ provider: 'openai', name: 'gpt-4o' });
   });
 });

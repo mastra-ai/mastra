@@ -242,4 +242,46 @@ describe('useSaveAgent persists tools and agents on save', () => {
     expect(capturedBody).toBeTruthy();
     expect(capturedBody.workflows).toEqual({ 'wf-1': {} });
   });
+
+  it('writes selected model on update', async () => {
+    let capturedBody: any = null;
+    server.use(
+      http.patch(`${BASE_URL}/api/stored/agents/existing-id`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'existing-id' });
+      }),
+    );
+
+    const { hook } = renderSave({
+      agentId: 'existing-id',
+      mode: 'edit',
+      availableAgentTools: [],
+      defaultValues: {
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: {},
+        agents: {},
+        workflows: {},
+        skills: {},
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+    });
+
+    await act(async () => {
+      await hook.current.save({
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: {},
+        agents: {},
+        workflows: {},
+        skills: {},
+        model: { provider: 'openai', name: 'gpt-4o' },
+      });
+    });
+
+    expect(capturedBody).toBeTruthy();
+    expect(capturedBody.model).toEqual({ provider: 'openai', name: 'gpt-4o' });
+  });
 });

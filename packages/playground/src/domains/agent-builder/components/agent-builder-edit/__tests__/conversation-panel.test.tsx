@@ -15,7 +15,10 @@ type Features = {
   memory: boolean;
   workflows: boolean;
   agents: boolean;
+  avatarUpload: boolean;
   skills: boolean;
+  model: boolean;
+  stars: boolean;
 };
 
 const sentMessages: Array<{ message: string; threadId?: string; clientTools: Record<string, any> }> = [];
@@ -47,6 +50,39 @@ vi.mock('@/hooks/use-agent-messages', () => ({
 
 vi.mock('@/domains/agents/hooks/use-create-skill', () => ({
   useCreateSkill: () => ({ mutateAsync: vi.fn() }),
+}));
+
+const llmProviderState = { isLoading: false };
+
+vi.mock('@/domains/llm', () => ({
+  useLLMProviders: () => ({
+    data: {
+      providers: [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          models: [{ id: 'gpt-4o', name: 'gpt-4o' }],
+        },
+        {
+          id: 'anthropic',
+          name: 'Anthropic',
+          models: [{ id: 'claude-opus-4-7', name: 'claude-opus-4-7' }],
+        },
+      ],
+    },
+    isLoading: llmProviderState.isLoading,
+  }),
+  useAllModels: (providers: Array<{ id: string; name: string; models: Array<{ id: string; name: string }> }>) =>
+    providers.flatMap(provider =>
+      provider.models.map(model => ({ provider: provider.id, providerName: provider.name, model: model.name })),
+    ),
+  cleanProviderId: (provider: string) => provider.replace(/^gateway\//, ''),
+}));
+
+vi.mock('@/domains/builder', () => ({
+  useBuilderModelPolicy: () => ({ active: true }),
+  useBuilderFilteredModels: (models: Array<{ provider: string; providerName: string; model: string }>) =>
+    models.filter(model => model.provider === 'openai'),
 }));
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
@@ -102,8 +138,17 @@ const getAgentBuilderTool = () => {
   return tool;
 };
 
-const allOff: Features = { tools: false, memory: false, workflows: false, agents: false, skills: false };
-const allOn: Features = { tools: true, memory: false, workflows: false, agents: false, skills: false };
+const allOff: Features = {
+  tools: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  avatarUpload: false,
+  skills: false,
+  model: false,
+  stars: false,
+};
+const allOn: Features = { ...allOff, tools: true };
 
 describe('ConversationPanel agent-builder client tool', () => {
   beforeEach(() => {
@@ -112,6 +157,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     chatCalls.length = 0;
     formMethodsRef = null;
     chatState.isRunning = false;
+    llmProviderState.isLoading = false;
   });
 
   afterEach(() => {
@@ -381,6 +427,25 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(invalid.success).toBe(false);
   });
 
+  it('passes policy-filtered models to the initial client tool schema and description', () => {
+    renderPanel({ ...allOff, model: true });
+    const tool = getAgentBuilderTool();
+
+    expect(tool.description).toContain('Available models');
+    expect(tool.description).toContain('provider: openai (OpenAI), name: gpt-4o');
+    expect(tool.description).not.toContain('anthropic');
+
+    expect(tool.inputSchema.shape.model).toBeDefined();
+    expect(
+      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } })
+        .success,
+    ).toBe(true);
+    expect(
+      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'anthropic', name: 'claude-opus-4-7' } })
+        .success,
+    ).toBe(false);
+  });
+
   it('execute writes workspaceId to the form when provided', async () => {
     renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
     const tool = getAgentBuilderTool();
@@ -430,6 +495,7 @@ describe('ConversationPanel chat busy/done state', () => {
     chatCalls.length = 0;
     formMethodsRef = null;
     chatState.isRunning = false;
+    llmProviderState.isLoading = false;
   });
 
   afterEach(() => {
@@ -450,6 +516,7 @@ describe('ConversationPanel chat busy/done state', () => {
 
   it('hides the pending indicator and re-enables the composer when not running', () => {
     chatState.isRunning = false;
+    llmProviderState.isLoading = false;
     const { queryByTestId, getByTestId } = renderPanel(allOff);
 
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();

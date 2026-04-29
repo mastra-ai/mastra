@@ -55,13 +55,11 @@ export const ModelDetail = ({ onClose, editable = true }: ModelDetailProps) => {
             provider={policy.default?.provider ?? provider}
             modelId={policy.default?.modelId ?? modelId}
           />
+        ) : !editable ? (
+          <ReadOnlyModelChip provider={provider} modelId={modelId} />
         ) : (
           <div className="flex flex-col gap-2" data-testid="model-detail-picker">
-            <LLMProviders
-              value={provider}
-              onValueChange={handleProviderSelect}
-              {...(editable ? {} : { onValueChange: () => {} })}
-            />
+            <LLMProviders value={provider} onValueChange={handleProviderSelect} />
             <LLMModels llmId={provider} value={modelId} onValueChange={handleModelSelect} />
           </div>
         )}
@@ -102,6 +100,18 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     </Txt>
     <Txt variant="ui-xs" className="ml-auto shrink-0 text-neutral3">
       Set by admin
+    </Txt>
+  </div>
+);
+
+const ReadOnlyModelChip = ({ provider, modelId }: LockedModelChipProps) => (
+  <div
+    className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
+    data-testid="model-detail-readonly-chip"
+  >
+    <CpuIcon className="h-4 w-4 shrink-0 text-neutral3" />
+    <Txt variant="ui-sm" className="font-medium text-neutral6 truncate">
+      {provider && modelId ? `${provider}/${modelId}` : 'No model configured'}
     </Txt>
   </div>
 );

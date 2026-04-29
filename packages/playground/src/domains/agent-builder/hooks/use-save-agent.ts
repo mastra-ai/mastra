@@ -95,6 +95,7 @@ export function useSaveAgent({
             workflows: params.workflows,
             skills: params.skills,
             visibility: params.visibility,
+            model: params.model,
             ...workspaceField,
             ...metadataField,
           });
