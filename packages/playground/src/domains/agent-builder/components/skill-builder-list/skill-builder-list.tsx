@@ -3,9 +3,7 @@ import { EmptyState } from '@mastra/playground-ui';
 import { SearchIcon, SparklesIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
-import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
 import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
-import { useLinkComponent } from '@/lib/framework';
 
 function formatRelativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -33,16 +31,6 @@ export type SkillBuilderListProps = {
 };
 
 export function SkillBuilderList({ skills, search }: SkillBuilderListProps) {
-  const { Link } = useLinkComponent();
-  const { data: builderSettings } = useBuilderSettings();
-
-  const defaultWorkspaceId = useMemo(() => {
-    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
-    return ws?.type === 'id' ? ws.workspaceId : undefined;
-  }, [builderSettings]);
-
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return skills;
@@ -68,16 +56,8 @@ export function SkillBuilderList({ skills, search }: SkillBuilderListProps) {
   return (
     <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
       {filtered.map(skill => {
-        const href = defaultWorkspaceId
-          ? `/workspaces/${encodeURIComponent(defaultWorkspaceId)}/skills/${encodeURIComponent(skill.name)}`
-          : undefined;
-        const Row = href ? Link : 'div';
         return (
-          <Row
-            key={skill.id}
-            {...(href ? { href } : {})}
-            className="px-6 py-5 flex items-center gap-4 hover:bg-surface3 transition-colors"
-          >
+          <div key={skill.id} className="px-6 py-5 flex items-center gap-4">
             <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
               <SparklesIcon className="h-5 w-5" />
             </div>
@@ -104,7 +84,7 @@ export function SkillBuilderList({ skills, search }: SkillBuilderListProps) {
               size="sm"
               className="shrink-0"
             />
-          </Row>
+          </div>
         );
       })}
     </div>
