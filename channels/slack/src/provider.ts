@@ -59,9 +59,14 @@ function hashConfig(
  * ```ts
  * import { SlackProvider } from '@mastra/slack';
  *
+ * // With credentials at construction
  * const slack = new SlackProvider({
  *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  * });
+ *
+ * // Or configure later (e.g., credentials from UI or vault)
+ * const slack = new SlackProvider();
+ * slack.configure({ refreshToken: 'xoxe-1-...' });
  *
  * const mastra = new Mastra({
  *   agents: { myAgent },
@@ -83,7 +88,7 @@ export class SlackProvider implements ChannelProvider {
   readonly #channelConfig: SlackProviderConfig;
   #storage!: ChannelsStorage;
   #storageResolved = false;
-  readonly #manifestClient: SlackManifestClient;
+  #manifestClient?: SlackManifestClient;
 
   /** Slash command configs keyed by webhookId (restored from installation data) */
   readonly #slashCommands = new Map<string, StoredSlashCommand[]>();
@@ -95,23 +100,44 @@ export class SlackProvider implements ChannelProvider {
   #baseUrl?: string;
   #initialized = false;
 
-  constructor(config: SlackProviderConfig) {
-    // At minimum we need a refresh token to rotate and get fresh tokens
-    if (!config.refreshToken) {
-      throw new Error('SlackProvider requires refreshToken. Get one at https://api.slack.com/apps');
-    }
-
+  constructor(config: SlackProviderConfig = {}) {
     this.#channelConfig = config;
-    // Storage will be resolved lazily via #getStorage() to use Mastra's storage if available
-    this.#baseUrl = config.baseUrl; // Optional at construction, required for connect()
+    this.#baseUrl = config.baseUrl;
 
-    // Create manifest client with storage-backed token rotation
-    // token can be empty - we'll rotate on first use to get a fresh one
+    // If refresh token is provided at construction, initialize the manifest client immediately
+    if (config.refreshToken) {
+      this.#initManifestClient(config.token ?? '', config.refreshToken);
+    }
+  }
+
+  /**
+   * Provide Slack App Configuration credentials at runtime.
+   *
+   * Use this when credentials aren't available at construction time — for example,
+   * when they're entered through the Editor UI or loaded from a vault.
+   *
+   * If the provider already has credentials (from the constructor or storage),
+   * this replaces them.
+   *
+   * @example
+   * ```ts
+   * const slack = new SlackProvider();
+   * // ... later, after user provides credentials:
+   * slack.configure({ refreshToken: 'xoxe-1-...' });
+   * ```
+   */
+  configure(credentials: { refreshToken: string; token?: string }): void {
+    this.#initManifestClient(credentials.token ?? '', credentials.refreshToken);
+  }
+
+  /**
+   * Create or replace the manifest client with new credentials.
+   */
+  #initManifestClient(token: string, refreshToken: string): void {
     this.#manifestClient = new SlackManifestClient({
-      token: config.token ?? '',
-      refreshToken: config.refreshToken,
+      token,
+      refreshToken,
       onTokenRotation: async tokens => {
-        // Persist rotated tokens to storage (encrypted)
         await this.#saveConfigTokens(
           this.#encryptConfigTokens({
             token: tokens.token,
@@ -533,15 +559,20 @@ export class SlackProvider implements ChannelProvider {
     }
     this.#initialized = true;
 
-    // Load stored tokens if available (these are fresher than .env tokens)
+    // Load stored tokens if available (these are fresher than constructor tokens)
     const storedTokensEncrypted = await this.#getConfigTokens();
     if (storedTokensEncrypted) {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);
-      this.#manifestClient.setTokens({
-        token: storedTokens.token ?? '',
-        refreshToken: storedTokens.refreshToken,
-      });
+      if (this.#manifestClient) {
+        this.#manifestClient.setTokens({
+          token: storedTokens.token ?? '',
+          refreshToken: storedTokens.refreshToken,
+        });
+      } else {
+        // No constructor credentials — bootstrap from storage
+        this.#initManifestClient(storedTokens.token ?? '', storedTokens.refreshToken);
+      }
     }
 
     // Restore all active installations from storage
@@ -632,7 +663,7 @@ export class SlackProvider implements ChannelProvider {
         })),
       });
 
-      await this.#manifestClient.updateApp(installation.appId, manifest);
+      await this.#requireManifestClient().updateApp(installation.appId, manifest);
 
       // Persist the new hash (keep stored overrides unchanged)
       const updated: SlackInstallation = { ...installation, configHash: currentHash };
@@ -749,9 +780,7 @@ export class SlackProvider implements ChannelProvider {
    * @returns OAuth connect result with authorization URL for user redirect
    */
   async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult> {
-    if (!this.#manifestClient) {
-      throw new Error('Slack manifest client not configured. Provide token and refreshToken.');
-    }
+    const client = this.#requireManifestClient();
 
     const baseUrl = this.#getBaseUrl();
     if (!baseUrl) {
@@ -825,14 +854,14 @@ export class SlackProvider implements ChannelProvider {
     }
 
     // Create the app via Slack's manifest API
-    const appCredentials = await this.#manifestClient.createApp(manifest);
+    const appCredentials = await client.createApp(manifest);
 
     // Set app icon if provided
     if (config.iconUrl) {
       try {
         const iconResponse = await fetch(config.iconUrl);
         const iconData = await iconResponse.arrayBuffer();
-        await this.#manifestClient.setAppIcon(appCredentials.appId, iconData);
+        await client.setAppIcon(appCredentials.appId, iconData);
       } catch (error) {
         // Log but don't fail app creation if icon upload fails
         console.warn(`[Slack] Failed to set app icon for "${agentId}":`, error);
@@ -890,9 +919,7 @@ export class SlackProvider implements ChannelProvider {
    * Disconnect an agent from Slack by deleting its app.
    */
   async disconnect(agentId: string): Promise<void> {
-    if (!this.#manifestClient) {
-      throw new Error('Slack manifest client not configured.');
-    }
+    const client = this.#requireManifestClient();
 
     const storage = await this.#getStorage();
     const allRecords = await storage.listInstallations(PLATFORM);
@@ -908,7 +935,7 @@ export class SlackProvider implements ChannelProvider {
 
         // Delete the app from Slack
         try {
-          await this.#manifestClient.deleteApp(installation.appId);
+          await client.deleteApp(installation.appId);
         } catch (err) {
           console.warn(`[Slack] Failed to delete Slack app ${installation.appId}:`, err);
         }
@@ -977,10 +1004,24 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
-   * Check if Slack is configured for app creation.
+   * Check if the provider has credentials and can create/manage Slack apps.
+   * Returns false if no refresh token has been provided via constructor, `configure()`, or storage.
    */
   isConfigured(): boolean {
     return !!this.#manifestClient;
+  }
+
+  /**
+   * Get the manifest client, throwing if the provider isn't configured.
+   */
+  #requireManifestClient(): SlackManifestClient {
+    if (!this.#manifestClient) {
+      throw new Error(
+        'SlackProvider is not configured. Provide a refreshToken via the constructor or call configure({ refreshToken }) first.\n' +
+          'Get your tokens at: https://api.slack.com/apps > "Your App Configuration Tokens"',
+      );
+    }
+    return this.#manifestClient;
   }
 
   /**

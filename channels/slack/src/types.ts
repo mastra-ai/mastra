@@ -20,8 +20,12 @@ export interface SlackProviderConfig {
   /**
    * Slack App Configuration refresh token.
    * Used for automatic token rotation. Single-use; each rotation returns a new pair.
+   *
+   * Can be provided here or later via `configure({ refreshToken })`.
+   * If omitted, the provider starts unconfigured and cannot create apps until
+   * `configure()` is called or tokens are loaded from storage.
    */
-  refreshToken: string;
+  refreshToken?: string;
 
   /**
    * Base URL for webhook callbacks.

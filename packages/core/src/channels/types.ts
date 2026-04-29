@@ -129,6 +129,17 @@ export interface ChannelProvider {
    */
   initialize?(): Promise<void>;
 
+  /**
+   * Provide platform credentials at runtime.
+   * Use this when credentials aren't available at construction time
+   * (e.g., entered through the Editor UI or loaded from a vault).
+   *
+   * The shape of `credentials` is provider-specific:
+   * - SlackProvider: `{ refreshToken: string; token?: string }`
+   * - DiscordProvider: `{ botToken: string; clientSecret: string }`
+   */
+  configure?(credentials: Record<string, unknown>): void;
+
   // ---------------------------------------------------------------------------
   // Discovery & Management (used by Editor/UI)
   // ---------------------------------------------------------------------------
