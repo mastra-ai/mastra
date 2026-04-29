@@ -60,7 +60,7 @@ function hashConfig(
  * import { SlackProvider } from '@mastra/slack';
  *
  * const slack = new SlackProvider({
- *   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+ *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  * });
  *
  * const mastra = new Mastra({
@@ -97,8 +97,8 @@ export class SlackProvider implements ChannelProvider {
 
   constructor(config: SlackProviderConfig) {
     // At minimum we need a refresh token to rotate and get fresh tokens
-    if (!config.appConfigRefreshToken) {
-      throw new Error('SlackProvider requires appConfigRefreshToken. Get one at https://api.slack.com/apps');
+    if (!config.refreshToken) {
+      throw new Error('SlackProvider requires refreshToken. Get one at https://api.slack.com/apps');
     }
 
     this.#channelConfig = config;
@@ -106,16 +106,16 @@ export class SlackProvider implements ChannelProvider {
     this.#baseUrl = config.baseUrl; // Optional at construction, required for connect()
 
     // Create manifest client with storage-backed token rotation
-    // appConfigToken can be empty - we'll rotate on first use to get a fresh one
+    // token can be empty - we'll rotate on first use to get a fresh one
     this.#manifestClient = new SlackManifestClient({
-      appConfigToken: config.appConfigToken ?? '',
-      appConfigRefreshToken: config.appConfigRefreshToken,
+      token: config.token ?? '',
+      refreshToken: config.refreshToken,
       onTokenRotation: async tokens => {
         // Persist rotated tokens to storage (encrypted)
         await this.#saveConfigTokens(
           this.#encryptConfigTokens({
-            appConfigToken: tokens.appConfigToken,
-            appConfigRefreshToken: tokens.appConfigRefreshToken,
+            token: tokens.token,
+            refreshToken: tokens.refreshToken,
             updatedAt: new Date(),
           }),
         );
@@ -250,8 +250,8 @@ export class SlackProvider implements ChannelProvider {
 
     return {
       ...tokens,
-      appConfigToken: tokens.appConfigToken ? encrypt(tokens.appConfigToken, key) : undefined,
-      appConfigRefreshToken: encrypt(tokens.appConfigRefreshToken, key),
+      token: tokens.token ? encrypt(tokens.token, key) : undefined,
+      refreshToken: encrypt(tokens.refreshToken, key),
     };
   }
 
@@ -264,8 +264,8 @@ export class SlackProvider implements ChannelProvider {
 
     return {
       ...tokens,
-      appConfigToken: tokens.appConfigToken ? decrypt(tokens.appConfigToken, key) : undefined,
-      appConfigRefreshToken: decrypt(tokens.appConfigRefreshToken, key),
+      token: tokens.token ? decrypt(tokens.token, key) : undefined,
+      refreshToken: decrypt(tokens.refreshToken, key),
     };
   }
 
@@ -447,8 +447,8 @@ export class SlackProvider implements ChannelProvider {
     await storage.saveConfig({
       platform: PLATFORM,
       data: {
-        appConfigToken: tokens.appConfigToken,
-        appConfigRefreshToken: tokens.appConfigRefreshToken,
+        token: tokens.token,
+        refreshToken: tokens.refreshToken,
       },
       updatedAt: tokens.updatedAt,
     });
@@ -539,8 +539,8 @@ export class SlackProvider implements ChannelProvider {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);
       this.#manifestClient.setTokens({
-        appConfigToken: storedTokens.appConfigToken ?? '',
-        appConfigRefreshToken: storedTokens.appConfigRefreshToken,
+        token: storedTokens.token ?? '',
+        refreshToken: storedTokens.refreshToken,
       });
     }
 
@@ -750,7 +750,7 @@ export class SlackProvider implements ChannelProvider {
    */
   async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult> {
     if (!this.#manifestClient) {
-      throw new Error('Slack manifest client not configured. Provide appConfigToken and appConfigRefreshToken.');
+      throw new Error('Slack manifest client not configured. Provide token and refreshToken.');
     }
 
     const baseUrl = this.#getBaseUrl();

@@ -10,9 +10,7 @@
  * import { SlackProvider } from '@mastra/slack';
  *
  * const slack = new SlackProvider({
- *   appConfigToken: process.env.SLACK_APP_CONFIG_TOKEN,
- *   appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
- *   baseUrl: process.env.BASE_URL,
+ *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
  * });
  *
  * const myAgent = new Agent({ id: 'my-agent', ... });

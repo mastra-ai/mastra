@@ -3,9 +3,9 @@ import type { SlackAppManifest, SlackAppCredentials } from './types';
 const SLACK_API_BASE = 'https://slack.com/api';
 
 export interface SlackManifestClientConfig {
-  appConfigToken: string;
-  appConfigRefreshToken: string;
-  onTokenRotation?: (tokens: { appConfigToken: string; appConfigRefreshToken: string }) => Promise<void>;
+  token: string;
+  refreshToken: string;
+  onTokenRotation?: (tokens: { token: string; refreshToken: string }) => Promise<void>;
 }
 
 /**
@@ -13,32 +13,32 @@ export interface SlackManifestClientConfig {
  * Handles programmatic app creation, deletion, and token rotation.
  */
 export class SlackManifestClient {
-  #appConfigToken: string;
-  #appConfigRefreshToken: string;
-  #onTokenRotation?: (tokens: { appConfigToken: string; appConfigRefreshToken: string }) => Promise<void>;
+  #token: string;
+  #refreshToken: string;
+  #onTokenRotation?: (tokens: { token: string; refreshToken: string }) => Promise<void>;
 
   constructor(config: SlackManifestClientConfig) {
-    this.#appConfigToken = config.appConfigToken;
-    this.#appConfigRefreshToken = config.appConfigRefreshToken;
+    this.#token = config.token;
+    this.#refreshToken = config.refreshToken;
     this.#onTokenRotation = config.onTokenRotation;
   }
 
   /**
    * Get current tokens (after potential rotation).
    */
-  getTokens(): { appConfigToken: string; appConfigRefreshToken: string } {
+  getTokens(): { token: string; refreshToken: string } {
     return {
-      appConfigToken: this.#appConfigToken,
-      appConfigRefreshToken: this.#appConfigRefreshToken,
+      token: this.#token,
+      refreshToken: this.#refreshToken,
     };
   }
 
   /**
    * Update tokens (e.g., from storage on startup).
    */
-  setTokens(tokens: { appConfigToken: string; appConfigRefreshToken: string }): void {
-    this.#appConfigToken = tokens.appConfigToken;
-    this.#appConfigRefreshToken = tokens.appConfigRefreshToken;
+  setTokens(tokens: { token: string; refreshToken: string }): void {
+    this.#token = tokens.token;
+    this.#refreshToken = tokens.refreshToken;
   }
 
   /**
@@ -53,7 +53,7 @@ export class SlackManifestClient {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        refresh_token: this.#appConfigRefreshToken,
+        refresh_token: this.#refreshToken,
       }),
     });
 
@@ -74,13 +74,13 @@ export class SlackManifestClient {
       throw new Error(`Token rotation failed: ${data.error}`);
     }
 
-    this.#appConfigToken = data.token!;
-    this.#appConfigRefreshToken = data.refresh_token!;
+    this.#token = data.token!;
+    this.#refreshToken = data.refresh_token!;
 
     if (this.#onTokenRotation) {
       await this.#onTokenRotation({
-        appConfigToken: this.#appConfigToken,
-        appConfigRefreshToken: this.#appConfigRefreshToken,
+        token: this.#token,
+        refreshToken: this.#refreshToken,
       });
     }
   }
@@ -96,7 +96,7 @@ export class SlackManifestClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.#appConfigToken}`,
+        Authorization: `Bearer ${this.#token}`,
       },
       body: JSON.stringify({ manifest }),
     });
@@ -146,7 +146,7 @@ export class SlackManifestClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.#appConfigToken}`,
+        Authorization: `Bearer ${this.#token}`,
       },
       body: JSON.stringify({ app_id: appId }),
     });
@@ -171,7 +171,7 @@ export class SlackManifestClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.#appConfigToken}`,
+        Authorization: `Bearer ${this.#token}`,
       },
       body: JSON.stringify({ app_id: appId, manifest }),
     });
@@ -204,7 +204,7 @@ export class SlackManifestClient {
     const response = await fetch(`${SLACK_API_BASE}/apps.icon.set`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.#appConfigToken}`,
+        Authorization: `Bearer ${this.#token}`,
       },
       body: formData,
     });

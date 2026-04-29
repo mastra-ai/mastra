@@ -17,7 +17,7 @@ const myAgent = new Agent({
 });
 
 const slack = new SlackProvider({
-  appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
+  refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
   // For local dev, set SLACK_BASE_URL to your tunnel URL
   // In production, this is auto-derived from server config
   baseUrl: process.env.SLACK_BASE_URL,
@@ -71,7 +71,7 @@ const mastra = new Mastra({
   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
   channels: {
     slack: new SlackProvider({
-      appConfigRefreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
+      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN!,
     }),
   },
 });

@@ -10,18 +10,18 @@ import type { SlackInstallation } from './schemas';
  */
 export interface SlackProviderConfig {
   /**
-   * Slack App Configuration Token for programmatic app creation.
+   * Slack App Configuration access token for programmatic app creation.
    * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
    *
-   * Optional if you have a valid appConfigRefreshToken - will rotate to get a fresh token on startup.
+   * Optional — will rotate to get a fresh token on startup using `refreshToken`.
    */
-  appConfigToken?: string;
+  token?: string;
 
   /**
-   * Slack App Configuration Refresh Token.
-   * Used for automatic token rotation.
+   * Slack App Configuration refresh token.
+   * Used for automatic token rotation. Single-use; each rotation returns a new pair.
    */
-  appConfigRefreshToken: string;
+  refreshToken: string;
 
   /**
    * Base URL for webhook callbacks.
