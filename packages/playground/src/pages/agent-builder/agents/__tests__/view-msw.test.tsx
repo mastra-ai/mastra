@@ -32,7 +32,9 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
 
 const BASE_URL = 'http://localhost:4111';
 
-const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>;
+const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  <a {...props}>{children}</a>
+);
 
 const noopPaths = {
   agentLink: () => '',

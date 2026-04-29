@@ -22,7 +22,9 @@ vi.mock('@mastra/playground-ui', async () => {
 
 const BASE_URL = 'http://localhost:4111';
 
-const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>;
+const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  <a {...props}>{children}</a>
+);
 
 const noopPaths = {
   agentLink: () => '',

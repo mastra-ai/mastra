@@ -103,6 +103,14 @@ export function useAgentBuilderTool({
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills affects feature-gated schema/description fields
-    [formMethods, toolsEnabled, skillsEnabled, availableAgentTools, availableWorkspaces, availableSkills, availableModels],
+    [
+      formMethods,
+      toolsEnabled,
+      skillsEnabled,
+      availableAgentTools,
+      availableWorkspaces,
+      availableSkills,
+      availableModels,
+    ],
   );
 }

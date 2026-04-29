@@ -25,7 +25,14 @@ vi.mock('@/domains/agent-builder/hooks/use-save-agent', () => ({
   useSaveAgent: () => ({ save: saveMock, isSaving: false }),
 }));
 
-const builderFeatures = { tools: false, memory: false, workflows: false, agents: false, skills: false, avatarUpload: false };
+const builderFeatures = {
+  tools: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  skills: false,
+  avatarUpload: false,
+};
 
 vi.mock('@/domains/agent-builder', () => ({
   useBuilderAgentFeatures: () => builderFeatures,
@@ -194,10 +201,12 @@ describe('AgentBuilderAgentEdit', () => {
       fireEvent.click(getByTestId('agent-builder-edit-save'));
 
       await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      expect(saveMock).toHaveBeenCalledWith(expect.objectContaining({
-        name: 'Updated name',
-        description: 'Updated description',
-      }));
+      expect(saveMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Updated name',
+          description: 'Updated description',
+        }),
+      );
     });
 
     it('waits for the current user before redirecting an owned agent', () => {

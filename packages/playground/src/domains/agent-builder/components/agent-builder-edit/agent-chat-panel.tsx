@@ -171,7 +171,10 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <Txt variant="ui-sm" className="text-neutral6 font-medium transition-colors group-hover:text-neutral6">
+                  <Txt
+                    variant="ui-sm"
+                    className="text-neutral6 font-medium transition-colors group-hover:text-neutral6"
+                  >
                     {starterPrompt.title}
                   </Txt>
                   <Txt variant="ui-xs" className="mt-1 text-neutral4 transition-colors group-hover:text-neutral5">

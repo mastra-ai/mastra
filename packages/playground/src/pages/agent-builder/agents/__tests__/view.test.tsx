@@ -145,10 +145,7 @@ describe('AgentBuilderAgentView', () => {
 
   it('reads the latest draft so freshly saved edits appear', () => {
     renderAt();
-    expect(useStoredAgentMock).toHaveBeenCalledWith(
-      'agent-123',
-      expect.objectContaining({ status: 'draft' }),
-    );
+    expect(useStoredAgentMock).toHaveBeenCalledWith('agent-123', expect.objectContaining({ status: 'draft' }));
   });
 
   it('re-syncs the form when the stored agent refetches with new data', () => {

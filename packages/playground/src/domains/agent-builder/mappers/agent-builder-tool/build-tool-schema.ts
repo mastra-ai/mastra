@@ -1,8 +1,8 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { z } from 'zod-v4';
+import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../types/agent-tool';
-import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
 
 interface AvailableWorkspace {
   id: string;
@@ -85,7 +85,13 @@ export function buildAgentBuilderToolSchema(
     const modelSchema =
       modelSchemas.length === 1
         ? modelSchemas[0]
-        : z.union(modelSchemas as [z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>, z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>, ...z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>[]]);
+        : z.union(
+            modelSchemas as [
+              z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>,
+              z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>,
+              ...z.ZodObject<{ provider: z.ZodLiteral<string>; name: z.ZodLiteral<string> }>[],
+            ],
+          );
 
     shape.model = modelSchema
       .optional()

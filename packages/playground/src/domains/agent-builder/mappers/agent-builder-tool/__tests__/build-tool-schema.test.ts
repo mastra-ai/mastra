@@ -101,21 +101,27 @@ describe('buildAgentBuilderToolSchema', () => {
     const emptySchema = buildAgentBuilderToolSchema(allOff, [], []);
     expect(emptySchema.shape.model).toBeUndefined();
 
-    const schema = buildAgentBuilderToolSchema({ ...allOff, model: true }, [], [], [], [
-      { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
-      { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
-    ]);
+    const schema = buildAgentBuilderToolSchema(
+      { ...allOff, model: true },
+      [],
+      [],
+      [],
+      [
+        { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
+        { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
+      ],
+    );
 
     expect(schema.shape.model).toBeDefined();
-    expect(schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } }).success).toBe(
-      true,
-    );
+    expect(
+      schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'gpt-4o' } }).success,
+    ).toBe(true);
     expect(
       schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'claude-opus-4-7' } })
         .success,
     ).toBe(false);
-    expect(schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'unknown' } }).success).toBe(
-      false,
-    );
+    expect(
+      schema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'openai', name: 'unknown' } }).success,
+    ).toBe(false);
   });
 });

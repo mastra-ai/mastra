@@ -110,10 +110,16 @@ describe('buildAgentBuilderToolDescription', () => {
   });
 
   it('mentions model and lists available provider/model pairs when models are available', () => {
-    const description = buildAgentBuilderToolDescription({ ...allOff, model: true }, [], [], [], [
-      { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
-      { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
-    ]);
+    const description = buildAgentBuilderToolDescription(
+      { ...allOff, model: true },
+      [],
+      [],
+      [],
+      [
+        { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
+        { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
+      ],
+    );
 
     expect(description).toContain('model');
     expect(description).toContain('Available models');

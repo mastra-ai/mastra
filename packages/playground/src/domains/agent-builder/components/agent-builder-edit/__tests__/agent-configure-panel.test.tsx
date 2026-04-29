@@ -18,7 +18,15 @@ vi.mock('../../../hooks/use-builder-agent-features', () => ({
   useBuilderAgentFeatures: () => mockUseBuilderAgentFeatures(),
 }));
 
-const mockUseBuilderModelPolicy = vi.fn(() => ({ active: false }) as { active: boolean; pickerVisible?: boolean; default?: { provider: string; modelId: string }; allowed?: unknown });
+const mockUseBuilderModelPolicy = vi.fn(
+  () =>
+    ({ active: false }) as {
+      active: boolean;
+      pickerVisible?: boolean;
+      default?: { provider: string; modelId: string };
+      allowed?: unknown;
+    },
+);
 
 vi.mock('@/domains/builder', () => ({
   useBuilderModelPolicy: () => mockUseBuilderModelPolicy(),
@@ -46,7 +54,6 @@ vi.mock('../details/instructions-detail', () => ({
     return <textarea data-testid="instructions-detail-textarea" readOnly={!props.editable} value={props.prompt} />;
   },
 }));
-
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
 
@@ -352,7 +359,9 @@ describe('AgentConfigurePanel disabled propagation', () => {
           editable={false}
           activeDetail="instructions"
           onActiveDetailChange={onActiveDetailChange}
-          availableAgentTools={[{ id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' }]}
+          availableAgentTools={[
+            { id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' },
+          ]}
           agent={{
             id: 'agent-1',
             name: 'Published agent',
@@ -400,7 +409,9 @@ describe('AgentConfigurePanel disabled propagation', () => {
           editable={false}
           activeDetail="tools"
           onActiveDetailChange={() => {}}
-          availableAgentTools={[{ id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' }]}
+          availableAgentTools={[
+            { id: 'tool-1', name: 'Tool 1', description: 'Test tool', isChecked: true, type: 'tool' },
+          ]}
           agent={{
             id: 'agent-1',
             name: 'Published agent',

@@ -441,8 +441,11 @@ describe('ConversationPanel agent-builder client tool', () => {
         .success,
     ).toBe(true);
     expect(
-      tool.inputSchema.safeParse({ name: 'N', instructions: 'I', model: { provider: 'anthropic', name: 'claude-opus-4-7' } })
-        .success,
+      tool.inputSchema.safeParse({
+        name: 'N',
+        instructions: 'I',
+        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      }).success,
     ).toBe(false);
   });
 

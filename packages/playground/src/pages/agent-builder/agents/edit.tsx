@@ -45,7 +45,9 @@ export default function AgentBuilderAgentEdit() {
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, { enabled: features.skills });
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, {
+    enabled: features.skills,
+  });
   const { data: workspacesData } = useStoredWorkspaces();
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
