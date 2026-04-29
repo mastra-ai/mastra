@@ -1,5 +1,4 @@
 import { Button, Skeleton, StatusBadge, Txt } from '@mastra/playground-ui';
-import { ExternalLink } from 'lucide-react';
 import {
   useChannelPlatforms,
   useChannelInstallations,
@@ -50,7 +49,6 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
   const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel(platform.id);
 
   const activeInstallation = installations?.find(i => i.status === 'active');
-  const pendingInstallation = installations?.find(i => i.status === 'pending');
 
   const handleConnect = () => {
     connect(
@@ -103,28 +101,6 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
             className="shrink-0 text-[11px] text-neutral5 hover:text-accent2 transition-colors disabled:opacity-50"
           >
             {isDisconnecting ? 'Removing...' : 'Remove'}
-          </button>
-        </div>
-      ) : pendingInstallation ? (
-        <div className="flex items-center gap-2.5">
-          <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <Txt variant="ui-sm" className="text-neutral3">
-                {platform.name}
-              </Txt>
-              <StatusBadge variant="warning" size="sm" withDot>
-                Pending
-              </StatusBadge>
-            </div>
-          </div>
-          <button
-            onClick={handleConnect}
-            disabled={isConnecting}
-            className="shrink-0 text-[11px] text-accent5 hover:text-accent5/80 transition-colors disabled:opacity-50"
-          >
-            <ExternalLink className="h-3 w-3 inline mr-0.5" />
-            Retry
           </button>
         </div>
       ) : (
