@@ -637,9 +637,6 @@ importers:
       '@chat-adapter/slack':
         specifier: ^4.26.0
         version: 4.26.0
-      chat:
-        specifier: ^4.26.0
-        version: 4.26.0
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -647,9 +644,6 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
-      hono:
-        specifier: ^4.7.10
-        version: 4.12.14
       tsup:
         specifier: ^8.4.0
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.10)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -659,6 +653,9 @@ importers:
       vitest:
         specifier: ^3.1.1
         version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.15)(@vitest/ui@4.1.5(vitest@4.1.5))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
 
   client-sdks/ai-sdk:
     devDependencies:

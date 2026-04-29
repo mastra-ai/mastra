@@ -30,20 +30,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/slack": "^4.26.0",
-    "chat": "^4.26.0"
+    "@chat-adapter/slack": "^4.26.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@types/node": "^22.14.0",
-    "hono": "^4.7.10",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "@mastra/core": "^1.0.0",
-    "hono": "^4.0.0"
+    "@mastra/core": "^1.0.0"
   },
   "publishConfig": {
     "access": "public"

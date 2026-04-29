@@ -61,5 +61,4 @@ export type {
   SlashCommandConfig,
   SlackMessage,
   SlackBlock,
-  SlackRoute,
 } from './types';

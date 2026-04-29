@@ -1,8 +1,14 @@
 import * as crypto from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
-import { type MastraChannel, type ChannelPlatformInfo, type ChannelInstallationInfo, type ChannelConnectResult, AgentChannels } from '@mastra/core/channels';
+import {
+  type MastraChannel,
+  type ChannelPlatformInfo,
+  type ChannelInstallationInfo,
+  type ChannelConnectResult,
+  AgentChannels,
+} from '@mastra/core/channels';
+import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import { type ChannelsStorage, type ChannelInstallation, InMemoryChannelsStorage } from '@mastra/core/storage';
-import type { Context } from 'hono';
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
@@ -17,7 +23,7 @@ import {
   type SlackConfigTokens,
   type StoredSlashCommand,
 } from './schemas';
-import type { SlackChannelConfig, SlashCommandConfig, SlackRoute, SlackConnectOptions } from './types';
+import type { SlackChannelConfig, SlashCommandConfig, SlackConnectOptions } from './types';
 
 const PLATFORM = 'slack';
 
@@ -102,7 +108,7 @@ export class SlackChannel implements MastraChannel {
     this.#manifestClient = new SlackManifestClient({
       configToken: config.configToken ?? '',
       refreshToken: config.refreshToken,
-      onTokenRotation: async (tokens) => {
+      onTokenRotation: async tokens => {
         // Persist rotated tokens to storage (encrypted)
         await this.#saveConfigTokens(
           this.#encryptConfigTokens({
@@ -140,7 +146,7 @@ export class SlackChannel implements MastraChannel {
    * Normalize all slash commands in a config.
    */
   #normalizeCommands(commands?: (string | SlashCommandConfig)[]): StoredSlashCommand[] {
-    return (commands ?? []).map((cmd) => this.#normalizeCommand(cmd));
+    return (commands ?? []).map(cmd => this.#normalizeCommand(cmd));
   }
 
   // ===========================================================================
@@ -394,9 +400,7 @@ export class SlackChannel implements MastraChannel {
   async #listInstallations(): Promise<SlackInstallation[]> {
     const storage = await this.#getStorage();
     const records = await storage.listInstallations(PLATFORM);
-    return records
-      .filter((r) => r.status === 'active')
-      .map((r) => this.#parseInstallation(r));
+    return records.filter(r => r.status === 'active').map(r => this.#parseInstallation(r));
   }
 
   /**
@@ -488,25 +492,18 @@ export class SlackChannel implements MastraChannel {
       return this.#baseUrl;
     }
 
-    // Try to derive from Mastra server config
-    if (this.#mastra) {
-      const server = this.#mastra.getServer();
-      if (server) {
-        const protocol = server.studioProtocol ?? 'http';
-        const host = server.studioHost ?? server.host ?? 'localhost';
-        const port = server.studioPort ?? server.port ?? 4111;
+    // Derive from Mastra server config + environment
+    // process.env.PORT is set by the CLI with the actual resolved port
+    // (e.g. 4112 if 4111 was taken), so it's more reliable than server config
+    const server = this.#mastra?.getServer();
+    const protocol = server?.studioProtocol ?? 'http';
+    const host = server?.studioHost ?? server?.host ?? process.env.MASTRA_HOST ?? 'localhost';
+    const port = server?.studioPort ?? server?.port ?? (Number(process.env.PORT) || 4111);
 
-        // Don't include port for standard ports
-        const includePort = !(
-          (protocol === 'https' && port === 443) ||
-          (protocol === 'http' && port === 80)
-        );
+    // Don't include port for standard ports
+    const includePort = !((protocol === 'https' && port === 443) || (protocol === 'http' && port === 80));
 
-        return includePort ? `${protocol}://${host}:${port}` : `${protocol}://${host}`;
-      }
-    }
-
-    return undefined;
+    return includePort ? `${protocol}://${host}:${port}` : `${protocol}://${host}`;
   }
 
   /**
@@ -562,7 +559,9 @@ export class SlackChannel implements MastraChannel {
           await this.#checkConfigDrift(installation, baseUrl);
         }
 
-        console.log(`[Slack] ✓ Agent "${installation.agentId}" connected to workspace "${installation.teamName ?? installation.teamId}"`);
+        console.log(
+          `[Slack] ✓ Agent "${installation.agentId}" connected to workspace "${installation.teamName ?? installation.teamId}"`,
+        );
       } catch (err) {
         console.error(`[Slack] Failed to restore installation "${installationEncrypted.id}":`, err);
       }
@@ -584,9 +583,9 @@ export class SlackChannel implements MastraChannel {
       signingSecret: installation.signingSecret,
       userName: displayName,
     });
-    
+
     this.#adapters.set(installation.id, adapter);
-    
+
     // Restore slash commands from installation data
     if (installation.slashCommands?.length) {
       this.#slashCommands.set(installation.webhookId, installation.slashCommands);
@@ -645,9 +644,7 @@ export class SlackChannel implements MastraChannel {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const isAppGone =
-        errMsg.includes('internal_error') ||
-        errMsg.includes('app_not_found') ||
-        errMsg.includes('no_permission');
+        errMsg.includes('internal_error') || errMsg.includes('app_not_found') || errMsg.includes('no_permission');
 
       if (isAppGone) {
         console.warn(
@@ -669,7 +666,7 @@ export class SlackChannel implements MastraChannel {
    */
   #getOrCreateAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
     let agentChannels = agent.agentChannels as AgentChannels | null;
-    
+
     if (!agentChannels) {
       // Create AgentChannels with Slack adapter
       agentChannels = new AgentChannels({
@@ -682,7 +679,7 @@ export class SlackChannel implements MastraChannel {
       // AgentChannels exists but doesn't have slack adapter
       agentChannels.__registerAdapter('slack', adapter, { adapter }, { managesRoutes: true });
     }
-    
+
     return agentChannels;
   }
 
@@ -698,15 +695,15 @@ export class SlackChannel implements MastraChannel {
   /**
    * Get API routes for the Mastra server.
    * Add these to your Mastra config via `server.apiRoutes`.
-   * 
+   *
    * The mastra instance is automatically injected via createHandler.
    * On first request, auto-initializes any agents with slack configs.
    */
-  getRoutes(): SlackRoute[] {
+  getRoutes(): ApiRoute[] {
     const self = this;
 
     // Helper that sets mastra and runs auto-init once
-    const withInit = (handler: (c: Context) => Promise<Response>) => {
+    const withInit = (handler: (c: ContextWithMastra) => Promise<Response>) => {
       return async ({ mastra }: { mastra: Mastra }) => {
         self.#mastra = mastra;
         await self.#autoInitialize();
@@ -763,10 +760,7 @@ export class SlackChannel implements MastraChannel {
    *
    * @returns Authorization URL for the user to install the app
    */
-  async connect(
-    agentId: string,
-    options?: SlackConnectOptions,
-  ): Promise<ChannelConnectResult> {
+  async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult> {
     if (!this.#manifestClient) {
       throw new Error('Slack manifest client not configured. Provide configToken and refreshToken.');
     }
@@ -798,7 +792,7 @@ export class SlackChannel implements MastraChannel {
       webhookUrl: `${baseUrl}/slack/events/${webhookId}`,
       oauthRedirectUrl: `${baseUrl}/slack/oauth/callback`,
       commandsUrl: `${baseUrl}/slack/commands/${webhookId}`,
-      slashCommands: normalizedCommands.map((cmd) => ({
+      slashCommands: normalizedCommands.map(cmd => ({
         command: cmd.command,
         description: cmd.description ?? `Run ${cmd.command}`,
         usageHint: cmd.usageHint,
@@ -880,7 +874,7 @@ export class SlackChannel implements MastraChannel {
 
     const storage = await this.#getStorage();
     const allRecords = await storage.listInstallations(PLATFORM);
-    const agentRecords = allRecords.filter((r) => r.agentId === agentId);
+    const agentRecords = allRecords.filter(r => r.agentId === agentId);
 
     if (agentRecords.length === 0) {
       throw new Error(`No Slack installation found for agent "${agentId}"`);
@@ -920,7 +914,7 @@ export class SlackChannel implements MastraChannel {
    */
   async listInstallations(): Promise<ChannelInstallationInfo[]> {
     const installations = await this.#listInstallations();
-    return installations.map((i) => {
+    return installations.map(i => {
       const decrypted = this.#decryptInstallation(i);
       return {
         id: decrypted.id,
@@ -963,7 +957,7 @@ export class SlackChannel implements MastraChannel {
   // Route Handlers
   // ===========================================================================
 
-  async #handleConnectRequest(c: Context): Promise<Response> {
+  async #handleConnectRequest(c: ContextWithMastra): Promise<Response> {
     const body = await c.req.json();
     const { agentId, ...options } = body;
 
@@ -980,7 +974,7 @@ export class SlackChannel implements MastraChannel {
     }
   }
 
-  async #handleDisconnectRequest(c: Context): Promise<Response> {
+  async #handleDisconnectRequest(c: ContextWithMastra): Promise<Response> {
     const body = await c.req.json();
     const { agentId } = body;
 
@@ -997,12 +991,12 @@ export class SlackChannel implements MastraChannel {
     }
   }
 
-  async #handleListInstallations(c: Context): Promise<Response> {
+  async #handleListInstallations(c: ContextWithMastra): Promise<Response> {
     const installations = await this.listInstallations();
     return c.json({ installations });
   }
 
-  async #handleOAuthCallback(c: Context): Promise<Response> {
+  async #handleOAuthCallback(c: ContextWithMastra): Promise<Response> {
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state'); // installationId
@@ -1127,7 +1121,7 @@ export class SlackChannel implements MastraChannel {
     }
   }
 
-  async #handleEvent(c: Context): Promise<Response> {
+  async #handleEvent(c: ContextWithMastra): Promise<Response> {
     const webhookId = c.req.param('webhookId');
     if (!webhookId) {
       return c.json({ error: 'Missing webhookId' }, 400);
@@ -1181,14 +1175,16 @@ export class SlackChannel implements MastraChannel {
 
     // Get or create AgentChannels with Slack adapter
     const displayName = installation.name || agent.name || installation.agentId;
-    const adapter = this.#adapters.get(installation.id) ?? createSlackAdapter({
-      botToken: installation.botToken,
-      botUserId: installation.botUserId,
-      signingSecret: installation.signingSecret,
-      userName: displayName,
-    });
+    const adapter =
+      this.#adapters.get(installation.id) ??
+      createSlackAdapter({
+        botToken: installation.botToken,
+        botUserId: installation.botUserId,
+        signingSecret: installation.signingSecret,
+        userName: displayName,
+      });
     const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
-    
+
     // Ensure initialized
     await agentChannels.initialize(this.#mastra);
 
@@ -1208,7 +1204,7 @@ export class SlackChannel implements MastraChannel {
     }
   }
 
-  async #handleSlashCommand(c: Context): Promise<Response> {
+  async #handleSlashCommand(c: ContextWithMastra): Promise<Response> {
     const webhookId = c.req.param('webhookId');
     if (!webhookId) {
       return c.json({ error: 'Missing webhookId' }, 400);
@@ -1244,7 +1240,7 @@ export class SlackChannel implements MastraChannel {
     const command = params.command;
 
     const commands = this.#slashCommands.get(webhookId);
-    const commandConfig = commands?.find((cmd) => cmd.command === command);
+    const commandConfig = commands?.find(cmd => cmd.command === command);
 
     if (!commandConfig) {
       return c.json({ response_type: 'ephemeral', text: `Unknown command: ${command}` });
@@ -1257,7 +1253,7 @@ export class SlackChannel implements MastraChannel {
 
     const responseUrl = params.response_url ?? '';
     const userText = params.text ?? '';
-    
+
     // Build prompt from template (replace {{text}} with user input)
     const prompt = (commandConfig.prompt ?? '{{text}}').replace(/\{\{text\}\}/g, userText);
 

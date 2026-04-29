@@ -1,22 +1,5 @@
 import type { ChannelsStorage } from '@mastra/core/storage';
-import type { Mastra } from '@mastra/core/mastra';
-import type { Handler } from 'hono';
 import type { SlackInstallation } from './schemas';
-
-// =============================================================================
-// Routes
-// =============================================================================
-
-/**
- * Route definition compatible with Mastra's ApiRoute.
- * Uses createHandler so mastra is injected automatically.
- */
-export interface SlackRoute {
-  path: string;
-  method: 'GET' | 'POST';
-  requiresAuth: boolean;
-  createHandler: (deps: { mastra: Mastra }) => Promise<Handler>;
-}
 
 // =============================================================================
 // Global Configuration (Mastra-level)
