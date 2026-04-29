@@ -1,4 +1,3 @@
-import type { ScorerRunInputForAgent } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
@@ -95,7 +94,7 @@ export function createPromptAlignmentScorerLLM({
       outputSchema: analyzeOutputSchema,
       createPrompt: ({ run }) => {
         const userPrompt = getUserMessageFromRunInput(run.input) ?? '';
-        const systemPrompt = getCombinedSystemPrompt(run.input as ScorerRunInputForAgent) ?? '';
+        const systemPrompt = getCombinedSystemPrompt(run.input) ?? '';
         const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Validation based on evaluation mode
@@ -105,8 +104,8 @@ export function createPromptAlignmentScorerLLM({
         if (evaluationMode === 'system' && !systemPrompt) {
           throw new Error('System prompt is required for system prompt alignment scoring');
         }
-        if (evaluationMode === 'both' && (!userPrompt || !systemPrompt)) {
-          throw new Error('Both user and system prompts are required for combined alignment scoring');
+        if (evaluationMode === 'both' && !userPrompt && !systemPrompt) {
+          throw new Error('A user or system prompt is required for combined alignment scoring');
         }
         if (!agentResponse) {
           throw new Error('Agent response is required for prompt alignment scoring');
@@ -177,7 +176,7 @@ export function createPromptAlignmentScorerLLM({
       description: 'Generate human-readable explanation of prompt alignment evaluation',
       createPrompt: ({ run, results, score }) => {
         const userPrompt = getUserMessageFromRunInput(run.input) ?? '';
-        const systemPrompt = getCombinedSystemPrompt(run.input as ScorerRunInputForAgent) ?? '';
+        const systemPrompt = getCombinedSystemPrompt(run.input) ?? '';
         const analysis = results.analyzeStepResult;
 
         if (!analysis) {

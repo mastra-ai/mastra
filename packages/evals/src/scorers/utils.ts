@@ -76,6 +76,20 @@ const isRecord = (value: unknown): value is Record<string, any> => {
   return typeof value === 'object' && value !== null;
 };
 
+export const isScorerRunInputForAgent = (input: unknown): input is ScorerRunInputForAgent => {
+  return (
+    isRecord(input) &&
+    Array.isArray(input.inputMessages) &&
+    Array.isArray(input.rememberedMessages) &&
+    Array.isArray(input.systemMessages) &&
+    isRecord(input.taggedSystemMessages)
+  );
+};
+
+export const isScorerRunOutputForAgent = (output: unknown): output is ScorerRunOutputForAgent => {
+  return Array.isArray(output);
+};
+
 const getTextFromMessages = (messages: unknown, role: string): string | undefined => {
   if (!Array.isArray(messages)) return undefined;
 
@@ -278,8 +292,8 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
  *   });
  * ```
  */
-export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string => {
-  const systemMessages = getSystemMessagesFromRunInput(input);
+export const getCombinedSystemPrompt = (input?: unknown): string => {
+  const systemMessages = getSystemMessagesFromRunInput(isScorerRunInputForAgent(input) ? input : undefined);
   return systemMessages.join('\n\n');
 };
 
@@ -309,6 +323,13 @@ export const getAssistantMessageFromRunOutput = (output?: unknown) => {
 
   if (typeof output.text === 'string') return output.text;
   if (typeof output.content === 'string') return output.content;
+  if (isRecord(output.content) || Array.isArray(output.content)) {
+    return (
+      getTextContentFromMastraDBMessage(output as MastraDBMessage) ||
+      getTextContentFromMastraDBMessage(output.content as MastraDBMessage) ||
+      undefined
+    );
+  }
   if (output.role === 'assistant') return getTextContentFromMastraDBMessage(output as MastraDBMessage) || undefined;
 
   return undefined;

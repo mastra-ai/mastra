@@ -66,6 +66,20 @@ describe('Scorer Utils', () => {
       expect(getAssistantMessageFromRunOutput('String response')).toBe('String response');
     });
 
+    it('should extract assistant text from nested content output', () => {
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { parts: [{ type: 'text', text: 'Nested task response' }] },
+        }),
+      ).toBe('Nested task response');
+
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { content: { parts: [{ type: 'text', text: 'Nested message response' }] } },
+        }),
+      ).toBe('Nested message response');
+    });
+
     it('should extract assistant text from model messages', () => {
       const output = [
         { role: 'user', content: 'Question' },
