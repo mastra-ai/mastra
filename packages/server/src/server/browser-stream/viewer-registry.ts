@@ -277,7 +277,9 @@ export class ViewerRegistry implements ViewerRegistryLike {
   ): Promise<void> {
     const toolset = getToolset(agentId);
     if (!toolset) {
-      // No browser available for this agent - just keep connection open
+      // No browser available for this agent - just keep connection open.
+      // The screencast will start when the agent hydrates and the browser launches
+      // (via the generation flow calling getAgentFromSystem → createAgentFromStoredConfig).
       console.info(`[ViewerRegistry] No toolset for ${viewerKey}, waiting...`);
       return;
     }

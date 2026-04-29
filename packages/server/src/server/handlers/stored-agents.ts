@@ -42,10 +42,11 @@ import type { VersionedStoreInterface } from './version-helpers';
  * - `false` → `null` (explicit clear)
  * - object/null/undefined → pass through unchanged
  */
-function resolveBrowserField(browser: unknown, mastra: { getEditor?: () => unknown }): unknown {
+async function resolveBrowserField(browser: unknown, mastra: { getEditor?: () => unknown }): Promise<unknown> {
   if (browser === true) {
     const editor = mastra.getEditor?.() as any;
-    const defaultBrowser = editor?.getBuilder?.()?.getConfiguration?.()?.agent?.browser;
+    const builder = await editor?.resolveBuilder?.();
+    const defaultBrowser = builder?.getConfiguration?.()?.agent?.browser;
     return defaultBrowser ?? undefined;
   }
   if (browser === false) {
@@ -331,7 +332,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
-      const resolvedBrowser = resolveBrowserField(browser, mastra);
+      const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
       const input = {
         id,
@@ -489,7 +490,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       }
 
       // Resolve boolean browser shorthand from the UI
-      const resolvedBrowser = resolveBrowserField(browser, mastra);
+      const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
