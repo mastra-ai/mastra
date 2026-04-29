@@ -1,3 +1,5 @@
+import { coreFeatures } from '@mastra/core/features';
+
 import { HTTPException } from '../http-exception';
 import {
   channelPlatformPathParams,
@@ -13,8 +15,14 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // ============================================================================
-// Helpers
+// Feature gate + helpers
 // ============================================================================
+
+function assertChannelsAvailable(): void {
+  if (!coreFeatures.has('channels')) {
+    throw new HTTPException(501, { message: 'Channels require a newer version of @mastra/core' });
+  }
+}
 
 function getChannelOrThrow(mastra: any, platform: string) {
   const channels = mastra.channels ?? {};
@@ -47,6 +55,7 @@ export const LIST_CHANNEL_PLATFORMS_ROUTE = createRoute({
   tags: ['Channels'],
   requiresAuth: true,
   handler: async ({ mastra }) => {
+    assertChannelsAvailable();
     try {
       const channels = (mastra as any).channels ?? {};
       return Object.values(channels).map((channel: any) => {
@@ -79,6 +88,7 @@ export const LIST_CHANNEL_INSTALLATIONS_ROUTE = createRoute({
   tags: ['Channels'],
   requiresAuth: true,
   handler: async ({ mastra, platform }) => {
+    assertChannelsAvailable();
     try {
       const channel = getChannelOrThrow(mastra, platform);
 
@@ -108,6 +118,7 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
   tags: ['Channels'],
   requiresAuth: true,
   handler: async ({ mastra, platform, agentId, options }) => {
+    assertChannelsAvailable();
     try {
       const channel = getChannelOrThrow(mastra, platform);
 
@@ -138,6 +149,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   tags: ['Channels'],
   requiresAuth: true,
   handler: async ({ mastra, platform, agentId }) => {
+    assertChannelsAvailable();
     try {
       const channel = getChannelOrThrow(mastra, platform);
 
