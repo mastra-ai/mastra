@@ -169,9 +169,15 @@ export async function createHonoServer(
   // bundling ws into user code. Returns null if ws is not available.
   const browserStreamSetup = await setupBrowserStream(app, {
     getToolset: (agentId: string) => {
-      // Look up agent and return its browser toolset if configured
-      const agent = mastra.getAgentById(agentId);
-      return agent?.browser;
+      // Look up agent and return its browser toolset if configured.
+      // Stored agents may not be in the runtime registry yet (hydrated on first chat),
+      // so we catch and return undefined to let the viewer wait for browser_ready.
+      try {
+        const agent = mastra.getAgentById(agentId);
+        return agent?.browser;
+      } catch {
+        return undefined;
+      }
     },
   });
 
