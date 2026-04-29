@@ -264,9 +264,7 @@ describe('resolveInstructionBlocks', () => {
       { productKey: 'royal-canin', variant: 'rcv31115' },
       { productKey: 'zeal-treats', variant: 'dtz0110' },
     ];
-    const blocks: AgentInstructionBlock[] = [
-      { type: 'text', content: 'Products in cart: {{products}}.' },
-    ];
+    const blocks: AgentInstructionBlock[] = [{ type: 'text', content: 'Products in cart: {{products}}.' }];
     const result = await resolveInstructionBlocks(blocks, { products }, { promptBlocksStorage: storage });
     expect(result).toBe(`Products in cart: ${JSON.stringify(products)}.`);
   });
