@@ -50,11 +50,33 @@ describe('AgentChatPanel', () => {
     cleanup();
   });
 
-  it('renders the empty state with name and description when there are no messages', () => {
-    const { getByTestId } = renderPanel();
+  it('renders the empty state with name, description, and animated starter prompt cards', () => {
+    const { getByTestId, getAllByTestId } = renderPanel();
     const empty = getByTestId('agent-builder-agent-chat-empty-state');
     expect(empty.textContent).toContain('My Agent');
     expect(empty.textContent).toContain('It does things');
+    expect(empty.textContent).toContain('What can you do?');
+    expect(empty.textContent).toContain('Show available tools');
+    expect(empty.textContent).toContain('Suggest a task');
+    expect(empty.textContent).toContain('Run a self-check');
+
+    const cards = getAllByTestId(/agent-builder-agent-chat-starter-/);
+    expect(cards).toHaveLength(4);
+    cards.forEach((card, index) => {
+      expect(card.className).toContain('starter-chip');
+      expect((card as HTMLElement).style.animationDelay).toBe(`${280 + index * 40}ms`);
+    });
+  });
+
+  it('fills the composer without sending when a starter prompt is clicked', () => {
+    const { getByTestId } = renderPanel();
+    const input = getByTestId('agent-builder-agent-chat-input') as HTMLTextAreaElement;
+    const card = getByTestId('agent-builder-agent-chat-starter-suggest-a-task');
+
+    fireEvent.click(card);
+
+    expect(input.value).toBe('Suggest a useful task I can try with you, including an example prompt.');
+    expect(sentMessages).toHaveLength(0);
   });
 
   it('disables the composer when isRunning is true', () => {
