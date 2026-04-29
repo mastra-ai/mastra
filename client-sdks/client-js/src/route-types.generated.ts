@@ -4630,6 +4630,9 @@ export type PostAgentsAgentIdGenerate_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -4793,6 +4796,9 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -4958,6 +4964,9 @@ export type PostAgentsAgentIdStream_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -4994,6 +5003,175 @@ export interface PostAgentsAgentIdStream_RouteContract {
   body: PostAgentsAgentIdStream_Body;
   request: PostAgentsAgentIdStream_Request;
   response: PostAgentsAgentIdStream_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/stream-until-idle
+// ============================================================================
+export type PostAgentsAgentIdStreamUntilIdle_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdStreamUntilIdle_Body = {
+  messages: any[] | string;
+  instructions?: (string | string[] | any | any[]) | undefined;
+  system?: (string | string[] | any | any[]) | undefined;
+  context?: any[] | undefined;
+  memory?:
+    | {
+        thread:
+          | string
+          | {
+              id: string;
+              [x: string]: unknown;
+            };
+        resource: string;
+        options?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        readOnly?: boolean | undefined;
+      }
+    | undefined;
+  runId?: string | undefined;
+  savePerStep?: boolean | undefined;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
+  maxSteps?: number | undefined;
+  stopWhen?: any | undefined;
+  providerOptions?:
+    | {
+        anthropic?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        google?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        openai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        xai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+      }
+    | undefined;
+  modelSettings?: any | undefined;
+  activeTools?: string[] | undefined;
+  toolsets?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  clientTools?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolChoice?:
+    | (
+        | ('auto' | 'none' | 'required')
+        | {
+            type: 'tool';
+            toolName: string;
+          }
+      )
+    | undefined;
+  requireToolApproval?: boolean | undefined;
+  scorers?:
+    | (
+        | {
+            [key: string]: any;
+          }
+        | {
+            [key: string]: {
+              scorer: string;
+              sampling?: any | undefined;
+            };
+          }
+      )
+    | undefined;
+  returnScorerData?: boolean | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  output?: any | undefined;
+  structuredOutput?:
+    | {
+        schema: {
+          [x: string]: unknown;
+        };
+        model?: (string | any) | undefined;
+        instructions?: string | undefined;
+        jsonPromptInjection?: boolean | undefined;
+        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+        fallbackValue?: any | undefined;
+      }
+    | undefined;
+  maxIdleMs?: number | undefined;
+  [x: string]: unknown;
+};
+
+export type PostAgentsAgentIdStreamUntilIdle_Response = any;
+
+export type PostAgentsAgentIdStreamUntilIdle_Request = Simplify<
+  (PostAgentsAgentIdStreamUntilIdle_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdStreamUntilIdle_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdStreamUntilIdle_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdStreamUntilIdle_Body
+        ? { body?: PostAgentsAgentIdStreamUntilIdle_Body }
+        : { body: PostAgentsAgentIdStreamUntilIdle_Body })
+>;
+
+export interface PostAgentsAgentIdStreamUntilIdle_RouteContract {
+  pathParams: PostAgentsAgentIdStreamUntilIdle_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdStreamUntilIdle_Body;
+  request: PostAgentsAgentIdStreamUntilIdle_Request;
+  response: PostAgentsAgentIdStreamUntilIdle_Response;
   responseType: 'stream';
 }
 
@@ -5123,6 +5301,9 @@ export type PostAgentsAgentIdStreamVnext_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -5292,6 +5473,173 @@ export interface PostAgentsAgentIdDeclineToolCall_RouteContract {
   body: PostAgentsAgentIdDeclineToolCall_Body;
   request: PostAgentsAgentIdDeclineToolCall_Request;
   response: PostAgentsAgentIdDeclineToolCall_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/resume-stream
+// ============================================================================
+export type PostAgentsAgentIdResumeStream_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdResumeStream_Body = {
+  instructions?: (string | string[] | any | any[]) | undefined;
+  system?: (string | string[] | any | any[]) | undefined;
+  context?: any[] | undefined;
+  memory?:
+    | {
+        thread:
+          | string
+          | {
+              id: string;
+              [x: string]: unknown;
+            };
+        resource: string;
+        options?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        readOnly?: boolean | undefined;
+      }
+    | undefined;
+  runId: string;
+  savePerStep?: boolean | undefined;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
+  maxSteps?: number | undefined;
+  stopWhen?: any | undefined;
+  providerOptions?:
+    | {
+        anthropic?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        google?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        openai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        xai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+      }
+    | undefined;
+  modelSettings?: any | undefined;
+  activeTools?: string[] | undefined;
+  toolsets?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  clientTools?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolChoice?:
+    | (
+        | ('auto' | 'none' | 'required')
+        | {
+            type: 'tool';
+            toolName: string;
+          }
+      )
+    | undefined;
+  requireToolApproval?: boolean | undefined;
+  scorers?:
+    | (
+        | {
+            [key: string]: any;
+          }
+        | {
+            [key: string]: {
+              scorer: string;
+              sampling?: any | undefined;
+            };
+          }
+      )
+    | undefined;
+  returnScorerData?: boolean | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  output?: any | undefined;
+  structuredOutput?:
+    | {
+        schema: {
+          [x: string]: unknown;
+        };
+        model?: (string | any) | undefined;
+        instructions?: string | undefined;
+        jsonPromptInjection?: boolean | undefined;
+        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+        fallbackValue?: any | undefined;
+      }
+    | undefined;
+  resumeData: unknown;
+  toolCallId?: string | undefined;
+  [x: string]: unknown;
+};
+
+export type PostAgentsAgentIdResumeStream_Response = any;
+
+export type PostAgentsAgentIdResumeStream_Request = Simplify<
+  (PostAgentsAgentIdResumeStream_PathParams extends never ? {} : { params: PostAgentsAgentIdResumeStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdResumeStream_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdResumeStream_Body
+        ? { body?: PostAgentsAgentIdResumeStream_Body }
+        : { body: PostAgentsAgentIdResumeStream_Body })
+>;
+
+export interface PostAgentsAgentIdResumeStream_RouteContract {
+  pathParams: PostAgentsAgentIdResumeStream_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdResumeStream_Body;
+  request: PostAgentsAgentIdResumeStream_Request;
+  response: PostAgentsAgentIdResumeStream_Response;
   responseType: 'stream';
 }
 
@@ -5585,6 +5933,9 @@ export type PostAgentsAgentIdNetwork_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -6214,6 +6565,9 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -6382,6 +6736,9 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -6552,6 +6909,9 @@ export type PostAgentsAgentIdStreamUi_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -7241,6 +7601,9 @@ export type PostWorkflowsWorkflowIdStream_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7301,6 +7664,9 @@ export type PostWorkflowsWorkflowIdResumeStream_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7365,6 +7731,9 @@ export type PostWorkflowsWorkflowIdStartAsync_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7463,6 +7832,9 @@ export type PostWorkflowsWorkflowIdStart_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7562,6 +7934,9 @@ export type PostWorkflowsWorkflowIdResumeAsync_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7660,6 +8035,9 @@ export type PostWorkflowsWorkflowIdResume_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7769,6 +8147,9 @@ export type PostWorkflowsWorkflowIdTimeTravel_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7848,6 +8229,9 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -7959,6 +8343,9 @@ export type PostWorkflowsWorkflowIdTimeTravelStream_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -8018,6 +8405,9 @@ export type PostWorkflowsWorkflowIdRestart_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
 };
@@ -8080,6 +8470,9 @@ export type PostWorkflowsWorkflowIdRestartAsync_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
 };
@@ -10649,6 +11042,7 @@ export type GetObservabilityTraces_QueryParams = {
         | undefined
       )
     | undefined;
+  traceId?: (string | undefined) | undefined;
   entityType?: (string | undefined) | undefined;
   entityId?: ((string | null) | undefined) | undefined;
   entityName?: ((string | null) | undefined) | undefined;
@@ -10658,6 +11052,7 @@ export type GetObservabilityTraces_QueryParams = {
             | (
                 | 'agent'
                 | 'scorer'
+                | 'rag_ingestion'
                 | 'trajectory'
                 | 'input_processor'
                 | 'input_step_processor'
@@ -10681,6 +11076,7 @@ export type GetObservabilityTraces_QueryParams = {
             | (
                 | 'agent'
                 | 'scorer'
+                | 'rag_ingestion'
                 | 'trajectory'
                 | 'input_processor'
                 | 'input_step_processor'
@@ -10817,6 +11213,7 @@ export type GetObservabilityTraces_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -10837,6 +11234,7 @@ export type GetObservabilityTraces_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -10857,6 +11255,7 @@ export type GetObservabilityTraces_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -10996,6 +11395,7 @@ export type GetObservabilityTracesTraceId_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11016,6 +11416,7 @@ export type GetObservabilityTracesTraceId_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11036,6 +11437,7 @@ export type GetObservabilityTracesTraceId_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11111,6 +11513,281 @@ export interface GetObservabilityTracesTraceId_RouteContract {
   body: never;
   request: GetObservabilityTracesTraceId_Request;
   response: GetObservabilityTracesTraceId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /observability/traces/:traceId/light
+// ============================================================================
+export type GetObservabilityTracesTraceIdLight_PathParams = {
+  /** Unique trace identifier */
+  traceId: string;
+};
+
+export type GetObservabilityTracesTraceIdLight_Response = {
+  /** Unique trace identifier */
+  traceId: string;
+  spans: {
+    /** Unique trace identifier */
+    traceId: string;
+    /** Unique span identifier within a trace */
+    spanId: string;
+    /** Human-readable span name */
+    name: string;
+    /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
+    spanType:
+      | 'agent_run'
+      | 'scorer_run'
+      | 'scorer_step'
+      | 'generic'
+      | 'model_generation'
+      | 'model_step'
+      | 'model_chunk'
+      | 'mcp_tool_call'
+      | 'processor_run'
+      | 'tool_call'
+      | 'workflow_run'
+      | 'workflow_step'
+      | 'workflow_conditional'
+      | 'workflow_conditional_eval'
+      | 'workflow_parallel'
+      | 'workflow_loop'
+      | 'workflow_sleep'
+      | 'workflow_wait_event'
+      | 'memory_operation'
+      | 'workspace_action'
+      | 'rag_ingestion'
+      | 'rag_embedding'
+      | 'rag_vector_operation'
+      | 'rag_action'
+      | 'graph_action';
+    /** Whether this is an event (point-in-time) vs a span (duration) */
+    isEvent: boolean;
+    /** When the span started */
+    startedAt: Date;
+    parentSpanId?: (string | null) | undefined;
+    endedAt?: (Date | null) | undefined;
+    error?: (unknown | null) | undefined;
+    entityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    /** Database record creation time */
+    createdAt: Date;
+    updatedAt: Date | null;
+  }[];
+};
+
+export type GetObservabilityTracesTraceIdLight_Request = Simplify<
+  (GetObservabilityTracesTraceIdLight_PathParams extends never
+    ? {}
+    : { params: GetObservabilityTracesTraceIdLight_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityTracesTraceIdLight_RouteContract {
+  pathParams: GetObservabilityTracesTraceIdLight_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetObservabilityTracesTraceIdLight_Request;
+  response: GetObservabilityTracesTraceIdLight_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /observability/traces/:traceId/spans/:spanId
+// ============================================================================
+export type GetObservabilityTracesTraceIdSpansSpanId_PathParams = {
+  /** Unique trace identifier */
+  traceId: string;
+  /** Unique span identifier within a trace */
+  spanId: string;
+};
+
+export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
+  /** Span record data */
+  span: {
+    /** Unique trace identifier */
+    traceId: string;
+    /** Unique span identifier within a trace */
+    spanId: string;
+    /** Human-readable span name */
+    name: string;
+    /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
+    spanType:
+      | 'agent_run'
+      | 'scorer_run'
+      | 'scorer_step'
+      | 'generic'
+      | 'model_generation'
+      | 'model_step'
+      | 'model_chunk'
+      | 'mcp_tool_call'
+      | 'processor_run'
+      | 'tool_call'
+      | 'workflow_run'
+      | 'workflow_step'
+      | 'workflow_conditional'
+      | 'workflow_conditional_eval'
+      | 'workflow_parallel'
+      | 'workflow_loop'
+      | 'workflow_sleep'
+      | 'workflow_wait_event'
+      | 'memory_operation'
+      | 'workspace_action'
+      | 'rag_ingestion'
+      | 'rag_embedding'
+      | 'rag_vector_operation'
+      | 'rag_action'
+      | 'graph_action';
+    /** Whether this is an event (point-in-time) vs a span (duration) */
+    isEvent: boolean;
+    /** When the span started */
+    startedAt: Date;
+    parentSpanId?: (string | null) | undefined;
+    entityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    parentEntityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    parentEntityId?: (string | null) | undefined;
+    parentEntityName?: (string | null) | undefined;
+    rootEntityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    rootEntityId?: (string | null) | undefined;
+    rootEntityName?: (string | null) | undefined;
+    userId?: (string | null) | undefined;
+    organizationId?: (string | null) | undefined;
+    resourceId?: (string | null) | undefined;
+    runId?: (string | null) | undefined;
+    sessionId?: (string | null) | undefined;
+    threadId?: (string | null) | undefined;
+    requestId?: (string | null) | undefined;
+    environment?: (string | null) | undefined;
+    serviceName?: (string | null) | undefined;
+    scope?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    entityVersionId?: (string | null) | undefined;
+    parentEntityVersionId?: (string | null) | undefined;
+    rootEntityVersionId?: (string | null) | undefined;
+    /** Experiment or eval run identifier */
+    experimentId?: (string | null) | undefined;
+    source?: (string | null) | undefined;
+    metadata?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    tags?: (string[] | null) | undefined;
+    attributes?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    links?: (unknown[] | null) | undefined;
+    input?: (unknown | null) | undefined;
+    output?: (unknown | null) | undefined;
+    error?: (unknown | null) | undefined;
+    endedAt?: (Date | null) | undefined;
+    /** Request context data */
+    requestContext?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    /** Database record creation time */
+    createdAt: Date;
+    updatedAt: Date | null;
+  };
+};
+
+export type GetObservabilityTracesTraceIdSpansSpanId_Request = Simplify<
+  (GetObservabilityTracesTraceIdSpansSpanId_PathParams extends never
+    ? {}
+    : { params: GetObservabilityTracesTraceIdSpansSpanId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityTracesTraceIdSpansSpanId_RouteContract {
+  pathParams: GetObservabilityTracesTraceIdSpansSpanId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetObservabilityTracesTraceIdSpansSpanId_Request;
+  response: GetObservabilityTracesTraceIdSpansSpanId_Response;
   responseType: 'json';
 }
 
@@ -11353,6 +12030,7 @@ export type GetObservabilityLogs_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -11380,6 +12058,7 @@ export type GetObservabilityLogs_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -11399,6 +12078,7 @@ export type GetObservabilityLogs_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -11445,6 +12125,8 @@ export type GetObservabilityLogs_Response = {
     hasMore: boolean;
   };
   logs: {
+    /** Unique id for this log event */
+    logId?: (string | null) | undefined;
     /** When the log was created */
     timestamp: Date;
     /** Log severity level */
@@ -11463,6 +12145,7 @@ export type GetObservabilityLogs_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11483,6 +12166,7 @@ export type GetObservabilityLogs_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11503,6 +12187,7 @@ export type GetObservabilityLogs_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11596,6 +12281,7 @@ export type GetObservabilityScores_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -11623,6 +12309,7 @@ export type GetObservabilityScores_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -11642,6 +12329,7 @@ export type GetObservabilityScores_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -11684,6 +12372,8 @@ export type GetObservabilityScores_Response = {
     hasMore: boolean;
   };
   scores: {
+    /** Unique id for this score event */
+    scoreId?: (string | null) | undefined;
     /** When the score was recorded */
     timestamp: Date;
     /** Trace that anchors the scored target when available */
@@ -11704,6 +12394,7 @@ export type GetObservabilityScores_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11724,6 +12415,7 @@ export type GetObservabilityScores_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11744,6 +12436,7 @@ export type GetObservabilityScores_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11814,6 +12507,8 @@ export interface GetObservabilityScores_RouteContract {
 // ============================================================================
 export type PostObservabilityScores_Body = {
   score: {
+    /** Unique id for this score event */
+    scoreId?: (string | null) | undefined;
     /** Trace that anchors the scored target when available */
     traceId?: (string | null) | undefined;
     /** Span ID this score applies to */
@@ -11832,6 +12527,7 @@ export type PostObservabilityScores_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11852,6 +12548,7 @@ export type PostObservabilityScores_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11872,6 +12569,7 @@ export type PostObservabilityScores_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11973,6 +12671,7 @@ export type PostObservabilityScoresAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -11997,6 +12696,7 @@ export type PostObservabilityScoresAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12013,6 +12713,7 @@ export type PostObservabilityScoresAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12106,6 +12807,7 @@ export type PostObservabilityScoresBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12130,6 +12832,7 @@ export type PostObservabilityScoresBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12146,6 +12849,7 @@ export type PostObservabilityScoresBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12240,6 +12944,7 @@ export type PostObservabilityScoresTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12264,6 +12969,7 @@ export type PostObservabilityScoresTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12280,6 +12986,7 @@ export type PostObservabilityScoresTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12377,6 +13084,7 @@ export type PostObservabilityScoresPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12401,6 +13109,7 @@ export type PostObservabilityScoresPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12417,6 +13126,7 @@ export type PostObservabilityScoresPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12508,6 +13218,7 @@ export type GetObservabilityFeedback_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -12535,6 +13246,7 @@ export type GetObservabilityFeedback_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -12554,6 +13266,7 @@ export type GetObservabilityFeedback_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -12597,6 +13310,8 @@ export type GetObservabilityFeedback_Response = {
     hasMore: boolean;
   };
   feedback: {
+    /** Unique id for this feedback event */
+    feedbackId?: (string | null) | undefined;
     /** When the feedback was recorded */
     timestamp: Date;
     /** Trace that anchors the feedback target when available */
@@ -12616,6 +13331,7 @@ export type GetObservabilityFeedback_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12636,6 +13352,7 @@ export type GetObservabilityFeedback_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12656,6 +13373,7 @@ export type GetObservabilityFeedback_Response = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12726,6 +13444,8 @@ export interface GetObservabilityFeedback_RouteContract {
 // ============================================================================
 export type PostObservabilityFeedback_Body = {
   feedback: {
+    /** Unique id for this feedback event */
+    feedbackId?: (string | null) | undefined;
     /** Trace that anchors the feedback target when available */
     traceId?: (string | null) | undefined;
     /** Span ID this feedback applies to */
@@ -12743,6 +13463,7 @@ export type PostObservabilityFeedback_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12763,6 +13484,7 @@ export type PostObservabilityFeedback_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12783,6 +13505,7 @@ export type PostObservabilityFeedback_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12884,6 +13607,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12908,6 +13632,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -12924,6 +13649,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13016,6 +13742,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13040,6 +13767,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13056,6 +13784,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13149,6 +13878,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13173,6 +13903,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13189,6 +13920,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13285,6 +14017,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13309,6 +14042,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13325,6 +14059,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13417,6 +14152,7 @@ export type PostObservabilityMetricsAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13441,6 +14177,7 @@ export type PostObservabilityMetricsAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13457,6 +14194,7 @@ export type PostObservabilityMetricsAggregate_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13564,6 +14302,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13588,6 +14327,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13604,6 +14344,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13708,6 +14449,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13732,6 +14474,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13748,6 +14491,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13855,6 +14599,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13879,6 +14624,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -13895,6 +14641,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
           | (
               | 'agent'
               | 'scorer'
+              | 'rag_ingestion'
               | 'trajectory'
               | 'input_processor'
               | 'input_step_processor'
@@ -14074,6 +14821,7 @@ export type GetObservabilityDiscoveryEntityTypes_Response = {
   entityTypes: (
     | 'agent'
     | 'scorer'
+    | 'rag_ingestion'
     | 'trajectory'
     | 'input_processor'
     | 'input_step_processor'
@@ -14110,6 +14858,7 @@ export type GetObservabilityDiscoveryEntityNames_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -14204,6 +14953,7 @@ export type GetObservabilityDiscoveryTags_QueryParams = {
         | (
             | 'agent'
             | 'scorer'
+            | 'rag_ingestion'
             | 'trajectory'
             | 'input_processor'
             | 'input_step_processor'
@@ -14652,23 +15402,37 @@ export type GetWellKnownAgentIdAgentCardJson_PathParams = {
 };
 
 export type GetWellKnownAgentIdAgentCardJson_Response = {
+  additionalInterfaces?: unknown[] | undefined;
   name: string;
   description: string;
   url: string;
+  protocolVersion: string;
   provider?:
     | {
         organization: string;
         url: string;
       }
     | undefined;
+  security?:
+    | {
+        [key: string]: string[];
+      }[]
+    | undefined;
+  securitySchemes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   version: string;
   capabilities: {
+    extensions?: unknown[] | undefined;
     streaming?: boolean | undefined;
     pushNotifications?: boolean | undefined;
     stateTransitionHistory?: boolean | undefined;
   };
   defaultInputModes: string[];
   defaultOutputModes: string[];
+  supportsAuthenticatedExtendedCard?: boolean | undefined;
   skills: {
     id: string;
     name: string;
@@ -14702,12 +15466,12 @@ export type PostA2aAgentId_PathParams = {
   agentId: string;
 };
 
-export type PostA2aAgentId_Body = {
-  jsonrpc: '2.0';
-  id: string | number;
-  method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
-  params:
-    | {
+export type PostA2aAgentId_Body =
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'message/send';
+      params: {
         message: {
           /** Event type */
           kind: 'message';
@@ -14790,7 +15554,7 @@ export type PostA2aAgentId_Body = {
         configuration?:
           | {
               /** Accepted output modalities by the client */
-              acceptedOutputModes: string[];
+              acceptedOutputModes?: string[] | undefined;
               /** If the server should treat the client as a blocking request */
               blocking?: boolean | undefined;
               /** Number of recent messages to be retrieved */
@@ -14821,8 +15585,133 @@ export type PostA2aAgentId_Body = {
               [key: string]: unknown;
             }
           | undefined;
-      }
-    | {
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'message/stream';
+      params: {
+        message: {
+          /** Event type */
+          kind: 'message';
+          /** Identifier created by the message creator */
+          messageId: string;
+          /** Message sender's role */
+          role: 'user' | 'agent';
+          /** Message content */
+          parts: (
+            | {
+                /** Part type - text for TextParts */
+                kind: 'text';
+                /** Text content */
+                text: string;
+                /** Optional metadata associated with the part */
+                metadata?:
+                  | {
+                      [key: string]: unknown;
+                    }
+                  | undefined;
+              }
+            | {
+                /** Part type - file for FileParts */
+                kind: 'file';
+                /** File content either as url or bytes */
+                file:
+                  | {
+                      /** base64 encoded content of the file */
+                      bytes: string;
+                      /** Optional mimeType for the file */
+                      mimeType?: string | undefined;
+                      /** Optional name for the file */
+                      name?: string | undefined;
+                    }
+                  | {
+                      /** URL for the File content */
+                      uri: string;
+                      /** Optional mimeType for the file */
+                      mimeType?: string | undefined;
+                      /** Optional name for the file */
+                      name?: string | undefined;
+                    };
+                /** Optional metadata associated with the part */
+                metadata?:
+                  | {
+                      [key: string]: unknown;
+                    }
+                  | undefined;
+              }
+            | {
+                /** Part type - data for DataParts */
+                kind: 'data';
+                /** Structured data content */
+                data: {
+                  [key: string]: unknown;
+                };
+                /** Optional metadata associated with the part */
+                metadata?:
+                  | {
+                      [key: string]: unknown;
+                    }
+                  | undefined;
+              }
+          )[];
+          /** The context the message is associated with */
+          contextId?: string | undefined;
+          /** Identifier of task the message is related to */
+          taskId?: string | undefined;
+          /** List of tasks referenced as context by this message */
+          referenceTaskIds?: string[] | undefined;
+          /** The URIs of extensions that are present or contributed to this Message */
+          extensions?: string[] | undefined;
+          /** Extension metadata */
+          metadata?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        };
+        configuration?:
+          | {
+              /** Accepted output modalities by the client */
+              acceptedOutputModes?: string[] | undefined;
+              /** If the server should treat the client as a blocking request */
+              blocking?: boolean | undefined;
+              /** Number of recent messages to be retrieved */
+              historyLength?: number | undefined;
+              pushNotificationConfig?:
+                | {
+                    /** URL for sending the push notifications */
+                    url: string;
+                    /** Push Notification ID - created by server to support multiple callbacks */
+                    id?: string | undefined;
+                    /** Token unique to this task/session */
+                    token?: string | undefined;
+                    authentication?:
+                      | {
+                          /** Supported authentication schemes - e.g. Basic, Bearer */
+                          schemes: string[];
+                          /** Optional credentials */
+                          credentials?: string | undefined;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        /** Extension metadata */
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/get';
+      params: {
         /** Task id */
         id: string;
         /** Number of recent messages to be retrieved */
@@ -14832,8 +15721,13 @@ export type PostA2aAgentId_Body = {
               [key: string]: unknown;
             }
           | undefined;
-      }
-    | {
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/cancel';
+      params: {
         /** Task id */
         id: string;
         metadata?:
@@ -14842,7 +15736,97 @@ export type PostA2aAgentId_Body = {
             }
           | undefined;
       };
-};
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/resubscribe';
+      params: {
+        /** Task id */
+        id: string;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/set';
+      params: {
+        /** Task id */
+        taskId: string;
+        pushNotificationConfig: {
+          /** URL for sending the push notifications */
+          url: string;
+          /** Push Notification ID - created by server to support multiple callbacks */
+          id?: string | undefined;
+          /** Token unique to this task/session */
+          token?: string | undefined;
+          authentication?:
+            | {
+                /** Supported authentication schemes - e.g. Basic, Bearer */
+                schemes: string[];
+                /** Optional credentials */
+                credentials?: string | undefined;
+              }
+            | undefined;
+        };
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/get';
+      params: {
+        /** Task id */
+        id: string;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Push notification config id */
+        pushNotificationConfigId?: string | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/list';
+      params: {
+        /** Task id */
+        id: string;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/delete';
+      params: {
+        /** Task id */
+        id: string;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Push notification config id */
+        pushNotificationConfigId: string;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'agent/getAuthenticatedExtendedCard';
+    };
 
 export type PostA2aAgentId_Response = unknown;
 
@@ -14862,7 +15846,7 @@ export interface PostA2aAgentId_RouteContract {
   body: PostA2aAgentId_Body;
   request: PostA2aAgentId_Request;
   response: PostA2aAgentId_Response;
-  responseType: 'json';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -15222,6 +16206,9 @@ export type PostAgentBuilderActionIdStream_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -15286,6 +16273,9 @@ export type PostAgentBuilderActionIdStartAsync_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -15384,6 +16374,9 @@ export type PostAgentBuilderActionIdStart_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -15483,6 +16476,9 @@ export type PostAgentBuilderActionIdResumeAsync_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -15581,6 +16577,9 @@ export type PostAgentBuilderActionIdResume_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -15647,6 +16646,9 @@ export type PostAgentBuilderActionIdResumeStream_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -16881,6 +17883,9 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -17049,6 +18054,9 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   output?: any | undefined;
@@ -17123,6 +18131,9 @@ export type PostWorkflowsWorkflowIdStreamLegacy_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -17224,6 +18235,9 @@ export type PostAgentBuilderActionIdStreamLegacy_Body = {
         requestContextKeys?: string[] | undefined;
         traceId?: string | undefined;
         parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
       }
     | undefined;
   perStep?: boolean | undefined;
@@ -70026,8 +71040,10 @@ export type GetSystemPackages_Response = {
   }[];
   isDev: boolean;
   cmsEnabled: boolean;
+  observabilityEnabled: boolean;
   storageType?: string | undefined;
   observabilityStorageType?: string | undefined;
+  observabilityRuntimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;
 };
 
 export type GetSystemPackages_Request = Simplify<
@@ -72368,6 +73384,7 @@ export type GetBackgroundTasksStream_QueryParams = {
   runId?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
+  taskId?: string | undefined;
 };
 
 export type GetBackgroundTasksStream_Response = any;
@@ -72522,10 +73539,12 @@ export interface RouteTypes {
   'POST /agents/:agentId/generate': PostAgentsAgentIdGenerate_RouteContract;
   'POST /agents/:agentId/generate/vnext': PostAgentsAgentIdGenerateVnext_RouteContract;
   'POST /agents/:agentId/stream': PostAgentsAgentIdStream_RouteContract;
+  'POST /agents/:agentId/stream-until-idle': PostAgentsAgentIdStreamUntilIdle_RouteContract;
   'POST /agents/:agentId/stream/vnext': PostAgentsAgentIdStreamVnext_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
+  'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
   'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
@@ -72621,6 +73640,8 @@ export interface RouteTypes {
   'POST /scores': PostScores_RouteContract;
   'GET /observability/traces': GetObservabilityTraces_RouteContract;
   'GET /observability/traces/:traceId': GetObservabilityTracesTraceId_RouteContract;
+  'GET /observability/traces/:traceId/light': GetObservabilityTracesTraceIdLight_RouteContract;
+  'GET /observability/traces/:traceId/spans/:spanId': GetObservabilityTracesTraceIdSpansSpanId_RouteContract;
   'GET /observability/traces/:traceId/trajectory': GetObservabilityTracesTraceIdTrajectory_RouteContract;
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
@@ -72927,6 +73948,9 @@ export interface Client {
   '/agents/:agentId/network': {
     POST: PostAgentsAgentIdNetwork_RouteContract;
   };
+  '/agents/:agentId/resume-stream': {
+    POST: PostAgentsAgentIdResumeStream_RouteContract;
+  };
   '/agents/:agentId/skills/:skillName': {
     GET: GetAgentsAgentIdSkillsSkillName_RouteContract;
   };
@@ -72941,6 +73965,9 @@ export interface Client {
   };
   '/agents/:agentId/stream-legacy': {
     POST: PostAgentsAgentIdStreamLegacy_RouteContract;
+  };
+  '/agents/:agentId/stream-until-idle': {
+    POST: PostAgentsAgentIdStreamUntilIdle_RouteContract;
   };
   '/agents/:agentId/stream/ui': {
     POST: PostAgentsAgentIdStreamUi_RouteContract;
@@ -73243,6 +74270,12 @@ export interface Client {
   };
   '/observability/traces/:traceId/:spanId/scores': {
     GET: GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
+  };
+  '/observability/traces/:traceId/light': {
+    GET: GetObservabilityTracesTraceIdLight_RouteContract;
+  };
+  '/observability/traces/:traceId/spans/:spanId': {
+    GET: GetObservabilityTracesTraceIdSpansSpanId_RouteContract;
   };
   '/observability/traces/:traceId/trajectory': {
     GET: GetObservabilityTracesTraceIdTrajectory_RouteContract;
