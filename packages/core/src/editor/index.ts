@@ -3,7 +3,6 @@ export type {
   MastraEditorConfig,
   GetByIdOptions,
   IEditorAgentNamespace,
-  IEditorChannelNamespace,
   IEditorMCPNamespace,
   IEditorPromptNamespace,
   IEditorScorerNamespace,
@@ -13,6 +12,3 @@ export type {
   SandboxProvider,
   BlobStoreProvider,
 } from './types';
-
-// Re-export channel discovery types used by IEditorChannelNamespace
-export type { ChannelPlatformInfo, ChannelInstallationInfo, ChannelConnectResult } from '../channels/types';
