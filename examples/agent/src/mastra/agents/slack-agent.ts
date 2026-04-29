@@ -11,6 +11,7 @@ import { Memory } from '@mastra/memory';
 export const slackDemoAgent = new Agent({
   id: 'slack-demo-agent',
   name: 'Slack Demo Agent',
+  description: 'This is a test description',
   instructions: `You are a helpful assistant available in Slack.
 Keep your responses concise and formatted for Slack (use *bold*, _italic_, \`code\`, etc).`,
   model: 'openai/gpt-5.4',

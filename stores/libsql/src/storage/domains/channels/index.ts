@@ -97,7 +97,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_INSTALLATIONS}" WHERE platform = ? AND agentId = ?`,
+      sql: `SELECT * FROM "${TABLE_INSTALLATIONS}" WHERE platform = ? AND agentId = ? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updatedAt DESC LIMIT 1`,
       args: [platform, agentId],
     });
     const row = result.rows?.[0];

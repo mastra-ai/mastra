@@ -112,10 +112,10 @@ export class ChannelsPG extends ChannelsStorage {
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "platform" = $1 AND "agentId" = $2`, [
-      platform,
-      agentId,
-    ]);
+    const row = await this.#db.client.oneOrNone(
+      `SELECT * FROM ${tableName} WHERE "platform" = $1 AND "agentId" = $2 ORDER BY CASE "status" WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, "updatedAt" DESC LIMIT 1`,
+      [platform, agentId],
+    );
     return row ? this.#parseInstallationRow(row) : null;
   }
 

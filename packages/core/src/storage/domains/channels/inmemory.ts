@@ -18,12 +18,16 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
   }
 
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
+    const statusPriority = { active: 0, pending: 1, error: 2 } as const;
+    let best: ChannelInstallation | null = null;
     for (const installation of this.#installations.values()) {
       if (installation.platform === platform && installation.agentId === agentId) {
-        return installation;
+        if (!best || (statusPriority[installation.status] ?? 3) < (statusPriority[best.status] ?? 3)) {
+          best = installation;
+        }
       }
     }
-    return null;
+    return best;
   }
 
   async getInstallationByWebhookId(webhookId: string): Promise<ChannelInstallation | null> {

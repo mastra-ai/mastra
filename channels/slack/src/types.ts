@@ -174,6 +174,13 @@ export interface SlackConnectOptions {
    * })
    */
   manifest?: (defaults: SlackAppManifest) => SlackAppManifest;
+
+  /**
+   * URL to redirect to after successful OAuth completion.
+   * Typically set by the Studio UI to return to the agent page.
+   * Defaults to `SlackChannelConfig.redirectPath` or `/`.
+   */
+  redirectUrl?: string;
 }
 
 /**

@@ -25,11 +25,16 @@ const PLATFORM = 'slack';
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
-function hashConfig(config: SlackConnectOptions, baseUrl: string, resolvedAppName: string): string {
+function hashConfig(
+  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
+  baseUrl: string,
+  resolvedAppName: string,
+  resolvedDescription: string,
+): string {
   const normalized = JSON.stringify({
     name: resolvedAppName,
-    description: config.description,
-    slashCommands: config.slashCommands,
+    description: resolvedDescription,
+    slashCommands: opts.slashCommands,
     baseUrl,
   });
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
@@ -374,6 +379,9 @@ export class SlackChannel implements MastraChannel {
         teamName: installation.teamName,
         botToken: installation.botToken,
         botUserId: installation.botUserId,
+        nameOverride: installation.nameOverride,
+        descriptionOverride: installation.descriptionOverride,
+        slashCommands: installation.slashCommands,
       },
       createdAt: installation.installedAt,
       updatedAt: new Date(),
@@ -419,6 +427,10 @@ export class SlackChannel implements MastraChannel {
         clientSecret: pending.clientSecret,
         signingSecret: pending.signingSecret,
         authorizationUrl: pending.authorizationUrl,
+        nameOverride: pending.nameOverride,
+        descriptionOverride: pending.descriptionOverride,
+        slashCommands: pending.slashCommands,
+        redirectUrl: pending.redirectUrl,
       },
       createdAt: pending.createdAt,
       updatedAt: new Date(),
@@ -538,11 +550,18 @@ export class SlackChannel implements MastraChannel {
     }
 
     // Restore all active installations from storage
+    const baseUrl = this.#getBaseUrl();
     const allInstallations = await this.#listInstallations();
     for (const installationEncrypted of allInstallations) {
       try {
         const installation = this.#decryptInstallation(installationEncrypted);
         await this.#activateAdapter(installation);
+
+        // Check if the agent config has changed since last connect
+        if (baseUrl) {
+          await this.#checkConfigDrift(installation, baseUrl);
+        }
+
         console.log(`[Slack] ✓ Agent "${installation.agentId}" connected to workspace "${installation.teamName ?? installation.teamId}"`);
       } catch (err) {
         console.error(`[Slack] Failed to restore installation "${installationEncrypted.id}":`, err);
@@ -573,6 +592,70 @@ export class SlackChannel implements MastraChannel {
     if (agent && this.#mastra) {
       const agentChannels = this.#getOrCreateAgentChannels(agent, adapter);
       await agentChannels.initialize(this.#mastra);
+    }
+  }
+
+  /**
+   * Check if the agent's config has drifted from the stored installation hash.
+   * If it has, update the Slack app manifest to match the current agent state.
+   */
+  async #checkConfigDrift(installation: SlackInstallation, baseUrl: string): Promise<void> {
+    const agent = this.#mastra?.getAgentById(installation.agentId);
+    if (!agent) return;
+
+    // Resolve current values: stored overrides (from connect()) > code-defined > defaults
+    const resolvedAppName = installation.nameOverride ?? agent.name ?? installation.agentId;
+    const resolvedDescription = installation.descriptionOverride || agent.getDescription() || 'AI assistant powered by Mastra';
+    const currentHash = hashConfig(
+      { slashCommands: installation.slashCommands },
+      baseUrl,
+      resolvedAppName,
+      resolvedDescription,
+    );
+
+    if (currentHash === installation.configHash) return;
+
+    console.log(`[Slack] Config drift detected for "${installation.agentId}" — updating manifest...`);
+
+    try {
+      const manifest = buildManifest({
+        name: resolvedAppName,
+        description: resolvedDescription,
+        webhookUrl: `${baseUrl}/slack/events/${installation.webhookId}`,
+        oauthRedirectUrl: `${baseUrl}/slack/oauth/callback`,
+        commandsUrl: `${baseUrl}/slack/commands/${installation.webhookId}`,
+        slashCommands: installation.slashCommands?.map(cmd => ({
+          command: cmd.command,
+          description: cmd.description ?? `Run ${cmd.command}`,
+          usageHint: cmd.usageHint,
+        })),
+      });
+
+      await this.#manifestClient.updateApp(installation.appId, manifest);
+
+      // Persist the new hash (keep stored overrides unchanged)
+      const updated: SlackInstallation = { ...installation, configHash: currentHash };
+      await this.#saveInstallation(this.#encryptInstallation(updated));
+
+      console.log(`[Slack] ✓ Manifest updated for "${installation.agentId}" (app: ${installation.appId})`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isAppGone =
+        errMsg.includes('internal_error') ||
+        errMsg.includes('app_not_found') ||
+        errMsg.includes('no_permission');
+
+      if (isAppGone) {
+        console.warn(
+          `[Slack] App ${installation.appId} for "${installation.agentId}" appears deleted from Slack — removing stale installation`,
+        );
+        // Clean up local state
+        this.#adapters.delete(installation.id);
+        this.#slashCommands.delete(installation.webhookId);
+        await this.#deleteInstallation(installation.id);
+      } else {
+        console.error(`[Slack] Failed to update manifest for "${installation.agentId}":`, err);
+      }
     }
   }
 
@@ -703,10 +786,11 @@ export class SlackChannel implements MastraChannel {
 
     // Build manifest using the manifest builder (includes proper default scopes)
     const appName = config.name ?? agent.name ?? agentId;
+    const appDescription = config.description || agent.getDescription() || 'AI assistant powered by Mastra';
     const normalizedCommands = this.#normalizeCommands(config.slashCommands);
     let manifest = buildManifest({
       name: appName,
-      description: config.description ?? `AI assistant powered by ${agent.name ?? agentId}`,
+      description: appDescription,
       webhookUrl: `${baseUrl}/slack/events/${webhookId}`,
       oauthRedirectUrl: `${baseUrl}/slack/oauth/callback`,
       commandsUrl: `${baseUrl}/slack/commands/${webhookId}`,
@@ -751,7 +835,7 @@ export class SlackChannel implements MastraChannel {
     const authorizationUrl = authUrl.toString();
 
     // Store pending installation (includes auth URL for UI to fetch later)
-    const configHash = hashConfig(config, baseUrl, appName);
+    const configHash = hashConfig(config, baseUrl, appName, appDescription);
     const pendingInstallation = this.#encryptPendingInstallation({
       id: installationId,
       agentId,
@@ -761,7 +845,10 @@ export class SlackChannel implements MastraChannel {
       clientSecret: appCredentials.clientSecret,
       signingSecret: appCredentials.signingSecret,
       authorizationUrl,
+      nameOverride: config.name,
+      descriptionOverride: config.description,
       slashCommands: normalizedCommands.length ? normalizedCommands : undefined,
+      redirectUrl: config.redirectUrl,
       configHash,
       createdAt: new Date(),
     });
@@ -787,23 +874,33 @@ export class SlackChannel implements MastraChannel {
       throw new Error('Slack manifest client not configured.');
     }
 
-    const installationEncrypted = await this.#getInstallation(agentId);
-    if (!installationEncrypted) {
+    const storage = await this.#getStorage();
+    const allRecords = await storage.listInstallations(PLATFORM);
+    const agentRecords = allRecords.filter((r) => r.agentId === agentId);
+
+    if (agentRecords.length === 0) {
       throw new Error(`No Slack installation found for agent "${agentId}"`);
     }
-    const installation = this.#decryptInstallation(installationEncrypted);
 
-    // Delete the app from Slack
-    await this.#manifestClient.deleteApp(installation.appId);
+    for (const record of agentRecords) {
+      if (record.status === 'active') {
+        const installation = this.#decryptInstallation(this.#parseInstallation(record));
 
-    // Remove adapter
-    this.#adapters.delete(installation.id);
+        // Delete the app from Slack
+        try {
+          await this.#manifestClient.deleteApp(installation.appId);
+        } catch (err) {
+          console.warn(`[Slack] Failed to delete Slack app ${installation.appId}:`, err);
+        }
 
-    // Remove from storage
-    await this.#deleteInstallation(installation.id);
+        // Remove adapter and command handlers
+        this.#adapters.delete(installation.id);
+        this.#slashCommands.delete(installation.webhookId);
+      }
 
-    // Clean up command handlers
-    this.#slashCommands.delete(installation.webhookId);
+      // Remove from storage (active, pending, or error)
+      await this.#deleteInstallation(record.id);
+    }
   }
 
   /**
@@ -907,13 +1004,8 @@ export class SlackChannel implements MastraChannel {
     const state = url.searchParams.get('state'); // installationId
     const error = url.searchParams.get('error');
 
-    if (error) {
-      const redirectUrl = this.#channelConfig.redirectPath ?? '/slack/error';
-      return c.redirect(`${redirectUrl}?error=${encodeURIComponent(error)}`);
-    }
-
-    if (!code || !state) {
-      return c.json({ error: 'Missing code or state parameter' }, 400);
+    if (!state) {
+      return c.json({ error: 'Missing state parameter' }, 400);
     }
 
     const pendingEncrypted = await this.#getPendingInstallationById(state);
@@ -923,6 +1015,18 @@ export class SlackChannel implements MastraChannel {
 
     // Decrypt secrets for use
     const pending = this.#decryptPendingInstallation(pendingEncrypted);
+
+    if (error) {
+      const errorUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
+      const redirect = new URL(errorUrl, c.req.url);
+      redirect.searchParams.set('channel_error', encodeURIComponent(error));
+      redirect.searchParams.set('platform', 'slack');
+      return c.redirect(redirect.toString());
+    }
+
+    if (!code) {
+      return c.json({ error: 'Missing code parameter' }, 400);
+    }
 
     const baseUrl = this.#getBaseUrl();
     if (!baseUrl) {
@@ -967,6 +1071,8 @@ export class SlackChannel implements MastraChannel {
         botUserId: tokenData.bot_user_id!,
         teamId: tokenData.team!.id,
         teamName: tokenData.team!.name,
+        nameOverride: pending.nameOverride,
+        descriptionOverride: pending.descriptionOverride,
         slashCommands: pending.slashCommands,
         installedAt: new Date(),
         configHash: pending.configHash,
@@ -995,13 +1101,22 @@ export class SlackChannel implements MastraChannel {
 
       console.log(`[Slack] ✓ Agent "${pending.agentId}" installed to team "${tokenData.team!.name}"`);
 
-      const redirectUrl = this.#channelConfig.redirectPath ?? '/slack/success';
-      return c.redirect(`${redirectUrl}?agent=${pending.agentId}&team=${tokenData.team!.name}`);
+      // Redirect back to the page the user came from, or the configured redirect path
+      const successUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
+      const redirect = new URL(successUrl, c.req.url);
+      redirect.searchParams.set('channel_connected', 'true');
+      redirect.searchParams.set('platform', 'slack');
+      redirect.searchParams.set('agent', pending.agentId);
+      redirect.searchParams.set('team', tokenData.team!.name);
+      return c.redirect(redirect.toString());
     } catch (error) {
       console.error('[Slack] OAuth callback error:', error);
       const message = error instanceof Error ? error.message : 'OAuth failed';
-      const redirectUrl = this.#channelConfig.redirectPath ?? '/slack/error';
-      return c.redirect(`${redirectUrl}?error=${encodeURIComponent(message)}`);
+      const errorUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
+      const redirect = new URL(errorUrl, c.req.url);
+      redirect.searchParams.set('channel_error', encodeURIComponent(message));
+      redirect.searchParams.set('platform', 'slack');
+      return c.redirect(redirect.toString());
     }
   }
 
