@@ -111,22 +111,29 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
-   * Provide Slack App Configuration credentials at runtime.
+   * Provide or clear Slack App Configuration credentials at runtime.
    *
    * Use this when credentials aren't available at construction time — for example,
    * when they're entered through the Editor UI or loaded from a vault.
    *
-   * If the provider already has credentials (from the constructor or storage),
-   * this replaces them.
+   * Pass `null` to clear credentials and delete stored tokens.
    *
    * @example
    * ```ts
    * const slack = new SlackProvider();
-   * // ... later, after user provides credentials:
+   * // Provide credentials:
    * slack.configure({ refreshToken: 'xoxe-1-...' });
+   * // Clear credentials and stored tokens:
+   * await slack.configure(null);
    * ```
    */
-  configure(credentials: { refreshToken: string; token?: string }): void {
+  configure(credentials: { refreshToken: string; token?: string }): void;
+  configure(credentials: null): Promise<void>;
+  configure(credentials: { refreshToken: string; token?: string } | null): void | Promise<void> {
+    if (credentials === null) {
+      this.#manifestClient = undefined;
+      return this.#deleteConfigTokens();
+    }
     this.#initManifestClient(credentials.token ?? '', credentials.refreshToken);
   }
 
@@ -478,6 +485,14 @@ export class SlackProvider implements ChannelProvider {
       },
       updatedAt: tokens.updatedAt,
     });
+  }
+
+  /**
+   * Delete stored config tokens.
+   */
+  async #deleteConfigTokens(): Promise<void> {
+    const storage = await this.#getStorage();
+    await storage.deleteConfig(PLATFORM);
   }
 
   /**
