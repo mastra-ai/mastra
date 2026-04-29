@@ -56,6 +56,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const initialValues = useMemo(
     () => (isEdit ? computeAgentInitialValues(options.dataSource) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isEdit, isEdit ? options.dataSource : undefined],
   );
 
@@ -104,6 +105,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   useEffect(() => {
     if (!isEdit) return;
     resetFormWithData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, isEdit ? options.dataSource : undefined]);
 
   const buildSharedParams = useCallback(
@@ -142,7 +144,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           model: values.model,
           // Only send editable fields: instructions, tools, integrationTools, and variables (requestContextSchema)
           instructions: mapInstructionBlocksToApi(values.instructionBlocks),
-          tools: Object.keys(registryTools).length > 0 ? registryTools : undefined,
+          tools: Object.keys(registryTools).length > 0 ? registryTools : {},
           integrationTools: transformIntegrationToolsForApi(values.integrationTools),
           mcpClients: mcpClientsParam,
           requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
@@ -185,7 +187,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         description: values.description || undefined,
         instructions: mapInstructionBlocksToApi(values.instructionBlocks),
         model: values.model,
-        tools: Object.keys(registryTools).length > 0 ? registryTools : undefined,
+        tools: Object.keys(registryTools).length > 0 ? registryTools : {},
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
@@ -266,6 +268,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         setIsSavingDraft(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       form,
       isEdit,
@@ -373,6 +376,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         setIsSubmitting(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       form,
       isEdit,
