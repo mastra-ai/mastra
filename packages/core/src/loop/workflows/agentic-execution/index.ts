@@ -61,31 +61,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     toolCallConcurrency = rest.toolCallConcurrency > 0 ? rest.toolCallConcurrency : 10;
   }
 
-  // Check for sequential execution requirements:
-  // 1. Global requireToolApproval flag
-  // 2. Any tool has suspendSchema
-  // 3. Any tool has requireApproval flag
-  const hasRequireToolApproval = !!rest.requireToolApproval;
-
-  let hasSuspendSchema = false;
-  let hasRequireApproval = false;
-
-  if (rest.tools) {
-    for (const tool of Object.values(rest.tools)) {
-      if ((tool as any)?.hasSuspendSchema) {
-        hasSuspendSchema = true;
-      }
-
-      if ((tool as any)?.requireApproval) {
-        hasRequireApproval = true;
-      }
-
-      if (hasSuspendSchema || hasRequireApproval) break;
-    }
-  }
-
-  const sequentialExecutionRequired = hasRequireToolApproval || hasSuspendSchema || hasRequireApproval;
-
   return createWorkflow({
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
@@ -136,7 +111,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       },
       { id: 'map-tool-calls' },
     )
-    .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : toolCallConcurrency })
+    .foreach(toolCallStep, { concurrency: toolCallConcurrency })
     .then(llmMappingStep)
     .then(backgroundTaskCheckStep)
     .then(isTaskCompleteStep)

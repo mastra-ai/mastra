@@ -670,6 +670,38 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(parentStream).toHaveBeenCalledTimes(1);
   });
 
+  it('forks: preserves global approval mode for inherited parent tools', async () => {
+    const { parentAgent, parentStream } = makeParentAgent('approval-preserving fork');
+    const cloneThreadForFork = vi
+      .fn()
+      .mockResolvedValue({ id: 'forked-thread-approval', resourceId: 'parent-resource-1' });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
+    requestContext.set('harness', {
+      emitEvent: vi.fn(),
+      threadId: 'parent-thread-approval',
+      resourceId: 'parent-resource-1',
+    } satisfies Partial<HarnessRequestContext>);
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Use inherited tools carefully', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-approval-fork' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(parentStream).toHaveBeenCalledTimes(1);
+    expect(parentStream.mock.calls[0]![1].requireToolApproval).toBe(true);
+  });
+
   it('forks: flushMessages failures are swallowed and the clone still runs', async () => {
     // A flush failure (e.g. transient storage error) should never abort the
     // fork — the clone will just be missing the very latest turn, which is

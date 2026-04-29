@@ -5,6 +5,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
+import { setInternalToolExecutionHints } from '../../tools/internal-execution-hints';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
 
@@ -484,6 +485,170 @@ describe('Tool Concurrency', () => {
     expect(result.isConcurrent).toBe(true);
     expect(result.tool1ResultIndex).not.toBe(-1);
     expect(result.tool2ResultIndex).not.toBe(-1);
+  });
+
+  it('should execute approval-bypass safe tools concurrently when global approval is enabled', async () => {
+    const starts: Record<string, number> = {};
+    const finishes: Record<string, number> = {};
+
+    const createSafeTool = (id: 'tool-1' | 'tool-2') => {
+      const tool = createTool({
+        id,
+        description: `Safe concurrent ${id}`,
+        inputSchema: z.object({ data: z.string() }),
+        execute: async (inputData: { data: string }) => {
+          starts[id] = Date.now();
+          await delay(80);
+          finishes[id] = Date.now();
+          return { result: `${id} processed: ${inputData.data}` };
+        },
+      });
+      return setInternalToolExecutionHints(tool, {
+        bypassGlobalToolApproval: true,
+        safeForConcurrentExecution: true,
+      });
+    };
+
+    const approvalTool = createTool({
+      id: 'approval-tool',
+      description: 'Configured but not called',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async (inputData: { data: string }) => ({ result: inputData.data }),
+    });
+
+    const agent = new Agent({
+      id: 'approval-bypass-concurrent-agent',
+      name: 'Approval Bypass Concurrent Agent',
+      instructions: 'You are a helpful assistant.',
+      model: createMockModel(),
+      tools: {
+        tool1: createSafeTool('tool-1'),
+        tool2: createSafeTool('tool-2'),
+        approvalTool,
+      },
+      memory: mockMemory,
+    });
+
+    const stream = await agent.stream('Use both tools', {
+      memory: {
+        thread: 'test-thread-bypass-concurrency',
+        resource: 'user-test-bypass-concurrency',
+      },
+      maxSteps: 1,
+      requireToolApproval: true,
+    });
+
+    const approvalChunks: unknown[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        approvalChunks.push(chunk);
+      }
+    }
+
+    expect(approvalChunks).toHaveLength(0);
+    expect(starts['tool-1']).toBeDefined();
+    expect(starts['tool-2']).toBeDefined();
+    expect(finishes['tool-1']).toBeDefined();
+    expect(finishes['tool-2']).toBeDefined();
+    expect(Math.max(starts['tool-1']!, starts['tool-2']!)).toBeLessThan(
+      Math.min(finishes['tool-1']!, finishes['tool-2']!),
+    );
+  });
+
+  it('should let safe tools run while approval-gated tools still request approval', async () => {
+    const safeToolStarts: number[] = [];
+    const safeToolFinishes: number[] = [];
+    let approvalToolExecuted = false;
+
+    const safeTool = setInternalToolExecutionHints(
+      createTool({
+        id: 'safe-tool',
+        description: 'Safe concurrent tool',
+        inputSchema: z.object({ data: z.string() }),
+        execute: async (inputData: { data: string }) => {
+          safeToolStarts.push(Date.now());
+          await delay(80);
+          safeToolFinishes.push(Date.now());
+          return { result: `safe: ${inputData.data}` };
+        },
+      }),
+      {
+        bypassGlobalToolApproval: true,
+        safeForConcurrentExecution: true,
+      },
+    );
+
+    const approvalTool = createTool({
+      id: 'approval-tool',
+      description: 'Approval gated tool',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async (inputData: { data: string }) => {
+        approvalToolExecuted = true;
+        return { result: `approval: ${inputData.data}` };
+      },
+    });
+
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'test-id', modelId: 'test-model', timestamp: new Date() },
+          {
+            type: 'tool-call',
+            toolCallType: 'function',
+            toolCallId: 'call-safe',
+            toolName: 'safe-tool',
+            input: '{"data":"safe"}',
+          },
+          {
+            type: 'tool-call',
+            toolCallType: 'function',
+            toolCallId: 'call-approval',
+            toolName: 'approval-tool',
+            input: '{"data":"approval"}',
+          },
+          {
+            type: 'finish',
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'mixed-safe-approval-agent',
+      name: 'Mixed Safe Approval Agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      tools: { safeTool, approvalTool },
+      memory: mockMemory,
+    });
+
+    const stream = await agent.stream('Use both tools', {
+      memory: {
+        thread: 'test-thread-mixed-safe-approval',
+        resource: 'user-test-mixed-safe-approval',
+      },
+      maxSteps: 1,
+      requireToolApproval: true,
+    });
+
+    const approvalChunks: Array<{ payload: { toolName: string } }> = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        approvalChunks.push(chunk as any);
+      }
+    }
+
+    expect(approvalChunks.map(chunk => chunk.payload.toolName)).toEqual(['approval-tool']);
+    expect(safeToolStarts).toHaveLength(1);
+    expect(safeToolFinishes).toHaveLength(1);
+    expect(approvalToolExecuted).toBe(false);
   });
 
   it('should execute tools sequentially even when toolCallConcurrency is explicitly set, if sequential conditions are met', async () => {

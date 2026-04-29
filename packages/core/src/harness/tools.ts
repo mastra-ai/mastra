@@ -4,6 +4,7 @@ import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
+import { setInternalToolExecutionHints } from '../tools/internal-execution-hints';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
@@ -412,8 +413,18 @@ export function createSubagentTool(opts: CreateSubagentToolOptions) {
   const subagentIds = subagents.map(s => s.id);
 
   const typeDescriptions = subagents.map(s => `- **${s.id}** (${s.name}): ${s.description}`).join('\n');
+  const isForkedSubagentCall = (input: unknown) => {
+    if (!input || typeof input !== 'object') {
+      return false;
+    }
 
-  return createTool({
+    const { agentType, forked } = input as { agentType?: unknown; forked?: unknown };
+    const definition = subagents.find(s => s.id === agentType);
+
+    return (forked ?? definition?.forked ?? false) === true;
+  };
+
+  const tool = createTool({
     id: 'subagent',
     description: `Delegate a focused task to a specialized subagent. The subagent runs independently with a constrained toolset, then returns its findings as text.
 
@@ -666,7 +677,8 @@ Use this tool when:
           maxSteps: streamMaxSteps,
           stopWhen: streamStopWhen,
           abortSignal,
-          requireToolApproval: false,
+          requireToolApproval:
+            runAsForked && context?.requestContext?.get('__mastra_requireToolApproval') === true ? true : false,
           requestContext: subagentRequestContext,
           ...(streamMemory && { memory: streamMemory }),
           ...(forkedToolsets && { toolsets: forkedToolsets }),
@@ -762,6 +774,11 @@ Use this tool when:
         return { content: `Subagent "${definition.name}" failed: ${message}`, isError: true };
       }
     },
+  });
+
+  return setInternalToolExecutionHints(tool, {
+    bypassGlobalToolApproval: input => !isForkedSubagentCall(input),
+    safeForConcurrentExecution: input => !isForkedSubagentCall(input),
   });
 }
 
