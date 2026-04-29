@@ -613,7 +613,7 @@ export class ReflectorRunner {
         try {
           await Promise.race([
             asyncOp,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
           ]);
         } catch {
           // Timeout or error - proceed with what we have
