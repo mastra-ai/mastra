@@ -72,14 +72,9 @@ describe('parseChangelog', () => {
   });
 
   it('returns null when there are no meaningful entries', () => {
-    const depOnly = [
-      '## 1.0.0',
-      '',
-      '### Patch Changes',
-      '',
-      '- Updated dependencies:',
-      '  - @mastra/core@2.0.0',
-    ].join('\n');
+    const depOnly = ['## 1.0.0', '', '### Patch Changes', '', '- Updated dependencies:', '  - @mastra/core@2.0.0'].join(
+      '\n',
+    );
     expect(parseChangelog(depOnly, '1.0.0')).toBeNull();
   });
 
