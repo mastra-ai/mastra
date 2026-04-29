@@ -86,6 +86,18 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 };
 
+/*
+ * Compatibility note: the working-memory and system-reminder helpers below are
+ * intentionally copied from @mastra/core instead of imported from
+ * @mastra/core/memory. @mastra/memory's peer range permits older core versions
+ * that do not export these newer helper names, and importing them can crash a
+ * published memory build during ESM instantiation before user code runs.
+ *
+ * Until v2 can tighten the peer contract, keep these copies manually in sync
+ * with packages/core/src/memory/working-memory-utils.ts and
+ * packages/core/src/memory/system-reminders.ts. Those source files also carry
+ * compatibility notes that point back here.
+ */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
 const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
