@@ -1072,11 +1072,13 @@ export interface StoredBrowserConfig {
   headless?: boolean;
   viewport?: { width: number; height: number };
   timeout?: number;
-  cdpUrl?: string;
-  scope?: string;
-  screencast?: { enabled?: boolean; quality?: number; maxWidth?: number; maxHeight?: number };
-  profile?: Record<string, unknown>;
-  executablePath?: string;
+  screencast?: {
+    format?: 'jpeg' | 'png';
+    quality?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    everyNthFrame?: number;
+  };
 }
 
 export type StoredBrowserRef = { type: 'inline'; config: StoredBrowserConfig };

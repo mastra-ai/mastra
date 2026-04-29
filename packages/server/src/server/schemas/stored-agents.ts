@@ -140,9 +140,9 @@ const screencastOptionsSchema = z.object({
   everyNthFrame: z.number().optional().describe('Capture every Nth frame (default: 1)'),
 });
 
-/** Browser config: serializable browser configuration matching BrowserConfigBase */
+/** Browser config: serializable browser configuration for stored agents */
 const browserConfigSchema = z.object({
-  provider: z.string().describe('Browser provider type (e.g., stagehand, playwright, browserbase)'),
+  provider: z.string().describe('Browser provider type (e.g., stagehand, playwright)'),
   headless: z.boolean().optional().describe('Run browser in headless mode (default: true)'),
   viewport: z
     .object({
@@ -152,11 +152,7 @@ const browserConfigSchema = z.object({
     .optional()
     .describe('Browser viewport dimensions'),
   timeout: z.number().optional().describe('Default timeout in milliseconds (default: 10000)'),
-  cdpUrl: z.string().optional().describe('CDP WebSocket URL for connecting to existing browser'),
-  scope: z.enum(['shared', 'thread']).optional().describe('Browser instance scope (default: thread)'),
   screencast: screencastOptionsSchema.optional().describe('Screencast options for streaming browser frames'),
-  profile: z.string().optional().describe('Path to Chrome/Chromium user data directory'),
-  executablePath: z.string().optional().describe('Path to browser executable'),
 });
 
 /** Browser reference: inline browser configuration */
