@@ -117,10 +117,6 @@ export class SlackChannel implements MastraChannel {
             updatedAt: new Date(),
           }),
         );
-        // Also call user's callback if provided
-        if (config.onTokenRotation) {
-          await config.onTokenRotation(tokens);
-        }
       },
     });
   }

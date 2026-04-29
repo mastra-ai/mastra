@@ -38,12 +38,6 @@ export interface SlackChannelConfig {
 
 
   /**
-   * Called when config tokens are rotated.
-   * Persist these to your database/env to avoid re-authentication.
-   */
-  onTokenRotation?: (tokens: { appConfigToken: string; appConfigRefreshToken: string }) => Promise<void>;
-
-  /**
    * Custom storage for installations.
    * Defaults to using Mastra's ChannelsStorage from the global storage.
    * Falls back to InMemoryChannelsStorage if no global storage is configured.
