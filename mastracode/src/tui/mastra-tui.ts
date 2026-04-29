@@ -226,12 +226,6 @@ export class MastraTUI {
         });
         this.state.ui.requestRender();
 
-        // Create thread lazily on first message (may load last-used model)
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
           // Hook blocked the message — remove it from the chat
@@ -242,6 +236,13 @@ export class MastraTUI {
             this.state.ui.requestRender();
           }
           continue;
+        }
+
+        // Create thread lazily on first message (may load last-used model).
+        // Runs after the hook check so we don't create a thread for blocked messages.
+        if (this.state.pendingNewThread) {
+          await this.state.harness.createThread();
+          this.state.pendingNewThread = false;
         }
 
         // Normal send — fire and forget; events handle the rest
