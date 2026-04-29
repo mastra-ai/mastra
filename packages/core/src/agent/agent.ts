@@ -2634,7 +2634,7 @@ export class Agent<
     mastraProxy,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
-    inputProcessors,
+    suppressEagerSkillTools,
     ...rest
   }: {
     runId?: string;
@@ -2644,7 +2644,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    inputProcessors?: InputProcessorOrWorkflow[];
+    suppressEagerSkillTools: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -2658,17 +2658,13 @@ export class Agent<
       return convertedSkillTools;
     }
 
-    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
-    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
-    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
-
     const skillTools = createSkillTools(workspace.skills);
 
     if (Object.keys(skillTools).length > 0) {
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
 
       for (const [toolName, tool] of Object.entries(skillTools)) {
-        if (hasOnDemandProcessor && !hasSkillsProcessor && (toolName === 'skill' || toolName === 'skill_search')) {
+        if (suppressEagerSkillTools && (toolName === 'skill' || toolName === 'skill_search')) {
           continue;
         }
         const toolObj = tool;
@@ -4606,6 +4602,10 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
+    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
+    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
+
     const skillTools = await this.listSkillTools({
       runId,
       resourceId,
@@ -4615,7 +4615,7 @@ export class Agent<
       mastraProxy,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
-      inputProcessors,
+      suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
     const channelTools = await this.listChannelTools({
