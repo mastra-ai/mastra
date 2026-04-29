@@ -154,6 +154,7 @@ export class MemoryPG extends MemoryStorage {
           'bufferedReflection',
           'bufferedReflectionTokens',
           'bufferedReflectionInputTokens',
+          'reflectedObservationLineCount',
           'bufferedObservationChunks',
           'isBufferingObservation',
           'isBufferingReflection',
