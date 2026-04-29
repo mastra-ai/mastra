@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.29.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9))
+
+- Fixed several processor bugs: BatchPartsProcessor no longer drops non-text parts (tool calls, step events) when they trigger a text batch flush. PIIDetector now correctly applies the confidence threshold to individual detections instead of flagging any detection regardless of confidence. Added missing break/return statements after abort() calls in PII detector and language detector switch statements. Unified error handling across all LLM-based processors to consistently use abort() for proper tripwire tracking in observability spans. ([#15881](https://github.com/mastra-ai/mastra/pull/15881))
+
+- Fixed duplicate provider response items from being re-added during agent loops. ([#15897](https://github.com/mastra-ai/mastra/pull/15897))
+
+- Fixed `getOrCreateSpan` to restore previous span-parenting behavior. ([#15907](https://github.com/mastra-ai/mastra/pull/15907))
+  Calls without `tracingContext.currentSpan` now start a new root span instead of attaching to ambient context, preventing unintended nesting.
+
+- Fixed Anthropic prompt-caching cache-write tokens being overwritten with the latest step's value instead of summed across multi-step runs. ([#15828](https://github.com/mastra-ai/mastra/pull/15828))
+
+  In multi-step agent runs (e.g. a subagent calling a model 3 times), per-step `usage.inputTokens.cacheWrite` was dropped during V3-to-V2 usage normalization and only survived in `raw`, which RunOutput intentionally keeps as the latest step. The aggregated total therefore reflected only the last step's cache-write tokens.
+
+  Added a new top-level `cacheCreationInputTokens` field on `LanguageModelUsage`. The V3 usage normalizer now extracts it from `inputTokens.cacheWrite`, and `RunOutput.updateUsageCount`/`populateUsageCount` sum it across steps, mirroring how `cachedInputTokens` already aggregates cache-read tokens. `MastraAgentNetworkStream` was updated symmetrically.
+
+  ```ts
+  // totalUsage on a 3-step Anthropic run with prompt caching:
+  // Before: { cacheCreationInputTokens: 4005 }   // only the last step
+  // After:  { cacheCreationInputTokens: 5268 }   // 967 + 296 + 4005
+  ```
+
+## 1.29.1-alpha.2
+
+### Patch Changes
+
+- Fixed several processor bugs: BatchPartsProcessor no longer drops non-text parts (tool calls, step events) when they trigger a text batch flush. PIIDetector now correctly applies the confidence threshold to individual detections instead of flagging any detection regardless of confidence. Added missing break/return statements after abort() calls in PII detector and language detector switch statements. Unified error handling across all LLM-based processors to consistently use abort() for proper tripwire tracking in observability spans. ([#15881](https://github.com/mastra-ai/mastra/pull/15881))
+
+- Fixed duplicate provider response items from being re-added during agent loops. ([#15897](https://github.com/mastra-ai/mastra/pull/15897))
+
 ## 1.29.1-alpha.1
 
 ### Patch Changes
