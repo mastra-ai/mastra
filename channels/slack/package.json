@@ -57,5 +57,12 @@
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
     "directory": "channels/slack"
+  },
+  "homepage": "https://mastra.ai",
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }
