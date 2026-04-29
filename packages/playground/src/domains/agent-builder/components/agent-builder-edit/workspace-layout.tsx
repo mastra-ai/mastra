@@ -17,6 +17,8 @@ interface WorkspaceLayoutProps {
   configure: ReactNode;
   defaultExpanded?: boolean;
   detailOpen?: boolean;
+  /** Optional browser modal overlay rendered outside the layout panels */
+  browserOverlay?: ReactNode;
 }
 
 export const WorkspaceLayout = ({
@@ -29,6 +31,7 @@ export const WorkspaceLayout = ({
   configure,
   defaultExpanded = false,
   detailOpen = false,
+  browserOverlay,
 }: WorkspaceLayoutProps) => {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -93,6 +96,7 @@ export const WorkspaceLayout = ({
           </div>
         </div>
       </div>
+      {browserOverlay}
     </div>
   );
 };

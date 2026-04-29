@@ -10,6 +10,8 @@ import { MessageList } from '../chat-primitives/message-list';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-chat-context';
 import { StreamChatProvider } from './stream-chat-provider';
+import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
+import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface AgentChatPanelProviderProps {
@@ -87,7 +89,12 @@ export const AgentChatPanelProvider = ({
   );
 };
 
-export const AgentChatPanelChat = () => {
+interface AgentChatPanelChatProps {
+  /** When true, renders the browser thumbnail above the composer */
+  hasBrowser?: boolean;
+}
+
+export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatProps) => {
   const isRunning = useStreamRunning();
   const send = useStreamSend();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
@@ -95,6 +102,7 @@ export const AgentChatPanelChat = () => {
   return (
     <div className="flex h-full min-h-0 flex-col px-6">
       <AgentChatMessageList onStarterPromptSelect={setDraft} />
+      {hasBrowser && <BrowserThumbnailSlot />}
       <AgentChatComposer
         draft={draft}
         setDraft={setDraft}
@@ -103,6 +111,17 @@ export const AgentChatPanelChat = () => {
         handleKeyDown={handleKeyDown}
         isRunning={isRunning}
       />
+    </div>
+  );
+};
+
+/** Shows the browser thumbnail when a session is active and not in modal/sidebar mode */
+const BrowserThumbnailSlot = () => {
+  const { hasSession, viewMode } = useBrowserSession();
+  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') return null;
+  return (
+    <div className="mx-auto mb-2 w-full max-w-3xl">
+      <BrowserThumbnail />
     </div>
   );
 };
