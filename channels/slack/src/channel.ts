@@ -766,6 +766,38 @@ export class SlackChannel implements MastraChannel {
       throw new Error(`Agent "${agentId}" not found`);
     }
 
+    // If there's already a pending installation, return its authorization URL
+    // instead of creating a duplicate Slack app
+    const storage = await this.#getStorage();
+    const existingRecord = await storage.getInstallationByAgent(PLATFORM, agentId);
+    if (existingRecord?.status === 'pending') {
+      try {
+        const pending = this.#parsePendingInstallation(existingRecord);
+        const decrypted = this.#decryptPendingInstallation(pending);
+        // Update redirectUrl if the caller provided one (e.g., different browser tab)
+        if (options?.redirectUrl && decrypted.redirectUrl !== options.redirectUrl) {
+          await this.#savePendingInstallation(
+            this.#encryptPendingInstallation({ ...decrypted, redirectUrl: options.redirectUrl }),
+          );
+        }
+        console.log(`[Slack] Reusing existing pending installation for "${agentId}"`);
+        return {
+          type: 'oauth' as const,
+          installationId: decrypted.id,
+          authorizationUrl: decrypted.authorizationUrl,
+        };
+      } catch {
+        // Corrupt pending record — delete it and create a fresh one
+        console.warn(`[Slack] Corrupt pending installation for "${agentId}", replacing it`);
+        await storage.deleteInstallation(existingRecord.id);
+      }
+    }
+
+    // If already connected, throw rather than creating a second app
+    if (existingRecord?.status === 'active') {
+      throw new Error(`Agent "${agentId}" is already connected to Slack. Disconnect first to reconnect.`);
+    }
+
     const config = options ?? {};
 
     // Generate unique webhook ID for this installation
@@ -902,20 +934,36 @@ export class SlackChannel implements MastraChannel {
 
   /**
    * List all Slack installations (public info only).
+   * Includes both active and pending installations.
    */
   async listInstallations(): Promise<ChannelInstallationInfo[]> {
-    const installations = await this.#listInstallations();
-    return installations.map(i => {
-      const decrypted = this.#decryptInstallation(i);
-      return {
-        id: decrypted.id,
-        platform: PLATFORM,
-        agentId: decrypted.agentId,
-        status: 'active' as const,
-        displayName: decrypted.teamName ?? decrypted.teamId,
-        installedAt: decrypted.installedAt,
-      };
-    });
+    const storage = await this.#getStorage();
+    const records = await storage.listInstallations(PLATFORM);
+    const results: ChannelInstallationInfo[] = [];
+
+    for (const record of records) {
+      if (record.status === 'active') {
+        const decrypted = this.#decryptInstallation(this.#parseInstallation(record));
+        results.push({
+          id: decrypted.id,
+          platform: PLATFORM,
+          agentId: decrypted.agentId,
+          status: 'active',
+          displayName: decrypted.teamName ?? decrypted.teamId,
+          installedAt: decrypted.installedAt,
+        });
+      } else if (record.status === 'pending') {
+        results.push({
+          id: record.id,
+          platform: PLATFORM,
+          agentId: record.agentId,
+          status: 'pending',
+          installedAt: record.createdAt,
+        });
+      }
+    }
+
+    return results;
   }
 
   /**
