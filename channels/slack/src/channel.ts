@@ -69,11 +69,14 @@ function hashConfig(
  *   channels: { slack },
  * });
  *
- * // Connect an agent to Slack (creates app, returns OAuth URL)
- * const { authorizationUrl } = await slack.connect('my-agent', {
+ * // Connect an agent to Slack (creates app, returns OAuth connect result)
+ * const result = await slack.connect('my-agent', {
  *   name: 'My Bot',
  *   slashCommands: ['/ask', '/help'],
  * });
+ * if (result.type === 'oauth') {
+ *   // Redirect user to result.authorizationUrl
+ * }
  * ```
  */
 export class SlackChannel implements MastraChannel {
@@ -744,7 +747,7 @@ export class SlackChannel implements MastraChannel {
   /**
    * Connect an agent to Slack by creating a new Slack app.
    *
-   * @returns Authorization URL for the user to install the app
+   * @returns OAuth connect result with authorization URL for user redirect
    */
   async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult> {
     if (!this.#manifestClient) {
@@ -846,7 +849,7 @@ export class SlackChannel implements MastraChannel {
     }
 
     return {
-      appId: appCredentials.appId,
+      type: 'oauth' as const,
       installationId,
       authorizationUrl,
     };

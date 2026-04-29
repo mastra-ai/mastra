@@ -57,7 +57,17 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
       { agentId },
       {
         onSuccess: result => {
-          window.location.href = result.authorizationUrl;
+          switch (result.type) {
+            case 'oauth':
+              window.location.href = result.authorizationUrl;
+              break;
+            case 'deep_link':
+              window.open(result.url, '_blank');
+              break;
+            case 'immediate':
+              // No user action needed — just refetch installations
+              break;
+          }
         },
       },
     );

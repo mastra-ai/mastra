@@ -11,6 +11,9 @@ export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export type {
   ChannelContext,
+  ChannelConnectDeepLink,
+  ChannelConnectImmediate,
+  ChannelConnectOAuth,
   ChannelConnectResult,
   ChannelInstallationInfo,
   ChannelPlatformInfo,

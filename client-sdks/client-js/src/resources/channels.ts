@@ -18,11 +18,24 @@ export interface ChannelInstallationInfo {
   installedAt?: string;
 }
 
-export interface ChannelConnectResult {
+export interface ChannelConnectOAuth {
+  type: 'oauth';
   authorizationUrl: string;
   installationId: string;
-  appId: string;
 }
+
+export interface ChannelConnectDeepLink {
+  type: 'deep_link';
+  url: string;
+  installationId: string;
+}
+
+export interface ChannelConnectImmediate {
+  type: 'immediate';
+  installationId: string;
+}
+
+export type ChannelConnectResult = ChannelConnectOAuth | ChannelConnectDeepLink | ChannelConnectImmediate;
 
 export class Channels extends BaseResource {
   constructor(options: ClientOptions) {
@@ -52,11 +65,11 @@ export class Channels extends BaseResource {
   }
 
   /**
-   * Connects an agent to a channel platform. Returns an OAuth authorization URL.
+   * Connects an agent to a channel platform.
    * @param platform - Platform identifier (e.g., "slack")
    * @param agentId - Agent to connect
    * @param options - Platform-specific connection options
-   * @returns Connect result with authorization URL
+   * @returns Discriminated connect result — check `type` for the authorization flow
    */
   connect(platform: string, agentId: string, options?: Record<string, unknown>): Promise<ChannelConnectResult> {
     return this.request(`/channels/${platform}/connect`, {

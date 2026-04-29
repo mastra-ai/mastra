@@ -42,11 +42,28 @@ const channelInstallationInfoSchema = z.object({
   installedAt: z.coerce.date().optional().describe('Installation timestamp'),
 });
 
-const channelConnectResultSchema = z.object({
+const channelConnectOAuthSchema = z.object({
+  type: z.literal('oauth').describe('OAuth-based connection requiring browser redirect'),
   authorizationUrl: z.string().describe('OAuth authorization URL for user redirect'),
   installationId: z.string().describe('Installation identifier'),
-  appId: z.string().describe('Platform app identifier'),
 });
+
+const channelConnectDeepLinkSchema = z.object({
+  type: z.literal('deep_link').describe('Deep-link connection requiring native app interaction'),
+  url: z.string().describe('Deep link URL to open in platform app'),
+  installationId: z.string().describe('Installation identifier'),
+});
+
+const channelConnectImmediateSchema = z.object({
+  type: z.literal('immediate').describe('Immediate connection with no user interaction needed'),
+  installationId: z.string().describe('Installation identifier'),
+});
+
+const channelConnectResultSchema = z.discriminatedUnion('type', [
+  channelConnectOAuthSchema,
+  channelConnectDeepLinkSchema,
+  channelConnectImmediateSchema,
+]);
 
 export const listChannelPlatformsResponseSchema = z.array(channelPlatformInfoSchema);
 

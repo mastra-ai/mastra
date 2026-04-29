@@ -39,17 +39,50 @@ export interface ChannelInstallationInfo {
   installedAt?: Date;
 }
 
+// =============================================================================
+// Connect Result (discriminated union for different platform flows)
+// =============================================================================
+
 /**
- * Result of connecting an agent to a channel platform.
+ * OAuth-based connection — user must be redirected to an authorization URL.
+ * Used by platforms like Slack where the connection requires browser-based consent.
  */
-export interface ChannelConnectResult {
+export interface ChannelConnectOAuth {
+  type: 'oauth';
   /** URL to redirect the user to for OAuth authorization. */
   authorizationUrl: string;
   /** Unique installation ID. */
   installationId: string;
-  /** Platform app ID. */
-  appId: string;
 }
+
+/**
+ * Deep-link-based connection — user opens a link in a native app to confirm.
+ * Used by platforms like Telegram where a deep link triggers in-app bot creation.
+ * Completion arrives asynchronously via webhook, not a browser redirect.
+ */
+export interface ChannelConnectDeepLink {
+  type: 'deep_link';
+  /** Deep link URL for the user to open (e.g., in Telegram). */
+  url: string;
+  /** Unique installation ID. */
+  installationId: string;
+}
+
+/**
+ * Immediate connection — no user interaction needed.
+ * Used by platforms where API keys or tokens are sufficient and the bot is ready instantly.
+ */
+export interface ChannelConnectImmediate {
+  type: 'immediate';
+  /** Unique installation ID. */
+  installationId: string;
+}
+
+/**
+ * Result of connecting an agent to a channel platform.
+ * Discriminated on the `type` field to support different platform authorization flows.
+ */
+export type ChannelConnectResult = ChannelConnectOAuth | ChannelConnectDeepLink | ChannelConnectImmediate;
 
 // =============================================================================
 // MastraChannel interface
@@ -107,7 +140,7 @@ export interface MastraChannel {
 
   /**
    * Connect an agent to this channel platform.
-   * Creates a platform app and returns an OAuth authorization URL.
+   * Returns a discriminated result indicating the authorization flow required.
    */
   connect?(agentId: string, options?: Record<string, unknown>): Promise<ChannelConnectResult>;
 
