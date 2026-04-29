@@ -1212,9 +1212,9 @@ export class SlackChannel implements MastraChannel {
       return c.json({ ok: true });
     }
 
-    // Get or create AgentChannels with Slack adapter
+    // Resolve the current adapter for this installation
     const displayName = installation.name || agent.name || installation.agentId;
-    const adapter =
+    const currentAdapter =
       this.#adapters.get(installation.id) ??
       createSlackAdapter({
         botToken: installation.botToken,
@@ -1222,10 +1222,14 @@ export class SlackChannel implements MastraChannel {
         signingSecret: installation.signingSecret,
         userName: displayName,
       });
-    const agentChannels = this.#createAgentChannels(agent, adapter);
 
-    // Ensure initialized
-    await agentChannels.initialize(this.#mastra);
+    // Reuse existing AgentChannels if it has the same adapter (e.g., from startup activation).
+    // Replace it if the adapter changed (disconnect + reconnect creates a new one).
+    let agentChannels = agent.getChannels();
+    if (!agentChannels || agentChannels.adapters.slack !== currentAdapter) {
+      agentChannels = this.#createAgentChannels(agent, currentAdapter);
+      await agentChannels.initialize(this.#mastra);
+    }
 
     // Delegate event handling to AgentChannels
     // Reconstruct the request with the raw body we already read
