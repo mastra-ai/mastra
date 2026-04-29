@@ -115,6 +115,23 @@ describe('fetchChangelog (integration)', () => {
     expect(result).toContain('evals');
   }, 10_000);
 
+  it('produces the expected exact output for a version with many entries (v0.10.0)', async () => {
+    const result = await fetchChangelog('0.10.0');
+    expect(result).toBe(
+      [
+        '  • Added a "Custom response..." option to questions with predefined choices.',
+        '  • Added a /thread command to show the active thread, resource, and pending-new-thread state.',
+        '  • Persist observational memory threshold settings across restarts and restore per-thread overrides.',
+        '  • Improved Mastra Code prompt guidance so responses stay concise and terminal-friendly.',
+        '  • Fixed provider name quoting in gateway sync to properly quote digit-leading provider IDs (e.g.',
+        '  • Limit dynamically injected AGENTS.md reminders to 1000 estimated tokens by default and tell mastracode observational…',
+        '  • Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminde…',
+        '  • Fixed the thread selector so it shows all threads consistently and opens faster.',
+        '  • Custom slash commands now load correctly from all configured directories',
+      ].join('\n'),
+    );
+  }, 10_000);
+
   it('returns null for a non-existent version', async () => {
     const result = await fetchChangelog('0.0.0-does-not-exist');
     expect(result).toBeNull();
