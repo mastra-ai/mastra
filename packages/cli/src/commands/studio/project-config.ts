@@ -8,6 +8,25 @@ export interface ProjectConfig {
   projectName: string;
   projectSlug?: string;
   organizationId: string;
+  disablePlatformObservability?: boolean;
+}
+
+export function getProjectConfigToSave(
+  projectId: string,
+  projectName: string,
+  projectSlug: string,
+  organizationId: string,
+  projectConfig: ProjectConfig | null,
+): ProjectConfig {
+  return {
+    projectId,
+    projectName,
+    projectSlug,
+    organizationId,
+    ...(projectConfig?.disablePlatformObservability !== undefined
+      ? { disablePlatformObservability: projectConfig.disablePlatformObservability }
+      : {}),
+  };
 }
 
 function resolveConfigPath(dir: string, configFile?: string): string {
