@@ -174,6 +174,7 @@ export class InternalMastraMCPClient extends MastraBase {
       },
       {
         capabilities: clientCapabilities,
+        ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
       },
     );
 
