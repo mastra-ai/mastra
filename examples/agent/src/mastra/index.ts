@@ -152,6 +152,7 @@ export const mastra = new Mastra({
           workflows: true,
           stars: true,
           model: true,
+          browser: true,
         },
       },
       configuration: {
@@ -160,6 +161,12 @@ export const mastra = new Mastra({
           memory: {
             options: {
               lastMessages: 10,
+            },
+          },
+          browser: {
+            type: 'inline',
+            config: {
+              provider: 'stagehand',
             },
           },
           models: {
