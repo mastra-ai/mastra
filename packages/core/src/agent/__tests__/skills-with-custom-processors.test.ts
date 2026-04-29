@@ -10,6 +10,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Processor, ProcessInputArgs } from '../../processors/index';
+import { SkillSearchProcessor } from '../../processors/processors/skill-search';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import { Agent } from '../index';
@@ -97,14 +98,17 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
   let mockModel: MockLanguageModelV2;
   let mockWorkspace: Workspace;
   let capturedTools: unknown;
+  let capturedPrompt: unknown;
 
   beforeEach(() => {
     capturedTools = undefined;
+    capturedPrompt = undefined;
 
     mockModel = new MockLanguageModelV2({
       doGenerate: async ({ prompt, tools }) => {
         // Capture the tools that were passed to the model
         capturedTools = tools;
+        capturedPrompt = prompt;
 
         return {
           content: [{ type: 'text', text: 'response' }],
@@ -117,6 +121,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       doStream: async ({ prompt, tools }) => {
         // Capture the tools that were passed to the model
         capturedTools = tools;
+        capturedPrompt = prompt;
 
         return {
           stream: convertArrayToReadableStream([
@@ -242,6 +247,59 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill');
       expect(toolNames).toContain('skill_search');
+    });
+  });
+
+  describe('SkillSearchProcessor on-demand mode', () => {
+    it('should avoid eager skill context and overlapping skill tools', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('search_skills');
+      expect(toolNames).toContain('load_skill');
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).not.toContain('skill');
+      expect(toolNames).not.toContain('skill_search');
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).toContain('To discover available skills, call search_skills');
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('Skills are NOT tools');
+    });
+
+    it('should apply on-demand mode when SkillSearchProcessor is passed to generate options', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+      });
+
+      await agent.generate('Hello', {
+        inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
+      });
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('search_skills');
+      expect(toolNames).toContain('load_skill');
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).not.toContain('skill');
+      expect(toolNames).not.toContain('skill_search');
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).toContain('To discover available skills, call search_skills');
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('Skills are NOT tools');
     });
   });
 });
