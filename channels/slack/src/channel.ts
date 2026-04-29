@@ -51,7 +51,7 @@ function hashConfig(
  *
  * Handles:
  * - Programmatic Slack app creation via manifest API
- * - OAuth flow for workspace installations
+ * - OAuth flow for Slack workspace installations
  * - Webhook routing for events and slash commands
  * - Message handling via @chat-adapter/slack
  *
