@@ -38,13 +38,13 @@ Vale is a syntax-aware linter for prose that can help enforce style and grammar 
    pnpm run vale:download
    ```
 
-2. Install `mdx2vast` globally, which is a dependency for Vale to lint MDX files:
+1. Install `mdx2vast` globally, which is a dependency for Vale to lint MDX files:
 
    ```bash
    npm install -g mdx2vast
    ```
 
-3. Then you can run the Vale linter:
+1. Then you can run the Vale linter:
 
    ```bash
    pnpm run lint:vale
