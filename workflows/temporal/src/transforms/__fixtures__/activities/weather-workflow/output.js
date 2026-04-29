@@ -1,13 +1,16 @@
 import { z } from 'zod';
+
 function createStep(args) {
   return async params => {
-    const { mastra } = await import('../index');
     return args.execute({
       ...params,
       mastra,
     });
   };
 }
+const mastra = {
+  marker: 'ok',
+};
 const fetchWeather = createStep({
   id: 'fetch-weather',
   inputSchema: z.object({
@@ -28,4 +31,5 @@ const planActivities = createStep({
   }),
   execute: async ({ inputData }) => inputData,
 });
+
 export { fetchWeather, planActivities };

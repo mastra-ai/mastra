@@ -1,22 +1,55 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import type { Configuration } from 'webpack';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BuildBundler } from './mastra-deployer';
 import { MastraPlugin } from './plugin';
 import { buildTemporalActivitiesModule } from './transforms/activities';
-import { buildTemporalWorkflowModule, buildWorkflowEntryModuleFromRegistry } from './transforms/workflows';
-import mastraTemporalWorkflowLoader from './webpack-loader';
-import { WorkflowExportRegistry } from './webpack-plugin';
+import { buildTemporalWorkflowModule } from './transforms/workflows';
+
+function stripInlineSourceMap(code: string): string {
+  return code.replace(/\n\/\/# sourceMappingURL=data:application\/json[^\n]*\n?$/, '');
+}
 
 async function transform(source: string): Promise<string> {
-  return (await buildTemporalWorkflowModule(source, '/virtual/weather-workflow.ts')).code;
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'temporal-index-workflow-'));
+  const inputPath = path.join(directory, 'weather-workflow.mjs');
+  await writeFile(inputPath, source);
+
+  const outputPath = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
+  return stripInlineSourceMap(await readFile(outputPath, 'utf-8'));
 }
 
 async function transformActivities(source: string): Promise<string> {
-  return buildTemporalActivitiesModule(source, '/virtual/weather-workflow.ts');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'temporal-index-activities-'));
+  const inputPath = path.join(directory, 'weather-workflow.mjs');
+  await writeFile(inputPath, source);
+
+  const { outputPath } = await buildTemporalActivitiesModule(inputPath, directory, 'activities.mjs');
+  return stripInlineSourceMap(await readFile(outputPath, 'utf-8'));
 }
+
+function mockCompiledBundle({
+  compiledEntrySource,
+  compiledWorkflowSource,
+  compiledWorkflowFileName = 'mastra.mjs',
+}: {
+  compiledEntrySource: string;
+  compiledWorkflowSource: string;
+  compiledWorkflowFileName?: string;
+}) {
+  return vi.spyOn(BuildBundler.prototype, 'bundle').mockImplementation(async (_entryFile, outputDirectory) => {
+    const outputDir = path.join(outputDirectory, 'output');
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(path.join(outputDir, 'index.mjs'), compiledEntrySource, 'utf8');
+    await writeFile(path.join(outputDir, compiledWorkflowFileName), compiledWorkflowSource, 'utf8');
+  });
+}
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await rm(path.resolve(process.cwd(), 'node_modules/.mastra'), { recursive: true, force: true });
+});
 
 describe('@mastra/temporal transform exports', () => {
   it('preserves export semantics for a locally declared workflow exported later', async () => {
@@ -30,6 +63,7 @@ describe('@mastra/temporal transform exports', () => {
     `);
 
     expect(output).toMatch(/export\s*(const\s+weatherWorkflow\s*=|\{\s*weatherWorkflow\s*\})/);
+    expect(output).not.toContain('weatherWorkflow.commit()');
   });
 
   it('preserves direct workflow exports', async () => {
@@ -40,9 +74,10 @@ describe('@mastra/temporal transform exports', () => {
     `);
 
     expect(output).toMatch(/export\s*(const\s+weatherWorkflow\s*=|\{\s*weatherWorkflow\s*\})/);
+    expect(output).not.toContain('weatherWorkflow.commit()');
   });
 
-  it('preserves non-workflow specifiers in mixed export lists', async () => {
+  it('removes non-workflow exports from mixed export lists', async () => {
     const output = await transform(`
       import { createWorkflow } from '@mastra/core/workflows';
 
@@ -53,8 +88,8 @@ describe('@mastra/temporal transform exports', () => {
       export { weatherWorkflow, otherValue };
     `);
 
-    expect(output).toContain('otherValue = 42');
-    expect(output).toMatch(/export\s*\{[\s\S]*otherValue[\s\S]*weatherWorkflow[\s\S]*\}/);
+    expect(output).not.toContain('otherValue');
+    expect(output).toMatch(/export\s*(const\s+weatherWorkflow\s*=|\{[\s\S]*weatherWorkflow[\s\S]*\})/);
   });
 
   it('preserves default workflow exports', async () => {
@@ -128,7 +163,7 @@ describe('@mastra/temporal transform exports', () => {
       }).then('fetch-weather');
     `);
 
-    expect(output).toContain('createWorkflow("weather-workflow")');
+    expect(output).toContain("createWorkflow('weather-workflow')");
     expect(output).not.toContain('inputSchema');
     expect(output).not.toContain('outputSchema');
     expect(output).not.toContain("from 'zod'");
@@ -148,7 +183,7 @@ describe('@mastra/temporal activities module transform', () => {
 
     expect(output).toContain('function createStep(args)');
     expect(output).toContain('const fetchWeather = createStep({');
-    expect(output).toMatch(/export\s*\{\s*fetchWeather\s*\}/);
+    expect(output).toMatch(/export\s*(const\s+fetchWeather\s*=|\{\s*fetchWeather\s*\})/);
   });
 
   it('extracts inline createStep calls from workflow chains and strips the workflow', async () => {
@@ -162,7 +197,7 @@ describe('@mastra/temporal activities module transform', () => {
     `);
 
     expect(output).toContain('const saveActivities = createStep({');
-    expect(output).toMatch(/export\s*\{\s*saveActivities\s*\}/);
+    expect(output).toMatch(/export\s*(const\s+saveActivities\s*=|\{\s*saveActivities\s*\})/);
     expect(output).not.toContain('weatherWorkflow');
     expect(output).not.toContain('.commit()');
   });
@@ -186,7 +221,7 @@ describe('@mastra/temporal activities module transform', () => {
     expect(output).not.toContain('loadClientConnectConfig');
     expect(output).not.toContain('const { createWorkflow, createStep }');
     expect(output).toContain('const fetchWeather = createStep({');
-    expect(output).toMatch(/export\s*\{\s*fetchWeather\s*\}/);
+    expect(output).toMatch(/export\s*(const\s+fetchWeather\s*=|\{\s*fetchWeather\s*\})/);
   });
 
   it('keeps helper code that extracted steps depend on', async () => {
@@ -196,7 +231,7 @@ describe('@mastra/temporal activities module transform', () => {
 
       const forecastSchema = z.object({ city: z.string() });
 
-      function getWeatherCondition(city: string) {
+      function getWeatherCondition(city) {
         return city.toUpperCase();
       }
 
@@ -207,22 +242,40 @@ describe('@mastra/temporal activities module transform', () => {
       });
     `);
 
-    expect(output).toContain('from "zod"');
+    expect(output).toMatch(/from ['"]zod['"]/);
     expect(output).toContain('const forecastSchema = z.object');
     expect(output).toContain('function getWeatherCondition(city)');
     expect(output).toContain('inputSchema: forecastSchema');
   });
 
-  it('uses a local createStep helper that imports mastra from index', async () => {
+  it('uses a local createStep helper with mastra', async () => {
     const output = await transformActivities(`
       import { createStep } from '@mastra/core/workflows';
 
+      const mastra = { getAgent() { return null; } };
       export const planActivities = createStep({ id: 'plan-activities', execute: async () => ({}) });
     `);
 
-    expect(output).toContain('await import("./index")');
+    expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('return args.execute({');
     expect(output).toContain('mastra');
+  });
+
+  it('keeps mastra declarations that reference stripped workflow bindings', async () => {
+    const output = await transformActivities(`
+      import { Mastra } from '@mastra/core/mastra';
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({}) });
+      const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(fetchWeather).commit();
+      const mastra = new Mastra({ workflows: { weatherWorkflow } });
+
+      export { mastra };
+    `);
+
+    expect(output).toContain('const mastra = new Mastra({');
+    expect(output).not.toContain('weatherWorkflow');
+    expect(output).toContain('return args.execute({');
   });
 
   it('strips createStep and createWorkflow from workflow imports while preserving other imports', async () => {
@@ -233,66 +286,21 @@ describe('@mastra/temporal activities module transform', () => {
       export const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => keepLegacyStep });
     `);
 
-    expect(output).toContain('import { LegacyStep } from "@mastra/core/workflows"');
+    expect(output).toContain("import { LegacyStep } from '@mastra/core/workflows'");
     expect(output).not.toContain('createWorkflow } from');
     expect(output).not.toContain('createStep,');
   });
 });
 
-describe('@mastra/temporal workflow entry module transform', () => {
-  it('rewrites the fixture entry file to re-export workflows', async () => {
-    const fixturePath = fileURLToPath(new URL('./__tests__/__fixtures__/before/index.ts', import.meta.url));
-    const source = await readFile(fixturePath, 'utf-8');
-    const workflowPath = fileURLToPath(new URL('./__tests__/__fixtures__/before/weather-workflow.ts', import.meta.url));
-
-    const output = await buildWorkflowEntryModuleFromRegistry(
-      source,
-      fixturePath,
-      new Map([[workflowPath, ['weatherWorkflow']]]),
-    );
-
-    expect(output).toMatch(/export\s*\{\s*weatherWorkflow\s*\}\s*from\s*['"]\.\/weather-workflow['"]/);
-    expect(output).not.toContain('mastra');
-  });
-
-  it('supports multiple workflow imports and explicit workflow property aliases', async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-entry-'));
-    const entryPath = path.join(tempDir, 'index.ts');
-    const weatherPath = path.join(tempDir, 'weather-workflow.ts');
-    const activityPath = path.join(tempDir, 'activity-workflow.ts');
-
-    await writeFile(weatherPath, 'export const weatherWorkflow = () => null;', 'utf8');
-    await writeFile(activityPath, 'export const activityWorkflow = () => null;', 'utf8');
-
-    const output = await buildWorkflowEntryModuleFromRegistry(
-      `
-      import { Mastra } from '@mastra/core/mastra';
-      import { weatherWorkflow } from './weather-workflow';
-      import { activityWorkflow as forecastWorkflow } from './activity-workflow';
-      import { otherValue } from './constants';
-
-      export const mastra = new Mastra({
-        workflows: {
-          weatherWorkflow,
-          forecast: forecastWorkflow,
-        },
-      });
-    `,
-      entryPath,
-      new Map([
-        [weatherPath, ['weatherWorkflow']],
-        [activityPath, ['forecastWorkflow']],
-      ]),
-    );
-
-    expect(output).toMatch(/export\s*\{\s*weatherWorkflow\s*\}\s*from\s*['"]\.\/weather-workflow['"]/);
-    expect(output).toMatch(/export\s*\{\s*forecastWorkflow\s*\}\s*from\s*['"]\.\/activity-workflow['"]/);
-    expect(output).not.toContain('otherValue');
-    expect(output).not.toContain('@mastra/core/mastra');
-  });
-});
-
 describe('@mastra/temporal configureWorker activities', () => {
+  it('requires prebuild output before configureWorker', () => {
+    const plugin = new MastraPlugin({});
+
+    expect(() => plugin.configureWorker({ taskQueue: 'mastra' } as any)).toThrow(
+      'MastraPlugin.prebuild() must be called before use',
+    );
+  });
+
   it('compiles workflow activities and wires them into worker options by step id', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-worker-'));
     const entryPath = path.join(tempDir, 'src', 'index.ts');
@@ -329,7 +337,7 @@ describe('@mastra/temporal configureWorker activities', () => {
         import { weatherWorkflow } from './workflows/weather-workflow';
 
         class Mastra {
-          constructor(_config: unknown) {}
+          constructor(_config) {}
         }
 
         export const mastra = { marker: 'ok' };
@@ -337,203 +345,97 @@ describe('@mastra/temporal configureWorker activities', () => {
       `,
     );
 
-    const plugin = new MastraPlugin({ src: entryPath });
-    const workerOptions = plugin.configureWorker({ taskQueue: 'mastra' } as any);
+    const compiledEntrySource = `
+      const init = () => ({
+        createStep: args => args,
+        createWorkflow: config => ({
+          then: step => ({
+            step,
+            commit() {},
+          }),
+        }),
+      });
+
+      const { createWorkflow, createStep } = init();
+
+      const fetchWeather = createStep({
+        id: 'fetch-weather',
+        execute: async ({ inputData, mastra }) => ({ inputData, marker: mastra.marker }),
+      });
+
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(fetchWeather);
+      export const mastra = { marker: 'ok' };
+    `;
+    const compiledWorkflowSource = 'export const unused = true;';
+    const bundleSpy = mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
+
+    const plugin = new MastraPlugin({});
+    await plugin.prebuild({ entryFile: entryPath });
+
+    await expect(
+      readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activity-bindings.json'), 'utf8'),
+    ).resolves.toContain('fetch-weather');
+
+    const workerPlugin = new MastraPlugin({});
+    const workerOptions = workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'
     ];
 
-    expect(workerOptions.workflowsPath).toBe(entryPath);
+    expect(bundleSpy).toHaveBeenCalledWith(entryPath, path.resolve(process.cwd(), 'node_modules/.mastra'), {
+      toolsPaths: [],
+      projectRoot: process.cwd(),
+    });
+    expect(workerOptions.workflowsPath).toBe(path.resolve(process.cwd(), 'node_modules/.mastra/workflow.mjs'));
     expect(fetchWeather).toBeTypeOf('function');
     await expect(fetchWeather({ inputData: { city: 'SF' } })).resolves.toEqual({
       inputData: { city: 'SF' },
       marker: 'ok',
     });
+    const workflowModule = await readFile(path.resolve(process.cwd(), 'node_modules/.mastra/workflow.mjs'), 'utf8');
+    expect(workflowModule).toContain('weatherWorkflow');
+    expect(workflowModule).not.toContain('export { mastra');
+    expect(workflowModule).not.toContain('export const mastra');
     await expect(
-      readFile(path.join(tempDir, 'src', 'workflows', '.weather-workflow.temporal.activities.mjs'), 'utf8'),
+      readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activities.mjs'), 'utf8'),
     ).resolves.toContain('function createStep(args)');
-  });
-});
-
-describe('@mastra/temporal debug output', () => {
-  it('wires debug output into the webpack loader and bundle config', async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-bundler-'));
-    const entryFile = path.join(tempDir, 'src', 'index.ts');
-    const workflowFile = path.join(tempDir, 'src', 'workflows', 'weather-workflow.ts');
-
-    await mkdir(path.dirname(workflowFile), { recursive: true });
-    await writeFile(
-      entryFile,
-      `
-        import { Mastra } from '@mastra/core/mastra';
-        import { weatherWorkflow } from './workflows/weather-workflow';
-
-        export const mastra = new Mastra({ workflows: { weatherWorkflow } });
-      `,
-      'utf8',
-    );
-    await writeFile(
-      workflowFile,
-      `
-        import { createWorkflow } from '@mastra/core/workflows';
-
-        export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather');
-      `,
-      'utf8',
-    );
-
-    const plugin = new MastraPlugin({ src: entryFile, debug: true });
-    const bundleOptions = plugin.configureBundler({ workflowsPath: entryFile });
-    const webpackConfig = bundleOptions.webpackConfigHook?.({ module: { rules: [] }, plugins: [] } as Configuration);
-
-    expect(webpackConfig).toBeDefined();
-
-    const rules = webpackConfig?.module?.rules ?? [];
-    const loaderRule = rules.find(rule => typeof rule === 'object' && rule && 'use' in rule) as
-      | { use?: { options?: { entryFile?: string; debugOutputDir?: string | null } } }
-      | undefined;
-
-    expect(loaderRule?.use?.options?.entryFile).toBe(entryFile);
-    expect(loaderRule?.use?.options?.debugOutputDir).toBe(path.resolve(process.cwd(), '.mastra/temporal'));
-    expect(webpackConfig?.plugins).toHaveLength(1);
+    await expect(
+      readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activities.mjs'), 'utf8'),
+    ).resolves.not.toContain('./output/index.mjs');
   });
 
-  it('writes emitted webpack bundle assets from assetEmitted content', async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-bundler-'));
-    const entryFile = path.join(tempDir, 'src', 'index.ts');
-    const workflowFile = path.join(tempDir, 'src', 'workflows', 'weather-workflow.ts');
+  it('bundles local mastra bindings into the generated activities module', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-plugin-'));
+    const entryPath = path.join(tempDir, 'src', 'index.ts');
+    const compiledEntrySource = `
+      import { createWorkflow, createStep } from '@mastra/core/workflows';
 
-    await mkdir(path.dirname(workflowFile), { recursive: true });
-    await writeFile(
-      entryFile,
-      `
-        import { Mastra } from '@mastra/core/mastra';
-        import { weatherWorkflow } from './workflows/weather-workflow';
+      const mastra = { marker: 'ok' };
+      const fetchWeather = createStep({
+        id: 'fetch-weather',
+        execute: async ({ inputData, mastra }) => ({ inputData, marker: mastra.marker }),
+      });
 
-        export const mastra = new Mastra({ workflows: { weatherWorkflow } });
-      `,
-      'utf8',
-    );
-    await writeFile(
-      workflowFile,
-      `
-        import { createWorkflow } from '@mastra/core/workflows';
-
-        export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather');
-      `,
-      'utf8',
-    );
-
-    const plugin = new MastraPlugin({ src: entryFile, debug: true });
-    const bundleOptions = plugin.configureBundler({ workflowsPath: entryFile });
-    const webpackConfig = bundleOptions.webpackConfigHook?.({ module: { rules: [] }, plugins: [] } as Configuration);
-    const debugPlugin = webpackConfig?.plugins?.find(
-      plugin => plugin && plugin.constructor?.name === 'WriteWebpackBundleDebugPlugin',
-    ) as { apply: (compiler: any) => void };
-    let emitAsset: ((filename: string, info: { content: Buffer }) => Promise<void>) | undefined;
-
-    debugPlugin.apply({
-      hooks: {
-        assetEmitted: {
-          tapPromise: (_name: string, handler: (filename: string, info: { content: Buffer }) => Promise<void>) => {
-            emitAsset = handler;
-          },
-        },
-      },
-    });
-
-    expect(emitAsset).toBeDefined();
-
-    await emitAsset?.('workflow-bundle-test.js', { content: Buffer.from('module.exports = {};') });
-
-    const writtenBundle = await readFile(
-      path.join(process.cwd(), '.mastra/temporal/bundle/workflow-bundle-test.js'),
-      'utf-8',
-    );
-    expect(writtenBundle).toBe('module.exports = {};');
-  });
-
-  it('rewrites the entry module before webpack builds the dependency graph', async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-loader-'));
-    const entryFile = path.join(tempDir, 'src', 'index.ts');
-    const workflowFile = path.join(tempDir, 'src', 'workflows', 'weather-workflow.ts');
-    const registry = new WorkflowExportRegistry();
-
-    await mkdir(path.dirname(workflowFile), { recursive: true });
-    await writeFile(
-      entryFile,
-      `
-        import { Mastra } from '@mastra/core/mastra';
-        import { weatherWorkflow } from './workflows/weather-workflow';
-        import { weatherAgent } from './agents/weather-agent';
-
-        export const mastra = new Mastra({
-          workflows: { weatherWorkflow },
-          agents: { weatherAgent },
-        });
-      `,
-      'utf8',
-    );
-    await writeFile(workflowFile, 'export const weatherWorkflow = null;', 'utf8');
-    registry.register(workflowFile, ['weatherWorkflow']);
-    const entrySource = await readFile(entryFile, 'utf8');
-
-    const output = await new Promise<string>((resolve, reject) => {
-      mastraTemporalWorkflowLoader.call(
-        {
-          resourcePath: entryFile,
-          getOptions: () => ({ entryFile, registry }),
-          async: () => (err: unknown, code?: string) => {
-            if (err) {
-              reject(err);
-              return;
-            }
-
-            resolve(code ?? '');
-          },
-        },
-        entrySource,
-      );
-    });
-
-    expect(output).toContain('export { weatherWorkflow } from "./workflows/weather-workflow";');
-    expect(output).not.toContain('weatherAgent');
-    expect(output).not.toContain('@mastra/core/mastra');
-  });
-
-  it('writes transformed workflow modules when debug output is enabled', async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-debug-'));
-    const entryFile = path.join(tempDir, 'src', 'index.ts');
-    const workflowFile = path.join(tempDir, 'src', 'workflows', 'weather-workflow.ts');
-    const debugOutputDir = path.join(tempDir, '.mastra', 'temporal');
-    const source = `
-      import { createWorkflow } from '@mastra/core/workflows';
-
-      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather');
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(fetchWeather);
     `;
+    const compiledWorkflowSource = `export const unused = true;`;
+    mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const output = await new Promise<string>((resolve, reject) => {
-      mastraTemporalWorkflowLoader.call(
-        {
-          resourcePath: workflowFile,
-          getOptions: () => ({ entryFile, debugOutputDir }),
-          async: () => (err: unknown, code?: string) => {
-            if (err) {
-              reject(err);
-              return;
-            }
+    const plugin = new MastraPlugin({});
+    await plugin.prebuild({ entryFile: entryPath });
 
-            resolve(code ?? '');
-          },
-        },
-        source,
-      );
+    const workerPlugin = new MastraPlugin({});
+    const workerOptions = workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
+    const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
+      'fetch-weather'
+    ];
+    const activitiesModule = await readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activities.mjs'), 'utf8');
+
+    await expect(fetchWeather({ inputData: { city: 'SF' } })).resolves.toEqual({
+      inputData: { city: 'SF' },
+      marker: 'ok',
     });
-
-    const debugModulePath = path.join(debugOutputDir, 'modules', 'workflows', 'weather-workflow.ts');
-    const writtenDebugModule = await readFile(debugModulePath, 'utf-8');
-
-    expect(writtenDebugModule).toBe(output);
-    expect(writtenDebugModule).toContain('.then("fetch-weather")');
+    expect(activitiesModule).toContain('const mastra = {');
+    expect(activitiesModule).not.toContain("await import('./activities.mjs')");
   });
 });

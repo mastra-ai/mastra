@@ -22,12 +22,4 @@ export default defineConfig([
       await cp(runtimeAssetPath, runtimeDistPath);
     },
   },
-  {
-    entry: ['src/webpack-loader.ts'],
-    format: ['cjs'],
-    outDir: 'dist',
-    dts: false,
-    clean: false,
-    sourcemap: true,
-  },
 ]);

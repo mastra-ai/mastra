@@ -1,172 +1,159 @@
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SimplePlugin } from '@temporalio/plugin';
-import type { BundleOptions, WorkerOptions } from '@temporalio/worker';
-import type { Compiler, Configuration } from 'webpack';
-import { buildTemporalActivitiesModule, collectTemporalActivityBindings } from './transforms/activities';
-import { collectTemporalWorkflowExports, resolveWorkflowEntriesSync } from './transforms/workflows';
-import { WorkflowExportRegistry } from './webpack-plugin';
+import type { WorkerOptions } from '@temporalio/worker';
+import type { TemporalActivityBinding } from './transforms/activities';
+import { buildTemporalActivitiesModule } from './transforms/activities';
+import { buildTemporalWorkflowModule } from './transforms/workflows';
 
-function getDebugOutputDir(): string {
-  return path.resolve(process.cwd(), '.mastra/temporal');
+const CACHE_PATH = 'node_modules/.mastra';
+const WORKFLOW_FILE_NAME = 'workflow.mjs';
+const ACTIVITIES_FILE_NAME = 'activities.mjs';
+const ACTIVITY_BINDINGS_FILE_NAME = 'activity-bindings.json';
+
+function getGeneratedWorkflowModulePath(outputDir: string): string {
+  return path.join(outputDir, WORKFLOW_FILE_NAME);
 }
 
-function getGeneratedActivitiesModulePath(workflowPath: string): string {
-  const extension = path.extname(workflowPath);
-  const baseName = path.basename(workflowPath, extension);
-  return path.join(path.dirname(workflowPath), `.${baseName}.temporal.activities.mjs`);
+function getGeneratedActivitiesModulePath(outputDir: string): string {
+  return path.join(outputDir, ACTIVITIES_FILE_NAME);
 }
 
-class WriteWebpackBundleDebugPlugin {
-  constructor(private readonly outputDir: string) {}
-
-  apply(compiler: Compiler): void {
-    compiler.hooks.assetEmitted.tapPromise(
-      'MastraTemporalWriteWebpackBundleDebugPlugin',
-      async (filename, { content }) => {
-        const bundleDir = path.join(this.outputDir, 'bundle');
-        const targetPath = path.join(bundleDir, filename);
-
-        await mkdir(path.dirname(targetPath), { recursive: true });
-        await writeFile(targetPath, content);
-      },
-    );
-  }
+function getActivityBindingsPath(outputDir: string): string {
+  return path.join(outputDir, ACTIVITY_BINDINGS_FILE_NAME);
 }
 
 export interface MastraPluginOptions {
-  /** Path to the Mastra entry file that imports workflow modules. */
-  src: string;
   /** Persist transformed modules and emitted workflow bundles for debugging. */
   debug?: boolean;
 }
 
 export class MastraPlugin extends SimplePlugin {
-  private readonly src: string;
-  private readonly debugOutputDir: string | null;
-  private readonly compiledActivities = new Map<string, Promise<Record<string, unknown>>>();
+  private compiledActivitiesModule: Promise<Record<string, unknown>> | null = null;
+  private compiledEntryPath: string | null = null;
+  private compiledActivitiesPath: string | null = null;
+  private activityBindings: TemporalActivityBinding[] | null = null;
 
-  constructor({ src, debug = false }: MastraPluginOptions) {
+  constructor(_options: MastraPluginOptions = {}) {
     super({
       name: 'Mastra',
     });
-
-    this.src = src.startsWith('file://') ? fileURLToPath(src) : src;
-    this.debugOutputDir = debug ? getDebugOutputDir() : null;
   }
 
-  private loadWorkflowActivitiesModule(workflowPath: string): Promise<Record<string, unknown>> {
-    const cachedModule = this.compiledActivities.get(workflowPath);
-    if (cachedModule) {
-      return cachedModule;
+  async #bundleMastra(entryFile: string, projectRoot: string, outputDirectory: string): Promise<string> {
+    const { BuildBundler } = await import('./mastra-deployer');
+    const normalizedEntryFile = entryFile.startsWith('file:/') ? fileURLToPath(entryFile) : entryFile;
+    const mastraBundler = new BuildBundler();
+    await mastraBundler.prepare(outputDirectory);
+    await mastraBundler.bundle(normalizedEntryFile, outputDirectory, {
+      toolsPaths: [],
+      projectRoot,
+    });
+
+    return path.join(outputDirectory, 'output', 'index.mjs');
+  }
+
+  async prebuild({ entryFile, projectRoot = process.cwd() }: { entryFile: string; projectRoot?: string }): Promise<{
+    workflowBundle: WorkerOptions['workflowBundle'];
+  }> {
+    const temporalOutputDir = path.resolve(projectRoot, CACHE_PATH);
+    const compiledEntryPath = await this.#bundleMastra(entryFile, projectRoot, temporalOutputDir);
+
+    const workflowOutputPath = await buildTemporalWorkflowModule(
+      compiledEntryPath,
+      temporalOutputDir,
+      WORKFLOW_FILE_NAME,
+    );
+
+    const { outputPath: activitiesOutputPath, activityBindings } = await buildTemporalActivitiesModule(
+      compiledEntryPath,
+      temporalOutputDir,
+      ACTIVITIES_FILE_NAME,
+    );
+
+    await writeFile(getActivityBindingsPath(temporalOutputDir), JSON.stringify(activityBindings, null, 2), 'utf8');
+
+    this.compiledActivitiesModule = null;
+    this.compiledEntryPath = workflowOutputPath;
+    this.compiledActivitiesPath = activitiesOutputPath;
+    this.activityBindings = activityBindings;
+
+    return {
+      workflowBundle: {
+        codePath: workflowOutputPath,
+      },
+    };
+  }
+
+  private getInitializedState(outputDir: string): {
+    compiledEntryPath: string;
+    compiledActivitiesPath: string;
+    activityBindings: TemporalActivityBinding[];
+  } {
+    const compiledEntryPath = this.compiledEntryPath ?? getGeneratedWorkflowModulePath(outputDir);
+    const compiledActivitiesPath = this.compiledActivitiesPath ?? getGeneratedActivitiesModulePath(outputDir);
+    const activityBindings = this.activityBindings ?? this.loadActivityBindings(getActivityBindingsPath(outputDir));
+
+    return {
+      compiledEntryPath,
+      compiledActivitiesPath,
+      activityBindings,
+    };
+  }
+
+  private loadActivityBindings(activityBindingsPath: string): TemporalActivityBinding[] {
+    try {
+      const bindings = JSON.parse(readFileSync(activityBindingsPath, 'utf8')) as TemporalActivityBinding[];
+      this.activityBindings = bindings;
+      return bindings;
+    } catch (error) {
+      throw new Error(`MastraPlugin.prebuild() must be called before use, or ${activityBindingsPath} must exist`, {
+        cause: error,
+      });
+    }
+  }
+
+  private loadCompiledActivitiesModule(activitiesModulePath: string): Promise<Record<string, unknown>> {
+    if (this.compiledActivitiesModule) {
+      return this.compiledActivitiesModule;
     }
 
-    const modulePromise = (async () => {
-      const sourceText = await readFile(workflowPath, 'utf8');
-      const generatedModulePath = getGeneratedActivitiesModulePath(workflowPath);
-      const transformedModule = await buildTemporalActivitiesModule(sourceText, workflowPath, {
-        entryFilePath: this.src,
-      });
+    const modulePromise = import(`${pathToFileURL(activitiesModulePath).href}?t=${Date.now()}`) as Promise<
+      Record<string, unknown>
+    >;
 
-      await writeFile(generatedModulePath, transformedModule);
-
-      const importedModule = (await import(pathToFileURL(generatedModulePath).href)) as Record<string, unknown>;
-      return importedModule;
-    })();
-
-    this.compiledActivities.set(workflowPath, modulePromise);
+    this.compiledActivitiesModule = modulePromise;
     return modulePromise;
   }
 
   configureWorker(options: WorkerOptions): WorkerOptions {
-    const entrySource = readFileSync(this.src, 'utf8');
-    const workflowPaths = resolveWorkflowEntriesSync(entrySource, this.src);
+    const temporalOutputDir = path.resolve(process.cwd(), CACHE_PATH);
+    const { compiledActivitiesPath, activityBindings } = this.getInitializedState(temporalOutputDir);
     const generatedActivities = Object.assign({}, options.activities) as Record<string, unknown>;
 
-    for (const workflowPath of workflowPaths) {
-      const workflowSource = readFileSync(workflowPath, 'utf8');
-      const activityBindings = collectTemporalActivityBindings(workflowSource, workflowPath);
+    for (const binding of activityBindings) {
+      if (generatedActivities[binding.stepId]) {
+        continue;
+      }
 
-      for (const binding of activityBindings) {
-        if (generatedActivities[binding.stepId]) {
-          continue;
+      generatedActivities[binding.stepId] = async (...args: unknown[]) => {
+        const activityModule = await this.loadCompiledActivitiesModule(compiledActivitiesPath);
+        const activity = activityModule[binding.exportName];
+
+        if (typeof activity !== 'function') {
+          throw new Error(`Unable to load activity '${binding.exportName}' from ${compiledActivitiesPath}`);
         }
 
-        generatedActivities[binding.stepId] = async (...args: unknown[]) => {
-          const activityModule = await this.loadWorkflowActivitiesModule(workflowPath);
-          const activity = activityModule[binding.exportName];
-
-          if (typeof activity !== 'function') {
-            throw new Error(`Unable to load activity '${binding.exportName}' from ${workflowPath}`);
-          }
-
-          return activity(...args);
-        };
-      }
-    }
-
-    return {
-      ...options,
-      workflowsPath: this.src,
-      activities: generatedActivities,
-    };
-  }
-
-  configureBundler(options: BundleOptions): BundleOptions {
-    const require = createRequire(import.meta.url);
-    const loader = require.resolve('@mastra/temporal/webpack-loader');
-    const existingWebpackConfigHook = options.webpackConfigHook;
-    const registry = new WorkflowExportRegistry();
-    const entrySource = readFileSync(this.src, 'utf8');
-
-    for (const workflowPath of resolveWorkflowEntriesSync(entrySource, this.src)) {
-      const workflowSource = readFileSync(workflowPath, 'utf8');
-      const workflowExports = collectTemporalWorkflowExports(workflowSource, workflowPath);
-      registry.register(
-        workflowPath,
-        workflowExports.map(workflow => workflow.exportName),
-      );
-    }
-
-    const webpackConfigHook = (config: Configuration): Configuration => {
-      const nextConfig = existingWebpackConfigHook ? existingWebpackConfigHook(config) : config;
-      const rules = nextConfig.module?.rules ?? [];
-      const plugins = [...(nextConfig.plugins ?? [])];
-
-      if (this.debugOutputDir) {
-        plugins.push(new WriteWebpackBundleDebugPlugin(this.debugOutputDir));
-      }
-
-      return {
-        ...nextConfig,
-        module: {
-          ...nextConfig.module,
-          rules: [
-            ...rules,
-            {
-              test: /\.(ts|tsx|js|jsx)$/,
-              exclude: /node_modules/,
-              use: {
-                loader,
-                options: {
-                  entryFile: this.src,
-                  debugOutputDir: this.debugOutputDir,
-                  registry,
-                },
-              },
-            },
-          ],
-        },
-        plugins,
+        return activity(...args);
       };
-    };
+    }
 
     return {
       ...options,
-      webpackConfigHook,
+      workflowsPath: getGeneratedWorkflowModulePath(temporalOutputDir),
+      activities: generatedActivities,
     };
   }
 }

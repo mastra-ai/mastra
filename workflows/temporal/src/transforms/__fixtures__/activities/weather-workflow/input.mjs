@@ -1,6 +1,8 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
+const mastra = { marker: 'ok' };
+
 const fetchWeather = createStep({
   id: 'fetch-weather',
   inputSchema: z.object({

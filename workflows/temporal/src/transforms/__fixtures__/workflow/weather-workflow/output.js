@@ -1,4 +1,5 @@
 import { proxyActivities, log, sleep } from '@temporalio/workflow';
+
 class TemporalExecutionEngine {
   startToCloseTimeout;
   activityHandle;
@@ -59,7 +60,7 @@ class TemporalExecutionEngine {
                     inputData,
                   }),
                 )
-              : /* @__PURE__ */ new Date();
+              : new Date();
         log.info('sleepUntil', {
           id: entry.id,
           date: date.toISOString(),
@@ -310,8 +311,8 @@ const weatherWorkflow = args => {
   return createWorkflow('weather-workflow')
     .then('fetch-weather')
     .then('plan-activities')
-    .sleep(3e3)
+    .sleep(3000)
     .then('plan-activities')(args);
 };
-weatherWorkflow.commit();
+
 export { weatherWorkflow };

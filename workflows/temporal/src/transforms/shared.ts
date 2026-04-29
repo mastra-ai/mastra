@@ -1,6 +1,6 @@
-import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { parse } from '@babel/parser';
 import * as t from '@babel/types';
-import { transform as esbuildTransform } from 'esbuild';
 
 export const parserPlugins = [
   'typescript',
@@ -12,11 +12,16 @@ export const parserPlugins = [
   'importAttributes',
   'decorators-legacy',
 ] as const;
+export function parseModule(filePath: string, sourceText?: string): t.File {
+  if (!sourceText) {
+    sourceText = readFileSync(filePath, 'utf8');
+  }
 
-export interface WorkflowImportBinding {
-  exportName: string;
-  importedName: string | 'default';
-  source: string;
+  return parse(sourceText, {
+    sourceType: 'module',
+    plugins: parserPlugins as any,
+    sourceFilename: filePath,
+  });
 }
 
 export function isIdentifierNamed(node: t.Node, name: string): boolean {
@@ -162,7 +167,12 @@ export function createExportedStepStatement(name: string, initializer: t.Express
   );
 }
 
-export function collectInlineCreateSteps(node: t.Node, seenNames: Set<string>, statements: t.Statement[]): void {
+export function collectInlineCreateSteps(
+  node: t.Node,
+  seenNames: Set<string>,
+  statements: t.Statement[],
+  onStep?: (exportName: string, call: t.CallExpression) => void,
+): void {
   walk(node, current => {
     if (!isCreateStepCall(current)) {
       return;
@@ -174,23 +184,10 @@ export function collectInlineCreateSteps(node: t.Node, seenNames: Set<string>, s
     }
 
     seenNames.add(stepName);
+    onStep?.(stepName, current);
     statements.push(createExportedStepStatement(stepName, current));
     return false;
   });
-}
-
-export async function transpileModule(sourceText: string, filePath: string): Promise<string> {
-  const loader = path.extname(filePath).slice(1) || 'js';
-  const { code } = await esbuildTransform(sourceText, {
-    loader: loader as any,
-    format: 'esm',
-    platform: 'node',
-    target: 'node22',
-    sourcemap: false,
-    sourcefile: filePath,
-  });
-
-  return code ?? '';
 }
 
 export function getCreateStepId(node: t.Node | null | undefined): string | null {
