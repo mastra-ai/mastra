@@ -152,7 +152,7 @@ export const mastra = new Mastra({
           workflows: true,
           stars: true,
           model: true,
-        }
+        },
       },
       configuration: {
         agent: {
@@ -163,15 +163,12 @@ export const mastra = new Mastra({
             },
           },
           models: {
-            allowed: [
-              { provider: 'openai' },
-              { provider: 'anthropic', modelId: 'claude-opus-4-7' },
-            ],
+            allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
             default: {
               provider: 'openai',
               modelId: 'gpt-5.4',
-            }
-          }
+            },
+          },
         },
       },
     },
