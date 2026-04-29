@@ -308,6 +308,35 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       expect(prompt).not.toContain('Skills are NOT tools');
     });
 
+    it('should apply on-demand mode when SkillSearchProcessor is passed to stream options', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+      });
+
+      const result = await agent.stream('Hello', {
+        inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
+      });
+      for await (const _ of result.fullStream) {
+        // consume the stream
+      }
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toContain('search_skills');
+      expect(toolNames).toContain('load_skill');
+      expect(toolNames).toContain('skill_read');
+      expect(toolNames).not.toContain('skill');
+      expect(toolNames).not.toContain('skill_search');
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).toContain('To discover available skills, call search_skills');
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('Skills are NOT tools');
+    });
+
     it('should preserve skill activation tools when SkillsProcessor is explicitly configured', async () => {
       const agent = new Agent({
         id: 'test-agent',

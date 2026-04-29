@@ -11,10 +11,10 @@ The `SkillSearchProcessor` is an **input processor** that enables on-demand skil
 
 By default, when you attach only `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
 
-- It does not auto-add the default eager `SkillsProcessor`.
-- It exposes `search_skills` and `load_skill` for discovery and instruction loading.
-- It does not expose the overlapping `skill` and `skill_search` tools.
-- It still exposes `skill_read` so the agent can read supporting skill files such as references, scripts, and assets.
+- The default eager `SkillsProcessor` is not auto-added.
+- `search_skills` and `load_skill` are exposed for discovery and instruction loading.
+- Overlapping `skill` and `skill_search` tools are hidden.
+- `skill_read` remains available so the agent can read supporting skill files such as references, scripts, and assets.
 
 If you explicitly configure `SkillsProcessor` alongside `SkillSearchProcessor`, the agent preserves the eager `skill` and `skill_search` tools as an opt-in path.
 
