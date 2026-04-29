@@ -45,6 +45,7 @@ const { authorizationUrl } = await slack.connect('my-agent', {
 1. **Get App Configuration Tokens** from https://api.slack.com/apps (look for "Your App Configuration Tokens" section)
 
 2. **Set up a tunnel** for local development:
+
    ```bash
    cloudflared tunnel --url http://localhost:4111
    ```
@@ -77,6 +78,7 @@ const mastra = new Mastra({
 ```
 
 When Mastra has storage configured, `SlackChannel` automatically:
+
 - Persists rotated config tokens (so you don't need fresh tokens after restart)
 - Persists Slack app installations
 - Detects config changes (e.g., agent renames) and updates manifests on startup
@@ -125,6 +127,7 @@ await slack.connect('my-agent', {
 ```
 
 The image should be:
+
 - Square (1:1 aspect ratio)
 - At least 512x512 pixels
 - PNG, JPG, or GIF format

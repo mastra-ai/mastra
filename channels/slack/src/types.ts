@@ -12,7 +12,7 @@ export interface SlackChannelConfig {
   /**
    * Slack App Configuration Token for programmatic app creation.
    * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
-   * 
+   *
    * Optional if you have a valid appConfigRefreshToken - will rotate to get a fresh token on startup.
    */
   appConfigToken?: string;
@@ -56,7 +56,7 @@ export interface SlackChannelConfig {
   /**
    * Encryption key for sensitive data (clientSecret, signingSecret, botToken).
    * If not provided, secrets are stored in plaintext (not recommended for production).
-   * 
+   *
    * Use a 32+ character random string. Can be set via MASTRA_ENCRYPTION_KEY env var.
    */
   encryptionKey?: string;
@@ -160,7 +160,7 @@ export interface SlackConnectOptions {
 
 /**
  * Slash command configuration (fully serializable).
- * 
+ *
  * A slash command is essentially a prompt template that gets filled with user input
  * and sent to the agent. Like Claude Code's slash commands.
  */
@@ -177,17 +177,15 @@ export interface SlashCommandConfig {
   /**
    * Prompt template sent to the agent.
    * Use {{text}} as placeholder for user input.
-   * 
+   *
    * Defaults to "{{text}}" (just passes input directly).
-   * 
+   *
    * @example
    * prompt: 'Summarize the following URL: {{text}}'
    * prompt: 'Write {{text}} in TypeScript'
    */
   prompt?: string;
 }
-
-
 
 // =============================================================================
 // Messages
@@ -276,5 +274,3 @@ export interface SlackAppCredentials {
 // =============================================================================
 // Internal Types
 // =============================================================================
-
-

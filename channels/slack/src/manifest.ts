@@ -73,14 +73,7 @@ export interface BuildManifestOptions {
  * Build a Slack app manifest for an agent.
  */
 export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
-  const {
-    name,
-    description,
-    webhookUrl,
-    oauthRedirectUrl,
-    commandsUrl = webhookUrl,
-    slashCommands = [],
-  } = options;
+  const { name, description, webhookUrl, oauthRedirectUrl, commandsUrl = webhookUrl, slashCommands = [] } = options;
 
   const scopes: string[] = [...DEFAULT_BOT_SCOPES];
   const events: string[] = [...DEFAULT_BOT_EVENTS];

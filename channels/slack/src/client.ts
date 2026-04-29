@@ -68,7 +68,7 @@ export class SlackManifestClient {
       if (data.error === 'invalid_refresh_token') {
         throw new Error(
           'Slack refresh token is invalid. Get fresh tokens from https://api.slack.com/apps > "Your App Configuration Tokens". ' +
-          'This can happen if storage was lost or the token was already used.',
+            'This can happen if storage was lost or the token was already used.',
         );
       }
       throw new Error(`Token rotation failed: ${data.error}`);
@@ -119,7 +119,7 @@ export class SlackManifestClient {
       // Slack may include detailed error info
       let errorDetails = data.error ?? 'unknown_error';
       if (data.errors?.length) {
-        errorDetails += ': ' + data.errors.map((e) => `${e.pointer}: ${e.message}`).join(', ');
+        errorDetails += ': ' + data.errors.map(e => `${e.pointer}: ${e.message}`).join(', ');
       }
       if (data.response_metadata?.messages?.length) {
         errorDetails += ' - ' + data.response_metadata.messages.join(', ');
@@ -185,7 +185,7 @@ export class SlackManifestClient {
     if (!data.ok) {
       let errorDetails = data.error ?? 'unknown_error';
       if (data.errors?.length) {
-        errorDetails += ': ' + data.errors.map((e) => `${e.pointer}: ${e.message}`).join(', ');
+        errorDetails += ': ' + data.errors.map(e => `${e.pointer}: ${e.message}`).join(', ');
       }
       throw new Error(`App manifest update failed: ${errorDetails}`);
     }
