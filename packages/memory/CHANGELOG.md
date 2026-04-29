@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 1.17.3-alpha.0
+
+### Patch Changes
+
+- Fixed memory package startup with older core versions. ([#15772](https://github.com/mastra-ai/mastra/pull/15772))
+
 ## 1.17.2
 
 ### Patch Changes

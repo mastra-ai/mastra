@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.16.1-alpha.1
+
+### Patch Changes
+
+- Added common binary availability to the Mastra Code environment prompt. ([#15820](https://github.com/mastra-ai/mastra/pull/15820))
+
+- Updated dependencies [[`95b001f`](https://github.com/mastra-ai/mastra/commit/95b001f750af6947ad9d174cd47abffc776663a5)]:
+  - @mastra/memory@1.17.3-alpha.0
+
 ## 0.16.1-alpha.0
 
 ### Patch Changes
