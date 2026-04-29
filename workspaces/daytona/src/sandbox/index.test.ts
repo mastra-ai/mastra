@@ -676,11 +676,7 @@ describe('DaytonaSandbox', () => {
     const findBlobfuseMountCall = (target: string) =>
       mockSandbox.process.executeCommand.mock.calls.find((call: any[]) => {
         const command = call[0] || '';
-        return (
-          command.includes('blobfuse2 mount') &&
-          command.includes(target) &&
-          !command.includes('which blobfuse2')
-        );
+        return command.includes('blobfuse2 mount') && command.includes(target) && !command.includes('which blobfuse2');
       });
 
     const findWrittenConfig = (): string | undefined => {

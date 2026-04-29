@@ -94,7 +94,10 @@ function parseOsRelease(output: string): Record<string, string> {
     const eq = line.indexOf('=');
     if (eq === -1) continue;
     const key = line.slice(0, eq);
-    const value = line.slice(eq + 1).trim().replace(/^"|"$/g, '');
+    const value = line
+      .slice(eq + 1)
+      .trim()
+      .replace(/^"|"$/g, '');
     values[key] = value;
   }
   return values;
@@ -128,9 +131,7 @@ function resolveMicrosoftAptRepos(osReleaseOutput: string): MicrosoftAptRepo[] {
     return repos;
   }
   if (distroId === 'ubuntu') {
-    const repos = [
-      { repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename },
-    ];
+    const repos = [{ repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename }];
     if (versionId !== '24.04' || codename !== 'noble') {
       repos.push({ repoUrl: 'https://packages.microsoft.com/ubuntu/24.04/prod', suite: 'noble' });
     }
@@ -189,12 +190,7 @@ function resolveAuth(config: E2BAzureBlobMountConfig): ResolvedAuth {
   return { mode, accountName, accountKey, sasToken, endpoint };
 }
 
-function buildBlobfuseConfig(
-  container: string,
-  auth: ResolvedAuth,
-  cachePath: string,
-  readOnly: boolean,
-): string {
+function buildBlobfuseConfig(container: string, auth: ResolvedAuth, cachePath: string, readOnly: boolean): string {
   const lines: string[] = [
     'allow-other: true',
     'foreground: false',
@@ -234,11 +230,7 @@ function buildBlobfuseConfig(
 /**
  * Mount an Azure Blob container using blobfuse2.
  */
-export async function mountAzure(
-  mountPath: string,
-  config: E2BAzureBlobMountConfig,
-  ctx: MountContext,
-): Promise<void> {
+export async function mountAzure(mountPath: string, config: E2BAzureBlobMountConfig, ctx: MountContext): Promise<void> {
   const { sandbox, logger } = ctx;
 
   validateContainerName(config.container);

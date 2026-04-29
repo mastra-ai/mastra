@@ -312,10 +312,10 @@ Pass `S3Filesystem`, `GCSFilesystem`, or `AzureBlobFilesystem` instances via the
 
 ### Azure Blob environment variables
 
-| Variable                            | Description               |
-| ----------------------------------- | ------------------------- |
-| `AZURE_STORAGE_CONTAINER`           | Container name            |
-| `AZURE_STORAGE_CONNECTION_STRING`   | Storage connection string |
+| Variable                          | Description               |
+| --------------------------------- | ------------------------- |
+| `AZURE_STORAGE_CONTAINER`         | Container name            |
+| `AZURE_STORAGE_CONNECTION_STRING` | Storage connection string |
 
 ### Reducing cold start latency with a snapshot
 

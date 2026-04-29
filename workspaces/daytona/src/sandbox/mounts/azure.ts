@@ -94,7 +94,10 @@ function parseOsRelease(output: string): Record<string, string> {
     const eq = line.indexOf('=');
     if (eq === -1) continue;
     const key = line.slice(0, eq);
-    const value = line.slice(eq + 1).trim().replace(/^"|"$/g, '');
+    const value = line
+      .slice(eq + 1)
+      .trim()
+      .replace(/^"|"$/g, '');
     values[key] = value;
   }
   return values;
@@ -128,9 +131,7 @@ function resolveMicrosoftAptRepos(osReleaseOutput: string): MicrosoftAptRepo[] {
     return repos;
   }
   if (distroId === 'ubuntu') {
-    const repos = [
-      { repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename },
-    ];
+    const repos = [{ repoUrl: `https://packages.microsoft.com/ubuntu/${versionId}/prod`, suite: codename }];
     if (versionId !== '24.04' || codename !== 'noble') {
       repos.push({ repoUrl: 'https://packages.microsoft.com/ubuntu/24.04/prod', suite: 'noble' });
     }
@@ -189,12 +190,7 @@ function resolveAuth(config: DaytonaAzureBlobMountConfig): ResolvedAuth {
   return { mode, accountName, accountKey, sasToken, endpoint };
 }
 
-function buildBlobfuseConfig(
-  container: string,
-  auth: ResolvedAuth,
-  cachePath: string,
-  readOnly: boolean,
-): string {
+function buildBlobfuseConfig(container: string, auth: ResolvedAuth, cachePath: string, readOnly: boolean): string {
   const lines: string[] = [
     'allow-other: true',
     'foreground: false',
@@ -259,7 +255,9 @@ export async function mountAzure(
 
   // Verify network reachability to the blob endpoint. Daytona's restricted tiers
   // block traffic to azure.com domains, which would otherwise hang the mount.
-  const probeUrl = auth.endpoint ? auth.endpoint.replace(/\/$/, '') : `https://${auth.accountName}.blob.core.windows.net`;
+  const probeUrl = auth.endpoint
+    ? auth.endpoint.replace(/\/$/, '')
+    : `https://${auth.accountName}.blob.core.windows.net`;
   const connectivityCheck = await run(`curl -sS --max-time 5 ${shellQuote(probeUrl)} 2>&1`, 10_000);
   const checkOutput = connectivityCheck.stdout.trim();
   if (
@@ -332,7 +330,11 @@ export async function mountAzure(
     if (!installResult || verifyResult.exitCode !== 0) {
       throw new Error(
         `Failed to install blobfuse2: ${
-          verifyResult.stderr || verifyResult.stdout || installResult?.stderr || installResult?.stdout || 'unknown error'
+          verifyResult.stderr ||
+          verifyResult.stdout ||
+          installResult?.stderr ||
+          installResult?.stdout ||
+          'unknown error'
         }`,
       );
     }
