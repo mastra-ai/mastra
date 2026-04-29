@@ -64,7 +64,9 @@ jobs:
           pnpm changeset-cli pre enter alpha
           git add .changeset/pre.json
           git commit -m "chore: version - enter prerelease mode" --no-verify
-          git push
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
           echo "restored=true" >> "$GITHUB_OUTPUT"
 
       - name: Version packages (alpha prerelease)

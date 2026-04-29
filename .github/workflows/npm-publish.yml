@@ -83,13 +83,32 @@ jobs:
             .trim()
             .split('\n')
             .filter(Boolean);
-          const hasAlphaVersion = packageJsons.some(file => {
-            const packageJson = JSON.parse(readFileSync(file, 'utf8'));
-            return typeof packageJson.version === 'string' && packageJson.version.includes('-alpha.');
+          const publishablePackages = packageJsons
+            .map(file => ({ file, packageJson: JSON.parse(readFileSync(file, 'utf8')) }))
+            .filter(({ packageJson }) => packageJson.name && packageJson.version && packageJson.private !== true);
+          const alphaPackages = publishablePackages.filter(({ packageJson }) => packageJson.version.includes('-alpha.'));
+
+          if (alphaPackages.length === 0) {
+            console.error('No publishable package versions contain -alpha.; refusing to publish stable versions to the alpha tag.');
+            process.exit(1);
+          }
+
+          const unpublishedStablePackages = publishablePackages.filter(({ packageJson }) => {
+            if (packageJson.version.includes('-alpha.')) return false;
+
+            try {
+              execSync(`npm view ${packageJson.name}@${packageJson.version} version`, { stdio: 'ignore' });
+              return false;
+            } catch {
+              return true;
+            }
           });
 
-          if (!hasAlphaVersion) {
-            console.error('No package.json versions contain -alpha.; refusing to publish stable versions to the alpha tag.');
+          if (unpublishedStablePackages.length > 0) {
+            console.error('Refusing to publish unpublished stable package versions to the alpha tag:');
+            for (const { file, packageJson } of unpublishedStablePackages) {
+              console.error(`- ${packageJson.name}@${packageJson.version} (${file})`);
+            }
             process.exit(1);
           }
           NODE
