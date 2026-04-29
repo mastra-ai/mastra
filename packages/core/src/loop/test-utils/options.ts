@@ -2107,6 +2107,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         it('result.totalUsage should contain total token usage', async () => {
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
+              "cacheCreationInputTokens": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,
@@ -2126,6 +2127,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         it('result.usage should contain token usage from final step', async () => {
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
+              "cacheCreationInputTokens": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,

@@ -569,6 +569,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         requestContext: requestContext || new RequestContext(),
                         outputWriter,
                         workspace: currentStep.workspace,
+                        requireApproval: (tool as any).requireApproval,
+                        backgroundConfig: (tool as any).background,
                       },
                       undefined,
                       autoResumeSuspendedTools,
@@ -882,6 +884,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             const provider = model?.provider;
             const modelIdStr = model?.modelId;
+
+            // Handle abort first — a client-disconnect mid-stream is the
+            // expected exit path, not an error. Logging it at error level
+            // pollutes monitoring (see #15844 for the production
+            // numbers). Bail out with a debug log before the upstream /
+            // generic error branches so we never emit an
+            // `error`-level entry for an AbortError.
+            if (isAbortError(error) && options?.abortSignal?.aborted) {
+              logger?.debug?.('LLM execution aborted', { runId });
+              await options?.onAbort?.({
+                steps: inputData?.output?.steps ?? [],
+              });
+
+              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            }
+
             const isUpstreamError = APICallError.isInstance(error);
 
             if (isUpstreamError) {
@@ -900,16 +920,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...(provider && { provider }),
                 ...(modelIdStr && { modelId: modelIdStr }),
               });
-            }
-
-            if (isAbortError(error) && options?.abortSignal?.aborted) {
-              await options?.onAbort?.({
-                steps: inputData?.output?.steps ?? [],
-              });
-
-              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-
-              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
             }
 
             if (isLastModel) {
@@ -1128,9 +1138,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const messages = {
           all: messageList.get.all.aiV5.model(),
           user: messageList.get.input.aiV5.model(),
-          // Keep assistant messages out of the retry payload so agentic-execution/index.ts
-          // does not replay failed step output back into messageList. Error processors own
-          // any cleanup or replacement of assistant responses before the next attempt.
+          // Do not return failed assistant output as new response messages for this retry step.
+          // That output was already added to messageList while processing the failed stream;
+          // returning it in messages.nonUser would make agentic-execution/index.ts append it again.
           nonUser: [],
         };
 
@@ -1358,7 +1368,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // - OR finishReason indicates more work (e.g., tool-use)
       // Provider-executed tools (e.g. web_search) are handled server-side — the response already
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
-      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted);
+      //
+      // NOTE: hasPendingToolCalls must NOT override finishReason='length'.
+      // When the provider hits max_tokens mid-generation, it returns finishReason='length' and
+      // may also emit a partial/truncated tool call. Retrying with the same parameters produces
+      // the same truncation → infinite loop until maxSteps. PR #13861 / issue #13012 explicitly
+      // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
+      // inadvertently re-enabling it.
+      // See: https://github.com/mastra-ai/mastra/issues/15717
+      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted) && finishReason !== 'length';
       const shouldContinue =
         shouldRetry ||
         (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));

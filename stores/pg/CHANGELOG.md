@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.9.3-alpha.0
+
+### Patch Changes
+
+- Fixed auto-migration for the `mastra_observational_memory` table to include the `reflectedObservationLineCount` column. Previously, upgrading from older versions would crash on `Memory.cloneThread()` because this column was missing from the `ifNotExists` migration list. ([#15892](https://github.com/mastra-ai/mastra/pull/15892))
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9)]:
+  - @mastra/core@1.29.1-alpha.0
+
 ## 1.9.2
 
 ### Patch Changes

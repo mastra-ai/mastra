@@ -73,6 +73,12 @@ export const useChat = ({
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
   const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
+  // Tracks the active streamUntilIdle request so a subsequent stream() call can
+  // abort the previous one. Without this, a still-open prior stream keeps its
+  // background-task pubsub subscription alive and fans events into a second
+  // concurrent UI consumer, producing duplicate bg-task events and duplicate
+  // continuation turns on the server.
+  const _streamAbortRef = useRef<AbortController | null>(null);
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
@@ -223,18 +229,33 @@ export const useChat = ({
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
+    // Abort any still-open prior streamUntilIdle so its bg-task pubsub
+    // subscription closes server-side. Otherwise the prior request keeps
+    // listening and duplicates every bg event into both the old and the new
+    // UI consumer.
+    _streamAbortRef.current?.abort();
+    const internalAbort = new AbortController();
+    _streamAbortRef.current = internalAbort;
+
+    // Forward the caller-supplied signal (e.g. from the runtime provider) so
+    // explicit external cancellation still works.
+    if (signal) {
+      if (signal.aborted) internalAbort.abort();
+      else signal.addEventListener('abort', () => internalAbort.abort(), { once: true });
+    }
+
     // Create a new client instance with the abort signal
     // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
-      abortSignal: signal,
+      abortSignal: internalAbort.signal,
     });
 
     const agent = clientWithAbort.getAgent(agentId);
 
     const runId = uuid();
 
-    const response = await agent.stream(coreUserMessages, {
+    const response = await agent.streamUntilIdle(coreUserMessages, {
       runId,
       maxSteps,
       modelSettings: {
@@ -267,6 +288,11 @@ export const useChat = ({
       },
     });
 
+    // Only clear the ref if we're still the active stream — a later stream()
+    // call may have already taken over and aborted us.
+    if (_streamAbortRef.current === internalAbort) {
+      _streamAbortRef.current = null;
+    }
     setIsRunning(false);
   };
 

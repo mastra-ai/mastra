@@ -1,0 +1,86 @@
+{
+  "name": "@mastra/azure",
+  "version": "0.2.0",
+  "description": "Azure provider for Mastra - includes Blob Storage workspace filesystem",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./blob": {
+      "import": {
+        "types": "./dist/blob/index.d.ts",
+        "default": "./dist/blob/index.js"
+      },
+      "require": {
+        "types": "./dist/blob/index.d.ts",
+        "default": "./dist/blob/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:lib": "pnpm build",
+    "build:watch": "pnpm build --watch",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:watch": "vitest watch",
+    "pretest": "docker compose up -d --wait",
+    "test": "AZURE_STORAGE_CONNECTION_STRING='DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;' TEST_AZURE_CONTAINER=test-container vitest run integration.test.ts",
+    "posttest": "docker compose down -v",
+    "test:cloud": "vitest run integration.test.ts",
+    "lint": "eslint ."
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@azure/storage-blob": "^12.26.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@internal/workspace-test-utils": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.15",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "dotenv": "^17.3.1",
+    "eslint": "^9.39.4",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.4.0-0 <2.0.0-0",
+    "@azure/identity": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@azure/identity": {
+      "optional": true
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "workspaces/azure"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

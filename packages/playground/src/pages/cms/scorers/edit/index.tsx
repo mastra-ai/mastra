@@ -4,6 +4,7 @@ import {
   AlertDescription,
   AlertTitle,
   Badge,
+  Button,
   Header,
   HeaderAction,
   HeaderTitle,
@@ -49,9 +50,19 @@ interface CmsScorersEditFormProps {
   scorer: StoredScorerData;
   scorerId: string;
   selectedVersionId: string | null;
+  latestVersionId?: string;
+  activeVersionId?: string;
+  onClearVersion: () => void;
 }
 
-function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersEditFormProps) {
+function CmsScorersEditForm({
+  scorer,
+  scorerId,
+  selectedVersionId,
+  latestVersionId,
+  activeVersionId,
+  onClearVersion,
+}: CmsScorersEditFormProps) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
@@ -66,6 +77,7 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
+  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
   const dataSource = isViewingVersion ? versionData : scorer;
 
   const initialValues: ScorerFormValues = useMemo(
@@ -146,6 +158,26 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
     }
   }, [form, updateStoredScorer, client, scorerId, navigate, paths, queryClient]);
 
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      setIsSubmitting(true);
+      try {
+        await client.getStoredScorer(scorerId).activateVersion(selectedVersionId);
+        void queryClient.invalidateQueries({ queryKey: ['scorers'] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
+        void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
+        toast.success('Version published');
+        void navigate(paths.scorerLink(scorerId));
+      } catch (error) {
+        toast.error(`Failed to publish version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId, client, scorerId, queryClient, navigate, paths]);
+
   return (
     <AgentEditLayout
       leftSlot={
@@ -160,10 +192,24 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
         />
       }
     >
-      {isViewingVersion && (
+      {isViewingPreviousVersion && (
         <Alert variant="info" className="m-4 mb-0">
           <AlertTitle>This is a previous version</AlertTitle>
           <AlertDescription as="p">You are seeing a specific version of the scorer.</AlertDescription>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="light" size="sm" onClick={onClearVersion}>
+              View latest version
+            </Button>
+            <Button
+              type="button"
+              variant="light"
+              size="sm"
+              onClick={handlePublishVersion}
+              disabled={selectedVersionId === activeVersionId || isSubmitting}
+            >
+              {isSubmitting ? 'Publishing...' : 'Publish This Version'}
+            </Button>
+          </div>
         </Alert>
       )}
       <form ref={formRef} className="h-full">
@@ -198,6 +244,10 @@ function CmsScorersEditPage() {
     },
     [setSearchParams],
   );
+
+  const handleClearVersion = useCallback(() => {
+    setSearchParams({});
+  }, [setSearchParams]);
 
   if (isLoading) {
     return (
@@ -265,7 +315,14 @@ function CmsScorersEditPage() {
           />
         </HeaderAction>
       </Header>
-      <CmsScorersEditForm scorer={scorer} scorerId={scorerId} selectedVersionId={selectedVersionId} />
+      <CmsScorersEditForm
+        scorer={scorer}
+        scorerId={scorerId}
+        selectedVersionId={selectedVersionId}
+        latestVersionId={latestVersion?.id}
+        activeVersionId={activeVersionId}
+        onClearVersion={handleClearVersion}
+      />
     </MainContentLayout>
   );
 }

@@ -106,6 +106,48 @@ async function setupTestServer(withSessionManagement: boolean) {
   return { httpServer, mcpServer, serverTransport: undefined as any, baseUrl };
 }
 
+describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
+  it('should forward jsonSchemaValidator to the underlying SDK Client', () => {
+    const customValidator = {
+      getValidator: vi.fn(() => (input: unknown) => ({
+        valid: true as const,
+        data: input,
+        errorMessage: undefined,
+      })),
+    };
+
+    const client = new InternalMastraMCPClient({
+      name: 'validator-pass-through-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+
+    // @ts-expect-error - accessing internal SDK property for testing
+    const sdkClient = client.client as Client;
+
+    // @ts-expect-error - accessing internal SDK property for testing
+    expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
+  });
+
+  it('should leave the SDK Client default validator in place when omitted', () => {
+    const client = new InternalMastraMCPClient({
+      name: 'default-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+      },
+    });
+
+    // @ts-expect-error - accessing internal SDK property for testing
+    const sdkClient = client.client as Client;
+
+    // SDK falls back to its built-in default (AJV) when nothing is forwarded
+    // @ts-expect-error - accessing internal SDK property for testing
+    expect(sdkClient._jsonSchemaValidator).not.toBeUndefined();
+  });
+});
+
 describe('MastraMCPClient with Streamable HTTP', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -1999,13 +2041,19 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const stderrChunks: string[] = [];
+      let settled = false;
+      let ready = false;
 
       const proc = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       proc.stderr.on('data', data => {
-        stderrChunks.push(data.toString());
+        const chunk = data.toString();
+        stderrChunks.push(chunk);
+        if (chunk.includes('Secure MCP Filesystem Server running on stdio')) {
+          ready = true;
+        }
       });
 
       let responseBuffer = '';
@@ -2044,6 +2092,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
                 // Wait for server to process roots and log
                 setTimeout(() => {
+                  settled = true;
                   proc.kill();
                   resolve(stderrChunks.join(''));
                 }, 1000);
@@ -2057,10 +2106,17 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
         // If no roots capability, kill after initialized
         if (!clientCapabilities.roots && initializedSent) {
-          setTimeout(() => {
+          const finish = () => {
+            settled = true;
+            clearTimeout(timeout);
             proc.kill();
             resolve(stderrChunks.join(''));
-          }, 1000);
+          };
+          if (ready) {
+            setTimeout(finish, 1000);
+          } else {
+            setTimeout(finish, 3000);
+          }
         }
       });
 
@@ -2083,9 +2139,16 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       }, 500);
 
       proc.on('error', reject);
+      proc.on('exit', () => {
+        if (!settled) {
+          clearTimeout(timeout);
+          resolve(stderrChunks.join(''));
+        }
+      });
 
       // Timeout after 25 seconds
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
+        settled = true;
         proc.kill();
         resolve(stderrChunks.join(''));
       }, 25000);

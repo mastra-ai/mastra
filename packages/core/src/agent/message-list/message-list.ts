@@ -716,7 +716,10 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+  public updateToolInvocation(
+    inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
+    metadata?: Record<string, unknown>,
+  ): boolean {
     if (!inputPart.toolInvocation?.toolCallId) {
       return false;
     }
@@ -749,6 +752,22 @@ export class MessageList {
             // Preserve providerMetadata from original call if not in result
             ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
               ? { providerMetadata: originalPart.providerMetadata }
+              : {}),
+          };
+
+          // `backgroundTasks` is a per-toolCallId record — merge instead of
+          // overwrite so multiple concurrent background dispatches on the
+          // same assistant message don't clobber each other's metadata.
+          const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+          const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+          const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+          const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+
+          msg.content.metadata = {
+            ...existingMeta,
+            ...incomingMeta,
+            ...(existingBgTasks || incomingBgTasks
+              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
               : {}),
           };
 

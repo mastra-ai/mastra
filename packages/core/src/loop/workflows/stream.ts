@@ -188,6 +188,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const run = await agenticLoopWorkflow.createRun({
         runId,
+        resourceId: _internal?.resourceId,
       });
 
       if (requireToolApproval) {
