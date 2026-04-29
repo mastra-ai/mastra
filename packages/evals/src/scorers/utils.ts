@@ -17,6 +17,10 @@ export type ScorerRunInputForLLMJudge =
       inputMessages?: unknown[];
       messages?: unknown[];
       prompt?: string;
+      text?: string;
+      content?: unknown;
+      input?: unknown;
+      user?: unknown;
       [key: string]: unknown;
     };
 
@@ -76,6 +80,23 @@ const isRecord = (value: unknown): value is Record<string, any> => {
   return typeof value === 'object' && value !== null;
 };
 
+const getTextFromValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const textParts = value
+      .filter(part => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
+      .map(part => part.text);
+    return textParts.length > 0 ? textParts[textParts.length - 1] : undefined;
+  }
+  if (!isRecord(value)) return undefined;
+
+  return (
+    getTextFromValue(value.content) ??
+    (typeof value.text === 'string' ? value.text : undefined) ??
+    (typeof value.body === 'string' ? value.body : undefined)
+  );
+};
+
 export const isScorerRunInputForAgent = (input: unknown): input is ScorerRunInputForAgent => {
   return (
     isRecord(input) &&
@@ -104,7 +125,7 @@ const getTextFromMessages = (messages: unknown, role: string): string | undefine
   if (!Array.isArray(messages)) return undefined;
 
   const message = messages.find(message => isRecord(message) && message.role === role);
-  return message ? getTextContentFromMastraDBMessage(message as MastraDBMessage) || undefined : undefined;
+  return message ? getTextFromValue(message) : undefined;
 };
 
 /**
@@ -225,7 +246,11 @@ export const getUserMessageFromRunInput = (input?: unknown): string | undefined 
   return (
     getTextFromMessages(input.inputMessages, 'user') ??
     getTextFromMessages(input.messages, 'user') ??
-    (typeof input.prompt === 'string' ? input.prompt : undefined)
+    (typeof input.prompt === 'string' ? input.prompt : undefined) ??
+    (typeof input.text === 'string' ? input.text : undefined) ??
+    getTextFromValue(input.content) ??
+    getTextFromValue(input.input) ??
+    getTextFromValue(input.user)
   );
 };
 
@@ -247,11 +272,12 @@ export const getUserMessageFromRunInput = (input?: unknown): string | undefined 
  *   });
  * ```
  */
-export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
+export const getSystemMessagesFromRunInput = (input?: unknown): string[] => {
   const systemMessages: string[] = [];
+  if (!isRecord(input)) return systemMessages;
 
   // Add standard system messages
-  if (input?.systemMessages) {
+  if (Array.isArray(input.systemMessages)) {
     systemMessages.push(
       ...input.systemMessages
         .map(msg => {
@@ -271,12 +297,28 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
     );
   }
 
+  const addSystemMessages = (messages: unknown) => {
+    if (!Array.isArray(messages)) return;
+
+    systemMessages.push(
+      ...messages
+        .filter(message => isRecord(message) && message.role === 'system')
+        .map(message => getTextFromValue(message))
+        .filter((content): content is string => Boolean(content)),
+    );
+  };
+
+  addSystemMessages(input.inputMessages);
+  addSystemMessages(input.messages);
+
   // Add tagged system messages (these are specialized system prompts)
-  if (input?.taggedSystemMessages) {
+  if (isRecord(input.taggedSystemMessages)) {
     Object.values(input.taggedSystemMessages).forEach(messages => {
+      if (!Array.isArray(messages)) return;
       messages.forEach(msg => {
-        if (typeof msg.content === 'string') {
-          systemMessages.push(msg.content);
+        const content = getTextFromValue(msg);
+        if (content) {
+          systemMessages.push(content);
         }
       });
     });
@@ -303,7 +345,7 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
  * ```
  */
 export const getCombinedSystemPrompt = (input?: unknown): string => {
-  const systemMessages = getSystemMessagesFromRunInput(isScorerRunInputForAgent(input) ? input : undefined);
+  const systemMessages = getSystemMessagesFromRunInput(input);
   return systemMessages.join('\n\n');
 };
 

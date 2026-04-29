@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getTextContentFromMastraDBMessage,
   getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
   isScorerRunOutputForAgent,
@@ -128,6 +129,13 @@ describe('Scorer Utils', () => {
       expect(getUserMessageFromRunInput('String question')).toBe('String question');
     });
 
+    it('should extract user text from common non-agent input fields', () => {
+      expect(getUserMessageFromRunInput({ text: 'Text question' })).toBe('Text question');
+      expect(getUserMessageFromRunInput({ content: 'Content question' })).toBe('Content question');
+      expect(getUserMessageFromRunInput({ input: { text: 'Input question' } })).toBe('Input question');
+      expect(getUserMessageFromRunInput({ user: { body: 'User question' } })).toBe('User question');
+    });
+
     it('should extract user text from model messages', () => {
       const input = {
         messages: [
@@ -137,6 +145,29 @@ describe('Scorer Utils', () => {
       };
 
       expect(getUserMessageFromRunInput(input)).toBe('Model question');
+    });
+
+    it('should extract user text from message text and body fields', () => {
+      expect(getUserMessageFromRunInput({ messages: [{ role: 'user', text: 'Text message question' }] })).toBe(
+        'Text message question',
+      );
+      expect(getUserMessageFromRunInput({ inputMessages: [{ role: 'user', body: 'Body message question' }] })).toBe(
+        'Body message question',
+      );
+    });
+  });
+
+  describe('getCombinedSystemPrompt', () => {
+    it('should include system messages from non-agent message arrays', () => {
+      expect(
+        getCombinedSystemPrompt({
+          messages: [
+            { role: 'system', content: 'System message' },
+            { role: 'user', content: 'User question' },
+          ],
+          inputMessages: [{ role: 'system', text: 'Input system message' }],
+        }),
+      ).toBe('Input system message\n\nSystem message');
     });
   });
 
