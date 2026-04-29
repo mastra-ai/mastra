@@ -3891,8 +3891,9 @@ export class Agent<
                 result = { text: fullText };
               }
 
-              // Note: usage is included in result for all generate and stream paths above.
-              // Legacy stream paths (streamLegacy) accumulate text only and won't have usage.
+              // Note: `usage` is included in `result` for successful generate, generateLegacy,
+              // and stream code paths. The `streamLegacy` path accumulates text only and won't
+              // have `usage`. Error/rejected delegation callbacks may also omit it.
 
               // Call onDelegationComplete hook if provided
               if (delegation?.onDelegationComplete) {
