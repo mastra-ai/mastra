@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "lib": ["DOM", "DOM.Iterable", "DOM.AsyncIterable", "ES2023"]
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
   },
   "include": ["src/**/*"],
   "exclude": [
