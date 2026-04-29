@@ -16,6 +16,8 @@ export interface SaveParams {
   workflows: Record<string, StoredAgentToolConfig> | undefined;
   skills: Record<string, StoredAgentSkillConfig> | undefined;
   workspace: StoredWorkspaceRef | undefined;
+  /** `undefined` = let server apply builder default; `null` = explicit opt-out */
+  browser: undefined | null;
   visibility: 'private' | 'public';
   metadata: Record<string, unknown> | undefined;
 }
@@ -73,6 +75,9 @@ export function formValuesToSaveParams(
 
   const metadata: Record<string, unknown> | undefined = values.avatarUrl ? { avatarUrl: values.avatarUrl } : undefined;
 
+  // undefined = let server apply builder default; null = explicit opt-out
+  const browser: undefined | null = values.browserEnabled ? undefined : null;
+
   return {
     name: values.name,
     description,
@@ -82,6 +87,7 @@ export function formValuesToSaveParams(
     workflows: orUndefined(workflows) as SaveParams['workflows'],
     skills: orUndefined(skills) as SaveParams['skills'],
     workspace,
+    browser,
     visibility: values.visibility ?? 'private',
     metadata,
   };

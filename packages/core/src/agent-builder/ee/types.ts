@@ -38,6 +38,8 @@ export interface AgentFeatures {
   /** Star (favorite) agents and skills with per-user state and aggregate counts. */
   stars?: boolean;
   avatarUpload?: boolean;
+  /** Allow end-users to enable browser access for their agents. */
+  browser?: boolean;
 }
 
 /**

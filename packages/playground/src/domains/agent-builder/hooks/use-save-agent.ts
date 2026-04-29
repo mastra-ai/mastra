@@ -27,6 +27,7 @@ export function useSaveAgent({
     async (values: AgentBuilderEditFormValues) => {
       const params = formValuesToSaveParams(values, availableAgentTools, availableSkills);
       const workspaceField = params.workspace ? { workspace: params.workspace } : {};
+      const browserField = params.browser !== undefined ? { browser: params.browser } : {};
       const metadataField = params.metadata ? { metadata: params.metadata } : {};
 
       try {
@@ -41,6 +42,7 @@ export function useSaveAgent({
             skills: params.skills,
             visibility: params.visibility,
             ...workspaceField,
+            ...browserField,
             ...metadataField,
           });
           toast.success('Agent updated');
@@ -60,6 +62,7 @@ export function useSaveAgent({
           skills: params.skills,
           visibility: params.visibility,
           ...workspaceField,
+          ...browserField,
           ...metadataField,
         });
         toast.success('Agent created');

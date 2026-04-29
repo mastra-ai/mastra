@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Avatar, cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, Plus, Sparkles, Wrench } from 'lucide-react';
+import { Avatar, cn, Skeleton, Switch, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
+import { ChevronRight, FileText, Globe, Plus, Sparkles, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -20,6 +20,7 @@ export interface AgentConfig {
   systemPrompt: string;
   visibility?: 'private' | 'public';
   authorId?: string | null;
+  browserEnabled?: boolean;
 }
 
 export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
@@ -334,6 +335,33 @@ interface ConfigRowsProps {
   disabled?: boolean;
 }
 
+function BrowserToggleRow({ disabled = false }: { disabled?: boolean }) {
+  const { setValue } = useFormContext<AgentBuilderEditFormValues>();
+  const browserEnabled = useWatch<AgentBuilderEditFormValues, 'browserEnabled'>({ name: 'browserEnabled' });
+
+  return (
+    <div className={cn('flex items-center gap-3 px-6 py-4', disabled && 'cursor-not-allowed opacity-60')}>
+      <span className="shrink-0 text-neutral3">
+        <Globe className="h-4 w-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <Txt variant="ui-sm" className="font-medium text-neutral6">
+          Browser
+        </Txt>
+        <Txt variant="ui-xs" className="truncate text-neutral3">
+          Allow your agent to browse the web
+        </Txt>
+      </div>
+      <Switch
+        checked={browserEnabled ?? false}
+        onCheckedChange={checked => setValue('browserEnabled', checked, { shouldDirty: true })}
+        disabled={disabled}
+        data-testid="agent-browser-toggle"
+      />
+    </div>
+  );
+}
+
 function ConfigRows({
   features,
   instructionsDescription,
@@ -382,6 +410,7 @@ function ConfigRows({
           testId="agent-preview-skills-button"
         />
       )}
+      {features.browser && <BrowserToggleRow disabled={disabled} />}
     </div>
   );
 }

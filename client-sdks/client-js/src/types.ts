@@ -1057,6 +1057,20 @@ export type StoredWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: Record<string, unknown> };
 
+export interface StoredBrowserConfig {
+  provider: string;
+  headless?: boolean;
+  viewport?: { width: number; height: number };
+  timeout?: number;
+  cdpUrl?: string;
+  scope?: string;
+  screencast?: { enabled?: boolean; quality?: number; maxWidth?: number; maxHeight?: number };
+  profile?: Record<string, unknown>;
+  executablePath?: string;
+}
+
+export type StoredBrowserRef = { type: 'inline'; config: StoredBrowserConfig };
+
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
 // Re-exported from @mastra/core/storage for convenience
@@ -1101,6 +1115,7 @@ export interface StoredAgentResponse {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  browser?: ConditionalField<StoredBrowserRef>;
   requestContextSchema?: Record<string, unknown>;
   // Stars (EE feature, present when stars feature is enabled)
   isStarred?: boolean;
@@ -2772,6 +2787,8 @@ export interface BuilderAgentFeatures {
   memory?: boolean;
   variables?: boolean;
   stars?: boolean;
+  avatarUpload?: boolean;
+  browser?: boolean;
 }
 
 /**

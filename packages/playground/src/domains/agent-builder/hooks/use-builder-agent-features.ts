@@ -12,5 +12,6 @@ export const useBuilderAgentFeatures = () => {
     avatarUpload: features?.avatarUpload === true,
     skills: features?.skills === true,
     stars: features?.stars === true,
+    browser: features?.browser === true,
   };
 };

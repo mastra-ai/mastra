@@ -14,6 +14,7 @@ export const agentFeaturesSchema = z.object({
   variables: z.boolean().optional(),
   stars: z.boolean().optional(),
   avatarUpload: z.boolean().optional(),
+  browser: z.boolean().optional(),
 });
 
 /**
