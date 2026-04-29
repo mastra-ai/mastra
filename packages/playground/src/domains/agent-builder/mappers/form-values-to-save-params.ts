@@ -11,10 +11,10 @@ export interface SaveParams {
   name: string;
   description: string | undefined;
   instructions: string;
-  tools: Record<string, StoredAgentToolConfig> | undefined;
-  agents: Record<string, StoredAgentToolConfig> | undefined;
-  workflows: Record<string, StoredAgentToolConfig> | undefined;
-  skills: Record<string, StoredAgentSkillConfig> | undefined;
+  tools: Record<string, StoredAgentToolConfig>;
+  agents: Record<string, StoredAgentToolConfig>;
+  workflows: Record<string, StoredAgentToolConfig>;
+  skills: Record<string, StoredAgentSkillConfig>;
   workspace: StoredWorkspaceRef | undefined;
   visibility: 'private' | 'public';
   /**
@@ -68,8 +68,6 @@ export function formValuesToSaveParams(
   const workflows = buildEnabledRecord(values.workflows, workflowDescriptionById);
   const skills = buildEnabledRecord(values.skills, skillDescriptionById);
 
-  const orUndefined = (rec: Record<string, unknown>) => (Object.keys(rec).length === 0 ? undefined : rec);
-
   const workspace: StoredWorkspaceRef | undefined =
     typeof values.workspaceId === 'string' && values.workspaceId.length > 0
       ? { type: 'id', workspaceId: values.workspaceId }
@@ -83,10 +81,10 @@ export function formValuesToSaveParams(
     name: values.name,
     description,
     instructions: values.instructions,
-    tools: orUndefined(tools) as SaveParams['tools'],
-    agents: orUndefined(agents) as SaveParams['agents'],
-    workflows: orUndefined(workflows) as SaveParams['workflows'],
-    skills: orUndefined(skills) as SaveParams['skills'],
+    tools,
+    agents,
+    workflows,
+    skills: skills as Record<string, StoredAgentSkillConfig>,
     workspace,
     visibility: values.visibility ?? 'private',
     model: values.model,

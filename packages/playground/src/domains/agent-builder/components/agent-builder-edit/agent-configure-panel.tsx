@@ -150,7 +150,7 @@ function ConfigurePanelContent({
     >
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-          <div className="flex flex-col gap-3 px-6">
+          <div className="grid grid-cols-[auto_1fr] gap-2 px-6">
             {features.avatarUpload ? (
               <>
                 <button
@@ -196,27 +196,31 @@ function ConfigurePanelContent({
               </div>
             )}
 
-            <TextFieldBlock
-              name="agent-name"
-              label="Name"
-              labelIsHidden
-              value={panelName}
-              placeholder="Untitled agent"
-              onChange={e => setDraftName(e.target.value)}
-              disabled={mutationsDisabled}
-              testId="agent-configure-name"
-            />
+            <div className="flex flex-col gap-2">
+              <TextFieldBlock
+                name="agent-name"
+                label="Name"
+                labelIsHidden
+                value={panelName}
+                placeholder="Untitled agent"
+                onChange={e => setDraftName(e.target.value)}
+                disabled={mutationsDisabled}
+                testId="agent-configure-name"
+                className="[&_input]:border-none"
+              />
 
-            <TextFieldBlock
-              name="agent-description"
-              label="Description"
-              labelIsHidden
-              value={panelDescription}
-              placeholder="What is this agent for?"
-              onChange={e => setDraftDescription(e.target.value)}
-              disabled={mutationsDisabled}
-              testId="agent-configure-description"
-            />
+              <TextFieldBlock
+                name="agent-description"
+                label="Description"
+                labelIsHidden
+                value={panelDescription}
+                placeholder="What is this agent for?"
+                onChange={e => setDraftDescription(e.target.value)}
+                disabled={mutationsDisabled}
+                testId="agent-configure-description"
+                className="[&_input]:border-none"
+              />
+            </div>
           </div>
 
           <ConfigRows

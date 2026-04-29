@@ -284,4 +284,48 @@ describe('useSaveAgent persists tools and agents on save', () => {
     expect(capturedBody).toBeTruthy();
     expect(capturedBody.model).toEqual({ provider: 'openai', name: 'gpt-4o' });
   });
+
+  it('sends an empty tools record when a previously-selected tool is deselected on update', async () => {
+    let capturedBody: any = null;
+    server.use(
+      http.patch(`${BASE_URL}/api/stored/agents/existing-id`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'existing-id' });
+      }),
+    );
+
+    const availableAgentTools: AgentTool[] = [
+      { id: 'tool-a', name: 'tool-a', description: 'Tool A desc', isChecked: false, type: 'tool' },
+    ];
+
+    const { hook } = renderSave({
+      agentId: 'existing-id',
+      mode: 'edit',
+      availableAgentTools,
+      defaultValues: {
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: { 'tool-a': false },
+        agents: {},
+        workflows: {},
+        skills: {},
+      },
+    });
+
+    await act(async () => {
+      await hook.current.save({
+        name: 'Existing',
+        description: '',
+        instructions: 'inst',
+        tools: { 'tool-a': false },
+        agents: {},
+        workflows: {},
+        skills: {},
+      });
+    });
+
+    expect(capturedBody).toBeTruthy();
+    expect(capturedBody.tools).toEqual({});
+  });
 });
