@@ -1,3 +1,4 @@
+import type { StorageSkillFileNode } from '@mastra/core/storage';
 import { LocalSkillSource } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
@@ -27,6 +28,78 @@ import {
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
 import { prepareStarsEnrichment, stripStarFields } from './stars-enrichment';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Well-known folder names in the skill file tree whose children represent
+ * indexable path arrays (references, scripts, assets).
+ */
+const INDEXED_FOLDERS = ['references', 'scripts', 'assets'] as const;
+
+/**
+ * Walks the `files` tree and collects relative file paths for each well-known
+ * folder (references, scripts, assets).  Returned arrays only include entries
+ * that are not already present in any explicitly-provided arrays so callers
+ * can pass both `files` and `references` without creating duplicates.
+ */
+function extractIndexedPathsFromFiles(
+  files: StorageSkillFileNode[] | undefined,
+  existing: {
+    references?: string[];
+    scripts?: string[];
+    assets?: string[];
+  },
+): {
+  references?: string[];
+  scripts?: string[];
+  assets?: string[];
+} {
+  if (!files || files.length === 0) return {};
+
+  // Find the root folder (first folder node, usually id="root")
+  const root = files.find(n => n.type === 'folder');
+  if (!root?.children) return {};
+
+  const result: Record<string, string[]> = {};
+
+  for (const folderName of INDEXED_FOLDERS) {
+    const folder = root.children.find(n => n.type === 'folder' && n.name === folderName);
+    if (!folder?.children || folder.children.length === 0) continue;
+
+    const existingPaths = new Set(existing[folderName] ?? []);
+    const paths: string[] = [...existingPaths];
+
+    collectFilePaths(folder.children, folderName, existingPaths, paths);
+
+    if (paths.length > 0) {
+      result[folderName] = paths;
+    }
+  }
+
+  return result;
+}
+
+/** Recursively collects file paths from a subtree, building relative paths. */
+function collectFilePaths(
+  nodes: StorageSkillFileNode[],
+  prefix: string,
+  existingPaths: Set<string>,
+  out: string[],
+): void {
+  for (const node of nodes) {
+    if (node.type === 'file') {
+      const relativePath = `${prefix}/${node.name}`;
+      if (!existingPaths.has(relativePath)) {
+        out.push(relativePath);
+      }
+    } else if (node.type === 'folder' && node.children) {
+      collectFilePaths(node.children, `${prefix}/${node.name}`, existingPaths, out);
+    }
+  }
+}
 
 // ============================================================================
 // Route Definitions
@@ -260,6 +333,10 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
       const visibility: 'private' | 'public' = bodyVisibility ?? (authorId ? 'private' : 'public');
 
+      // Derive references/scripts/assets path arrays from the files tree
+      // so agents can discover them via skill_read even when only `files` is provided.
+      const indexedPaths = extractIndexedPathsFromFiles(files, { references, scripts, assets });
+
       await skillStore.create({
         skill: {
           id,
@@ -271,9 +348,9 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
           license,
           compatibility,
           source,
-          references,
-          scripts,
-          assets,
+          references: indexedPaths.references ?? references,
+          scripts: indexedPaths.scripts ?? scripts,
+          assets: indexedPaths.assets ?? assets,
           files,
           metadata,
         },
@@ -353,6 +430,9 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         record: existing,
       });
 
+      // Derive references/scripts/assets path arrays from the files tree
+      const indexedPaths = files ? extractIndexedPathsFromFiles(files, { references, scripts, assets }) : {};
+
       // Update the skill with both entity-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
       await skillStore.update({
@@ -365,9 +445,9 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         license,
         compatibility,
         source,
-        references,
-        scripts,
-        assets,
+        references: indexedPaths.references ?? references,
+        scripts: indexedPaths.scripts ?? scripts,
+        assets: indexedPaths.assets ?? assets,
         files,
         metadata,
       });
