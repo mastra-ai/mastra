@@ -154,8 +154,6 @@ const AgentBuilderAgentViewReady = ({
   const features = useBuilderAgentFeatures();
   const hasBrowser = features.browser && storedAgent?.browser != null;
 
-  console.log(' hasBrowser', hasBrowser, features, storedAgent);
-
   const content = (
     <AgentChatPanelProvider
       agentId={id}
