@@ -15,10 +15,12 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
+import type { ObservabilityContext } from '../../../observability';
 import { executeWithContextSync } from '../../../observability/utils';
-import type { ProcessorStreamWriter } from '../../../processors/index';
+import type { OutputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
+import type { ProcessorState } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -61,7 +63,43 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
+  // processToolResult plumbing — let the streaming case 'tool-result' handler
+  // invoke output processors after tool.execute() returns and before the result
+  // chunk is forwarded to streaming clients.
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  processorStates?: Map<string, ProcessorState>;
+  agentId?: string;
+  processorRetryCount?: number;
+  outputWriter?: (chunk: ChunkType, options?: { messageId?: string }) => Promise<void> | void;
+  requestContext?: RequestContext;
+  toolResultObservability?: Partial<ObservabilityContext>;
+  toolResultStepNumber?: number;
 };
+
+/**
+ * Walk messageList backwards looking for a tool-invocation part with the given
+ * toolCallId in result state. Returns the result value if found, undefined otherwise.
+ *
+ * Used to read the post-processToolResult value back from the message list so we can
+ * sync any processor mutations into the downstream tool-result stream chunk.
+ */
+function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
+  const messages = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (
+        part?.type === 'tool-invocation' &&
+        part.toolInvocation?.toolCallId === toolCallId &&
+        part.toolInvocation?.state === 'result'
+      ) {
+        return part.toolInvocation.result;
+      }
+    }
+  }
+  return undefined;
+}
 
 function buildResponseModelMetadata(
   runState: AgenticRunState,
@@ -94,9 +132,39 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
-}: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
+  outputProcessors,
+  processorStates,
+  agentId,
+  processorRetryCount,
+  outputWriter,
+  requestContext,
+  toolResultObservability,
+  toolResultStepNumber,
+}: ProcessOutputStreamOptions<OUTPUT>): Promise<{
+  collectedChunks: CollectedChunk[];
+  toolResultTripwire: TripWire | null;
+}> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
+  let toolResultTripwire: TripWire | null = null;
+  let toolResultProcessorRunner: ProcessorRunner | null = null;
+  const getToolResultProcessorRunner = (): ProcessorRunner => {
+    if (toolResultProcessorRunner) return toolResultProcessorRunner;
+    toolResultProcessorRunner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: outputProcessors ?? [],
+      logger: logger || new ConsoleLogger({ level: 'error' }),
+      agentName: agentId || 'unknown',
+      processorStates,
+    });
+    return toolResultProcessorRunner;
+  };
+  const toolResultWriter: ProcessorStreamWriter | undefined = outputWriter
+    ? {
+        custom: async (data: { type: string }, customOptions?: { messageId?: string }) =>
+          outputWriter(data as ChunkType, { ...customOptions, messageId: outputStream.messageId }),
+      }
+    : undefined;
 
   for await (const chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
@@ -234,6 +302,7 @@ async function processOutputStream<OUTPUT = undefined>({
         if (chunk.payload.result != null) {
           const resultToolDef =
             tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+          const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef);
           messageList.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: {
@@ -244,8 +313,61 @@ async function processOutputStream<OUTPUT = undefined>({
               result: chunk.payload.result,
             },
             providerMetadata: chunk.payload.providerMetadata,
-            providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+            providerExecuted: inferredProviderExecuted,
           });
+
+          // Run processToolResult processors after the result is in messageList,
+          // before the chunk is enqueued to streaming clients. Symmetric with
+          // processOutputStep (which fires before tool execution); this hook fires
+          // after tool.execute() returns and lets processors scan the result for
+          // prompt injection / sensitive data, redact fields, or abort the run.
+          //
+          // This case path covers provider-executed deferred tools (e.g. Anthropic
+          // web_search) whose results arrive in a later LLM stream. Client-executed
+          // tools take a different path through llm-mapping-step.ts, which has its
+          // own processToolResult invocation site.
+          if (outputProcessors && outputProcessors.length > 0) {
+            try {
+              await getToolResultProcessorRunner().runProcessToolResult({
+                steps: [],
+                messages: messageList.get.all.db(),
+                messageList,
+                stepNumber: toolResultStepNumber ?? 0,
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+                toolArgs: chunk.payload.args,
+                result: chunk.payload.result,
+                providerExecuted: inferredProviderExecuted,
+                ...(toolResultObservability ?? {}),
+                requestContext,
+                retryCount: processorRetryCount ?? 0,
+                writer: toolResultWriter,
+                abortSignal: options?.abortSignal,
+              });
+
+              // Sync any processor mutation back into the chunk so streaming clients
+              // see the post-processor value, not the raw tool return.
+              const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
+              if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+                (chunk.payload as { result: unknown }).result = postProcessorResult;
+              }
+            } catch (error) {
+              if (error instanceof TripWire) {
+                toolResultTripwire = error;
+                logger?.warn('Tool result processor tripwire triggered', {
+                  reason: error.message,
+                  processorId: error.processorId,
+                  retry: error.options?.retry,
+                });
+                // Stop processing further chunks; the outer LLM execution step
+                // joins this tripwire with the existing processOutputStep tripwire path.
+                runState.setState({ hasErrored: true });
+                break;
+              }
+              logger?.error('Error in processToolResult processors:', error);
+              throw error;
+            }
+          }
         }
         safeEnqueue(controller, chunk);
         break;
@@ -279,7 +401,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
   }
 
-  return collectedChunks;
+  return { collectedChunks, toolResultTripwire };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -391,15 +513,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
-      const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
-        await executeStreamWithFallbackModels<{
-          outputStream: MastraModelOutput<OUTPUT>;
-          runState: AgenticRunState;
-          callBail?: boolean;
-          stepTools?: TOOLS;
-          stepWorkspace?: Workspace;
-          processAPIErrorRetry?: { retry: boolean };
-        }>(
+      const {
+        outputStream,
+        callBail,
+        runState,
+        stepTools,
+        stepWorkspace,
+        processAPIErrorRetry,
+        toolResultTripwire: toolResultTripwireFromStreamOuter,
+      } = await executeStreamWithFallbackModels<{
+        outputStream: MastraModelOutput<OUTPUT>;
+        runState: AgenticRunState;
+        callBail?: boolean;
+        stepTools?: TOOLS;
+        stepWorkspace?: Workspace;
+        processAPIErrorRetry?: { retry: boolean };
+        toolResultTripwire?: TripWire | null;
+      }>(
           models,
           logger,
           activeFallbackModelIndex,
@@ -834,8 +964,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             transportResolver = () => routerModel._getStreamTransport();
           }
 
+          let toolResultTripwireFromStream: TripWire | null = null;
           try {
-            const collectedChunks = await processOutputStream({
+            const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
@@ -852,7 +983,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger,
               transportRef: _internal?.transportRef,
               transportResolver,
+              outputProcessors,
+              processorStates,
+              agentId,
+              processorRetryCount: inputData.processorRetryCount,
+              outputWriter,
+              requestContext,
+              toolResultObservability: createObservabilityContext(
+                modelSpanTracker?.getTracingContext() ?? tracingContext,
+              ),
+              toolResultStepNumber: inputData.output?.steps?.length ?? 0,
             });
+            toolResultTripwireFromStream = streamToolResultTripwire;
 
             // Build messages from the full chunk sequence and add to messageList.
             // This replaces the old inline flush approach — all parts are built in
@@ -1026,6 +1168,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             runState,
             stepTools: currentStep.tools,
             stepWorkspace: currentStep.workspace,
+            toolResultTripwire: toolResultTripwireFromStream,
           };
         });
 
@@ -1202,8 +1345,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       });
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
-      // This allows processors to validate/modify the response and trigger retries if needed
-      let processOutputStepTripwire: TripWire | null = null;
+      // This allows processors to validate/modify the response and trigger retries if needed.
+      //
+      // toolResultTripwireFromStreamOuter is a tripwire that fired during stream processing
+      // from a processToolResult hook (per-tool, post-tool-execute). We seed
+      // processOutputStepTripwire with it so the existing tripwire/retry/abort flow handles
+      // both kinds of step-level processor tripwires uniformly.
+      let processOutputStepTripwire: TripWire | null = toolResultTripwireFromStreamOuter ?? null;
       if (outputProcessors && outputProcessors.length > 0) {
         const processorRunner = new ProcessorRunner({
           inputProcessors: [],
