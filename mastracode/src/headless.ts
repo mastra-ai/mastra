@@ -186,6 +186,12 @@ Examples:
   mastracode --resource-id my-project --prompt "Fix the bug"
   echo "task description" | mastracode --prompt -
 
+Piping without --prompt launches the interactive TUI with piped content
+as the first message:
+  cat file.txt | mastracode
+  git diff | mastracode
+  npm test 2>&1 | mastracode
+
 Run without --prompt for the interactive TUI.
 `);
 }
