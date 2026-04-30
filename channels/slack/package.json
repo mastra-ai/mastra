@@ -41,7 +41,7 @@
     "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "@mastra/core": "^1.31.0"
+    "@mastra/core": ">=1.31.0-0 <2.0.0-0"
   },
   "publishConfig": {
     "access": "public"
