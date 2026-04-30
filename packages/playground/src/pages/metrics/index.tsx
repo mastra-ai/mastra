@@ -25,12 +25,7 @@ import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
 import { LatencyCard } from '@/domains/metrics/components/latency-card';
-import {
-  AgentRunsKpiCard,
-  AvgScoreKpiCard,
-  ModelCostKpiCard,
-  TotalTokensKpiCard,
-} from '@/domains/metrics/components/metrics-kpi-cards';
+import { AgentRunsKpiCard, ModelCostKpiCard, TotalTokensKpiCard } from '@/domains/metrics/components/metrics-kpi-cards';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
 import { ScoresCard } from '@/domains/metrics/components/scores-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
@@ -166,7 +161,6 @@ function MetricsContent() {
             <AgentRunsKpiCard />
             <ModelCostKpiCard />
             <TotalTokensKpiCard />
-            <AvgScoreKpiCard />
           </MetricsFlexGrid>
 
           <MetricsFlexGrid>
