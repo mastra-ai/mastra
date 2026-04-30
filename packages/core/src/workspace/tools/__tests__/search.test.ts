@@ -54,6 +54,24 @@ describe('workspace_search', () => {
     expect(result).not.toContain('0 results');
   });
 
+  it('should restrict mode enum in tool input schema to supported modes (#14531)', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      bm25: true,
+      // No vector config — only bm25 should appear in the enum
+    });
+    const tools = createWorkspaceTools(workspace);
+    const tool = tools[WORKSPACE_TOOLS.SEARCH.SEARCH];
+
+    // The dynamic input schema should reject 'hybrid' / 'vector' so the LLM
+    // never sees them as valid options in the JSON schema sent to the model.
+    const parsed = (tool.inputSchema as any).safeParse({ query: 'quick', mode: 'hybrid' });
+    expect(parsed.success).toBe(false);
+
+    const ok = (tool.inputSchema as any).safeParse({ query: 'quick', mode: 'bm25' });
+    expect(ok.success).toBe(true);
+  });
+
   it('should return empty results for no matches', async () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),

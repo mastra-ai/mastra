@@ -26,7 +26,7 @@ import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
-import { searchTool } from './search';
+import { searchInputSchema, searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
 export type {
   WorkspaceToolConfig,
@@ -284,9 +284,9 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     const dynamicSearchTool = {
       ...searchTool,
-      inputSchema: searchTool.inputSchema.extend({
+      inputSchema: searchInputSchema.extend({
         mode: z
-          .enum(availableModes as ['bm25' | 'vector' | 'hybrid', ...('bm25' | 'vector' | 'hybrid')[]])
+          .enum(availableModes as [(typeof availableModes)[number], ...(typeof availableModes)[number][]])
           .optional()
           .describe(`Search mode: ${availableModes.join(', ')}`),
       }),
