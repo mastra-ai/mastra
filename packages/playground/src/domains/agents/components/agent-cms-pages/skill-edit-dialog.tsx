@@ -70,7 +70,11 @@ export function SkillEditDialog({
   const { data: workspacesData } = useStoredWorkspaces();
   const { data: builderSettings } = useBuilderSettings();
   const workspaceOptions = useMemo(
-    () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
+    () =>
+      (workspacesData?.workspaces ?? [])
+        .filter(ws => ws.status !== 'archived')
+        .sort((a, b) => (b.runtimeRegistered ? 1 : 0) - (a.runtimeRegistered ? 1 : 0))
+        .map(ws => ({ value: ws.id, label: ws.name })),
     [workspacesData],
   );
   const { data: workspaceInfo } = useWorkspaceInfo(workspaceId || undefined);

@@ -11,7 +11,7 @@ import type {
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
-import type { BlobStore } from '@mastra/core/storage';
+import type { BlobStore, StorageWorkspaceSnapshotType } from '@mastra/core/storage';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
@@ -151,10 +151,15 @@ export class MastraEditor implements IMastraEditor {
       this.__logger = mastra.getLogger();
     }
 
-    // Fire-and-forget: persist builder default workspace to DB if configured
-    this.ensureBuilderWorkspaces().catch(err => {
-      this.__logger?.warn('[MastraEditor] Failed to persist builder default workspace on startup', { error: err });
-    });
+    // Fire-and-forget: persist builder default workspace to DB if configured,
+    // then reconcile orphaned builder workspaces
+    this.ensureBuilderWorkspaces()
+      .then(() => this.reconcileBuilderWorkspaces())
+      .catch(err => {
+        this.__logger?.warn('[MastraEditor] Failed to persist/reconcile builder workspaces on startup', {
+          error: err,
+        });
+      });
   }
 
   /**
@@ -162,6 +167,11 @@ export class MastraEditor implements IMastraEditor {
    * Called automatically on startup when the editor registers with Mastra.
    * Goes through the normal create() path so hydration validates that
    * all providers (filesystem, sandbox) are properly registered.
+   *
+   * If the workspace already exists but its config has drifted from the
+   * runtime workspace, the DB record is updated (creating a new version).
+   * Builder-created workspaces are tagged with `metadata.source = 'builder'`
+   * so they can be identified during reconciliation.
    */
   private async ensureBuilderWorkspaces(): Promise<void> {
     if (!this.hasEnabledBuilderConfig()) return;
@@ -171,19 +181,86 @@ export class MastraEditor implements IMastraEditor {
     const workspaceRef = agentConfig?.workspace as { type: string; workspaceId?: string } | undefined;
     if (!workspaceRef || workspaceRef.type !== 'id' || !workspaceRef.workspaceId) return;
 
-    // Already persisted?
-    const existing = await this.workspace.getById(workspaceRef.workspaceId);
-    if (existing) return;
-
     const runtimeWorkspace = this.__mastra?.getWorkspaceById(workspaceRef.workspaceId);
     if (!runtimeWorkspace) return;
 
     const snapshot = this.workspace.snapshotFromWorkspace(runtimeWorkspace);
-    await this.workspace.create({
-      id: workspaceRef.workspaceId,
-      ...snapshot,
+    const builderMetadata = { source: 'builder' as const, builderWorkspaceId: workspaceRef.workspaceId };
+
+    const existing = await this.workspace.getById(workspaceRef.workspaceId);
+    if (!existing) {
+      // First time — create with builder metadata
+      await this.workspace.create({
+        id: workspaceRef.workspaceId,
+        metadata: builderMetadata,
+        ...snapshot,
+      });
+      this.__logger?.info(`[MastraEditor] Persisted builder workspace '${workspaceRef.workspaceId}' to DB`);
+      return;
+    }
+
+    // Workspace exists — check for config drift and backfill metadata
+    const needsMetadataBackfill = !existing.metadata?.source;
+    const configDrifted = !snapshotsMatch(existing, snapshot);
+
+    if (needsMetadataBackfill || configDrifted) {
+      const updateInput: Record<string, unknown> = { id: workspaceRef.workspaceId };
+      if (needsMetadataBackfill) {
+        updateInput.metadata = { ...existing.metadata, ...builderMetadata };
+      }
+      if (configDrifted) {
+        Object.assign(updateInput, snapshot);
+        this.__logger?.info(
+          `[MastraEditor] Workspace '${workspaceRef.workspaceId}' config drifted — updating DB record`,
+        );
+      }
+      await this.workspace.update(updateInput as any);
+    }
+  }
+
+  /**
+   * Archive builder-created workspaces that no longer match the current
+   * builder configuration. Called after `ensureBuilderWorkspaces()` on startup.
+   *
+   * Only touches workspaces tagged with `metadata.source === 'builder'`.
+   * The current builder workspace (if any) is never archived.
+   */
+  private async reconcileBuilderWorkspaces(): Promise<void> {
+    if (!this.hasEnabledBuilderConfig()) return;
+
+    const builder = await this.resolveBuilder();
+    const agentConfig = builder?.getConfiguration()?.agent;
+    const workspaceRef = agentConfig?.workspace as { type: string; workspaceId?: string } | undefined;
+
+    // Determine the "current" builder workspace ID
+    let currentWorkspaceId: string | undefined;
+    if (workspaceRef?.type === 'id' && workspaceRef.workspaceId) {
+      currentWorkspaceId = workspaceRef.workspaceId;
+    }
+    // For inline workspaces, the ID is deterministic based on config hash
+    // (computed in agent.ensureStoredWorkspace), but since ensureBuilderWorkspaces
+    // only handles type='id', we just need the current ID here.
+
+    // List all builder-tagged workspaces
+    const { workspaces: allWorkspaces } = await this.workspace.listResolved({
+      perPage: false, // fetch all
+      metadata: { source: 'builder' },
     });
-    this.__logger?.info(`[MastraEditor] Persisted builder workspace '${workspaceRef.workspaceId}' to DB`);
+
+    for (const ws of allWorkspaces) {
+      // Skip the current builder workspace
+      if (ws.id === currentWorkspaceId) continue;
+      // Skip already archived
+      if (ws.status === 'archived') continue;
+
+      // Archive this orphaned builder workspace
+      try {
+        await this.workspace.update({ id: ws.id, status: 'archived' } as any);
+        this.__logger?.info(`[MastraEditor] Archived orphaned builder workspace '${ws.id}'`);
+      } catch (err) {
+        this.__logger?.warn(`[MastraEditor] Failed to archive workspace '${ws.id}'`, { error: err });
+      }
+    }
   }
 
   /**
@@ -302,4 +379,42 @@ export class MastraEditor implements IMastraEditor {
     if (!blobStore) throw new Error('Blob storage domain is not available');
     return blobStore;
   }
+}
+
+/**
+ * Compare a resolved workspace's config fields against a runtime snapshot.
+ * Returns true if all snapshot config fields match.
+ */
+export function snapshotsMatch(
+  stored: { name: string } & Partial<StorageWorkspaceSnapshotType>,
+  runtime: StorageWorkspaceSnapshotType,
+): boolean {
+  const keys: (keyof StorageWorkspaceSnapshotType)[] = [
+    'name',
+    'description',
+    'filesystem',
+    'sandbox',
+    'mounts',
+    'search',
+    'skills',
+    'tools',
+    'autoSync',
+    'operationTimeout',
+  ];
+
+  // JSON replacer that strips falsy leaf values (false, null, 0) so DB-hydrated
+  // defaults don't cause spurious mismatches against runtime snapshots.
+  const replacer = (_k: string, v: unknown) => (v === false || v === null || v === 0 ? undefined : v);
+
+  for (const key of keys) {
+    const storedVal = stored[key];
+    const runtimeVal = runtime[key];
+
+    const storedJSON = storedVal == null || storedVal === false ? undefined : JSON.stringify(storedVal, replacer);
+    const runtimeJSON = runtimeVal == null || runtimeVal === false ? undefined : JSON.stringify(runtimeVal, replacer);
+
+    if (storedJSON !== runtimeJSON) return false;
+  }
+
+  return true;
 }

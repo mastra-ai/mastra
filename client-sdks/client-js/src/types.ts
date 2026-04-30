@@ -2102,6 +2102,8 @@ export interface StoredWorkspaceResponse {
   };
   autoSync?: boolean;
   operationTimeout?: number;
+  /** Whether this workspace is registered at runtime (only present in list responses) */
+  runtimeRegistered?: boolean;
 }
 
 /**

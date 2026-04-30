@@ -64,7 +64,11 @@ export default function AgentBuilderAgentEdit() {
     (!features.workflows || !isWorkflowsPending);
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
-    () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
+    () =>
+      (workspacesData?.workspaces ?? [])
+        .filter(ws => ws.status !== 'archived')
+        .sort((a, b) => (b.runtimeRegistered ? 1 : 0) - (a.runtimeRegistered ? 1 : 0))
+        .map(ws => ({ id: ws.id, name: ws.name })),
     [workspacesData],
   );
 

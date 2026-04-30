@@ -248,6 +248,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         const snapshot = workspaceNs.snapshotFromWorkspace(runtimeWorkspace);
         await workspaceNs.create({
           id: workspaceRef.workspaceId,
+          metadata: { source: 'builder', builderWorkspaceId: workspaceRef.workspaceId },
           ...snapshot,
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted runtime workspace '${workspaceRef.workspaceId}' to DB`);
@@ -262,6 +263,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
         await workspaceNs.create({
           id: workspaceId,
+          metadata: { source: 'builder', builderConfigHash: configHash },
           ...workspaceRef.config,
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted inline workspace '${workspaceId}' to DB`);
