@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.17.4-alpha.0
+
+### Patch Changes
+
+- Fixed idle timeout and provider-change observation activations blocking on in-progress reflection buffering. These triggers now return immediately, letting the background reflection complete asynchronously. ([#15937](https://github.com/mastra-ai/mastra/pull/15937))
+
+- Updated dependencies [[`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443)]:
+  - @mastra/core@1.29.2-alpha.0
+
 ## 1.17.3
 
 ### Patch Changes

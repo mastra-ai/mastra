@@ -132,5 +132,13 @@
     "@mastra/s3": "0.5.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260430-010433",
+    "fair-birds-knock",
+    "frank-ghosts-work",
+    "green-birds-knock",
+    "rare-jokes-double",
+    "sharp-ghosts-wave",
+    "spotty-states-ring"
+  ]
 }

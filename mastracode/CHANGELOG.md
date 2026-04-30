@@ -1,5 +1,17 @@
 # mastracode
 
+## 0.16.2-alpha.0
+
+### Patch Changes
+
+- Show user message in TUI immediately before async work (thread creation, hooks, sending) for instant feedback regardless of GC pressure or I/O delays ([#15942](https://github.com/mastra-ai/mastra/pull/15942))
+
+- Added changelog display to the update prompt. When a new version is available, the update screen now shows a summary of what's changed, fetched from the published npm package's CHANGELOG.md. ([#15924](https://github.com/mastra-ai/mastra/pull/15924))
+
+- Updated dependencies [[`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`4b2e4f3`](https://github.com/mastra-ai/mastra/commit/4b2e4f3bc9f5a63dcbfccfa54f9474340c3cea58)]:
+  - @mastra/core@1.29.2-alpha.0
+  - @mastra/memory@1.17.4-alpha.0
+
 ## 0.16.1
 
 ### Patch Changes
