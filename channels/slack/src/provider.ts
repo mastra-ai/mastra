@@ -1284,7 +1284,12 @@ export class SlackProvider implements ChannelProvider {
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
-    const event = JSON.parse(rawBody);
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      return c.json({ error: 'Malformed JSON body' }, 400);
+    }
 
     // Handle URL verification challenge
     if (event.type === 'url_verification') {

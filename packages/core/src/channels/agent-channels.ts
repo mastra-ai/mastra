@@ -428,6 +428,9 @@ export class AgentChannels {
     options?: { managesRoutes?: boolean },
   ): void {
     if (this.adapters[platform]) {
+      if (options?.managesRoutes) {
+        this.externallyManagedPlatforms.add(platform);
+      }
       return;
     }
     this.adapters[platform] = adapter;
@@ -789,7 +792,14 @@ export class AgentChannels {
   ): Promise<Response> {
     // Ensure initialization is complete
     if (this.initPromise) {
-      await this.initPromise;
+      try {
+        await this.initPromise;
+      } catch {
+        return new Response(JSON.stringify({ error: 'Channel initialization failed' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const sdkInstance = this.chat;

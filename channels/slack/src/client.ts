@@ -90,8 +90,12 @@ export class SlackManifestClient {
       throw new Error(`Token rotation failed: ${data.error}`);
     }
 
-    this.#token = data.token!;
-    this.#refreshToken = data.refresh_token!;
+    if (!data.token || !data.refresh_token) {
+      throw new Error('Token rotation returned incomplete data');
+    }
+
+    this.#token = data.token;
+    this.#refreshToken = data.refresh_token;
 
     if (this.#onTokenRotation) {
       await this.#onTokenRotation({
@@ -144,12 +148,16 @@ export class SlackManifestClient {
       throw new Error(`App creation failed: ${errorDetails}`);
     }
 
+    if (!data.app_id || !data.credentials || !data.oauth_authorize_url) {
+      throw new Error('App creation returned incomplete data');
+    }
+
     return {
-      appId: data.app_id!,
-      clientId: data.credentials!.client_id,
-      clientSecret: data.credentials!.client_secret,
-      signingSecret: data.credentials!.signing_secret,
-      oauthAuthorizeUrl: data.oauth_authorize_url!,
+      appId: data.app_id,
+      clientId: data.credentials.client_id,
+      clientSecret: data.credentials.client_secret,
+      signingSecret: data.credentials.signing_secret,
+      oauthAuthorizeUrl: data.oauth_authorize_url,
     };
   }
 
