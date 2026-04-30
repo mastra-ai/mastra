@@ -101,6 +101,7 @@ npx tsx test-script.ts
 ```
 
 Key approach:
+
 - Import the component directly (e.g., `UserMessageComponent` from `./src/tui/components/user-message.js`)
 - Render at specific widths and strip ANSI codes to measure visible character widths
 - Assert all lines have identical visible width (for bordered components)
