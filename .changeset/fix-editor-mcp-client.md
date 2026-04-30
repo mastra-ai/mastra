@@ -2,7 +2,6 @@
 "@mastra/core": patch
 "@mastra/editor": patch
 "@mastra/server": patch
-"@mastra/playground": patch
 ---
 
 Fix MCP client support in the agent editor:
