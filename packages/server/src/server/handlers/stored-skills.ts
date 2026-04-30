@@ -223,6 +223,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
     references,
     scripts,
     assets,
+    files,
     metadata,
     visibility: bodyVisibility,
   }) => {
@@ -273,6 +274,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
           references,
           scripts,
           assets,
+          files,
           metadata,
         },
       });
@@ -321,6 +323,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
     references,
     scripts,
     assets,
+    files,
     metadata,
   }) => {
     try {
@@ -365,6 +368,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         references,
         scripts,
         assets,
+        files,
         metadata,
       });
 

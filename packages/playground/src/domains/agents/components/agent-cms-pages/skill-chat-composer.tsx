@@ -52,7 +52,6 @@ export function SkillChatComposer({
       },
       onDescriptionChange: callbacks.onDescriptionChange,
       onInstructionsChange: callbacks.onInstructionsChange,
-      onVisibilityChange: callbacks.onVisibilityChange,
     }),
     [callbacks, onFieldsPopulated],
   );
@@ -121,7 +120,7 @@ export function SkillChatComposer({
             </Txt>
             <Txt variant="ui-sm" className="text-neutral3" as="p">
               {hasFields
-                ? 'Ask the agent to adjust the name, description, instructions, or visibility.'
+                ? 'Ask the agent to adjust the name, description, or instructions.'
                 : 'Tell the agent what this skill should do and it will fill in the details for you.'}
             </Txt>
           </div>

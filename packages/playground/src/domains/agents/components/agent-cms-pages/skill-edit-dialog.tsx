@@ -1,6 +1,14 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, SideDialog } from '@mastra/playground-ui';
-import { AlertTriangle, ChevronDown, ChevronRight, Pencil, Settings2 } from 'lucide-react';
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SideDialog,
+} from '@mastra/playground-ui';
+import { AlertTriangle, ChevronDown, ChevronRight, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -233,14 +241,30 @@ export function SkillEditDialog({
             </Button>
           )}
           {!isReadOnly && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSave}
-              disabled={!name.trim() || (!isExistingSkill && (!workspaceId || !hasFilesystem)) || isPending}
-            >
-              {isPending ? 'Saving...' : isExistingSkill ? 'Save' : 'Create'}
-            </Button>
+            <>
+              <Select value={visibility} onValueChange={next => setVisibility(next as 'private' | 'public')}>
+                <SelectTrigger size="sm" aria-label="Visibility" className="w-fit gap-1.5">
+                  <SelectValue placeholder="Visibility" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">
+                    <span className="flex items-center gap-2">
+                      <LockIcon className="h-3.5 w-3.5" />
+                      Private
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="public">
+                    <span className="flex items-center gap-2">
+                      <Globe className="h-3.5 w-3.5" />
+                      Public
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="primary" size="sm" onClick={handleSave} disabled={!name.trim() || isPending}>
+                {isPending ? 'Saving...' : isExistingSkill ? 'Save' : 'Create'}
+              </Button>
+            </>
           )}
         </div>
       </SideDialog.Top>
@@ -253,8 +277,6 @@ export function SkillEditDialog({
             onNameChange={handleNameChange}
             description={description}
             onDescriptionChange={setDescription}
-            visibility={visibility}
-            onVisibilityChange={setVisibility}
             instructions={instructions}
             onInstructionsChange={handleInstructionsChange}
             readOnly
@@ -267,11 +289,10 @@ export function SkillEditDialog({
               sessionKey={chatSessionKey}
               hasFields={hasFields}
               onFieldsPopulated={handleFieldsPopulated}
-              formState={{ name, description, instructions, visibility }}
+              formState={{ name, description, instructions }}
               onNameChange={handleNameChange}
               onDescriptionChange={setDescription}
               onInstructionsChange={handleInstructionsChange}
-              onVisibilityChange={setVisibility}
             />
 
             {/* Form section — revealed after agent populates or user expands */}
@@ -284,6 +305,18 @@ export function SkillEditDialog({
                   <ChevronDown className="h-3 w-3" />
                   Hide skill details
                 </button>
+
+                {(!hasFilesystem || !workspaceId) && (
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>
+                      {!workspaceId
+                        ? 'No workspace available. The skill will be saved to the database only.'
+                        : 'No workspace filesystem configured. The skill will be saved to the database only.'}
+                    </span>
+                  </div>
+                )}
+
                 {mode === 'simple' ? (
                   <>
                     <SkillSimpleForm
@@ -291,18 +324,9 @@ export function SkillEditDialog({
                       onNameChange={handleNameChange}
                       description={description}
                       onDescriptionChange={setDescription}
-                      visibility={visibility}
-                      onVisibilityChange={setVisibility}
                       instructions={instructions}
                       onInstructionsChange={handleInstructionsChange}
                     />
-
-                    {!hasFilesystem && workspaceId && (
-                      <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
-                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>The selected workspace has no filesystem configured. Skill files cannot be written.</span>
-                      </div>
-                    )}
 
                     {isAdmin && (
                       <button

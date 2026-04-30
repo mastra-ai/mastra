@@ -72,7 +72,7 @@ const storage = new MastraCompositeStore({
 
 const workspace = new Workspace({
   id: 'builder-workspace',
-  filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
+  // filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
   sandbox: new DaytonaSandbox(),
 });
 
@@ -184,7 +184,15 @@ export const mastra = new Mastra({
       },
       configuration: {
         agent: {
-          workspace: { type: 'id', workspaceId: 'builder-workspace' },
+          // workspace: { type: 'id', workspaceId: 'builder-workspace' },
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'builder-workspace',
+              filesystem: { provider: 'local', config: { basePath: '.mastra/workspace' } },
+              sandbox: { provider: 'daytona', config: {} },
+            },
+          },
           memory: {
             options: {
               lastMessages: 10,

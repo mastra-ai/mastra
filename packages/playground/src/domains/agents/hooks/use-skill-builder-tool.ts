@@ -75,14 +75,12 @@ export interface SkillBuilderCallbacks {
   onNameChange: (name: string) => void;
   onDescriptionChange: (description: string) => void;
   onInstructionsChange: (instructions: string) => void;
-  onVisibilityChange: (visibility: 'private' | 'public') => void;
 }
 
 export interface SkillFormState {
   name: string;
   description: string;
   instructions: string;
-  visibility: 'private' | 'public';
 }
 
 export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formStateRef: React.RefObject<SkillFormState>) {
@@ -94,7 +92,7 @@ export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formState
       createTool({
         id: SKILL_BUILDER_TOOL_NAME,
         description:
-          'Update the skill form fields. Call this tool to set or change the name, description, instructions, or visibility of the skill being created or edited. ' +
+          'Update the skill form fields. Call this tool to set or change the name, description, or instructions of the skill being created or edited. ' +
           'You can update any combination of fields in a single call — omit fields you do not want to change. ' +
           'The "instructions" field should be detailed markdown content describing the skill\'s purpose, workflow, rules, and tone.',
         inputSchema: z.object({
@@ -104,7 +102,6 @@ export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formState
             .string()
             .optional()
             .describe('Detailed markdown instructions for the skill (purpose, workflow, rules, tone)'),
-          visibility: z.enum(['private', 'public']).optional().describe('Skill visibility — defaults to private'),
         }),
         outputSchema: z.object({ success: z.boolean() }),
         execute: async (input: any) => {
@@ -112,8 +109,6 @@ export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formState
           if (typeof input?.name === 'string') cb.onNameChange(input.name);
           if (typeof input?.description === 'string') cb.onDescriptionChange(input.description);
           if (typeof input?.instructions === 'string') cb.onInstructionsChange(input.instructions);
-          if (input?.visibility === 'private' || input?.visibility === 'public')
-            cb.onVisibilityChange(input.visibility);
           return { success: true };
         },
       }),
@@ -126,13 +121,12 @@ export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formState
         id: SKILL_READER_TOOL_NAME,
         description:
           'Read the current skill form values. Call this before making changes so you know what the user has on screen. ' +
-          'Returns the current name, description, instructions (markdown), and visibility.',
+          'Returns the current name, description, and instructions (markdown).',
         inputSchema: z.object({}),
         outputSchema: z.object({
           name: z.string(),
           description: z.string(),
           instructions: z.string(),
-          visibility: z.string(),
         }),
         execute: async () => {
           const state = formStateRef.current;
@@ -140,7 +134,6 @@ export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formState
             name: state.name || '',
             description: state.description || '',
             instructions: state.instructions || '',
-            visibility: state.visibility || 'private',
           };
         },
       }),

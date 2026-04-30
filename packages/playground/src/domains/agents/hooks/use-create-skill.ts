@@ -11,7 +11,7 @@ interface CreateSkillParams {
   name: string;
   description: string;
   visibility?: 'private' | 'public';
-  workspaceId: string;
+  workspaceId?: string;
   files: InMemoryFileNode[];
 }
 
@@ -36,20 +36,23 @@ export function useCreateSkill() {
   return useMutation({
     mutationFn: async (params: CreateSkillParams): Promise<StoredSkillResponse> => {
       const { name, description, workspaceId, files } = params;
-      // Write all files to workspace filesystem
-      const filesToWrite = flattenFiles(files, '');
-      await Promise.all(
-        filesToWrite.map(file =>
-          writeFile.mutateAsync({
-            workspaceId,
-            path: `skills/${file.path}`,
-            content: file.content,
-            recursive: true,
-          }),
-        ),
-      );
 
-      // Create stored skill via API
+      // Write files to workspace filesystem if a workspace is available
+      if (workspaceId) {
+        const filesToWrite = flattenFiles(files, '');
+        await Promise.all(
+          filesToWrite.map(file =>
+            writeFile.mutateAsync({
+              workspaceId,
+              path: `skills/${file.path}`,
+              content: file.content,
+              recursive: true,
+            }),
+          ),
+        );
+      }
+
+      // Create stored skill via API (DB record always created)
       return client.createStoredSkill({
         name,
         description,
@@ -61,7 +64,9 @@ export function useCreateSkill() {
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
-      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      if (variables.workspaceId) {
+        void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      }
       toast.success('Skill created');
     },
     onError: error => {
