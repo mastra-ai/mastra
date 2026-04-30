@@ -174,15 +174,21 @@ describe('dev command - https scheme in internal fetches', () => {
       debug: false,
     });
 
-    // Wait for the server-ready message handler to run (MockChildProcess fires after 10ms)
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Wait for the server-ready message handler to fire and trigger fetch calls
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((call: any[]) => {
+          const url = String(call[0]);
+          return url.includes('__restart-active-workflow-runs') || url.includes('__refresh');
+        }),
+      ).toBe(true);
+    });
 
     const fetchedUrls = fetchMock.mock.calls.map((call: any[]) => call[0] as string);
     const internalFetches = fetchedUrls.filter(
       (url: string) => url.includes('__restart-active-workflow-runs') || url.includes('__refresh'),
     );
 
-    expect(internalFetches.length).toBeGreaterThan(0);
     for (const url of internalFetches) {
       expect(url).toMatch(/^http:\/\//);
     }
@@ -213,15 +219,21 @@ describe('dev command - https scheme in internal fetches', () => {
       debug: false,
     });
 
-    // Wait for the server-ready message handler to run (MockChildProcess fires after 10ms)
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Wait for the server-ready message handler to fire and trigger fetch calls
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((call: any[]) => {
+          const url = String(call[0]);
+          return url.includes('__restart-active-workflow-runs') || url.includes('__refresh');
+        }),
+      ).toBe(true);
+    });
 
     const fetchedUrls = fetchMock.mock.calls.map((call: any[]) => call[0] as string);
     const internalFetches = fetchedUrls.filter(
       (url: string) => url.includes('__restart-active-workflow-runs') || url.includes('__refresh'),
     );
 
-    expect(internalFetches.length).toBeGreaterThan(0);
     for (const url of internalFetches) {
       expect(url).toMatch(/^https:\/\//);
     }
