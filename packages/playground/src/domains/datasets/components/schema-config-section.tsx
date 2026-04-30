@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@mastra/playground-ui';
 import type { JSONSchema7 } from 'json-schema';
-import { ChevronRight, InfoIcon } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
@@ -167,23 +167,19 @@ export function SchemaConfigSection({
 
       <CollapsibleContent className="pt-4 space-y-4">
         {/* JSON Schema info notification */}
-        <Notice variant="info">
-          <InfoIcon />
-          <Notice.Column>
-            <Notice.Title>JSON Schema Format</Notice.Title>
-            <Notice.Message>
-              Schemas use{' '}
-              <a
-                href="https://json-schema.org/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-accent5Lighter"
-              >
-                JSON Schema
-              </a>{' '}
-              for validation and type checking.
-            </Notice.Message>
-          </Notice.Column>
+        <Notice variant="info" title="JSON Schema Format">
+          <Notice.Message>
+            Schemas use{' '}
+            <a
+              href="https://json-schema.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-accent5Lighter"
+            >
+              JSON Schema
+            </a>{' '}
+            for validation and type checking.
+          </Notice.Message>
         </Notice>
 
         {/* Source selector */}
