@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
@@ -134,14 +134,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   async function runToolResultProcessors(args: {
     chunk: ChunkType<OUTPUT> & { payload: { toolCallId: string; toolName: string; args?: unknown; result?: unknown; providerExecuted?: boolean } };
     stepNumber: number;
+    steps: Array<StepResult<ToolSet>>;
   }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
     if (!processorRunner || !rest.outputProcessors?.length) {
       return { ok: true };
     }
-    const { chunk, stepNumber } = args;
+    const { chunk, stepNumber, steps } = args;
     try {
       await processorRunner.runProcessToolResult({
-        steps: [],
+        steps,
         messages: rest.messageList.get.all.db(),
         messageList: rest.messageList,
         stepNumber,
@@ -278,6 +279,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           const successfulResults = inputData.filter(tc => tc.result !== undefined);
           if (successfulResults.length) {
             const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
+            const steps = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
             for (const toolCall of successfulResults) {
               const chunk: ChunkType<OUTPUT> = {
                 type: 'tool-result',
@@ -320,6 +322,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   };
                 },
                 stepNumber,
+                steps,
               });
               if (!trResult.ok) {
                 emitTripwireChunk(trResult.tripwire);
@@ -365,6 +368,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       if (inputData?.length) {
         const stepNumberForToolResults = (initialResult?.output?.steps?.length ?? 0) as number;
+        const stepsForToolResults = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
         for (const toolCall of inputData) {
           // No result yet — skip emitting a chunk. For deferred provider-executed tools
           // (e.g. Anthropic web_search), the result arrives in a later step and is handled
@@ -416,6 +420,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               };
             },
             stepNumber: stepNumberForToolResults,
+            steps: stepsForToolResults,
           });
           if (!trResult.ok) {
             emitTripwireChunk(trResult.tripwire);

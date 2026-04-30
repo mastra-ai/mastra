@@ -2,7 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
-import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
@@ -74,6 +74,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   requestContext?: RequestContext;
   toolResultObservability?: Partial<ObservabilityContext>;
   toolResultStepNumber?: number;
+  toolResultSteps?: Array<unknown>;
 };
 
 /**
@@ -140,6 +141,7 @@ async function processOutputStream<OUTPUT = undefined>({
   requestContext,
   toolResultObservability,
   toolResultStepNumber,
+  toolResultSteps,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<{
   collectedChunks: CollectedChunk[];
   toolResultTripwire: TripWire | null;
@@ -299,7 +301,9 @@ async function processOutputStream<OUTPUT = undefined>({
         // so the messageList is up-to-date as early as possible.
         // For same-stream results (call + result in one step), no matching part exists yet
         // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
-        if (chunk.payload.result != null) {
+        // Use a presence check so a tool that legitimately returns `null` still triggers
+        // processToolResult (governance integrations may need to inspect/redact null).
+        if ('result' in chunk.payload) {
           const resultToolDef =
             tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
           const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef);
@@ -329,7 +333,7 @@ async function processOutputStream<OUTPUT = undefined>({
           if (outputProcessors && outputProcessors.length > 0) {
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
-                steps: [],
+                steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
                 messages: messageList.get.all.db(),
                 messageList,
                 stepNumber: toolResultStepNumber ?? 0,
@@ -993,6 +997,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSpanTracker?.getTracingContext() ?? tracingContext,
               ),
               toolResultStepNumber: inputData.output?.steps?.length ?? 0,
+              toolResultSteps: inputData.output?.steps ?? [],
             });
             toolResultTripwireFromStream = streamToolResultTripwire;
 
