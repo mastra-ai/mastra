@@ -81,7 +81,7 @@ export function AgentBuilderMobileMenu({
 
       {showSetVisibility && (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent data-testid="agent-builder-visibility-dialog">
+          <DialogContent className="w-[calc(100%-2rem)]" data-testid="agent-builder-visibility-dialog">
             <DialogHeader>
               <DialogTitle>Set visibility</DialogTitle>
               <DialogDescription>Choose who can see this agent.</DialogDescription>

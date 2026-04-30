@@ -97,7 +97,7 @@ export const WorkspaceLayout = ({
         </div>
       </div>
       {showConfigure && (
-        <div className="lg:hidden px-4 pt-3 md:px-10">
+        <div className="lg:hidden px-4 py-4 md:px-10 md:py-5">
           <div
             role="tablist"
             aria-label="Workspace view"

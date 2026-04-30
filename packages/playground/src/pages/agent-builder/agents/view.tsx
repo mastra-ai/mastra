@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, Spinner } from '@mastra/playground-ui';
+import { Button, IconButton, Spinner } from '@mastra/playground-ui';
+import { PencilIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
@@ -210,8 +211,28 @@ const AgentBuilderAgentViewReady = ({
 const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
   const isRunning = useStreamRunning();
   return (
-    <Button size="sm" variant="default" onClick={onEdit} disabled={isRunning} data-testid="agent-builder-view-edit">
-      Edit agent capabilities
-    </Button>
+    <>
+      <Button
+        size="sm"
+        variant="default"
+        onClick={onEdit}
+        disabled={isRunning}
+        data-testid="agent-builder-view-edit"
+        className="hidden lg:inline-flex"
+      >
+        Edit agent capabilities
+      </Button>
+      <IconButton
+        size="sm"
+        variant="default"
+        onClick={onEdit}
+        disabled={isRunning}
+        tooltip="Edit agent capabilities"
+        data-testid="agent-builder-view-edit-icon"
+        className="lg:hidden"
+      >
+        <PencilIcon />
+      </IconButton>
+    </>
   );
 };

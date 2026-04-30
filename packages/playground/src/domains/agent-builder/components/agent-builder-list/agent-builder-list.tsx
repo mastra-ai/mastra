@@ -77,7 +77,7 @@ export function AgentBuilderList({ agents, search, rowTestId }: AgentBuilderList
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="px-6 py-5 flex items-center gap-4 hover:bg-surface3 transition-colors"
+            className="px-6 py-5 flex items-start gap-4 hover:bg-surface3 transition-colors md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} />
@@ -90,13 +90,21 @@ export function AgentBuilderList({ agents, search, rowTestId }: AgentBuilderList
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
               </div>
+              <div className="mt-2 md:hidden">
+                <StarButton
+                  agentId={agent.id}
+                  isStarred={agent.isStarred}
+                  starCount={agent.starCount}
+                  size="sm"
+                />
+              </div>
             </div>
             <StarButton
               agentId={agent.id}
               isStarred={agent.isStarred}
               starCount={agent.starCount}
               size="sm"
-              className="shrink-0"
+              className="shrink-0 hidden md:inline-flex"
             />
           </Link>
         );
