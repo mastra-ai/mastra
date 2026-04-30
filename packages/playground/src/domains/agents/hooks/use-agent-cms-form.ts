@@ -85,7 +85,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           servers: r.servers,
           selectedTools: mcpClientRecord?.[r.id]?.tools ?? {},
         }));
-        form.setValue('mcpClients', mcpClientValues, { shouldDirty: true });
+        form.setValue('mcpClients', mcpClientValues, { shouldDirty: false });
 
         // Sync MCP tools into form.tools
         const currentTools = form.getValues('tools') ?? {};
@@ -95,7 +95,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
             next[name] = { description: config.description };
           }
         }
-        form.setValue('tools', next, { shouldDirty: true });
+        form.setValue('tools', next, { shouldDirty: false });
       })
       .catch(() => {
         // Silently ignore — clients may have been deleted

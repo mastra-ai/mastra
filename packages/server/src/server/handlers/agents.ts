@@ -664,10 +664,20 @@ async function formatAgentList({
   };
 }
 
-export function extractVersionOptions(requestContext?: RequestContext): { versionId: string } | undefined {
+export function extractVersionOptions(
+  requestContext?: RequestContext,
+  bodyRequestContext?: Record<string, unknown>,
+): { versionId: string } | undefined {
+  // First check the server-populated RequestContext (e.g. from auth middleware)
   const agentVersionId = requestContext?.get('agentVersionId');
   if (typeof agentVersionId === 'string' && agentVersionId) {
     return { versionId: agentVersionId };
+  }
+  // Fall back to body requestContext — the client may send agentVersionId there
+  // (e.g. the playground editor sends it so the correct stored version is loaded)
+  const bodyVersionId = bodyRequestContext?.agentVersionId;
+  if (typeof bodyVersionId === 'string' && bodyVersionId) {
+    return { versionId: bodyVersionId };
   }
   return undefined;
 }
@@ -1102,12 +1112,6 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
@@ -1115,6 +1119,15 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
 
       // Merge body's requestContext values into the server's RequestContext instance
       // Only set values that don't already exist on the server context to prevent
@@ -1398,18 +1411,21 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
 
       // Merge body's requestContext values into the server's RequestContext instance
       // Only set values that don't already exist on the server context to prevent
@@ -1486,18 +1502,21 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
 
       // Merge body's requestContext values into the server's RequestContext instance
       // Only set values that don't already exist on the server context to prevent
@@ -1675,12 +1694,6 @@ export const RESUME_STREAM_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -1696,6 +1709,15 @@ export const RESUME_STREAM_ROUTE = createRoute({
         versions,
         ...rest
       } = params;
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
 
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
