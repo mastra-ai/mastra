@@ -129,12 +129,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -258,9 +258,9 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "environment": "test",
                       "toolCallId": "call-calc-1",
-                      "toolName": "calculator"
+                      "toolName": "calculator",
+                      "environment": "test"
                     }
                   }
                 }
@@ -296,12 +296,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {

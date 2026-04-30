@@ -31,7 +31,9 @@
         },
         "input": "Use metadata tool to process some data",
         "output": {
-          "text": "Mock V2 generate response",
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -93,7 +95,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": "Mock V2 generate response",
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -129,12 +133,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -199,11 +203,11 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "environment": "test",
                       "toolOperation": "metadata-processing",
                       "inputValue": "some data",
                       "customFlag": true,
-                      "timestamp": "<date>"
+                      "timestamp": "<date>",
+                      "environment": "test"
                     },
                     "input": {
                       "input": "some data"
@@ -231,9 +235,9 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "environment": "test",
                       "toolCallId": "call-metadata-1",
-                      "toolName": "metadataTool"
+                      "toolName": "metadataTool",
+                      "environment": "test"
                     }
                   }
                 }
@@ -270,16 +274,18 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
-                  "text": "Mock V2 generate response",
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -305,7 +311,9 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": "Mock V2 generate response"
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

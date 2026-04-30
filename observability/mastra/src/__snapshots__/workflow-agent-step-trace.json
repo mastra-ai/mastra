@@ -30,7 +30,9 @@
           "prompt": "Hello from workflow"
         },
         "output": {
-          "response": "Mock V2 stream response"
+          "response": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          }
         }
       },
       "children": [
@@ -57,7 +59,9 @@
               "prompt": "Hello from workflow"
             },
             "output": {
-              "response": "Mock V2 stream response"
+              "response": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              }
             }
           },
           "children": [
@@ -82,7 +86,9 @@
                 },
                 "input": "Hello from workflow",
                 "output": {
-                  "text": "Mock V2 stream response",
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "files": []
                 }
               },
@@ -144,7 +150,9 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": "Mock V2 stream response",
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      },
                       "warnings": []
                     }
                   },
@@ -179,16 +187,18 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
-                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
                         "input": {},
                         "output": {
-                          "text": "Mock V2 stream response",
+                          "text": {
+                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                          },
                           "toolCalls": []
                         }
                       },
@@ -214,7 +224,9 @@
                               "environment": "test"
                             },
                             "output": {
-                              "text": "Mock V2 stream response"
+                              "text": {
+                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                              }
                             }
                           }
                         }

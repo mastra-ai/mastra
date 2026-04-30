@@ -136,12 +136,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -361,12 +361,12 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
-                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
                         "input": {},
                         "output": {

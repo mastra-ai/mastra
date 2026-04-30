@@ -35,7 +35,9 @@
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
-          "text": "Mock V2 stream response",
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -99,7 +101,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": "Mock V2 stream response",
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -136,12 +140,12 @@
                   "runId": "<runId-1>",
                   "id1": 123,
                   "id2": "tacos",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -313,9 +317,9 @@
                       "runId": "<runId-1>",
                       "id1": 123,
                       "id2": "tacos",
-                      "environment": "test",
                       "toolCallId": "call-workflow-1",
-                      "toolName": "workflowExecutor"
+                      "toolName": "workflowExecutor",
+                      "environment": "test"
                     }
                   }
                 }
@@ -353,16 +357,18 @@
                   "runId": "<runId-1>",
                   "id1": 123,
                   "id2": "tacos",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
-                  "text": "Mock V2 stream response",
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -390,7 +396,9 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": "Mock V2 stream response"
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

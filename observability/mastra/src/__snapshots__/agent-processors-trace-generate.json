@@ -210,12 +210,12 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
-                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
                         "input": {},
                         "output": {
@@ -350,12 +350,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
-                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -427,11 +427,11 @@
                         "createdAt": "<date>"
                       }
                     ],
-                    "content": "Mock V2 generate response",
                     "metadata": {
                       "modelId": "mock-model-id",
                       "provider": "mock-provider"
-                    }
+                    },
+                    "content": "Mock V2 generate response"
                   },
                   "createdAt": "<date>"
                 }
@@ -565,12 +565,12 @@
                         },
                         "metadata": {
                           "runId": "<runId-3>",
-                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
                         "input": {},
                         "output": {
