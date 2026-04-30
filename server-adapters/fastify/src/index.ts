@@ -249,6 +249,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
    */
   private parseMultipartFormData(request: FastifyRequest, maxFileSize?: number): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
+      let done = false;
+
       const result: Record<string, unknown> = {};
 
       const busboy = new Busboy({
@@ -268,7 +270,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         file.on('limit', () => {
           limitExceeded = true;
-          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+
+          file.resume(); // stop stream properly
+          request.raw.unpipe(busboy); // stop request piping
+          busboy.removeAllListeners(); // cleanup
+
+          if (!done) {
+            done = true;
+            reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+          }
         });
 
         file.on('end', () => {
@@ -288,11 +298,17 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       });
 
       busboy.on('finish', () => {
-        resolve(result);
+        if (!done) {
+          done = true;
+          resolve(result);
+        }
       });
 
       busboy.on('error', (error: Error) => {
-        reject(error);
+        if (!done) {
+          done = true;
+          reject(error);
+        }
       });
 
       // Pipe the raw request to busboy
