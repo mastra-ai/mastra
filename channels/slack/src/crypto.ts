@@ -88,7 +88,7 @@ export function decrypt(ciphertext: string, key: string): string {
 
   const payload = ciphertext.slice(colonIdx + 1);
   const [saltB64, ivB64, authTagB64, encryptedB64] = payload.split(':');
-  if (!saltB64 || !ivB64 || !authTagB64 || !encryptedB64) {
+  if (!saltB64 || !ivB64 || !authTagB64 || encryptedB64 === undefined) {
     throw new Error('Invalid ciphertext payload');
   }
 
