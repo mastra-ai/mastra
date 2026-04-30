@@ -147,6 +147,14 @@ export function SkillEditDialog({
     });
   }, []);
 
+  // Keep instructions state in sync when the file tree changes (e.g. admin
+  // edits SKILL.md directly in the code editor in advanced mode).
+  const handleFilesChange = useCallback((newFiles: InMemoryFileNode[]) => {
+    setFiles(newFiles);
+    const skillMdContent = extractSkillInstructions(newFiles);
+    setInstructions(skillMdContent);
+  }, []);
+
   const handleFieldsPopulated = useCallback(() => {
     setShowForm(true);
   }, []);
@@ -154,8 +162,14 @@ export function SkillEditDialog({
   const handleSave = useCallback(async () => {
     let filesToSave = files;
     if (!filesToSave.some(n => n.id === 'root') && name.trim()) {
-      const initial = createInitialStructure(name);
-      filesToSave = instructions ? updateNodeContent(initial, 'skill-md', instructions) : initial;
+      // No file structure yet — create it
+      filesToSave = createInitialStructure(name);
+    }
+    // Always sync instructions state into SKILL.md before saving.
+    // This is the authoritative source — handleFilesChange keeps it in sync
+    // with any direct SKILL.md edits made in advanced mode.
+    if (instructions && filesToSave.some(n => n.id === 'root')) {
+      filesToSave = updateNodeContent(filesToSave, 'skill-md', instructions);
     }
 
     if (isExistingSkill && skill) {
@@ -335,7 +349,7 @@ export function SkillEditDialog({
                     )}
                     <SkillFolder
                       files={files}
-                      onChange={setFiles}
+                      onChange={handleFilesChange}
                       readOnly={false}
                       workspaceId={workspaceId}
                       setWorkspaceId={setWorkspaceId}
