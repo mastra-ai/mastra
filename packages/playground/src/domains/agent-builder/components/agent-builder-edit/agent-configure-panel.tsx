@@ -1,7 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Avatar, cn, Skeleton, Switch, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
+import { FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -524,12 +524,6 @@ const ConfigRow = ({
         {count} / {total}
       </Txt>
     )}
-    <ChevronRight
-      className={cn(
-        'h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
-        isActive && 'text-neutral5',
-      )}
-    />
   </button>
 );
 

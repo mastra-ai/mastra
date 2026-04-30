@@ -96,7 +96,7 @@ describe('AgentBuilderBreadcrumb', () => {
     const crumb = screen.getByTestId('agent-builder-mode-crumb');
     const label = screen.getByTestId('agent-builder-mode-label');
     expect(screen.getByTestId('agent-builder-mode-icon-build')).toBeTruthy();
-    expect(label.textContent).toBe('Edit configuration');
+    expect(label.textContent).toBe('Edit agent capabilities');
     expect(label.className).toContain('font-semibold');
     expect(crumb.className).not.toContain('text-test');
   });

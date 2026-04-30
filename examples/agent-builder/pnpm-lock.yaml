@@ -18,6 +18,7 @@ overrides:
   '@mastra/ai-sdk': link:../../client-sdks/ai-sdk
   mastra: link:../../packages/cli
   '@mastra/editor': link:../../packages/editor
+  '@mastra/stagehand': link:../../browser/stagehand
 
 importers:
 
@@ -62,6 +63,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/stagehand':
+        specifier: link:../../browser/stagehand
+        version: link:../../browser/stagehand
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai

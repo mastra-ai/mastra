@@ -168,6 +168,21 @@ describe('AgentBuilderAgentEdit', () => {
       expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
     });
 
+    it('shows the disabled Publish to Slack button for the owner', () => {
+      storedAgent = {
+        id: 'agent-123',
+        name: 'Existing',
+        instructions: 'Do things',
+        tools: [],
+        agents: [],
+        workflows: [],
+        authorId: 'current-user',
+      };
+      const { getByTestId } = renderAt();
+      const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+    });
+
     it('Cancel navigates back to the view page without saving', () => {
       const { getByTestId } = renderAt();
       fireEvent.click(getByTestId('agent-builder-edit-cancel'));

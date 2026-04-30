@@ -11,6 +11,7 @@ import {
   ConversationPanelChat,
   ConversationPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
+import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
@@ -89,6 +90,7 @@ export default function AgentBuilderAgentEdit() {
       availableSkills={availableSkills}
       initialUserMessage={initialUserMessage}
       fromStarter={fromStarter}
+      isOwner={isOwner}
     />
   );
 }
@@ -103,6 +105,7 @@ interface PageProps {
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
+  isOwner: boolean;
 }
 
 const AgentBuilderAgentEditPage = ({
@@ -115,6 +118,7 @@ const AgentBuilderAgentEditPage = ({
   availableSkills,
   initialUserMessage,
   fromStarter,
+  isOwner,
 }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
@@ -134,6 +138,7 @@ const AgentBuilderAgentEditPage = ({
         availableSkills={availableSkills}
         initialUserMessage={initialUserMessage}
         fromStarter={fromStarter}
+        isOwner={isOwner}
       />
     </FormProvider>
   );
@@ -155,6 +160,7 @@ interface AgentBuilderAgentEditReadyProps {
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
+  isOwner: boolean;
 }
 
 const AgentBuilderAgentEditReady = ({
@@ -167,6 +173,7 @@ const AgentBuilderAgentEditReady = ({
   availableSkills,
   initialUserMessage,
   fromStarter,
+  isOwner,
 }: AgentBuilderAgentEditReadyProps) => {
   const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
@@ -215,7 +222,12 @@ const AgentBuilderAgentEditReady = ({
         creating={mode === 'create'}
         defaultExpanded={mode === 'edit'}
         detailOpen={activeDetail !== null}
-        modeAction={<VisibilitySelectConnected />}
+        modeAction={
+          <div className="flex items-center gap-2">
+            <VisibilitySelectConnected />
+            {isOwner && <PublishToSlackButton />}
+          </div>
+        }
         primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
         chat={<ConversationPanelChat />}
         configure={

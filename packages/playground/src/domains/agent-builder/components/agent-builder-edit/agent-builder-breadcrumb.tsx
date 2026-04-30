@@ -15,7 +15,7 @@ export interface AgentBuilderBreadcrumbProps {
 
 const MODE_META: Record<WorkspaceMode, { label: string; Icon: typeof MessageCircleIcon; iconTestId: string }> = {
   build: {
-    label: 'Edit configuration',
+    label: 'Edit agent capabilities',
     Icon: SlidersHorizontalIcon,
     iconTestId: 'agent-builder-mode-icon-build',
   },

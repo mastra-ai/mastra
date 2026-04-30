@@ -10,6 +10,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
+import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
@@ -131,6 +132,7 @@ const AgentBuilderAgentViewReady = ({
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
   const { data: currentUser } = useCurrentUser();
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
+  const threadId = currentUser?.id ? `${currentUser.id}-${id}` : id;
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
@@ -152,6 +154,8 @@ const AgentBuilderAgentViewReady = ({
   const features = useBuilderAgentFeatures();
   const hasBrowser = features.browser && storedAgent?.browser != null;
 
+  console.log(' hasBrowser', hasBrowser, features, storedAgent);
+
   const content = (
     <AgentChatPanelProvider
       agentId={id}
@@ -164,7 +168,12 @@ const AgentBuilderAgentViewReady = ({
         mode="test"
         defaultExpanded={false}
         detailOpen={activeDetail !== null}
-        modeAction={<VisibilitySelect disabled />}
+        modeAction={
+          <div className="flex items-center gap-2">
+            <VisibilitySelect disabled />
+            {isOwner && <PublishToSlackButton />}
+          </div>
+        }
         primaryAction={
           isOwner ? (
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
@@ -190,7 +199,7 @@ const AgentBuilderAgentViewReady = ({
 
   return (
     <BrowserToolCallsProvider>
-      <BrowserSessionProvider agentId={id} threadId={id}>
+      <BrowserSessionProvider agentId={id} threadId={threadId}>
         {content}
       </BrowserSessionProvider>
     </BrowserToolCallsProvider>
@@ -201,7 +210,7 @@ const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
   const isRunning = useStreamRunning();
   return (
     <Button size="sm" variant="default" onClick={onEdit} disabled={isRunning} data-testid="agent-builder-view-edit">
-      Edit configuration
+      Edit agent capabilities
     </Button>
   );
 };

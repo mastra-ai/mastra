@@ -148,7 +148,13 @@ export const mastra = new Mastra({
       stagehand: {
         id: 'stagehand',
         name: 'Stagehand Browser',
-        createBrowser: config => new StagehandBrowser(config),
+        createBrowser: config =>
+          new StagehandBrowser({
+            ...config,
+            apiKey: process.env.BROWSERBASE_API_KEY ?? '',
+            env: 'BROWSERBASE',
+            projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
+          }),
       },
     },
     builder: {

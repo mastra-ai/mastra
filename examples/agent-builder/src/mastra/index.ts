@@ -4,6 +4,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { builderAgent } from '@mastra/editor/ee';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { initWorkOS } from './auth';
+import { StagehandBrowser } from '@mastra/stagehand';
+import { ComposioToolProvider } from '@mastra/editor/composio';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -39,6 +41,22 @@ export const mastra = new Mastra({
     },
   }),
   editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '' }),
+    },
+    browsers: {
+      stagehand: {
+        id: 'stagehand',
+        name: 'Stagehand Browser',
+        createBrowser: config =>
+          new StagehandBrowser({
+            ...config,
+            apiKey: process.env.BROWSERBASE_API_KEY ?? '',
+            env: 'BROWSERBASE',
+            projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
+          }),
+      },
+    },
     builder: {
       enabled: true,
       features: {
@@ -48,6 +66,7 @@ export const mastra = new Mastra({
           workflows: true,
           stars: true,
           model: true,
+          browser: true,
         },
       },
       configuration: {
@@ -63,6 +82,12 @@ export const mastra = new Mastra({
           memory: {
             options: {
               lastMessages: 10,
+            },
+          },
+          browser: {
+            type: 'inline',
+            config: {
+              provider: 'stagehand',
             },
           },
         },

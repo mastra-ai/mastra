@@ -14,6 +14,7 @@ type StoredAgentMock = {
   agents: Record<string, unknown> | unknown[];
   workflows: Record<string, unknown> | unknown[];
   visibility: string;
+  authorId?: string;
 };
 let storedAgent: StoredAgentMock = {
   id: 'agent-123',
@@ -23,6 +24,7 @@ let storedAgent: StoredAgentMock = {
   agents: [],
   workflows: [],
   visibility: 'public',
+  authorId: 'current-user',
 };
 
 vi.mock('react-router', async () => {
@@ -117,6 +119,7 @@ describe('AgentBuilderAgentView', () => {
       agents: [],
       workflows: [],
       visibility: 'public',
+      authorId: 'current-user',
     };
   });
 
@@ -124,10 +127,23 @@ describe('AgentBuilderAgentView', () => {
     cleanup();
   });
 
-  it('renders a labeled Edit configuration button', () => {
+  it('renders a labeled Edit agent capabilities button for the owner', () => {
     const { getByTestId } = renderAt();
     const button = getByTestId('agent-builder-view-edit');
-    expect(button.textContent).toContain('Edit configuration');
+    expect(button.textContent).toContain('Edit agent capabilities');
+  });
+
+  it('shows the disabled Publish to Slack button for the owner', () => {
+    const { getByTestId } = renderAt();
+    const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it('hides the Edit and Publish to Slack buttons for non-owners', () => {
+    storedAgent = { ...storedAgent, authorId: 'someone-else' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-view-edit')).toBeNull();
+    expect(queryByTestId('agent-builder-publish-slack')).toBeNull();
   });
 
   it('shows the current visibility as disabled', () => {
@@ -156,6 +172,7 @@ describe('AgentBuilderAgentView', () => {
       tools: { 'tool-a': {} },
       agents: [],
       workflows: [],
+      authorId: 'current-user',
       visibility: 'public',
     };
 
@@ -174,6 +191,7 @@ describe('AgentBuilderAgentView', () => {
       agents: [],
       workflows: [],
       visibility: 'public',
+      authorId: 'current-user',
     };
 
     rerender(

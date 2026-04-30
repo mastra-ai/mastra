@@ -3,7 +3,7 @@ import { Avatar, Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
-import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
@@ -12,6 +12,7 @@ import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-cha
 import { StreamChatProvider } from './stream-chat-provider';
 import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
 import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface AgentChatPanelProviderProps {
@@ -65,9 +66,12 @@ export const AgentChatPanelProvider = ({
   agentAvatarUrl,
   children,
 }: AgentChatPanelProviderProps) => {
+  const { data: currentUser } = useCurrentUser();
+  const threadId = currentUser?.id ? `${currentUser.id}-${agentId}` : agentId;
+
   const { data, isLoading: isConversationLoading } = useAgentMessages({
     agentId,
-    threadId: agentId,
+    threadId,
     memory: true,
   });
 
@@ -83,7 +87,7 @@ export const AgentChatPanelProvider = ({
   );
 
   return (
-    <StreamChatProvider agentId={agentId} threadId={agentId} initialMessages={v5Messages}>
+    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={v5Messages}>
       <AgentChatMetaContext.Provider value={meta}>{children}</AgentChatMetaContext.Provider>
     </StreamChatProvider>
   );
@@ -105,13 +109,19 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
     <div className="flex h-full min-h-0 flex-col px-6">
       <AgentChatMessageList onStarterPromptSelect={setDraft} />
       {hasBrowser && <BrowserThumbnailSlot hideSidebar={hideBrowserSidebar} />}
-      <AgentChatComposer
+      <ChatComposer
         draft={draft}
-        setDraft={setDraft}
-        trimmed={trimmed}
-        handleFormSubmit={handleFormSubmit}
-        handleKeyDown={handleKeyDown}
+        onDraftChange={setDraft}
+        onSubmit={handleFormSubmit}
+        onKeyDown={handleKeyDown}
+        disabled={isRunning}
         isRunning={isRunning}
+        canSubmit={trimmed.length > 0 && !isRunning}
+        placeholder="Message your agent…"
+        inputTestId="agent-builder-agent-chat-input"
+        submitTestId="agent-builder-agent-chat-submit"
+        containerTestId="agent-builder-agent-chat-composer"
+        tone="success"
       />
     </div>
   );
@@ -207,41 +217,6 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
           </div>
         </div>
       }
-    />
-  );
-};
-
-interface AgentChatComposerProps {
-  draft: string;
-  setDraft: (value: string) => void;
-  trimmed: string;
-  handleFormSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  handleKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
-  isRunning: boolean;
-}
-
-const AgentChatComposer = ({
-  draft,
-  setDraft,
-  trimmed,
-  handleFormSubmit,
-  handleKeyDown,
-  isRunning,
-}: AgentChatComposerProps) => {
-  return (
-    <ChatComposer
-      draft={draft}
-      onDraftChange={setDraft}
-      onSubmit={handleFormSubmit}
-      onKeyDown={handleKeyDown}
-      disabled={isRunning}
-      isRunning={isRunning}
-      canSubmit={trimmed.length > 0 && !isRunning}
-      placeholder="Message your agent…"
-      inputTestId="agent-builder-agent-chat-input"
-      submitTestId="agent-builder-agent-chat-submit"
-      containerTestId="agent-builder-agent-chat-composer"
-      tone="success"
     />
   );
 };
