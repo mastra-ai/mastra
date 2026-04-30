@@ -34,7 +34,13 @@ export const SkillsDetail = ({ onClose, editable = true, availableSkills = [] }:
             </Txt>
           )}
         </div>
-        <IconButton tooltip="Close" className="rounded-full" onClick={onClose} data-testid="skills-detail-close">
+        <IconButton
+          variant="ghost"
+          tooltip="Close"
+          className="rounded-full"
+          onClick={onClose}
+          data-testid="skills-detail-close"
+        >
           <XIcon />
         </IconButton>
       </div>

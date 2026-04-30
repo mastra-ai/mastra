@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
+import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import {
@@ -13,6 +14,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
+import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
@@ -89,6 +91,7 @@ export default function AgentBuilderAgentEdit() {
       availableSkills={availableSkills}
       initialUserMessage={initialUserMessage}
       fromStarter={fromStarter}
+      isOwner={isOwner}
     />
   );
 }
@@ -103,6 +106,7 @@ interface PageProps {
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
+  isOwner: boolean;
 }
 
 const AgentBuilderAgentEditPage = ({
@@ -115,6 +119,7 @@ const AgentBuilderAgentEditPage = ({
   availableSkills,
   initialUserMessage,
   fromStarter,
+  isOwner,
 }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
@@ -134,6 +139,7 @@ const AgentBuilderAgentEditPage = ({
         availableSkills={availableSkills}
         initialUserMessage={initialUserMessage}
         fromStarter={fromStarter}
+        isOwner={isOwner}
       />
     </FormProvider>
   );
@@ -155,6 +161,7 @@ interface AgentBuilderAgentEditReadyProps {
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
   fromStarter: boolean;
+  isOwner: boolean;
 }
 
 const AgentBuilderAgentEditReady = ({
@@ -167,6 +174,7 @@ const AgentBuilderAgentEditReady = ({
   availableSkills,
   initialUserMessage,
   fromStarter,
+  isOwner,
 }: AgentBuilderAgentEditReadyProps) => {
   const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
@@ -194,9 +202,6 @@ const AgentBuilderAgentEditReady = ({
     void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
-  const handleCancel = () => {
-    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
-  };
 
   return (
     <ConversationPanelProvider
@@ -215,8 +220,17 @@ const AgentBuilderAgentEditReady = ({
         creating={mode === 'create'}
         defaultExpanded={mode === 'edit'}
         detailOpen={activeDetail !== null}
-        modeAction={<VisibilitySelectConnected />}
-        primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
+        showConfigure={isOwner}
+        backHref={mode === 'edit' ? `/agent-builder/agents/${id}/view` : '/agent-builder/agents'}
+        backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
+        modeAction={
+          <div className="hidden lg:flex items-center gap-2">
+            {isOwner && <PublishToSlackButton />}
+            <VisibilitySelectConnected />
+          </div>
+        }
+        primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} />}
+        mobileExtra={<AgentBuilderMobileMenuConnected showPublishToSlack={isOwner} />}
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected
@@ -234,35 +248,28 @@ const AgentBuilderAgentEditReady = ({
 
 const VisibilitySelectConnected = () => {
   const isRunning = useStreamRunning();
-  return <VisibilitySelect disabled={isRunning} />;
+  return <VisibilitySelect disabled={isRunning} variant="ghost" />;
+};
+
+const AgentBuilderMobileMenuConnected = ({ showPublishToSlack }: { showPublishToSlack: boolean }) => {
+  const isRunning = useStreamRunning();
+  return <AgentBuilderMobileMenu showSetVisibility showPublishToSlack={showPublishToSlack} disabled={isRunning} />;
 };
 
 interface HeaderActionsProps {
   mode: 'create' | 'edit';
   isSaving: boolean;
   onSave: () => void;
-  onCancel: () => void;
 }
 
-const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps) => {
+const HeaderActions = ({ mode, isSaving, onSave }: HeaderActionsProps) => {
   const isRunning = useStreamRunning();
   const disabled = isSaving || isRunning;
   return (
-    <>
-      {mode === 'edit' && (
-        <Button
-          size="sm"
-          variant="default"
-          onClick={onCancel}
-          disabled={disabled}
-          data-testid="agent-builder-edit-cancel"
-        >
-          Cancel
-        </Button>
-      )}
+    <div className="flex items-center gap-2">
       <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
         <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
       </Button>
-    </>
+    </div>
   );
 };

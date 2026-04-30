@@ -1,8 +1,8 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Avatar, cn, Skeleton, Switch, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
-import { useRef } from 'react';
+import { FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
@@ -125,6 +125,18 @@ function ConfigurePanelContent({
   };
   const closeDetail = () => onActiveDetailChange(null);
 
+  // Keep the last non-null detail rendered during the close animation so the
+  // sheet still has visible content while sliding out on mobile/tablet.
+  const [renderedDetail, setRenderedDetail] = useState<ActiveDetail>(activeDetail);
+  useEffect(() => {
+    if (activeDetail) {
+      setRenderedDetail(activeDetail);
+      return;
+    }
+    const timeout = window.setTimeout(() => setRenderedDetail(null), 320);
+    return () => window.clearTimeout(timeout);
+  }, [activeDetail]);
+
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -145,13 +157,18 @@ function ConfigurePanelContent({
     <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
       <div
         className={cn(
-          'agent-builder-detail-pane absolute inset-y-0 right-[320px] overflow-hidden',
-          activeDetail ? 'w-[calc(100%-320px)] border-r border-border1' : 'w-0 pointer-events-none',
+          'agent-builder-detail-pane absolute inset-0 z-10 overflow-hidden bg-surface2',
+          'transition-transform duration-300 ease-out will-change-transform',
+          'lg:inset-y-0 lg:left-0 lg:right-[320px] lg:z-0 lg:bg-transparent',
+          'lg:transition-[width,opacity] lg:duration-300',
+          activeDetail
+            ? 'translate-y-0 lg:translate-y-0 lg:w-[calc(100%-320px)] lg:opacity-100 lg:border-r lg:border-border1'
+            : 'translate-y-full pointer-events-none lg:translate-y-0 lg:w-0 lg:opacity-0',
         )}
         aria-hidden={!activeDetail}
       >
         <DetailPane
-          activeDetail={activeDetail}
+          activeDetail={renderedDetail}
           features={features}
           editable={!mutationsDisabled}
           instructionsPrompt={panelInstructions}
@@ -162,7 +179,7 @@ function ConfigurePanelContent({
         />
       </div>
 
-      <div className="ml-auto w-[320px] flex h-full min-w-0 flex-col">
+      <div className="ml-auto flex h-full min-w-0 flex-col w-full lg:w-[320px]">
         <div className="flex-1 flex flex-col py-6 overflow-y-auto">
           <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
             <div className="flex items-center justify-center">
@@ -229,7 +246,8 @@ function ConfigurePanelContent({
             totalSkillsCount={totalSkillsCount}
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
-            disabled={mutationsDisabled}
+            disabled={disabled}
+            mutationsDisabled={mutationsDisabled}
           />
         </div>
       </div>
@@ -349,7 +367,10 @@ interface ConfigRowsProps {
   totalSkillsCount: number;
   activeDetail: ActiveDetail;
   toggleDetail: (next: ActiveDetail) => void;
+  /** Blocks row click (e.g. while a stream is running). */
   disabled?: boolean;
+  /** Blocks mutation controls inside rows (e.g. browser toggle) when read-only. */
+  mutationsDisabled?: boolean;
 }
 
 function BrowserToggleRow({ disabled = false }: { disabled?: boolean }) {
@@ -389,6 +410,7 @@ function ConfigRows({
   activeDetail,
   toggleDetail,
   disabled = false,
+  mutationsDisabled = false,
 }: ConfigRowsProps) {
   return (
     <div className="flex flex-col">
@@ -425,7 +447,7 @@ function ConfigRows({
           testId="agent-preview-skills-button"
         />
       )}
-      {features.browser && <BrowserToggleRow disabled={disabled} />}
+      {features.browser && <BrowserToggleRow disabled={mutationsDisabled} />}
     </div>
   );
 }
@@ -524,12 +546,6 @@ const ConfigRow = ({
         {count} / {total}
       </Txt>
     )}
-    <ChevronRight
-      className={cn(
-        'h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
-        isActive && 'text-neutral5',
-      )}
-    />
   </button>
 );
 

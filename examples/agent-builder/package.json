@@ -17,6 +17,7 @@
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
     "ai": "^6.0.1",
+    "@hono/node-ws": "^1.1.1",
     "@mastra/client-js": "beta",
     "@mastra/core": "beta",
     "@mastra/evals": "beta",
@@ -28,7 +29,9 @@
     "@mastra/voice-openai": "beta",
     "@mastra/ai-sdk": "beta",
     "@mastra/editor": "beta",
-    "@mastra/auth-workos": "beta"
+    "@mastra/auth-workos": "beta",
+    "@mastra/stagehand": "beta",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "mastra": "link:../../packages/cli",
@@ -48,7 +51,8 @@
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/ai-sdk": "link:../../client-sdks/ai-sdk",
       "mastra": "link:../../packages/cli",
-      "@mastra/editor": "link:../../packages/editor"
+      "@mastra/editor": "link:../../packages/editor",
+      "@mastra/stagehand": "link:../../browser/stagehand"
     }
   },
   "keywords": [],

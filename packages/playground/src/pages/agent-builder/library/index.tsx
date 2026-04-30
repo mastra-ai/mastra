@@ -108,9 +108,9 @@ export default function AgentBuilderLibraryPage() {
 
   return (
     <>
-      <EntityListPageLayout>
+      <EntityListPageLayout className="px-4 md:px-10">
         <EntityListPageLayout.Top>
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
             <PageHeader>
               <PageHeader.Title>
                 <LibraryIcon /> Library
@@ -150,14 +150,15 @@ export default function AgentBuilderLibraryPage() {
         {body}
       </EntityListPageLayout>
 
-      <SkillEditDialog
-        isOpen={!!selectedSkill}
-        onClose={() => setSelectedSkill(null)}
-        skill={selectedSkill ?? undefined}
-        onSkillUpdated={() => setSelectedSkill(null)}
-        currentUserId={currentUser?.id}
-        isAdmin={isAdmin}
-      />
+      {selectedSkill && (
+        <SkillEditDialog
+          isOpen={!!selectedSkill}
+          onClose={() => setSelectedSkill(null)}
+          skill={selectedSkill}
+          currentUserId={currentUser?.id}
+          isAdmin={isAdmin}
+        />
+      )}
     </>
   );
 }

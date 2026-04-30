@@ -14,6 +14,7 @@ type StoredAgentMock = {
   agents: Record<string, unknown> | unknown[];
   workflows: Record<string, unknown> | unknown[];
   visibility: string;
+  authorId?: string;
 };
 let storedAgent: StoredAgentMock = {
   id: 'agent-123',
@@ -23,6 +24,7 @@ let storedAgent: StoredAgentMock = {
   agents: [],
   workflows: [],
   visibility: 'public',
+  authorId: 'current-user',
 };
 
 vi.mock('react-router', async () => {
@@ -117,6 +119,7 @@ describe('AgentBuilderAgentView', () => {
       agents: [],
       workflows: [],
       visibility: 'public',
+      authorId: 'current-user',
     };
   });
 
@@ -124,10 +127,23 @@ describe('AgentBuilderAgentView', () => {
     cleanup();
   });
 
-  it('renders a labeled Edit configuration button', () => {
+  it('renders an Edit agent icon button for the owner', () => {
     const { getByTestId } = renderAt();
     const button = getByTestId('agent-builder-view-edit');
-    expect(button.textContent).toContain('Edit configuration');
+    expect(button.getAttribute('aria-label')).toBe('Edit agent');
+  });
+
+  it('shows an active Publish to Slack button for the owner', () => {
+    const { getByTestId } = renderAt();
+    const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+  });
+
+  it('hides the Edit and Publish to Slack buttons for non-owners', () => {
+    storedAgent = { ...storedAgent, authorId: 'someone-else' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-view-edit')).toBeNull();
+    expect(queryByTestId('agent-builder-publish-slack')).toBeNull();
   });
 
   it('shows the current visibility as disabled', () => {
@@ -156,6 +172,7 @@ describe('AgentBuilderAgentView', () => {
       tools: { 'tool-a': {} },
       agents: [],
       workflows: [],
+      authorId: 'current-user',
       visibility: 'public',
     };
 
@@ -174,6 +191,7 @@ describe('AgentBuilderAgentView', () => {
       agents: [],
       workflows: [],
       visibility: 'public',
+      authorId: 'current-user',
     };
 
     rerender(
@@ -190,5 +208,31 @@ describe('AgentBuilderAgentView', () => {
       | { selectedTools?: Record<string, boolean> }
       | undefined;
     expect(refreshedSelectedTools?.selectedTools).toEqual({ 'tool-b': true });
+  });
+
+  it('renders Chat and Configuration tabs for the owner', () => {
+    const { getByTestId } = renderAt();
+    expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
+    expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
+  });
+
+  it('does not render tabs for non-owners', () => {
+    storedAgent = { ...storedAgent, authorId: 'someone-else' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-tab-chat')).toBeNull();
+    expect(queryByTestId('agent-builder-tab-configure')).toBeNull();
+  });
+
+  it('switching to the Configuration tab toggles which panel is active', () => {
+    const { getByTestId } = renderAt();
+    const chatPanel = getByTestId('agent-builder-panel-chat');
+    const configurePanel = getByTestId('agent-builder-panel-configure');
+    expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
+    expect(configurePanel.getAttribute('data-active-tab')).toBe('chat');
+
+    fireEvent.click(getByTestId('agent-builder-tab-configure'));
+
+    expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
+    expect(configurePanel.getAttribute('data-active-tab')).toBe('configure');
   });
 });

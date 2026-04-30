@@ -93,7 +93,7 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
   return (
     <div
       className={cn(
-        'bg-surface2 border border-border1 rounded-lg overflow-hidden transition-all duration-200',
+        'bg-surface2 border border-border1 rounded-3xl overflow-hidden transition-all duration-200',
         'hover:border-border2',
       )}
     >

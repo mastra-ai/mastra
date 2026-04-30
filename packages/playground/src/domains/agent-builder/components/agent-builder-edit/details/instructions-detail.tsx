@@ -18,7 +18,13 @@ export const InstructionsDetail = ({ prompt, onChange, onClose, editable = true 
             Instructions
           </Txt>
         </div>
-        <IconButton tooltip="Close" className="rounded-full" onClick={onClose} data-testid="instructions-detail-close">
+        <IconButton
+          variant="ghost"
+          tooltip="Close"
+          className="rounded-full"
+          onClick={onClose}
+          data-testid="instructions-detail-close"
+        >
           <XIcon />
         </IconButton>
       </div>

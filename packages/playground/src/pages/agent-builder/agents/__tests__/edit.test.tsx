@@ -148,6 +148,18 @@ describe('AgentBuilderAgentEdit', () => {
       await waitFor(() => expect(navigateMock).toHaveBeenCalled());
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
+
+    it('shows an active Publish to Slack button in create mode', () => {
+      const { getByTestId } = renderAt();
+      const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
+    it('renders Chat and Configuration tabs in create mode', () => {
+      const { getByTestId } = renderAt();
+      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
+      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
+    });
   });
 
   describe('edit mode (stored agent present)', () => {
@@ -162,15 +174,30 @@ describe('AgentBuilderAgentEdit', () => {
       };
     });
 
-    it('renders Cancel + Save in the top right', () => {
-      const { getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-edit-cancel')).not.toBeNull();
+    it('renders Save in the top right (no Cancel)', () => {
+      const { getByTestId, queryByTestId } = renderAt();
+      expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
       expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
     });
 
-    it('Cancel navigates back to the view page without saving', () => {
+    it('shows an active Publish to Slack button for the owner', () => {
+      storedAgent = {
+        id: 'agent-123',
+        name: 'Existing',
+        instructions: 'Do things',
+        tools: [],
+        agents: [],
+        workflows: [],
+        authorId: 'current-user',
+      };
       const { getByTestId } = renderAt();
-      fireEvent.click(getByTestId('agent-builder-edit-cancel'));
+      const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
+    it('back arrow navigates to the view page without saving', () => {
+      const { getByLabelText } = renderAt();
+      fireEvent.click(getByLabelText('Back to agent chat'));
 
       expect(saveMock).not.toHaveBeenCalled();
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
@@ -228,6 +255,24 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).not.toHaveBeenCalled();
     });
 
+    it('renders Chat and Configuration tabs in edit mode', () => {
+      const { getByTestId } = renderAt();
+      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
+      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
+    });
+
+    it('switching to Configuration tab in edit mode toggles active panel', () => {
+      const { getByTestId } = renderAt();
+      const chatPanel = getByTestId('agent-builder-panel-chat');
+      const configurePanel = getByTestId('agent-builder-panel-configure');
+      expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
+
+      fireEvent.click(getByTestId('agent-builder-tab-configure'));
+
+      expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
+      expect(configurePanel.getAttribute('data-active-tab')).toBe('configure');
+    });
+
     it('redirects non-owners to the view page after current user loads', () => {
       storedAgent = {
         id: 'agent-123',
@@ -254,7 +299,7 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
 
-    it('navigates to the agents list in edit mode', () => {
+    it('navigates to the view page in edit mode', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -264,8 +309,8 @@ describe('AgentBuilderAgentEdit', () => {
         workflows: [],
       };
       const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
+      fireEvent.click(getByLabelText('Back to agent chat'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
   });
 });

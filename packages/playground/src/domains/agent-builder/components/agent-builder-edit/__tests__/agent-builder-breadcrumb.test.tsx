@@ -37,18 +37,19 @@ describe('AgentBuilderBreadcrumb', () => {
     cleanup();
   });
 
-  it('renders the form name when not loading', () => {
+  it('renders the form name when not loading in both mobile and desktop variants', () => {
     render(
       <FormWrapper>
         <AgentBuilderBreadcrumb />
       </FormWrapper>,
     );
 
-    expect(screen.getByText('Support agent')).toBeTruthy();
+    expect(screen.getAllByText('Support agent')).toHaveLength(2);
     expect(screen.queryByTestId('agent-builder-breadcrumb-skeleton')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-breadcrumb-mobile-skeleton')).toBeNull();
   });
 
-  it('renders a skeleton in place of the current crumb when loading', () => {
+  it('renders skeletons in place of the name in both mobile and desktop variants when loading', () => {
     render(
       <FormWrapper>
         <AgentBuilderBreadcrumb isLoading />
@@ -56,7 +57,22 @@ describe('AgentBuilderBreadcrumb', () => {
     );
 
     expect(screen.getByTestId('agent-builder-breadcrumb-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('agent-builder-breadcrumb-mobile-skeleton')).toBeTruthy();
     expect(screen.queryByText('Support agent')).toBeNull();
+  });
+
+  it('hides the mobile name on desktop and hides the full breadcrumb on mobile via responsive classes', () => {
+    render(
+      <FormWrapper>
+        <AgentBuilderBreadcrumb mode="build" />
+      </FormWrapper>,
+    );
+
+    const mobile = screen.getByTestId('agent-builder-breadcrumb-mobile');
+    const desktop = screen.getByTestId('agent-builder-breadcrumb-desktop');
+    expect(mobile.className).toContain('lg:hidden');
+    expect(desktop.className).toContain('hidden');
+    expect(desktop.className).toContain('lg:block');
   });
 
   it('renders "New agent" as a standalone title when creating, with no breadcrumb trail', () => {
@@ -96,7 +112,7 @@ describe('AgentBuilderBreadcrumb', () => {
     const crumb = screen.getByTestId('agent-builder-mode-crumb');
     const label = screen.getByTestId('agent-builder-mode-label');
     expect(screen.getByTestId('agent-builder-mode-icon-build')).toBeTruthy();
-    expect(label.textContent).toBe('Edit configuration');
+    expect(label.textContent).toBe('Edit agent capabilities');
     expect(label.className).toContain('font-semibold');
     expect(crumb.className).not.toContain('text-test');
   });
