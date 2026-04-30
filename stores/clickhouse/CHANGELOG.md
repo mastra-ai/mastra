@@ -1,5 +1,32 @@
 # @mastra/clickhouse
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added ClickhouseStoreVNext, a ClickHouse storage adapter that uses the vNext observability domain by default. Equivalent to constructing a ClickhouseStore and overriding the observability domain manually, but exposed as a single class for new projects. ([#15984](https://github.com/mastra-ai/mastra/pull/15984))
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { ClickhouseStoreVNext } from '@mastra/clickhouse';
+
+  export const mastra = new Mastra({
+    storage: new ClickhouseStoreVNext({
+      id: 'clickhouse-storage',
+      url: process.env.CLICKHOUSE_URL!,
+      username: process.env.CLICKHOUSE_USERNAME!,
+      password: process.env.CLICKHOUSE_PASSWORD!,
+    }),
+  });
+  ```
+
+  ClickhouseStoreVNext accepts the same configuration as ClickhouseStore and reuses the same ClickHouse client across every domain. ClickhouseStore continues to work for projects on the legacy observability schema.
+
+### Patch Changes
+
+- Updated dependencies [[`1723e09`](https://github.com/mastra-ai/mastra/commit/1723e099829892419ddbfe49287acfeac2522724), [`629f9e9`](https://github.com/mastra-ai/mastra/commit/629f9e9a7e56aa8f129515a3923c5813298790c7), [`25168fb`](https://github.com/mastra-ai/mastra/commit/25168fb9c1de9db7f8171df4f58ceb842c53aa29), [`ab34b5a`](https://github.com/mastra-ai/mastra/commit/ab34b5a2191b8e4353df1dbf7b9155e7d6628d79), [`5fb6c2a`](https://github.com/mastra-ai/mastra/commit/5fb6c2a95c1843cc231704b91354311fc1f34a71), [`394f0cf`](https://github.com/mastra-ai/mastra/commit/394f0cfc31e6b4d801219fdef2e9cc69e5bc8682), [`3d7f709`](https://github.com/mastra-ai/mastra/commit/3d7f709b615e588050bb6283c4ee5cfe2978cbde), [`48a42f1`](https://github.com/mastra-ai/mastra/commit/48a42f114a4006a95e0b7a1b5ad1a24815a175c2), [`2c83efc`](https://github.com/mastra-ai/mastra/commit/2c83efc4482b3efe50830e3b8b4ba9a8d219edff), [`282a10c`](https://github.com/mastra-ai/mastra/commit/282a10c9446e9922afe80e10e3770481c8ac8a28)]:
+  - @mastra/core@1.31.0-alpha.0
+
 ## 1.5.2
 
 ### Patch Changes
