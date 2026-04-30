@@ -130,12 +130,35 @@
     "@mastra/gcs": "0.2.1",
     "@mastra/modal": "0.2.0",
     "@mastra/s3": "0.5.0",
-    "@mastra/vercel": "0.1.0"
+    "@mastra/vercel": "0.1.0",
+    "@mastra/google-drive": "0.0.1"
   },
   "changesets": [
+    "all-paws-shake",
+    "automated-provider-registry-20260430-184308",
+    "brown-lamps-lie",
+    "chilly-turtles-rescue",
     "cyan-roses-repair",
+    "eleven-rings-tease",
+    "empty-ads-clean",
+    "fastify-multipart-fix",
+    "fastify-multipart-test-fix",
+    "fifty-planets-refuse",
+    "five-hands-punch",
+    "fix-toolcallfilter-per-step",
+    "four-owls-flow",
+    "google-drive-filesystem",
     "green-birds-knock",
+    "icy-trains-wait",
     "new-pets-live",
-    "tricky-papayas-feel"
+    "proud-bags-create",
+    "public-jeans-dance",
+    "semantic-recall-readonly",
+    "sharp-facts-work",
+    "slow-regions-help",
+    "tame-teeth-lie",
+    "tricky-papayas-feel",
+    "twelve-coats-punch",
+    "witty-dolls-beg"
   ]
 }
