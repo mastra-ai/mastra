@@ -39,7 +39,7 @@ function getChannelOrThrow(mastra: any, platform: string) {
 }
 
 function assertAgentExists(mastra: any, agentId: string) {
-  const agent = mastra.getAgent?.(agentId);
+  const agent = mastra.getAgentById?.(agentId);
   if (!agent) {
     throw new HTTPException(404, {
       message: `Agent "${agentId}" not found`,
