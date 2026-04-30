@@ -43,3 +43,6 @@ trustPolicyExclude:
   - '@clerk/shared@3.47.4'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
+  # exa-js 2.12.1 is signed but lacks provenance/trusted-publisher metadata that earlier versions carried.
+  # Used by `@mastra/exa` integration. Verified via npm registry signature.
+  - 'exa-js@2.12.1'
