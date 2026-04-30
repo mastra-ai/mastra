@@ -174,13 +174,11 @@ async function main() {
     process.stderr.write('Reading piped input...\n');
     pipedInput = await drainPipedStdin();
 
-    if (pipedInput) {
-      // Reopen a real TTY for the interactive TUI.  If this fails (e.g. no
-      // controlling terminal in CI), fall back to headless mode.
-      if (!reopenStdinFromTTY()) {
-        process.stderr.write('No TTY available — falling back to headless mode.\n');
-        return headlessMain();
-      }
+    // Always reopen a real TTY — even if the pipe was empty, the original
+    // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
+    if (!reopenStdinFromTTY()) {
+      process.stderr.write('No TTY available — falling back to headless mode.\n');
+      return headlessMain();
     }
   }
 

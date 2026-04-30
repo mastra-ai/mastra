@@ -173,8 +173,15 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided
+    // Process initial message if provided (e.g. piped stdin content)
     if (this.state.options.initialMessage) {
+      addUserMessage(this.state, {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: [{ type: 'text', text: this.state.options.initialMessage }],
+        createdAt: new Date(),
+      });
+      this.state.ui.requestRender();
       this.fireMessage(this.state.options.initialMessage);
     }
 
