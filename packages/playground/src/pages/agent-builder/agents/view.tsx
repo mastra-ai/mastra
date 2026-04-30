@@ -166,6 +166,7 @@ const AgentBuilderAgentViewReady = ({
         mode="test"
         defaultExpanded={false}
         detailOpen={activeDetail !== null}
+        showConfigure={isOwner}
         modeAction={
           <div className="flex items-center gap-2">
             <VisibilitySelect disabled />

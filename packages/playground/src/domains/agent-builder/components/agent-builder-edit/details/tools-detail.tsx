@@ -34,7 +34,13 @@ export const ToolsDetail = ({ onClose, editable = true, availableAgentTools = []
             </Txt>
           )}
         </div>
-        <IconButton tooltip="Close" className="rounded-full" onClick={onClose} data-testid="tools-detail-close">
+        <IconButton
+          variant="ghost"
+          tooltip="Close"
+          className="rounded-full"
+          onClick={onClose}
+          data-testid="tools-detail-close"
+        >
           <XIcon />
         </IconButton>
       </div>

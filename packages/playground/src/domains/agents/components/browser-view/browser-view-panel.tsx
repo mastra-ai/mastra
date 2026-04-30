@@ -5,6 +5,7 @@ import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
 import { BrowserViewFrame } from './browser-view-frame';
+import { useRestoreFocus } from '@/hooks/use-restore-focus';
 
 /**
  * Get StatusBadge configuration based on stream status
@@ -51,21 +52,7 @@ export function BrowserViewPanel({ hideSidebar = false }: { hideSidebar?: boolea
   const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
   const isModal = viewMode === 'modal';
   const dialogRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-
-  // Focus management: trap focus in dialog and restore on close
-  useEffect(() => {
-    if (isModal) {
-      // Store the previously focused element
-      previousFocusRef.current = document.activeElement as HTMLElement | null;
-      // Focus the dialog
-      dialogRef.current?.focus();
-    } else if (previousFocusRef.current) {
-      // Restore focus when closing
-      previousFocusRef.current.focus();
-      previousFocusRef.current = null;
-    }
-  }, [isModal]);
+  useRestoreFocus(isModal, dialogRef);
 
   const handleOpenSidebar = () => setViewMode('sidebar');
 

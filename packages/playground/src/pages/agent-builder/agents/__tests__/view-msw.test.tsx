@@ -129,7 +129,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
     await waitFor(() => expect(sendRequestCount).toBe(0));
   });
 
-  it('shows the disabled Publish to Slack button for the owner', async () => {
+  it('shows an active Publish to Slack button for the owner', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () =>
@@ -140,7 +140,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
     renderPage();
 
     const publish = (await screen.findByTestId('agent-builder-publish-slack')) as HTMLButtonElement;
-    expect(publish.disabled).toBe(true);
+    expect(publish.disabled).toBe(false);
   });
 
   it('hides the Edit and Publish to Slack buttons for non-owners', async () => {
@@ -157,5 +157,35 @@ describe('AgentBuilderAgentView MSW integration', () => {
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
     expect(screen.queryByTestId('agent-builder-view-edit')).toBeNull();
     expect(screen.queryByTestId('agent-builder-publish-slack')).toBeNull();
+  });
+
+  it('shows Chat and Configuration tabs for the owner via real stored-agent data', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
+      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () =>
+        HttpResponse.json({ messages: [] }),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId('agent-builder-tab-configure')).toBeTruthy();
+    expect(screen.getByTestId('agent-builder-tab-chat')).toBeTruthy();
+  });
+
+  it('hides Configuration tab for non-owners via real stored-agent data', async () => {
+    const otherAgent = { ...storedAgent, authorId: 'someone-else' };
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(otherAgent)),
+      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () =>
+        HttpResponse.json({ messages: [] }),
+      ),
+    );
+
+    renderPage();
+
+    await screen.findByTestId('agent-builder-agent-chat-empty-state');
+    expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
   });
 });

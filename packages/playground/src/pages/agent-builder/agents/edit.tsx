@@ -222,6 +222,7 @@ const AgentBuilderAgentEditReady = ({
         creating={mode === 'create'}
         defaultExpanded={mode === 'edit'}
         detailOpen={activeDetail !== null}
+        showConfigure={isOwner}
         modeAction={
           <div className="flex items-center gap-2">
             <VisibilitySelectConnected />

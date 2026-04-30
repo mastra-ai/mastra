@@ -87,9 +87,9 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <EntityListPageLayout>
+    <EntityListPageLayout className="px-4 md:px-10">
       <EntityListPageLayout.Top>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>
             <PageHeader.Title>
               <AgentIcon /> My agents
@@ -97,8 +97,13 @@ export default function AgentBuilderAgentsPage() {
             <PageHeader.Description>Agents you've created in Agent Builder.</PageHeader.Description>
           </PageHeader>
           {agents.length > 0 && (
-            <div className="shrink-0">
-              <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
+            <div className="w-full shrink-0 md:w-auto">
+              <Button
+                as={FrameworkLink}
+                to="/agent-builder/agents/create"
+                variant="primary"
+                className="w-full justify-center md:w-auto"
+              >
                 <PlusIcon /> New agent
               </Button>
             </div>

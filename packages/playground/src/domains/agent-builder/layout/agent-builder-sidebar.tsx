@@ -10,25 +10,32 @@ const links: NavLink[] = [
   { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon />, isOnMastraPlatform: true },
 ];
 
-export function AgentBuilderSidebar() {
+type AgentBuilderSidebarProps = {
+  forceExpanded?: boolean;
+};
+
+export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSidebarProps = {}) {
   const { Link } = useLinkComponent();
-  const { state } = useMainSidebar();
+  const { state: contextState } = useMainSidebar();
   const { pathname } = useLocation();
+  const state = forceExpanded ? 'default' : contextState;
 
   return (
     <MainSidebar className="h-full">
-      <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
-        {state === 'collapsed' ? (
-          <div className="flex flex-col gap-3 items-center">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
-          </div>
-        ) : (
-          <span className="flex items-center gap-2 pl-3">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-serif text-sm">Mastra Studio</span>
-          </span>
-        )}
-      </div>
+      {!forceExpanded && (
+        <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
+          {state === 'collapsed' ? (
+            <div className="flex flex-col gap-3 items-center">
+              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+            </div>
+          ) : (
+            <span className="flex items-center gap-2 pl-3">
+              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+              <span className="font-serif text-sm">Mastra Studio</span>
+            </span>
+          )}
+        </div>
+      )}
 
       <MainSidebar.Nav>
         <MainSidebar.NavSection>
@@ -50,12 +57,14 @@ export function AgentBuilderSidebar() {
         </MainSidebar.NavSection>
       </MainSidebar.Nav>
 
-      <MainSidebar.Bottom>
-        <MainSidebar.NavSeparator />
-        <div className="flex justify-end pb-3">
-          <MainSidebar.Trigger />
-        </div>
-      </MainSidebar.Bottom>
+      {!forceExpanded && (
+        <MainSidebar.Bottom>
+          <MainSidebar.NavSeparator />
+          <div className="flex justify-end pb-3">
+            <MainSidebar.Trigger />
+          </div>
+        </MainSidebar.Bottom>
+      )}
     </MainSidebar>
   );
 }

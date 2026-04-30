@@ -106,7 +106,7 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 
   return (
-    <div className="flex h-full min-h-0 flex-col px-6">
+    <div className="flex h-full min-h-0 flex-col">
       <AgentChatMessageList onStarterPromptSelect={setDraft} />
       {hasBrowser && <BrowserThumbnailSlot hideSidebar={hideBrowserSidebar} />}
       <ChatComposer
@@ -188,7 +188,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
             ) : null}
           </div>
 
-          <div className="grid w-full max-w-2xl grid-cols-2 gap-5">
+          <div className="grid w-full max-w-2xl grid-cols-1 gap-5 sm:grid-cols-2">
             {STARTER_PROMPTS.map((starterPrompt, index) => (
               <button
                 key={starterPrompt.title}

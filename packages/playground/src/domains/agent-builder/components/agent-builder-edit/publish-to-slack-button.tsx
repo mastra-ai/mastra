@@ -1,20 +1,9 @@
-import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
 
-export interface PublishToSlackButtonProps {
-  disabled?: boolean;
-}
-
-export function PublishToSlackButton({ disabled = true }: PublishToSlackButtonProps) {
+export function PublishToSlackButton() {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span tabIndex={0}>
-          <Button size="sm" variant="default" disabled={disabled} data-testid="agent-builder-publish-slack">
-            Publish to Slack
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>Coming soon</TooltipContent>
-    </Tooltip>
+    <Button size="sm" variant="default" data-testid="agent-builder-publish-slack">
+      Publish to Slack
+    </Button>
   );
 }

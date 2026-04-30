@@ -62,7 +62,7 @@ export const StarButton = ({
         aria-hidden
       />
       {showCount && typeof starCount === 'number' && (
-        <span className="leading-none">
+        <span className="leading-none whitespace-nowrap">
           <span className="tabular-nums">{starCount}</span> {starText}
         </span>
       )}

@@ -21,7 +21,7 @@ export default function AgentBuilderCreate() {
   const navigate = useNavigate();
   return (
     <>
-      <div className="absolute top-6 left-6 z-10">
+      <div className="absolute top-3 left-3 md:top-6 md:left-6 z-10">
         <IconButton
           variant="ghost"
           onClick={() =>

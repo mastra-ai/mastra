@@ -148,6 +148,18 @@ describe('AgentBuilderAgentEdit', () => {
       await waitFor(() => expect(navigateMock).toHaveBeenCalled());
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
+
+    it('shows an active Publish to Slack button in create mode', () => {
+      const { getByTestId } = renderAt();
+      const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
+    it('renders Chat and Configuration tabs in create mode', () => {
+      const { getByTestId } = renderAt();
+      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
+      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
+    });
   });
 
   describe('edit mode (stored agent present)', () => {
@@ -168,7 +180,7 @@ describe('AgentBuilderAgentEdit', () => {
       expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
     });
 
-    it('shows the disabled Publish to Slack button for the owner', () => {
+    it('shows an active Publish to Slack button for the owner', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -180,7 +192,7 @@ describe('AgentBuilderAgentEdit', () => {
       };
       const { getByTestId } = renderAt();
       const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
-      expect(button.disabled).toBe(true);
+      expect(button.disabled).toBe(false);
     });
 
     it('Cancel navigates back to the view page without saving', () => {
@@ -241,6 +253,24 @@ describe('AgentBuilderAgentEdit', () => {
 
       expect(queryByTestId('agent-configure-name')).toBeNull();
       expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    it('renders Chat and Configuration tabs in edit mode', () => {
+      const { getByTestId } = renderAt();
+      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
+      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
+    });
+
+    it('switching to Configuration tab in edit mode toggles active panel', () => {
+      const { getByTestId } = renderAt();
+      const chatPanel = getByTestId('agent-builder-panel-chat');
+      const configurePanel = getByTestId('agent-builder-panel-configure');
+      expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
+
+      fireEvent.mouseDown(getByTestId('agent-builder-tab-configure'));
+
+      expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
+      expect(configurePanel.getAttribute('data-active-tab')).toBe('configure');
     });
 
     it('redirects non-owners to the view page after current user loads', () => {
