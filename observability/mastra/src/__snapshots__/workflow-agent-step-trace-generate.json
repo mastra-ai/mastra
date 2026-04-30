@@ -23,15 +23,14 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "prompt": "Hello from workflow"
         },
         "output": {
-          "response": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          }
+          "response": "Mock V2 generate response"
         }
       },
       "children": [
@@ -51,15 +50,14 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "prompt": "Hello from workflow"
             },
             "output": {
-              "response": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              }
+              "response": "Mock V2 generate response"
             }
           },
           "children": [
@@ -79,13 +77,12 @@
                   "instructions": "You are a test agent"
                 },
                 "metadata": {
-                  "runId": "<runId-2>"
+                  "runId": "<runId-2>",
+                  "environment": "test"
                 },
                 "input": "Hello from workflow",
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "files": []
                 }
               },
@@ -123,7 +120,8 @@
                       }
                     },
                     "metadata": {
-                      "runId": "<runId-2>"
+                      "runId": "<runId-2>",
+                      "environment": "test"
                     },
                     "input": {
                       "messages": [
@@ -146,9 +144,7 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "warnings": []
                     }
                   },
@@ -184,6 +180,7 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
+                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
@@ -192,9 +189,7 @@
                         },
                         "input": {},
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          },
+                          "text": "Mock V2 generate response",
                           "toolCalls": []
                         }
                       },
@@ -216,12 +211,11 @@
                               "sequenceNumber": 0
                             },
                             "metadata": {
-                              "runId": "<runId-2>"
+                              "runId": "<runId-2>",
+                              "environment": "test"
                             },
                             "output": {
-                              "text": {
-                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                              }
+                              "text": "Mock V2 generate response"
                             }
                           }
                         }

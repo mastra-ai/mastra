@@ -27,13 +27,12 @@
           "availableTools": ["childSpanTool"]
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Use child span tool to process test-data",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -71,7 +70,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -94,9 +94,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -132,6 +130,7 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -170,7 +169,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "childSpanTool",
@@ -199,7 +199,8 @@
                       "success": true
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "input": {
                       "input": "test-data"
@@ -223,6 +224,7 @@
                         "entityId": "childSpanTool",
                         "metadata": {
                           "runId": "<runId-1>",
+                          "environment": "test",
                           "childOperation": "data-processing",
                           "inputValue": "test-data",
                           "processedValue": "processed-test-data"
@@ -251,6 +253,7 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
+                      "environment": "test",
                       "toolCallId": "call-child-span-1",
                       "toolName": "childSpanTool"
                     }
@@ -289,6 +292,7 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -297,9 +301,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -321,12 +323,11 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 generate response"
                     }
                   }
                 }

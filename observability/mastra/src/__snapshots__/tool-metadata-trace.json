@@ -26,13 +26,12 @@
           "availableTools": ["metadataTool"]
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Use metadata tool to process some data",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "files": []
         }
       },
@@ -70,7 +69,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -93,9 +93,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -130,6 +128,7 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -168,7 +167,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "metadataTool",
@@ -198,6 +198,7 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
+                      "environment": "test",
                       "toolOperation": "metadata-processing",
                       "inputValue": "some data",
                       "customFlag": true,
@@ -229,6 +230,7 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
+                      "environment": "test",
                       "toolCallId": "call-metadata-1",
                       "toolName": "metadataTool"
                     }
@@ -266,6 +268,7 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -274,9 +277,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "toolCalls": []
                 }
               },
@@ -298,12 +299,11 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 stream response"
                     }
                   }
                 }

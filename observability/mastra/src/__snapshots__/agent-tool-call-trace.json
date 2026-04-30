@@ -29,13 +29,12 @@
         "metadata": {
           "runId": "<runId-1>",
           "resourceId": "test-resource-id",
-          "threadId": "test-thread-id"
+          "threadId": "test-thread-id",
+          "environment": "test"
         },
         "input": "Calculate 5 + 3",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "files": []
         }
       },
@@ -75,7 +74,8 @@
             "metadata": {
               "runId": "<runId-1>",
               "resourceId": "test-resource-id",
-              "threadId": "test-thread-id"
+              "threadId": "test-thread-id",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -98,9 +98,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -137,6 +135,7 @@
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
                   "threadId": "test-thread-id",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -179,7 +178,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id"
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -212,7 +212,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id"
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "input": {
                       "operation": "add",
@@ -244,6 +245,7 @@
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
                       "threadId": "test-thread-id",
+                      "environment": "test",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
                     }
@@ -283,6 +285,7 @@
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
                   "threadId": "test-thread-id",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -291,9 +294,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "toolCalls": []
                 }
               },
@@ -317,12 +318,11 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id"
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 stream response"
                     }
                   }
                 }

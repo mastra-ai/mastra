@@ -27,7 +27,8 @@
           "availableTools": ["calculator"]
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "What is 5 + 3?",
         "output": {
@@ -69,7 +70,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -127,6 +129,7 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -167,7 +170,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Let me calculate that for you. "
@@ -191,7 +195,8 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -222,7 +227,8 @@
                       "success": true
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "input": {
                       "operation": "add",
@@ -252,6 +258,7 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
+                      "environment": "test",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
                     }
@@ -289,6 +296,7 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -319,7 +327,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "The result of 5 + 3 is 8."

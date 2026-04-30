@@ -30,13 +30,12 @@
         "metadata": {
           "runId": "<runId-1>",
           "id1": 123,
-          "id2": "tacos"
+          "id2": "tacos",
+          "environment": "test"
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -76,7 +75,8 @@
             "metadata": {
               "runId": "<runId-1>",
               "id1": 123,
-              "id2": "tacos"
+              "id2": "tacos",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -99,9 +99,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -139,6 +137,7 @@
                   "runId": "<runId-1>",
                   "id1": 123,
                   "id2": "tacos",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -182,7 +181,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "id1": 123,
-                      "id2": "tacos"
+                      "id2": "tacos",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "workflowExecutor",
@@ -216,7 +216,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "id1": 123,
-                      "id2": "tacos"
+                      "id2": "tacos",
+                      "environment": "test"
                     },
                     "input": {
                       "workflowId": "simpleWorkflow",
@@ -249,7 +250,8 @@
                         "metadata": {
                           "runId": "<runId-2>",
                           "id1": 123,
-                          "id2": "tacos"
+                          "id2": "tacos",
+                          "environment": "test"
                         },
                         "input": {
                           "input": "test input"
@@ -277,7 +279,8 @@
                             "metadata": {
                               "runId": "<runId-2>",
                               "id1": 123,
-                              "id2": "tacos"
+                              "id2": "tacos",
+                              "environment": "test"
                             },
                             "input": {
                               "input": "test input"
@@ -311,6 +314,7 @@
                       "runId": "<runId-1>",
                       "id1": 123,
                       "id2": "tacos",
+                      "environment": "test",
                       "toolCallId": "call-workflow-1",
                       "toolName": "workflowExecutor"
                     }
@@ -351,6 +355,7 @@
                   "runId": "<runId-1>",
                   "id1": 123,
                   "id2": "tacos",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -359,9 +364,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -385,12 +388,11 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "id1": 123,
-                      "id2": "tacos"
+                      "id2": "tacos",
+                      "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 generate response"
                     }
                   }
                 }
