@@ -60,6 +60,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected cardinalityFilter: CardinalityFilter;
 
+  /**
+   * Deployment environment propagated from the parent Mastra instance.
+   * Set by `Observability.setMastraContext`, read by spans as a fallback when
+   * a span's `metadata.environment` isn't set.
+   */
+  #mastraEnvironment?: string;
+
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
@@ -287,6 +294,22 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getConfig(): Readonly<ObservabilityInstanceConfig> {
     return { ...this.config };
+  }
+
+  /**
+   * Returns the deployment environment propagated from the parent Mastra instance.
+   * Spans use this as a fallback when `metadata.environment` isn't set.
+   */
+  getMastraEnvironment(): string | undefined {
+    return this.#mastraEnvironment;
+  }
+
+  /**
+   * Internal hook used by `Observability.setMastraContext` to push the
+   * resolved Mastra-level environment into this instance.
+   */
+  __setMastraEnvironment(environment: string | undefined): void {
+    this.#mastraEnvironment = environment;
   }
 
   // ============================================================================

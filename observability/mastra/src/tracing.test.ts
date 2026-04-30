@@ -2430,4 +2430,94 @@ describe('Tracing', () => {
       span.end();
     });
   });
+
+  describe('Mastra environment fallback', () => {
+    it('exposes a Mastra-pushed environment via getCorrelationContext when metadata.environment is unset', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      expect(span.getCorrelationContext().environment).toBe('production');
+
+      span.end();
+    });
+
+    it('lets per-span metadata.environment override the Mastra-pushed environment', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          metadata: { environment: 'staging' },
+        },
+      });
+
+      expect(span.getCorrelationContext().environment).toBe('staging');
+
+      span.end();
+    });
+
+    it('leaves environment undefined when neither metadata nor Mastra environment is set', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      expect(span.getCorrelationContext().environment).toBeUndefined();
+
+      span.end();
+    });
+
+    it('child spans inherit the Mastra environment fallback through metadata propagation', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('staging');
+
+      const parent = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'parent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const child = parent.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child',
+        attributes: { toolId: 'tool-1', toolType: 'function' },
+      });
+
+      expect(child.getCorrelationContext().environment).toBe('staging');
+
+      child.end();
+      parent.end();
+    });
+  });
 });

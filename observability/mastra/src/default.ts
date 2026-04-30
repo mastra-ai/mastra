@@ -152,7 +152,13 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     const { mastra } = options;
     this.#mastra = mastra;
 
+    const mastraEnvironment = mastra.getEnvironment?.();
+
     instances.forEach(instance => {
+      // Propagate the Mastra-level environment so spans can fall back to it
+      // when `metadata.environment` isn't set on a specific span.
+      instance.__setMastraEnvironment?.(mastraEnvironment);
+
       const config = instance.getConfig();
       const exporters = instance.getExporters();
       exporters.forEach(exporter => {
