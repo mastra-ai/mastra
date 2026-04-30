@@ -76,13 +76,9 @@ export const init = async ({
 
       const depService = new DepsService();
 
-      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
-      if (needsLibsql) {
-        await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
-      }
-      const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
-      if (needsDuckDB) {
-        await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
+      const needsLocalDev = (await depService.checkDependencies(['@mastra/localdev'])) !== `ok`;
+      if (needsLocalDev) {
+        await depService.installPackages([`@mastra/localdev${packageVersionTag}`]);
       }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;

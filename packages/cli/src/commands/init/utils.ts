@@ -476,9 +476,7 @@ export const mastra = new Mastra()
       `
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { DuckDBStore } from "@mastra/duckdb";
-import { MastraCompositeStore } from '@mastra/core/storage';
+import { LocalDevStore } from '@mastra/localdev';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
@@ -486,16 +484,7 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new LibSQLStore({
-      id: "mastra-storage",
-      url: "file:./mastra.db",
-    }),
-    domains: {
-      observability: await new DuckDBStore().getStore('observability'),
-    }
-  }),
+  storage: new LocalDevStore(),
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
@@ -558,10 +547,10 @@ export const checkAndInstallCoreDeps = async (addExample: boolean, versionTag?: 
     }
 
     if (addExample) {
-      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+      const needsLocalDev = (await depService.checkDependencies(['@mastra/localdev'])) !== `ok`;
 
-      if (needsLibsql) {
-        packages.push({ name: '@mastra/libsql', version: mastraVersionTag });
+      if (needsLocalDev) {
+        packages.push({ name: '@mastra/localdev', version: mastraVersionTag });
       }
     }
 

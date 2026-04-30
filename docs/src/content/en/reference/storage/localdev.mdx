@@ -1,0 +1,110 @@
+---
+title: "Reference: LocalDevStore | Storage"
+description: API reference for LocalDevStore, the zero-config local development storage adapter for Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/localdev"
+  - "@mastra/libsql"
+  - "@mastra/duckdb"
+---
+
+# LocalDevStore
+
+`LocalDevStore` is a zero-config wrapper around [`MastraCompositeStore`](/reference/storage/composite) for local development. It uses [LibSQL](/reference/storage/libsql) for every domain by default and routes the `observability` domain to a [DuckDB](https://duckdb.org) store for faster trace queries in Mastra Studio.
+
+`LocalDevStore` is intended for local development. Both backends are embedded and persist data to local files. For production, swap to a hosted adapter such as [PostgreSQL](/reference/storage/postgresql) or [ClickHouse](/reference/storage/clickhouse) for observability.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/localdev@latest
+```
+
+`@mastra/localdev` depends on `@mastra/libsql` and `@mastra/duckdb`. Both are installed automatically.
+
+## Usage example
+
+The default configuration creates a LibSQL database at `file:./mastra.db` and a DuckDB database at `mastra.duckdb`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LocalDevStore } from '@mastra/localdev'
+
+export const mastra = new Mastra({
+  storage: new LocalDevStore(),
+})
+```
+
+Override the database paths:
+
+```typescript title="src/mastra/index.ts"
+import { LocalDevStore } from '@mastra/localdev'
+
+const storage = new LocalDevStore({
+  dbPath: 'file:./custom.db',
+  duckdbPath: './traces.duckdb',
+})
+```
+
+Pass per-domain overrides for advanced composition. Overrides take precedence over the built-in DuckDB observability store and the LibSQL default:
+
+```typescript title="src/mastra/index.ts"
+import { LocalDevStore } from '@mastra/localdev'
+import { MemoryLibSQL } from '@mastra/libsql'
+
+const storage = new LocalDevStore({
+  domains: {
+    memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: true,
+    defaultValue: 'localdev-storage',
+  },
+  {
+    name: 'dbPath',
+    type: 'string',
+    description:
+      'LibSQL database URL used for the default store. Accepts any value supported by `@libsql/client`, including `file:` paths and remote `libsql://` URLs.',
+    isOptional: true,
+    defaultValue: 'file:./mastra.db',
+  },
+  {
+    name: 'duckdbPath',
+    type: 'string',
+    description:
+      'DuckDB database file used for the observability domain. Use `:memory:` for an ephemeral in-memory database.',
+    isOptional: true,
+    defaultValue: 'mastra.duckdb',
+  },
+  {
+    name: 'default',
+    type: 'MastraCompositeStore',
+    description:
+      'Override the default store. When provided, replaces the built-in LibSQL default for every domain not covered by `domains`.',
+    isOptional: true,
+  },
+  {
+    name: 'domains',
+    type: 'MastraStorageDomains',
+    description:
+      'Per-domain overrides. Takes precedence over both the LibSQL default and the built-in DuckDB observability store. See [Composite storage](/reference/storage/composite) for the available domain keys.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Related
+
+- [Composite storage](/reference/storage/composite)
+- [LibSQL storage](/reference/storage/libsql)
+- [Storage overview](/reference/storage/overview)
