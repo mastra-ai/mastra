@@ -359,4 +359,49 @@ describe('dev command - inspect flag behavior', () => {
       expect(commands.some(cmd => cmd.startsWith('--inspect-brk='))).toBe(false);
     });
   });
+
+  describe('HTTPS internal dev server requests', () => {
+    it('uses https for ready and hot-reload fetches when dev HTTPS is enabled', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ disabled: true, timestamp: 'now' }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { dev } = await import('./dev');
+
+      await dev({
+        dir: undefined,
+        root: process.cwd(),
+        tools: undefined,
+        env: undefined,
+        inspect: false,
+        inspectBrk: false,
+        customArgs: undefined,
+        https: true,
+        debug: false,
+      });
+
+      fetchMock.mockClear();
+
+      await vi.waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith('https://localhost:4111/__restart-active-workflow-runs', {
+          method: 'POST',
+        });
+      });
+      expect(fetchMock).toHaveBeenCalledWith('https://localhost:4111/__refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const bundleEndHandler = mockWatcher.on.mock.calls.find(([event]) => event === 'event')?.[1];
+      expect(bundleEndHandler).toBeDefined();
+
+      await bundleEndHandler({ code: 'BUNDLE_END' });
+
+      expect(fetchMock).toHaveBeenCalledWith('https://localhost:4111/__hot-reload-status');
+    });
+  });
 });
