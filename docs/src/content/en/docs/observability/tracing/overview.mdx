@@ -354,7 +354,7 @@ Metadata set here will be shown in all configured exporters.
 
 ### Tagging traces with the deployment environment
 
-Set the top-level `environment` field on Mastra to automatically attach the deployment environment to every trace, log, and metric without passing `tracingOptions.metadata.environment` on each call.
+Set the top-level `environment` field on Mastra to automatically attach the deployment environment to all observability signals without passing `tracingOptions.metadata.environment` on each call.
 
 ```ts title="src/mastra/index.ts"
 export const mastra = new Mastra({

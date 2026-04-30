@@ -298,9 +298,9 @@ export interface Config<
 
   /**
    * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
-   * When set, the value is automatically attached to every observability signal
-   * (traces, logs, metrics) so they can be filtered by environment without
-   * passing `tracingOptions.metadata.environment` on every call.
+   * When set, the value is automatically attached to all observability signals
+   * so they can be filtered by environment without passing
+   * `tracingOptions.metadata.environment` on every call.
    *
    * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
    * is left undefined rather than guessed.
@@ -479,9 +479,9 @@ export class Mastra<
    * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
    * is provided.
    *
-   * Observability automatically reads this and attaches it to every signal
-   * (traces, logs, metrics) so consumers can filter by environment without
-   * passing `tracingOptions.metadata.environment` on each call.
+   * Observability automatically reads this and attaches it to all signals so
+   * consumers can filter by environment without passing
+   * `tracingOptions.metadata.environment` on each call.
    */
   public getEnvironment(): string | undefined {
     return this.#environment;
