@@ -30,6 +30,10 @@ describe('sanitizePipedOutput', () => {
     expect(sanitizePipedOutput('Building... |\rBuilding... /\rDone!')).toBe('Done!');
   });
 
+  it('preserves visible text when input ends with bare \\r', () => {
+    expect(sanitizePipedOutput('hello\r')).toBe('hello');
+  });
+
   it('handles \\r overwrites on multiple lines', () => {
     const input = 'line1\nspinner |\rspinner /\rspinner done\nline3';
     expect(sanitizePipedOutput(input)).toBe('line1\nspinner done\nline3');

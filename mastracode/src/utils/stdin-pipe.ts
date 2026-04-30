@@ -33,7 +33,12 @@ export function sanitizePipedOutput(raw: string): string {
     .map(line => {
       if (!line.includes('\r')) return line;
       const segments = line.split('\r');
-      return segments[segments.length - 1];
+      // Walk backwards to find the last non-empty segment — a trailing \r
+      // produces an empty final segment that would otherwise discard visible text.
+      for (let i = segments.length - 1; i >= 0; i--) {
+        if (segments[i]!.length > 0) return segments[i]!;
+      }
+      return '';
     })
     .join('\n');
 
