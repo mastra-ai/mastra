@@ -1,6 +1,14 @@
+import { createAzure } from '@ai-sdk/azure';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AzureOpenAIGateway } from './azure';
 import type { AzureOpenAIGatewayConfig } from './azure';
+
+vi.mock('@ai-sdk/azure', () => ({
+  createAzure: vi.fn((options: Record<string, unknown>) => {
+    const provider = vi.fn((modelId: string) => ({ modelId, options }));
+    return provider;
+  }),
+}));
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
@@ -21,13 +29,59 @@ describe('AzureOpenAIGateway', () => {
       }).toThrow('resourceName is required');
     });
 
-    it('should throw error if apiKey missing', () => {
+    it('should throw error if apiKey and Entra ID authentication are missing', () => {
       expect(() => {
         new AzureOpenAIGateway({
           resourceName: 'test-resource',
           deployments: ['gpt-4'],
         } as AzureOpenAIGatewayConfig);
-      }).toThrow('apiKey is required');
+      }).toThrow('apiKey or Entra ID authentication is required');
+    });
+
+    it('should allow Entra ID authentication without apiKey', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          resourceName: 'test-resource',
+          deployments: ['gpt-4'],
+          authentication: {
+            type: 'entraId',
+            credential: {
+              getToken: vi.fn(),
+            },
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should throw error if Entra ID credential missing', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          resourceName: 'test-resource',
+          deployments: ['gpt-4'],
+          authentication: {
+            type: 'entraId',
+          } as any,
+        });
+      }).toThrow('credential is required');
+    });
+
+    it('should warn if both apiKey and Entra ID authentication provided', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: ['gpt-4'],
+        authentication: {
+          type: 'entraId',
+          credential: {
+            getToken: vi.fn(),
+          },
+        },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Both apiKey and Entra ID authentication provided'));
+      warnSpy.mockRestore();
     });
 
     it('should allow neither deployments nor management (manual deployment names)', () => {
@@ -481,6 +535,14 @@ describe('AzureOpenAIGateway', () => {
       });
 
       expect(model).toBeDefined();
+      expect(createAzure).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          resourceName: 'test-resource',
+          apiKey: 'test-key',
+          apiVersion: '2024-04-01-preview',
+          useDeploymentBasedUrls: true,
+        }),
+      );
     });
 
     it('should use default API version if not provided', async () => {
@@ -497,6 +559,86 @@ describe('AzureOpenAIGateway', () => {
       });
 
       expect(model).toBeDefined();
+    });
+
+    it('should use Entra ID bearer auth through custom fetch', async () => {
+      const credential = {
+        getToken: vi.fn().mockResolvedValue({
+          token: 'entra-token',
+          expiresOnTimestamp: Date.now() + 3600_000,
+        }),
+      };
+
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        authentication: {
+          type: 'entraId',
+          credential,
+        },
+        deployments: ['gpt-4'],
+      });
+
+      const model = (await gateway.resolveLanguageModel({
+        modelId: 'gpt-4',
+        providerId: 'azure-openai',
+        apiKey: await gateway.getApiKey('gpt-4'),
+      })) as any;
+
+      mockFetch.mockResolvedValueOnce(new Response('{}'));
+
+      await model.options.fetch('https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions', {
+        headers: {
+          'api-key': '',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      expect(credential.getToken).toHaveBeenCalledWith('https://cognitiveservices.azure.com/.default');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions',
+        expect.objectContaining({
+          headers: expect.any(Headers),
+        }),
+      );
+
+      const headers = mockFetch.mock.calls.at(-1)?.[1].headers as Headers;
+      expect(headers.get('Authorization')).toBe('Bearer entra-token');
+      expect(headers.has('api-key')).toBe(false);
+    });
+
+    it('should cache Entra ID tokens', async () => {
+      const credential = {
+        getToken: vi.fn().mockResolvedValue({
+          token: 'cached-token',
+          expiresOnTimestamp: Date.now() + 3600_000,
+        }),
+      };
+
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        authentication: {
+          type: 'entraId',
+          credential,
+        },
+        deployments: ['gpt-4'],
+      });
+
+      const model = (await gateway.resolveLanguageModel({
+        modelId: 'gpt-4',
+        providerId: 'azure-openai',
+        apiKey: await gateway.getApiKey('gpt-4'),
+      })) as any;
+
+      mockFetch.mockResolvedValue(new Response('{}'));
+
+      await model.options.fetch('https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions', {
+        headers: { 'api-key': '' },
+      });
+      await model.options.fetch('https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions', {
+        headers: { 'api-key': '' },
+      });
+
+      expect(credential.getToken).toHaveBeenCalledTimes(1);
     });
   });
 });
