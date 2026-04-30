@@ -199,11 +199,16 @@ export class MastraTUI {
             this.state.ui.requestRender();
           }
         } else {
-          if (this.state.pendingNewThread) {
-            await this.state.harness.createThread();
+          try {
+            if (this.state.pendingNewThread) {
+              await this.state.harness.createThread();
+              this.state.pendingNewThread = false;
+            }
+            this.fireMessage(msg);
+          } catch (error) {
             this.state.pendingNewThread = false;
+            showError(this.state, error instanceof Error ? error.message : 'Failed to start thread');
           }
-          this.fireMessage(msg);
         }
       }
     }

@@ -70,7 +70,7 @@ describe('sanitizePipedOutput', () => {
 // ---------------------------------------------------------------------------
 
 describe('drainPipedStdin', () => {
-  const originalStdin = process.stdin;
+  const originalStdinDescriptor = Object.getOwnPropertyDescriptor(process, 'stdin');
   const originalStderrWrite = process.stderr.write;
 
   beforeEach(() => {
@@ -79,11 +79,9 @@ describe('drainPipedStdin', () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      writable: true,
-      configurable: true,
-    });
+    if (originalStdinDescriptor) {
+      Object.defineProperty(process, 'stdin', originalStdinDescriptor);
+    }
     process.stderr.write = originalStderrWrite;
   });
 

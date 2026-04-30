@@ -590,9 +590,9 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   }
 
   let prompt = args.prompt;
-  if (predrainedInput) {
+  if (predrainedInput !== undefined) {
     // Stdin was already drained by the caller (e.g. TTY reopen failed after pipe drain)
-    prompt = predrainedInput;
+    prompt = predrainedInput ?? '';
   } else if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
     const chunks: Buffer[] = [];
     for await (const chunk of process.stdin) {
