@@ -1,9 +1,10 @@
+import { cn } from '@/lib/utils';
+
 export type DataListNextPageLoadingProps = {
   isLoading?: boolean;
   hasMore?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   loadingText?: string;
-  noMoreDataText?: string;
 };
 
 export function DataListNextPageLoading({
@@ -11,7 +12,6 @@ export function DataListNextPageLoading({
   hasMore,
   setEndOfListElement,
   loadingText = 'Loading more data...',
-  noMoreDataText = 'No more data to load',
 }: DataListNextPageLoadingProps) {
   if (!setEndOfListElement) {
     return null;
@@ -20,10 +20,11 @@ export function DataListNextPageLoading({
   return (
     <div
       ref={setEndOfListElement}
-      className="col-span-full text-ui-md text-neutral3 opacity-50 flex py-4 justify-center"
+      className={cn('col-span-full text-ui-md text-neutral3 opacity-50 flex justify-center min-h-1', {
+        'py-4': isLoading,
+      })}
     >
       {isLoading && loadingText}
-      {!hasMore && !isLoading && noMoreDataText}
     </div>
   );
 }
