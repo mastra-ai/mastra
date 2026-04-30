@@ -1462,7 +1462,9 @@ export class Agent extends BaseResource {
                   : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing
+                // This will wait for the recursive stream to complete before continuing.
+                // Forward `route` so stream-until-idle (and future non-default routes)
+                // stay on the same endpoint across client-tool continuations.
                 try {
                   await this.processStreamResponse(
                     {
@@ -1470,6 +1472,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
+                    route,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
@@ -1751,6 +1754,125 @@ export class Agent extends BaseResource {
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
     const response = await this.processStreamResponse(processedParams, readableController!);
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions?: StreamParamsBaseWithoutMessages<any> & {
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle<OUTPUT>(
+    messagesOrParams: MessageListInput,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Handle both new signature (messages, options) and old signature (single param object)
+    let params: StreamParams<OUTPUT> = {
+      messages: messagesOrParams as MessageListInput,
+      ...options,
+    } as StreamParams<OUTPUT>;
+
+    let structuredOutput: SerializableStructuredOutputOptions<OUTPUT> | undefined = undefined;
+    if (params.structuredOutput?.schema) {
+      structuredOutput = {
+        ...params.structuredOutput,
+        schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
+      } as SerializableStructuredOutputOptions<OUTPUT>;
+    }
+    const processedParams: StreamParams<OUTPUT> = {
+      ...params,
+      requestContext: parseClientRequestContext(params.requestContext),
+      clientTools: processClientTools(params.clientTools),
+      structuredOutput,
+    };
+
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    // Start processing the response in the background
+    // This returns immediately with response metadata and continues streaming in background
+    const response = await this.processStreamResponse(processedParams, readableController!, 'stream-until-idle');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {

@@ -8,7 +8,7 @@ import type { AgentBuilderListProps } from '../agent-builder-list';
 import { LinkComponentProvider } from '@/lib/framework';
 
 vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/playground-ui')>();
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,

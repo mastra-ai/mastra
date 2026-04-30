@@ -22,6 +22,7 @@ import {
   STREAM_GENERATE_LEGACY_ROUTE,
   STREAM_GENERATE_ROUTE,
   ENHANCE_INSTRUCTIONS_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
 } from './agents';
 import { createTestServerContext } from './test-utils';
 class MockAgent extends Agent {
@@ -30,6 +31,7 @@ class MockAgent extends Agent {
 
     this.generate = vi.fn();
     this.stream = vi.fn();
+    this.streamUntilIdle = vi.fn();
     this.__updateInstructions = vi.fn();
   }
 
@@ -39,6 +41,10 @@ class MockAgent extends Agent {
 
   stream(args: any) {
     return this.stream(args);
+  }
+
+  streamUntilIdle(args: any) {
+    return this.streamUntilIdle(args);
   }
 
   __updateInstructions(args: any) {
@@ -418,6 +424,87 @@ describe('Agent Handlers', () => {
         modelList: undefined,
       });
     });
+
+    it("should still list other agents when one agent's dynamic instructions throws", async () => {
+      const healthyAgent = makeMockAgent({
+        name: 'agent-b',
+        description: 'Healthy agent',
+        instructions: 'healthy instructions',
+      });
+
+      // Simulate the MRE: a dynamic instructions callback that throws when the
+      // active request context doesn't satisfy the agent's expected shape.
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: () => {
+          throw new Error("Cannot destructure property 'name' of 'requestContext.get(...)' as it is undefined.");
+        },
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({
+        agents: {
+          'agent-a': throwingAgent,
+          'agent-b': healthyAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+        requestContext,
+      });
+
+      // The handler must resolve and include both agents — the throwing agent
+      // should be returned with `instructions: undefined`.
+      expect(result['agent-a']).toBeDefined();
+      expect(result['agent-a'].name).toBe('agent-a');
+      expect(result['agent-a'].instructions).toBeUndefined();
+
+      expect(result['agent-b']).toBeDefined();
+      expect(result['agent-b'].name).toBe('agent-b');
+      expect(result['agent-b'].instructions).toBe('healthy instructions');
+    });
+
+    it('should still list other agents when an agent throws from a non-instructions dynamic getter', async () => {
+      const healthyAgent = makeMockAgent({
+        name: 'agent-b',
+        description: 'Healthy agent',
+        instructions: 'healthy instructions',
+      });
+
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: 'agent-a instructions',
+      });
+      vi.spyOn(throwingAgent, 'getLLM').mockImplementation(async () => {
+        throw new Error('boom from getLLM');
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({
+        agents: {
+          'agent-a': throwingAgent,
+          'agent-b': healthyAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+        requestContext,
+      });
+
+      // The throwing agent is still listed with safe defaults; the healthy
+      // agent is unaffected.
+      expect(result['agent-a']).toBeDefined();
+      expect(result['agent-a'].name).toBe('agent-a');
+      expect(result['agent-a'].instructions).toBe('agent-a instructions');
+      expect(result['agent-a'].provider).toBeUndefined();
+      expect(result['agent-a'].modelId).toBeUndefined();
+
+      expect(result['agent-b']).toBeDefined();
+      expect(result['agent-b'].provider).toBe('openai.chat');
+      expect(result['agent-b'].modelId).toBe('gpt-4o');
+    });
   });
 
   describe('getAgentByIdHandler', () => {
@@ -656,6 +743,43 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         STREAM_GENERATE_LEGACY_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'non-existing',
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+    });
+  });
+
+  describe('streamUntilIdleGenerateHandler', () => {
+    it('should stream response from agent', async () => {
+      const mockStreamResult = {
+        toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
+        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        fullStream: new ReadableStream(),
+      };
+      (mockAgent.streamUntilIdle as any).mockResolvedValue(mockStreamResult);
+
+      const result = await STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'test-agent',
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
+      });
+
+      expect(result).toBeDefined();
+      expect(result).toBeInstanceOf(ReadableStream);
+      expect(mockAgent.streamUntilIdle).toHaveBeenCalled();
+    });
+
+    it('should throw 404 when agent not found', async () => {
+      await expect(
+        STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           agentId: 'non-existing',
           messages: ['test message'],

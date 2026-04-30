@@ -1,4 +1,10 @@
+import { Alert, AlertDescription, AlertTitle, Button } from '@mastra/playground-ui';
+import { Save } from 'lucide-react';
+
+import { useFormState } from 'react-hook-form';
+
 import { AgentSettingsProvider } from '../../context/agent-context';
+import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { BrowserSessionProvider } from '../../context/browser-session-context';
 import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
@@ -12,6 +18,32 @@ interface AgentPlaygroundTestChatProps {
   hasMemory: boolean;
 }
 
+function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useOptionalAgentEditFormContext>> }) {
+  const { isDirty } = useFormState({ control: ctx.form.control });
+  const handleSaveDraft = ctx.handleSaveDraft;
+  const isSavingDraft = ctx.isSavingDraft ?? false;
+
+  if (!isDirty) return null;
+
+  return (
+    <Alert variant="warning" className="mx-4 mt-3 mb-0">
+      <AlertTitle>Unsaved changes</AlertTitle>
+      <AlertDescription as="p">
+        You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest
+        changes.
+      </AlertDescription>
+      {handleSaveDraft && (
+        <div className="pt-2">
+          <Button type="button" variant="light" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
+            <Save className="h-3.5 w-3.5" />
+            {isSavingDraft ? 'Saving...' : 'Save draft'}
+          </Button>
+        </div>
+      )}
+    </Alert>
+  );
+}
+
 export function AgentPlaygroundTestChat({
   agentId,
   agentName,
@@ -19,8 +51,11 @@ export function AgentPlaygroundTestChat({
   agentVersionId,
   hasMemory,
 }: AgentPlaygroundTestChatProps) {
+  // Generate a stable ephemeral thread ID for test chat sessions
   const mergedRequestContext = useMergedRequestContext();
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
+
+  const editFormCtx = useOptionalAgentEditFormContext();
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
@@ -32,6 +67,7 @@ export function AgentPlaygroundTestChat({
           requestContext={hasRequestContext ? mergedRequestContext : undefined}
         >
           <div className="flex flex-col h-full">
+            {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
             <div className="flex-1 min-h-0">
               <AgentChat
                 key={agentId}

@@ -1,7 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentTool } from '../../types/agent-tool';
-import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
 
 interface AvailableWorkspace {
   id: string;
@@ -24,6 +24,7 @@ export function buildAgentBuilderToolDescription(
   if (features.tools) descriptionParts.push('tools');
   if (skillsAvailable) descriptionParts.push('skills');
   if (modelsAvailable) descriptionParts.push('model');
+  if (features.browser) descriptionParts.push('browserEnabled');
   descriptionParts.push('workspaceId');
 
   const availableToolsBlock =

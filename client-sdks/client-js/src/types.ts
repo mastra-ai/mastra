@@ -1067,6 +1067,22 @@ export type StoredWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: Record<string, unknown> };
 
+export interface StoredBrowserConfig {
+  provider: string;
+  headless?: boolean;
+  viewport?: { width: number; height: number };
+  timeout?: number;
+  screencast?: {
+    format?: 'jpeg' | 'png';
+    quality?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    everyNthFrame?: number;
+  };
+}
+
+export type StoredBrowserRef = { type: 'inline'; config: StoredBrowserConfig };
+
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
 // Re-exported from @mastra/core/storage for convenience
@@ -1111,6 +1127,7 @@ export interface StoredAgentResponse {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  browser?: ConditionalField<StoredBrowserRef>;
   requestContextSchema?: Record<string, unknown>;
   // Stars (EE feature, present when stars feature is enabled)
   isStarred?: boolean;
@@ -1205,6 +1222,8 @@ export interface CreateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -1236,6 +1255,8 @@ export interface UpdateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
@@ -1654,6 +1675,7 @@ export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  observabilityEnabled: boolean;
   storageType?: string;
   observabilityStorageType?: string;
   observabilityRuntimeStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
@@ -2831,6 +2853,7 @@ export interface StreamBackgroundTasksParams {
   runId?: string;
   threadId?: string;
   resourceId?: string;
+  taskId?: string;
 }
 
 export interface ExperimentReviewCounts {
@@ -2854,6 +2877,8 @@ export interface BuilderAgentFeatures {
   memory?: boolean;
   variables?: boolean;
   stars?: boolean;
+  avatarUpload?: boolean;
+  browser?: boolean;
   /**
    * Whether the model picker is visible in the Agent Builder.
    * Omitted/`false` ⇒ picker hidden (locked mode); admin's `models.default` is applied.

@@ -6,8 +6,8 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
-import type { ModelInfo } from '@/domains/llm';
 import { useAgentBuilderTool } from '../use-agent-builder-tool';
+import type { ModelInfo } from '@/domains/llm';
 
 vi.mock('../../../../hooks/use-builder-agent-features', () => ({
   useBuilderAgentFeatures: () => ({

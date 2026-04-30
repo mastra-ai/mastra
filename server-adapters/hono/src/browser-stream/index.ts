@@ -76,7 +76,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
         onMessage(event, _ws) {
           const data = typeof event.data === 'string' ? event.data : null;
           if (data) {
-            handleInputMessage(data, config.getToolset, agentId, threadId);
+            void handleInputMessage(data, config.getToolset, agentId, threadId);
           }
         },
 
@@ -102,7 +102,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
       return c.json({ error: 'Agent ID is required' }, 400);
     }
 
-    const toolset = config.getToolset(agentId);
+    const toolset = await config.getToolset(agentId);
     if (!toolset) {
       return c.json({ error: 'No browser session for this agent' }, 404);
     }

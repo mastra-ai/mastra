@@ -140,9 +140,9 @@ const screencastOptionsSchema = z.object({
   everyNthFrame: z.number().optional().describe('Capture every Nth frame (default: 1)'),
 });
 
-/** Browser config: serializable browser configuration matching BrowserConfigBase */
+/** Browser config: serializable browser configuration for stored agents */
 const browserConfigSchema = z.object({
-  provider: z.string().describe('Browser provider type (e.g., stagehand, playwright, browserbase)'),
+  provider: z.string().describe('Browser provider type (e.g., stagehand, playwright)'),
   headless: z.boolean().optional().describe('Run browser in headless mode (default: true)'),
   viewport: z
     .object({
@@ -152,11 +152,7 @@ const browserConfigSchema = z.object({
     .optional()
     .describe('Browser viewport dimensions'),
   timeout: z.number().optional().describe('Default timeout in milliseconds (default: 10000)'),
-  cdpUrl: z.string().optional().describe('CDP WebSocket URL for connecting to existing browser'),
-  scope: z.enum(['shared', 'thread']).optional().describe('Browser instance scope (default: thread)'),
   screencast: screencastOptionsSchema.optional().describe('Screencast options for streaming browser frames'),
-  profile: z.string().optional().describe('Path to Chrome/Chromium user data directory'),
-  executablePath: z.string().optional().describe('Path to browser executable'),
 });
 
 /** Browser reference: inline browser configuration */
@@ -286,9 +282,10 @@ const snapshotConfigSchema = z.object({
   workspace: conditionalFieldSchema(workspaceRefSchema)
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
-  browser: conditionalFieldSchema(browserRefSchema)
+  browser: z
+    .union([conditionalFieldSchema(browserRefSchema), z.boolean(), z.null()])
     .optional()
-    .describe('Browser configuration — static or conditional'),
+    .describe('Browser configuration — object config, true (apply default), false/null (disable)'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -413,9 +410,10 @@ export const storedAgentSchema = z.object({
   workspace: conditionalFieldSchema(workspaceRefSchema)
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
-  browser: conditionalFieldSchema(browserRefSchema)
+  browser: z
+    .union([conditionalFieldSchema(browserRefSchema), z.boolean(), z.null()])
     .optional()
-    .describe('Browser configuration — static or conditional'),
+    .describe('Browser configuration — object config, true (apply default), false/null (disable)'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()

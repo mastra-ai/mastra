@@ -1,3 +1,4 @@
+import type { MastraBrowser } from '@mastra/core/browser';
 import type {
   StatusMessage,
   BrowserStreamConfig,
@@ -275,9 +276,11 @@ export class ViewerRegistry implements ViewerRegistryLike {
     agentId: string,
     threadId?: string,
   ): Promise<void> {
-    const toolset = getToolset(agentId);
+    const toolset = await getToolset(agentId);
     if (!toolset) {
-      // No browser available for this agent - just keep connection open
+      // No browser available for this agent - just keep connection open.
+      // The screencast will start when the agent hydrates and the browser launches
+      // (via the generation flow calling getAgentFromSystem → createAgentFromStoredConfig).
       console.info(`[ViewerRegistry] No toolset for ${viewerKey}, waiting...`);
       return;
     }
@@ -340,11 +343,7 @@ export class ViewerRegistry implements ViewerRegistryLike {
    * @param toolset - The browser toolset
    * @param threadId - The thread ID for thread-scoped page selection (optional)
    */
-  private async doStartScreencast(
-    viewerKey: string,
-    toolset: NonNullable<ReturnType<BrowserStreamConfig['getToolset']>>,
-    threadId?: string,
-  ): Promise<void> {
+  private async doStartScreencast(viewerKey: string, toolset: MastraBrowser, threadId?: string): Promise<void> {
     // Skip if already streaming or currently starting (prevents race conditions)
     if (this.screencasts.has(viewerKey) || this.startingScreencasts.has(viewerKey)) {
       return;

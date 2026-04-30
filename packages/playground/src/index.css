@@ -289,14 +289,14 @@ th:has(header) {
     will-change: transform, opacity;
   }
 
-  .agent-builder-detail-grid {
-    transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  .agent-builder-detail-pane {
+    transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .agent-builder-panel-grid,
     .agent-builder-panel-slide,
-    .agent-builder-detail-grid {
+    .agent-builder-detail-pane {
       transition: none;
     }
   }

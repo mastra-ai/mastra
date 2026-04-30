@@ -95,6 +95,9 @@ export function useAgentBuilderTool({
               { shouldDirty: true },
             );
           }
+          if (features.browser && typeof inputData?.browserEnabled === 'boolean') {
+            formMethods.setValue('browserEnabled', inputData.browserEnabled, { shouldDirty: true });
+          }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
             formMethods.setValue('workspaceId', inputData.workspaceId);
           }

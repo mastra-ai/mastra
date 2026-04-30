@@ -517,9 +517,11 @@ export type StorageUpdateAgentInput = {
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
-} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+} & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
     memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    /** Browser configuration (inline ref), or null to disable browser */
+    browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
 
 export type StorageListAgentsInput = {
@@ -2098,13 +2100,16 @@ export type StorageWorkspaceRef =
 
 /**
  * Serializable browser configuration for storage.
- * Mirrors BrowserConfigBase but excludes non-serializable fields (functions).
  *
- * Runtime-only options (onLaunch, onClose, cdpUrl as function) are not stored;
- * they're added when instantiating the browser at runtime.
+ * Only includes settings that make sense as stored config — behavioral defaults
+ * that apply to every browser instance created for an agent. Infrastructure-level
+ * concerns (cdpUrl, scope, profile, executablePath) belong in the BrowserProvider
+ * registration where they're set per-instance via `createBrowser`.
+ *
+ * Runtime-only options (onLaunch, onClose, cdpUrl as function) are never stored.
  */
 export interface StorageBrowserConfig {
-  /** Provider type identifier (e.g., 'stagehand', 'playwright', 'browserbase') — resolved by the editor's browser registry */
+  /** Provider type identifier (e.g., 'stagehand', 'playwright') — resolved by the editor's browser registry */
   provider: string;
 
   /**
@@ -2129,20 +2134,6 @@ export interface StorageBrowserConfig {
   timeout?: number;
 
   /**
-   * CDP WebSocket URL for connecting to an existing browser.
-   * Only string URLs are storable; function providers must be set at runtime.
-   */
-  cdpUrl?: string;
-
-  /**
-   * Browser instance scope across threads.
-   * - `'thread'`: Each thread gets its own isolated browser instance.
-   * - `'shared'`: All threads share a single browser instance.
-   * @default 'thread'
-   */
-  scope?: 'shared' | 'thread';
-
-  /**
    * Screencast options for streaming browser frames.
    */
   screencast?: {
@@ -2157,16 +2148,6 @@ export interface StorageBrowserConfig {
     /** Capture every Nth frame (default: 1) */
     everyNthFrame?: number;
   };
-
-  /**
-   * Path to a Chrome/Chromium user data directory (profile).
-   */
-  profile?: string;
-
-  /**
-   * Path to the browser executable to use.
-   */
-  executablePath?: string;
 }
 
 /**

@@ -168,10 +168,23 @@ export async function createHonoServer(
   // This is async because it dynamically imports @hono/node-ws to avoid
   // bundling ws into user code. Returns null if ws is not available.
   const browserStreamSetup = await setupBrowserStream(app, {
-    getToolset: (agentId: string) => {
-      // Look up agent and return its browser toolset if configured
-      const agent = mastra.getAgentById(agentId);
-      return agent?.browser;
+    getToolset: async (agentId: string) => {
+      // Look up agent and return its browser if configured.
+      // First try the runtime registry (code-defined + previously hydrated agents),
+      // then fall back to the editor for stored agents (hydrates on first access).
+      try {
+        const agent = mastra.getAgentById(agentId);
+        return agent?.browser;
+      } catch {
+        // Agent not in runtime registry — try stored agents via editor
+      }
+
+      try {
+        const agent = await mastra.getEditor?.()?.agent.getById(agentId);
+        return agent?.browser;
+      } catch {
+        return undefined;
+      }
     },
   });
 

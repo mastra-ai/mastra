@@ -14,6 +14,7 @@ export const agentFeaturesSchema = z.object({
   variables: z.boolean().optional(),
   stars: z.boolean().optional(),
   avatarUpload: z.boolean().optional(),
+  browser: z.boolean().optional(),
   /**
    * Whether the model picker is visible in the Agent Builder.
    * Omitted/`false` ⇒ picker hidden (locked mode); `models.default` is applied.

@@ -101,6 +101,8 @@ export interface AgentFeatures {
   /** Star (favorite) agents and skills with per-user state and aggregate counts. */
   stars?: boolean;
   avatarUpload?: boolean;
+  /** Allow end-users to enable browser access for their agents. */
+  browser?: boolean;
   /**
    * Whether the model picker is visible to end-users in the Agent Builder.
    * Omitted/`false` ⇒ picker hidden (locked mode); admin's `models.default` is applied.

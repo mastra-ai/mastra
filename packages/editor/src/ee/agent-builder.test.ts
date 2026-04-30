@@ -207,4 +207,81 @@ describe('EditorAgentBuilder', () => {
       expect(warnSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('browser config validation', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('does nothing when browser feature is not enabled', () => {
+      const builder = new EditorAgentBuilder({
+        features: { agent: { tools: true } },
+      });
+      expect(builder.getModelPolicyWarnings()).toEqual([]);
+      expect(builder.getFeatures()?.agent?.browser).toBeUndefined();
+    });
+
+    it('downgrades browser to false and warns when feature enabled but no browser config', () => {
+      const builder = new EditorAgentBuilder({
+        features: { agent: { browser: true } },
+      });
+      expect(builder.getFeatures()?.agent?.browser).toBe(false);
+      expect(builder.getModelPolicyWarnings()).toHaveLength(1);
+      expect(builder.getModelPolicyWarnings()[0]).toMatch(/no default browser config was provided/);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('downgrades browser to false and warns when config exists but has no provider', () => {
+      const builder = new EditorAgentBuilder({
+        features: { agent: { browser: true } },
+        configuration: {
+          agent: {
+            browser: { type: 'inline' as const, config: {} as any },
+          },
+        },
+      });
+      expect(builder.getFeatures()?.agent?.browser).toBe(false);
+      expect(builder.getModelPolicyWarnings()).toHaveLength(1);
+      expect(builder.getModelPolicyWarnings()[0]).toMatch(/missing a `provider` field/);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps browser enabled when feature and config are both set correctly', () => {
+      const builder = new EditorAgentBuilder({
+        features: { agent: { browser: true } },
+        configuration: {
+          agent: {
+            browser: { type: 'inline' as const, config: { provider: 'stagehand' } },
+          },
+        },
+      });
+      expect(builder.getFeatures()?.agent?.browser).toBe(true);
+      expect(builder.getModelPolicyWarnings()).toEqual([]);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when browser feature is false', () => {
+      const builder = new EditorAgentBuilder({
+        features: { agent: { browser: false } },
+      });
+      expect(builder.getFeatures()?.agent?.browser).toBe(false);
+      expect(builder.getModelPolicyWarnings()).toEqual([]);
+    });
+
+    it('downgrades browser and warns when configuration.agent is set but browser key is missing', () => {
+      const builder = new EditorAgentBuilder({
+        features: { agent: { browser: true } },
+        configuration: { agent: {} },
+      });
+      expect(builder.getFeatures()?.agent?.browser).toBe(false);
+      expect(builder.getModelPolicyWarnings()).toHaveLength(1);
+      expect(builder.getModelPolicyWarnings()[0]).toMatch(/no default browser config was provided/);
+    });
+  });
 });

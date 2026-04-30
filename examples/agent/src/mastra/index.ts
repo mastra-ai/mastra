@@ -53,6 +53,7 @@ import {
 import { gatewayAgent } from './agents/gateway';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';
+import { StagehandBrowser } from '@mastra/stagehand';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -152,6 +153,13 @@ export const mastra = new Mastra({
         createSandbox: () => new DaytonaSandbox(),
       },
     },
+    browsers: {
+      stagehand: {
+        id: 'stagehand',
+        name: 'Stagehand Browser',
+        createBrowser: config => new StagehandBrowser(config),
+      },
+    },
     builder: {
       enabled: true,
       features: {
@@ -162,6 +170,7 @@ export const mastra = new Mastra({
           stars: true,
           skills: true,
           model: true,
+          browser: true,
         },
         skill: {
           stars: true,
@@ -173,6 +182,12 @@ export const mastra = new Mastra({
           memory: {
             options: {
               lastMessages: 10,
+            },
+          },
+          browser: {
+            type: 'inline',
+            config: {
+              provider: 'stagehand',
             },
           },
           models: {

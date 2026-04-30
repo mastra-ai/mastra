@@ -13,5 +13,6 @@ export const useBuilderAgentFeatures = () => {
     skills: features?.skills === true,
     model: features?.model === true,
     stars: features?.stars === true,
+    browser: features?.browser === true,
   };
 };

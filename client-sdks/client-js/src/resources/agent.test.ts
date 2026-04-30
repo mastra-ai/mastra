@@ -100,6 +100,94 @@ describe('Agent.stream', () => {
   });
 });
 
+describe('Agent.streamUntilIdle', () => {
+  const mockClientOptions = {
+    baseUrl: 'http://localhost:4111',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-key',
+      'x-mastra-client-type': 'js',
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  it('should transform params.structuredOutput.schema using zodToJsonSchema when provided', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response('data: [DONE]\n\n', { status: 200 }));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const schema = z.object({ name: z.string() });
+    const params = {
+      messages: 'test message',
+      structuredOutput: {
+        schema,
+      },
+    };
+
+    await agent.streamUntilIdle(params.messages, params);
+
+    const requestBody = mockRequest.mock.calls[0][1].body;
+    expect(requestBody.structuredOutput.schema).toEqual(zodToJsonSchema(schema));
+  });
+
+  it('should process requestContext through parseClientRequestContext', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response('data: [DONE]\n\n', { status: 200 }));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const requestContext = { userId: 'user-123' } as any;
+    const params = {
+      messages: 'test message',
+      requestContext,
+    };
+
+    await agent.streamUntilIdle(params.messages, params);
+
+    const requestBody = mockRequest.mock.calls[0][1].body;
+    expect(requestBody.requestContext).toEqual({ userId: 'user-123' });
+  });
+
+  it('should process clientTools through processClientTools', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response('data: [DONE]\n\n', { status: 200 }));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const clientTools = {
+      testTool: {
+        id: 'testTool',
+        description: 'A test tool',
+        inputSchema: z.object({ input: z.string() }),
+        execute: vi.fn(),
+      },
+    };
+
+    const params = {
+      messages: 'test message',
+      clientTools,
+    };
+
+    await agent.streamUntilIdle(params.messages, params);
+
+    const requestBody = mockRequest.mock.calls[0][1].body;
+    expect(requestBody.clientTools).toEqual(processClientTools(clientTools));
+  });
+
+  it('should post to the /stream-until-idle route', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response('data: [DONE]\n\n', { status: 200 }));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await agent.streamUntilIdle('test message');
+
+    const [url] = mockRequest.mock.calls[0];
+    expect(url).toBe('/agents/test-agent/stream-until-idle');
+  });
+});
+
 describe('Agent Voice Resource', () => {
   let client: MastraClient;
   let agent: Agent;

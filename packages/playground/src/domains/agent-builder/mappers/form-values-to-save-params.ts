@@ -16,6 +16,8 @@ export interface SaveParams {
   workflows: Record<string, StoredAgentToolConfig>;
   skills: Record<string, StoredAgentSkillConfig>;
   workspace: StoredWorkspaceRef | undefined;
+  /** `true` = enable browser (server applies default config); `false` = disable browser */
+  browser: boolean;
   visibility: 'private' | 'public';
   /**
    * Static model selection from the form. Conditional models are owned by code;
@@ -77,6 +79,8 @@ export function formValuesToSaveParams(
 
   const metadata: Record<string, unknown> | undefined = values.avatarUrl ? { avatarUrl: values.avatarUrl } : undefined;
 
+  const browser = values.browserEnabled === true;
+
   return {
     name: values.name,
     description,
@@ -86,6 +90,7 @@ export function formValuesToSaveParams(
     workflows,
     skills: skills as Record<string, StoredAgentSkillConfig>,
     workspace,
+    browser,
     visibility: values.visibility ?? 'private',
     model: values.model,
     metadata,

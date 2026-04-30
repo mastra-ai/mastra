@@ -33,7 +33,9 @@ import type {
   AgentInstructionBlock,
   StoredProcessorGraph,
   StorageWorkspaceRef,
+  StorageBrowserRef,
 } from '@mastra/core/storage';
+import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
 import { assertModelAllowed, builderToModelPolicy } from '@mastra/core/agent-builder/ee';
@@ -531,6 +533,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       storedAgent.defaultOptions != null && this.isConditionalVariants(storedAgent.defaultOptions);
     const hasConditionalModel = this.isConditionalVariants(storedAgent.model);
     const hasConditionalWorkspace = storedAgent.workspace != null && this.isConditionalVariants(storedAgent.workspace);
+    const hasConditionalBrowser = storedAgent.browser != null && this.isConditionalVariants(storedAgent.browser);
 
     // --- Resolve fields: conditional fields accumulate all matching variants ---
 
@@ -791,6 +794,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : await this.resolveStoredWorkspace(storedAgent.workspace as StorageWorkspaceRef | undefined, skillSource);
 
+    // Browser: resolve stored browser config to a runtime MastraBrowser instance.
+    // When conditional, wrapped in a DynamicArgument function resolved at request time.
+    const browser = hasConditionalBrowser
+      ? async ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolvedRef = this.accumulateObjectVariants(
+            storedAgent.browser as StorageConditionalVariant<StorageBrowserRef>[],
+            ctx,
+          );
+          return this.resolveStoredBrowser(resolvedRef);
+        }
+      : await this.resolveStoredBrowser(storedAgent.browser as StorageBrowserRef | undefined);
+
     const skillsFormat = storedAgent.skillsFormat;
 
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
@@ -814,6 +830,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       defaultOptions,
       requestContextSchema,
       workspace,
+      browser,
       ...(skillsFormat && { skillsFormat }),
     } as any);
 
@@ -1443,6 +1460,30 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       // duplicate workspace instances on repeated calls.
       const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
       return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Resolve a stored browser config to a runtime MastraBrowser instance.
+   * Looks up the provider by ID in the editor's browser registry.
+   * Only supports `type: 'inline'` refs (config is embedded in the agent snapshot).
+   */
+  private async resolveStoredBrowser(browserRef: StorageBrowserRef | undefined): Promise<MastraBrowser | undefined> {
+    if (!browserRef) return undefined;
+
+    if (browserRef.type === 'inline') {
+      const { provider: providerId, ...config } = browserRef.config;
+      const browserProvider = this.editor.__browsers.get(providerId);
+      if (!browserProvider) {
+        this.logger?.warn(
+          `[resolveStoredBrowser] Browser provider "${providerId}" is not registered. ` +
+            `Register it via new MastraEditor({ browsers: { '${providerId}': yourProvider } })`,
+        );
+        return undefined;
+      }
+      return await browserProvider.createBrowser(config);
     }
 
     return undefined;

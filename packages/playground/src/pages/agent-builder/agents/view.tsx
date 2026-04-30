@@ -17,6 +17,9 @@ import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-availa
 import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
+import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
@@ -148,7 +151,10 @@ const AgentBuilderAgentViewReady = ({
     [storedSkillsResponse],
   );
 
-  return (
+  const features = useBuilderAgentFeatures();
+  const hasBrowser = features.browser && storedAgent?.browser != null;
+
+  const content = (
     <AgentChatPanelProvider
       agentId={id}
       agentName={storedAgent?.name}
@@ -166,7 +172,7 @@ const AgentBuilderAgentViewReady = ({
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
           ) : undefined
         }
-        chat={<AgentChatPanelChat />}
+        chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
         configure={
           <ConfigurePanelConnected
             editable={false}
@@ -177,8 +183,19 @@ const AgentBuilderAgentViewReady = ({
             onActiveDetailChange={setActiveDetail}
           />
         }
+        browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
       />
     </AgentChatPanelProvider>
+  );
+
+  if (!hasBrowser) return content;
+
+  return (
+    <BrowserToolCallsProvider>
+      <BrowserSessionProvider agentId={id} threadId={id}>
+        {content}
+      </BrowserSessionProvider>
+    </BrowserToolCallsProvider>
   );
 };
 

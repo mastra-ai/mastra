@@ -12,6 +12,30 @@ Azure OpenAI provides enterprise-grade access to OpenAI models through dedicated
 
 Unlike other providers that have fixed model names, Azure uses **deployment names** that you configure in the Azure Portal.
 
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.
+
 ## How Azure Deployments Work
 
 Azure model IDs follow this pattern: `azure-openai/your-deployment-name`
@@ -109,27 +133,3 @@ export const mastra = new Mastra({
 | `management.resourceGroup` | `string` | Yes* | Resource group name |
 
 \* Required if `management` is provided
-
-## Usage
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-
-const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
-});
-
-// Generate a response
-const response = await agent.generate("Hello!");
-
-// Stream a response
-const stream = await agent.stream("Tell me a story");
-for await (const chunk of stream) {
-  console.log(chunk);
-}
-```
-
-Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.

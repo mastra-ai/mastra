@@ -1,7 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { isModelAllowed } from '@mastra/core/agent-builder/ee';
-import { Avatar, cn, Skeleton, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
+import { Avatar, cn, Skeleton, Switch, TextFieldBlock, toast, Txt } from '@mastra/playground-ui';
+import { ChevronRight, FileText, Globe, LockIcon, Plus, Sparkles, TriangleAlertIcon, Wrench } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
@@ -22,6 +22,7 @@ export interface AgentConfig {
   systemPrompt: string;
   visibility?: 'private' | 'public';
   authorId?: string | null;
+  browserEnabled?: boolean;
 }
 
 export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
@@ -141,13 +142,27 @@ function ConfigurePanelContent({
   const modelSectionVisible = features.model || policy.active;
 
   return (
-    <div
-      className={cn(
-        'grid h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden agent-builder-detail-grid',
-        activeDetail ? 'grid-cols-[320px_calc(100%-320px)]' : 'grid-cols-[320px_0px]',
-      )}
-    >
-      <div className="flex h-full min-w-0 flex-col">
+    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
+      <div
+        className={cn(
+          'agent-builder-detail-pane absolute inset-y-0 right-[320px] overflow-hidden',
+          activeDetail ? 'w-[calc(100%-320px)] border-r border-border1' : 'w-0 pointer-events-none',
+        )}
+        aria-hidden={!activeDetail}
+      >
+        <DetailPane
+          activeDetail={activeDetail}
+          features={features}
+          editable={!mutationsDisabled}
+          instructionsPrompt={panelInstructions}
+          onInstructionsChange={setDraftInstructions}
+          onClose={closeDetail}
+          availableAgentTools={availableAgentTools}
+          availableSkills={availableSkills}
+        />
+      </div>
+
+      <div className="ml-auto w-[320px] flex h-full min-w-0 flex-col">
         <div className="flex-1 flex flex-col py-6 overflow-y-auto">
           <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
             <div className="flex items-center justify-center">
@@ -214,21 +229,10 @@ function ConfigurePanelContent({
             totalSkillsCount={totalSkillsCount}
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
-            disabled={disabled}
+            disabled={mutationsDisabled}
           />
         </div>
       </div>
-
-      <DetailPane
-        activeDetail={activeDetail}
-        features={features}
-        editable={!mutationsDisabled}
-        instructionsPrompt={panelInstructions}
-        onInstructionsChange={setDraftInstructions}
-        onClose={closeDetail}
-        availableAgentTools={availableAgentTools}
-        availableSkills={availableSkills}
-      />
     </div>
   );
 }
@@ -348,6 +352,33 @@ interface ConfigRowsProps {
   disabled?: boolean;
 }
 
+function BrowserToggleRow({ disabled = false }: { disabled?: boolean }) {
+  const { setValue } = useFormContext<AgentBuilderEditFormValues>();
+  const browserEnabled = useWatch<AgentBuilderEditFormValues, 'browserEnabled'>({ name: 'browserEnabled' });
+
+  return (
+    <div className={cn('flex items-center gap-3 px-6 py-4', disabled && 'cursor-not-allowed opacity-60')}>
+      <span className="shrink-0 text-neutral3">
+        <Globe className="h-4 w-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <Txt variant="ui-sm" className="font-medium text-neutral6">
+          Browser
+        </Txt>
+        <Txt variant="ui-xs" className="truncate text-neutral3">
+          Allow your agent to browse the web
+        </Txt>
+      </div>
+      <Switch
+        checked={browserEnabled ?? false}
+        onCheckedChange={checked => setValue('browserEnabled', checked, { shouldDirty: true })}
+        disabled={disabled}
+        data-testid="agent-browser-toggle"
+      />
+    </div>
+  );
+}
+
 function ConfigRows({
   features,
   instructionsDescription,
@@ -394,6 +425,7 @@ function ConfigRows({
           testId="agent-preview-skills-button"
         />
       )}
+      {features.browser && <BrowserToggleRow disabled={disabled} />}
     </div>
   );
 }
@@ -420,10 +452,7 @@ function DetailPane({
   availableSkills,
 }: DetailPaneProps) {
   return (
-    <div
-      className={cn('h-full min-w-0 overflow-hidden', activeDetail ? 'border-l border-border1' : 'pointer-events-none')}
-      aria-hidden={!activeDetail}
-    >
+    <div className="h-full w-full min-w-0 overflow-hidden">
       {activeDetail === 'instructions' && (
         <InstructionsDetail
           prompt={instructionsPrompt}

@@ -6,6 +6,7 @@ import type {
   FilesystemProvider,
   SandboxProvider,
   BlobStoreProvider,
+  BrowserProvider,
 } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
@@ -44,6 +45,7 @@ export {
 } from './namespaces';
 export type { StorageAdapter } from './namespaces';
 export { localFilesystemProvider, localSandboxProvider } from './providers';
+export type { BrowserProvider } from '@mastra/core/editor';
 
 export class MastraEditor implements IMastraEditor {
   /** @internal — exposed for namespace classes, not part of public API */
@@ -79,6 +81,13 @@ export class MastraEditor implements IMastraEditor {
    */
   readonly __blobStores: Map<string, BlobStoreProvider>;
 
+  /**
+   * @internal — exposed for namespace classes to hydrate stored browser configs.
+   * Maps provider ID (e.g., 'stagehand', 'agent-browser') to the provider descriptor.
+   * No built-in providers — browser packages must be registered via config.
+   */
+  readonly __browsers: Map<string, BrowserProvider>;
+
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
   public readonly mcpServer: EditorMCPServerNamespace;
@@ -111,6 +120,12 @@ export class MastraEditor implements IMastraEditor {
     this.__blobStores = new Map<string, BlobStoreProvider>();
     for (const [id, provider] of Object.entries(config?.blobStores ?? {})) {
       this.__blobStores.set(id, provider);
+    }
+
+    // Browser providers — no built-in providers; browser packages must be registered
+    this.__browsers = new Map<string, BrowserProvider>();
+    for (const [id, provider] of Object.entries(config?.browsers ?? {})) {
+      this.__browsers.set(id, provider);
     }
 
     this.agent = new EditorAgentNamespace(this);
@@ -196,6 +211,27 @@ export class MastraEditor implements IMastraEditor {
 
     const { EditorAgentBuilder } = await import('./ee');
     this.__builderInstance = new EditorAgentBuilder(this.__builderConfig);
+
+    // Cross-validate: if the builder has a browser config with a provider that
+    // isn't registered in __browsers, downgrade the feature flag and warn.
+    const browserRef = this.__builderInstance.getConfiguration()?.agent?.browser;
+    const browserFeatureOn = this.__builderInstance.getFeatures()?.agent?.browser === true;
+    if (browserFeatureOn && browserRef?.config?.provider) {
+      const providerId = browserRef.config.provider;
+      if (!this.__browsers.has(providerId)) {
+        const warning =
+          `Agent Builder browser config references provider "${providerId}" but no matching browser ` +
+          `provider is registered in \`editor.browsers\`. The browser toggle will be hidden. ` +
+          `Register the provider: \`new MastraEditor({ browsers: { "${providerId}": yourProvider } })\`.`;
+        // eslint-disable-next-line no-console
+        console.warn(`[mastra:editor] ${warning}`);
+        const features = this.__builderInstance.getFeatures()?.agent;
+        if (features) {
+          features.browser = false;
+        }
+      }
+    }
+
     this.__builderResolved = true;
     return this.__builderInstance;
   }
