@@ -51,7 +51,10 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
               control={control}
               render={({ field }) => {
                 const selectedIds = Object.keys(field.value || {});
-                const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+                const selectedOptions = selectedIds.map(id => {
+                  const existing = options.find(opt => opt.value === id);
+                  return existing || { value: id, label: id, description: field.value?.[id]?.description || '' };
+                });
 
                 const handleValueChange = (newIds: string[]) => {
                   const newValue: Record<string, EntityConfig> = {};
