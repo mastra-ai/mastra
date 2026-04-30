@@ -412,7 +412,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
         // Resolve integration tools (tool providers)
         const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
@@ -426,7 +426,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         return { ...registryTools, ...mcpTools, ...integrationTools };
       };
     } else {
-      // All are static — resolve once at agent creation time
+      // All are static — resolve once at agent creation time (no requestContext available)
       const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
