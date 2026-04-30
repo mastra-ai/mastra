@@ -39,7 +39,7 @@ import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfigInternal } from '../memory/types';
+import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
@@ -884,6 +884,16 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Returns the error processors for this agent, resolving function-based processors if necessary.
+   */
+  public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
+    if (!this.#errorProcessors) return [];
+    return typeof this.#errorProcessors === 'function'
+      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+      : this.#errorProcessors;
   }
 
   /**
@@ -4359,6 +4369,36 @@ export class Agent<
     }
 
     return convertedWorkflowTools;
+  }
+
+  /**
+   * Get tools for execution.
+   *
+   * This method assembles all tools from various sources (assigned tools, memory tools,
+   * toolsets, client tools, agent tools, workflow tools) into a unified CoreTool dictionary.
+   *
+   * This is useful for durable execution where tools need to be reconstructed from
+   * serialized state rather than stored in a registry.
+   *
+   * @param options - Options for tool assembly
+   * @returns A record of tool names to CoreTool instances
+   */
+  async getToolsForExecution(options: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    requestContext?: RequestContext;
+    memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
+  }): Promise<Record<string, CoreTool>> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    return this.convertTools({
+      ...options,
+      requestContext,
+      methodType: 'stream',
+    });
   }
 
   /**
