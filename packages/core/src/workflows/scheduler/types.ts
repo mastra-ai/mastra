@@ -11,7 +11,7 @@
  * treated as removing the old schedule and creating a new one (the fire
  * history of the old id is lost).
  */
-export type WorkflowScheduleConfig = {
+export type WorkflowScheduleConfig<TInput = unknown, TState = unknown, TRequestContext = unknown> = {
   /**
    * Stable identifier for this schedule, scoped to its workflow. Required
    * when the workflow declares an array of schedules; optional (and defaults
@@ -27,17 +27,24 @@ export type WorkflowScheduleConfig = {
    */
   timezone?: string;
   /**
-   * Static input data passed to each scheduled run.
+   * Static input data passed to each scheduled run. Type-checked against the
+   * workflow's `inputSchema` when the schedule is declared inline on
+   * `createWorkflow`.
    */
-  inputData?: unknown;
+  inputData?: TInput;
   /**
-   * Static initial state for each scheduled run.
+   * Static initial state for each scheduled run. Type-checked against the
+   * workflow's `stateSchema` when the schedule is declared inline on
+   * `createWorkflow`.
    */
-  initialState?: unknown;
+  initialState?: TState;
   /**
-   * Optional request context applied to each scheduled run.
+   * Optional request context applied to each scheduled run. Type-checked
+   * against the workflow's `requestContextSchema` when the schedule is
+   * declared inline on `createWorkflow`. Falls back to a generic record
+   * when the workflow does not declare a `requestContextSchema`.
    */
-  requestContext?: Record<string, unknown>;
+  requestContext?: unknown extends TRequestContext ? Record<string, unknown> : TRequestContext;
   /**
    * Optional metadata persisted alongside the schedule row.
    */
@@ -48,7 +55,9 @@ export type WorkflowScheduleConfig = {
  * Accepts either a single schedule config or an array of schedule configs.
  * When using the array form, every entry must specify a unique `id`.
  */
-export type WorkflowScheduleInput = WorkflowScheduleConfig | WorkflowScheduleConfig[];
+export type WorkflowScheduleInput<TInput = unknown, TState = unknown, TRequestContext = unknown> =
+  | WorkflowScheduleConfig<TInput, TState, TRequestContext>
+  | WorkflowScheduleConfig<TInput, TState, TRequestContext>[];
 
 /**
  * Configuration for the `WorkflowScheduler` component owned by Mastra.

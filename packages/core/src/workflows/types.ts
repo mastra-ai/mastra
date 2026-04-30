@@ -824,9 +824,12 @@ export type WorkflowConfig<
    * Only supported on the evented engine.
    *
    * Accepts either a single schedule object or an array of schedule objects.
-   * Array entries must each specify a unique stable `id`.
+   * Array entries must each specify a unique stable `id`. The `inputData`,
+   * `initialState`, and `requestContext` fields on each schedule are
+   * type-checked against the workflow's `inputSchema`, `stateSchema`, and
+   * `requestContextSchema` respectively.
    */
-  schedule?: WorkflowScheduleInput;
+  schedule?: WorkflowScheduleInput<NoInfer<TInput>, NoInfer<TState>, NoInfer<TRequestContext>>;
 };
 
 /**
