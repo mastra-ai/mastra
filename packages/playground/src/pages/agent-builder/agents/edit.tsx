@@ -202,9 +202,6 @@ const AgentBuilderAgentEditReady = ({
     void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
-  const handleCancel = () => {
-    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
-  };
 
   return (
     <ConversationPanelProvider
@@ -224,13 +221,15 @@ const AgentBuilderAgentEditReady = ({
         defaultExpanded={mode === 'edit'}
         detailOpen={activeDetail !== null}
         showConfigure={isOwner}
+        backHref={mode === 'edit' ? `/agent-builder/agents/${id}/view` : '/agent-builder/agents'}
+        backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            <VisibilitySelectConnected />
             {isOwner && <PublishToSlackButton />}
+            <VisibilitySelectConnected />
           </div>
         }
-        primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
+        primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} />}
         mobileExtra={<AgentBuilderMobileMenuConnected showPublishToSlack={isOwner} />}
         chat={<ConversationPanelChat />}
         configure={
@@ -249,7 +248,7 @@ const AgentBuilderAgentEditReady = ({
 
 const VisibilitySelectConnected = () => {
   const isRunning = useStreamRunning();
-  return <VisibilitySelect disabled={isRunning} />;
+  return <VisibilitySelect disabled={isRunning} variant="ghost" />;
 };
 
 const AgentBuilderMobileMenuConnected = ({ showPublishToSlack }: { showPublishToSlack: boolean }) => {
@@ -261,26 +260,13 @@ interface HeaderActionsProps {
   mode: 'create' | 'edit';
   isSaving: boolean;
   onSave: () => void;
-  onCancel: () => void;
 }
 
-const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps) => {
+const HeaderActions = ({ mode, isSaving, onSave }: HeaderActionsProps) => {
   const isRunning = useStreamRunning();
   const disabled = isSaving || isRunning;
   return (
     <div className="flex items-center gap-2">
-      {mode === 'edit' && (
-        <Button
-          size="sm"
-          variant="default"
-          onClick={onCancel}
-          disabled={disabled}
-          data-testid="agent-builder-edit-cancel"
-          className="hidden lg:inline-flex"
-        >
-          Cancel
-        </Button>
-      )}
       <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
         <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
       </Button>

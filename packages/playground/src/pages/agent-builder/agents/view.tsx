@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, IconButton, Spinner } from '@mastra/playground-ui';
+import { IconButton, Spinner } from '@mastra/playground-ui';
 import { PencilIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -179,8 +179,8 @@ const AgentBuilderAgentViewReady = ({
         showConfigure={isOwner}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            <VisibilitySelect disabled />
             {isOwner && <PublishToSlackButton />}
+            <VisibilitySelect disabled variant="ghost" />
           </div>
         }
         primaryAction={
@@ -219,28 +219,15 @@ const AgentBuilderAgentViewReady = ({
 const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
   const isRunning = useStreamRunning();
   return (
-    <>
-      <Button
-        size="sm"
-        variant="default"
-        onClick={onEdit}
-        disabled={isRunning}
-        data-testid="agent-builder-view-edit"
-        className="hidden lg:inline-flex"
-      >
-        Edit agent capabilities
-      </Button>
-      <IconButton
-        size="sm"
-        variant="default"
-        onClick={onEdit}
-        disabled={isRunning}
-        tooltip="Edit agent capabilities"
-        data-testid="agent-builder-view-edit-icon"
-        className="lg:hidden"
-      >
-        <PencilIcon />
-      </IconButton>
-    </>
+    <IconButton
+      size="sm"
+      variant="ghost"
+      onClick={onEdit}
+      disabled={isRunning}
+      tooltip="Edit agent"
+      data-testid="agent-builder-view-edit"
+    >
+      <PencilIcon />
+    </IconButton>
   );
 };

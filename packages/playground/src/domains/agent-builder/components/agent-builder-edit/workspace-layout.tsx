@@ -25,6 +25,10 @@ interface WorkspaceLayoutProps {
   showConfigure?: boolean;
   /** Optional browser modal overlay rendered outside the layout panels */
   browserOverlay?: ReactNode;
+  /** Where the back button navigates. Defaults to the agents list. */
+  backHref?: string;
+  /** Tooltip for the back button. Defaults to "Agents list". */
+  backTooltip?: string;
 }
 
 export const WorkspaceLayout = ({
@@ -40,6 +44,8 @@ export const WorkspaceLayout = ({
   detailOpen = false,
   showConfigure = true,
   browserOverlay,
+  backHref = '/agent-builder/agents',
+  backTooltip = 'Agents list',
 }: WorkspaceLayoutProps) => {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -57,8 +63,8 @@ export const WorkspaceLayout = ({
         <div className="justify-self-start">
           <IconButton
             variant="ghost"
-            tooltip="Agents list"
-            onClick={() => navigate(`/agent-builder/agents`, { viewTransition: true })}
+            tooltip={backTooltip}
+            onClick={() => navigate(backHref, { viewTransition: true })}
           >
             <ArrowLeftIcon />
           </IconButton>

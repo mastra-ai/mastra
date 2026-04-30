@@ -174,9 +174,9 @@ describe('AgentBuilderAgentEdit', () => {
       };
     });
 
-    it('renders Cancel + Save in the top right', () => {
-      const { getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-edit-cancel')).not.toBeNull();
+    it('renders Save in the top right (no Cancel)', () => {
+      const { getByTestId, queryByTestId } = renderAt();
+      expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
       expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
     });
 
@@ -195,9 +195,9 @@ describe('AgentBuilderAgentEdit', () => {
       expect(button.disabled).toBe(false);
     });
 
-    it('Cancel navigates back to the view page without saving', () => {
-      const { getByTestId } = renderAt();
-      fireEvent.click(getByTestId('agent-builder-edit-cancel'));
+    it('back arrow navigates to the view page without saving', () => {
+      const { getByLabelText } = renderAt();
+      fireEvent.click(getByLabelText('Back to agent chat'));
 
       expect(saveMock).not.toHaveBeenCalled();
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
@@ -299,7 +299,7 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
 
-    it('navigates to the agents list in edit mode', () => {
+    it('navigates to the view page in edit mode', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -309,8 +309,8 @@ describe('AgentBuilderAgentEdit', () => {
         workflows: [],
       };
       const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
+      fireEvent.click(getByLabelText('Back to agent chat'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
   });
 });

@@ -127,10 +127,10 @@ describe('AgentBuilderAgentView', () => {
     cleanup();
   });
 
-  it('renders a labeled Edit agent capabilities button for the owner', () => {
+  it('renders an Edit agent icon button for the owner', () => {
     const { getByTestId } = renderAt();
     const button = getByTestId('agent-builder-view-edit');
-    expect(button.textContent).toContain('Edit agent capabilities');
+    expect(button.getAttribute('aria-label')).toBe('Edit agent');
   });
 
   it('shows an active Publish to Slack button for the owner', () => {

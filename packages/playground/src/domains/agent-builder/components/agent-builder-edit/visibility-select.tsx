@@ -1,4 +1,5 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+import type { ComponentProps } from 'react';
 import { Globe, LockIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
@@ -7,9 +8,10 @@ export type Visibility = 'private' | 'public';
 
 export interface VisibilitySelectProps {
   disabled?: boolean;
+  variant?: ComponentProps<typeof SelectTrigger>['variant'];
 }
 
-export function VisibilitySelect({ disabled = false }: VisibilitySelectProps) {
+export function VisibilitySelect({ disabled = false, variant = 'inputLike' }: VisibilitySelectProps) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const value = useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private';
 
@@ -21,7 +23,12 @@ export function VisibilitySelect({ disabled = false }: VisibilitySelectProps) {
         formMethods.setValue('visibility', next as Visibility, { shouldDirty: true });
       }}
     >
-      <SelectTrigger size="sm" aria-label="Visibility" data-testid="agent-builder-visibility-trigger">
+      <SelectTrigger
+        size="sm"
+        variant={variant}
+        aria-label="Visibility"
+        data-testid="agent-builder-visibility-trigger"
+      >
         <SelectValue placeholder="Visibility" />
       </SelectTrigger>
       <SelectContent>
