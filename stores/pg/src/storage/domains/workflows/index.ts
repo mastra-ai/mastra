@@ -35,7 +35,7 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
  *     removing just \uXXXX would leave a dangling backslash that creates a new invalid escape (e.g. \-)
  * - Escapes any remaining invalid JSON escape sequences (e.g. \v, \k, \-)
  */
-function sanitizeJsonForPg(jsonString: string): string {
+export function sanitizeJsonForPg(jsonString: string): string {
   return (
     jsonString
       // Remove null char and surrogate escape sequences. The optional extra backslash (\\\\?)
