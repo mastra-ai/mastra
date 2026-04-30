@@ -1,5 +1,22 @@
 # @mastra/arize
 
+## 1.0.22-alpha.0
+
+### Patch Changes
+
+- Renamed emitted OTel GenAI cache usage attributes to match the OpenTelemetry semantic conventions: ([#15966](https://github.com/mastra-ai/mastra/pull/15966))
+  - `gen_ai.usage.cached_input_tokens` → `gen_ai.usage.cache_read.input_tokens`
+  - `gen_ai.usage.cache_write_tokens` → `gen_ai.usage.cache_creation.input_tokens`
+
+  `gen_ai.usage.input_tokens` is unchanged and remains the total prompt-token count. Cache attributes are emitted separately as subsets of that total.
+
+  Updated Arize, Arthur, and Sentry mappings so cache values continue to flow through those exporters.
+
+  Direct consumers should update any dashboards, alerts, or queries that reference the old attribute names.
+
+- Updated dependencies [[`724ec57`](https://github.com/mastra-ai/mastra/commit/724ec5736c4b0baf84d3baa7877ac3cf04947995)]:
+  - @mastra/otel-exporter@1.0.21-alpha.0
+
 ## 1.0.21
 
 ### Patch Changes

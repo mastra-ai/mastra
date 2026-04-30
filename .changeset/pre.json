@@ -132,5 +132,10 @@
     "@mastra/s3": "0.5.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "cyan-roses-repair",
+    "green-birds-knock",
+    "new-pets-live",
+    "tricky-papayas-feel"
+  ]
 }
