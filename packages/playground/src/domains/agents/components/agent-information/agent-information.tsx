@@ -29,6 +29,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { selectedTab, handleTabChange } = useAgentInformationTab({
     isMemoryLoading,
     hasMemory,
+    hasChannels,
   });
 
   return (
@@ -107,11 +108,14 @@ export interface AgentInformationTabLayoutProps {
 }
 export const AgentInformationTabLayout = ({ children, agentId }: AgentInformationTabLayoutProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: platforms } = useChannelPlatforms();
   const hasMemory = Boolean(memory?.result);
+  const hasChannels = Boolean(platforms && platforms.length > 0);
 
   const { selectedTab, handleTabChange } = useAgentInformationTab({
     isMemoryLoading,
     hasMemory,
+    hasChannels,
   });
 
   return (
