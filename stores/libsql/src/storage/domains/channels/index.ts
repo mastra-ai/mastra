@@ -1,65 +1,57 @@
 import type { Client } from '@libsql/client';
-import { ChannelsStorage } from '@mastra/core/storage';
+import {
+  ChannelsStorage,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
-import { resolveClient } from '../../db';
+
+import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 
-const TABLE_INSTALLATIONS = 'mastra_channel_installations';
-const TABLE_CONFIG = 'mastra_channel_config';
-
 export class ChannelsLibSQL extends ChannelsStorage {
+  #db: LibSQLDB;
   #client: Client;
+
+  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
 
   constructor(config: LibSQLDomainConfig) {
     super();
-    this.#client = resolveClient(config);
+    const client = resolveClient(config);
+    this.#client = client;
+    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
   }
 
   async init(): Promise<void> {
-    // Create installations table
-    await this.#client.execute(`
-      CREATE TABLE IF NOT EXISTS "${TABLE_INSTALLATIONS}" (
-        id TEXT PRIMARY KEY,
-        platform TEXT NOT NULL,
-        agentId TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        webhookId TEXT,
-        data TEXT NOT NULL DEFAULT '{}',
-        configHash TEXT,
-        error TEXT,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      )
-    `);
-
-    // Create config table (generic JSON blob for platform-specific config)
-    await this.#client.execute(`
-      CREATE TABLE IF NOT EXISTS "${TABLE_CONFIG}" (
-        platform TEXT PRIMARY KEY,
-        data TEXT NOT NULL DEFAULT '{}',
-        updatedAt TEXT NOT NULL
-      )
-    `);
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_INSTALLATIONS,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_INSTALLATIONS],
+    });
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_CONFIG,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
+    });
 
     // Indexes
     await this.#client.execute(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook ON "${TABLE_INSTALLATIONS}" ("webhookId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook ON "${TABLE_CHANNEL_INSTALLATIONS}" ("webhookId")`,
     );
     await this.#client.execute(
-      `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON "${TABLE_INSTALLATIONS}" ("platform", "agentId")`,
+      `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON "${TABLE_CHANNEL_INSTALLATIONS}" ("platform", "agentId")`,
     );
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#client.execute(`DELETE FROM "${TABLE_INSTALLATIONS}"`);
-    await this.#client.execute(`DELETE FROM "${TABLE_CONFIG}"`);
+    await this.#db.deleteData({ tableName: TABLE_CHANNEL_INSTALLATIONS });
+    await this.#db.deleteData({ tableName: TABLE_CHANNEL_CONFIG });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
     const now = new Date().toISOString();
     await this.#client.execute({
       sql: `
-        INSERT INTO "${TABLE_INSTALLATIONS}" (id, platform, agentId, status, webhookId, data, configHash, error, createdAt, updatedAt)
+        INSERT INTO "${TABLE_CHANNEL_INSTALLATIONS}" (id, platform, agentId, status, webhookId, data, configHash, error, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           platform = excluded.platform,
@@ -88,7 +80,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async getInstallation(id: string): Promise<ChannelInstallation | null> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_INSTALLATIONS}" WHERE id = ?`,
+      sql: `SELECT * FROM "${TABLE_CHANNEL_INSTALLATIONS}" WHERE id = ?`,
       args: [id],
     });
     const row = result.rows?.[0];
@@ -97,7 +89,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_INSTALLATIONS}" WHERE platform = ? AND agentId = ? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updatedAt DESC LIMIT 1`,
+      sql: `SELECT * FROM "${TABLE_CHANNEL_INSTALLATIONS}" WHERE platform = ? AND agentId = ? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updatedAt DESC LIMIT 1`,
       args: [platform, agentId],
     });
     const row = result.rows?.[0];
@@ -106,7 +98,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async getInstallationByWebhookId(webhookId: string): Promise<ChannelInstallation | null> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_INSTALLATIONS}" WHERE webhookId = ?`,
+      sql: `SELECT * FROM "${TABLE_CHANNEL_INSTALLATIONS}" WHERE webhookId = ?`,
       args: [webhookId],
     });
     const row = result.rows?.[0];
@@ -115,7 +107,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async listInstallations(platform: string): Promise<ChannelInstallation[]> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_INSTALLATIONS}" WHERE platform = ? ORDER BY createdAt DESC`,
+      sql: `SELECT * FROM "${TABLE_CHANNEL_INSTALLATIONS}" WHERE platform = ? ORDER BY createdAt DESC`,
       args: [platform],
     });
     return result.rows.map(row => this.#parseInstallationRow(row));
@@ -123,7 +115,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async deleteInstallation(id: string): Promise<void> {
     await this.#client.execute({
-      sql: `DELETE FROM "${TABLE_INSTALLATIONS}" WHERE id = ?`,
+      sql: `DELETE FROM "${TABLE_CHANNEL_INSTALLATIONS}" WHERE id = ?`,
       args: [id],
     });
   }
@@ -131,7 +123,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
   async saveConfig(config: ChannelConfig): Promise<void> {
     await this.#client.execute({
       sql: `
-        INSERT INTO "${TABLE_CONFIG}" (platform, data, updatedAt)
+        INSERT INTO "${TABLE_CHANNEL_CONFIG}" (platform, data, updatedAt)
         VALUES (?, ?, ?)
         ON CONFLICT(platform) DO UPDATE SET
           data = excluded.data,
@@ -143,7 +135,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async getConfig(platform: string): Promise<ChannelConfig | null> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_CONFIG}" WHERE platform = ?`,
+      sql: `SELECT * FROM "${TABLE_CHANNEL_CONFIG}" WHERE platform = ?`,
       args: [platform],
     });
     const row = result.rows?.[0];
@@ -157,7 +149,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
   async deleteConfig(platform: string): Promise<void> {
     await this.#client.execute({
-      sql: `DELETE FROM "${TABLE_CONFIG}" WHERE platform = ?`,
+      sql: `DELETE FROM "${TABLE_CHANNEL_CONFIG}" WHERE platform = ?`,
       args: [platform],
     });
   }

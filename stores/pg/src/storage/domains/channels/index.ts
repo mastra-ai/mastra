@@ -1,110 +1,120 @@
-import { ChannelsStorage } from '@mastra/core/storage';
-import type { ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
+import {
+  ChannelsStorage,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
+import type { CreateIndexOptions, ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
-
-const TABLE_INSTALLATIONS = 'mastra_channel_installations';
-const TABLE_CONFIG = 'mastra_channel_config';
 
 export class ChannelsPG extends ChannelsStorage {
   #db: PgDB;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  static readonly MANAGED_TABLES = [TABLE_INSTALLATIONS, TABLE_CONFIG] as const;
-
-  /**
-   * Returns all DDL statements for this domain: tables and indexes.
-   * Used by exportSchemas to produce a complete, reproducible schema export.
-   */
-  static getExportDDL(schemaName?: string): string[] {
-    const sn = schemaName ? getSchemaName(schemaName) : '';
-    const installationsTable = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName: sn });
-    const configTable = getTableName({ indexName: TABLE_CONFIG, schemaName: sn });
-
-    return [
-      `CREATE TABLE IF NOT EXISTS ${installationsTable} (
-  "id" TEXT PRIMARY KEY,
-  "platform" TEXT NOT NULL,
-  "agentId" TEXT NOT NULL,
-  "status" TEXT NOT NULL DEFAULT 'pending',
-  "webhookId" TEXT,
-  "data" JSONB NOT NULL DEFAULT '{}',
-  "configHash" TEXT,
-  "error" TEXT,
-  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);`,
-      `CREATE TABLE IF NOT EXISTS ${configTable} (
-  "platform" TEXT PRIMARY KEY,
-  "data" JSONB NOT NULL DEFAULT '{}',
-  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook ON ${installationsTable} ("webhookId");`,
-      `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON ${installationsTable} ("platform", "agentId");`,
-    ];
-  }
+  static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName });
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (ChannelsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
-    const schemaName = getSchemaName(this.#schema);
-    const installationsTable = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
-    const configTable = getTableName({ indexName: TABLE_CONFIG, schemaName });
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_INSTALLATIONS,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_INSTALLATIONS],
+    });
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_CONFIG,
+      schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
+    });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
 
-    // Create installations table
-    await this.#db.client.none(`
-      CREATE TABLE IF NOT EXISTS ${installationsTable} (
-        "id" TEXT PRIMARY KEY,
-        "platform" TEXT NOT NULL,
-        "agentId" TEXT NOT NULL,
-        "status" TEXT NOT NULL DEFAULT 'pending',
-        "webhookId" TEXT,
-        "data" JSONB NOT NULL DEFAULT '{}',
-        "configHash" TEXT,
-        "error" TEXT,
-        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}idx_channel_installations_webhook`,
+        table: TABLE_CHANNEL_INSTALLATIONS,
+        columns: ['webhookId'],
+        unique: true,
+      },
+      {
+        name: `${schemaPrefix}idx_channel_installations_platform_agent`,
+        table: TABLE_CHANNEL_INSTALLATIONS,
+        columns: ['platform', 'agentId'],
+      },
+    ];
+  }
 
-    // Create config table
-    await this.#db.client.none(`
-      CREATE TABLE IF NOT EXISTS ${configTable} (
-        "platform" TEXT PRIMARY KEY,
-        "data" JSONB NOT NULL DEFAULT '{}',
-        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
-    // Indexes
-    await this.#db.client.none(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook
-      ON ${installationsTable} ("webhookId")
-    `);
-    await this.#db.client.none(`
-      CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent
-      ON ${installationsTable} ("platform", "agentId")
-    `);
+    for (const tableName of ChannelsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    for (const idx of ChannelsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return ChannelsPG.getDefaultIndexDefs(schemaPrefix);
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const schemaName = getSchemaName(this.#schema);
-    const installationsTable = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
-    const configTable = getTableName({ indexName: TABLE_CONFIG, schemaName });
-    await this.#db.client.none(`DELETE FROM ${installationsTable}`);
-    await this.#db.client.none(`DELETE FROM ${configTable}`);
+    await this.#db.clearTable({ tableName: TABLE_CHANNEL_INSTALLATIONS });
+    await this.#db.clearTable({ tableName: TABLE_CHANNEL_CONFIG });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     const now = new Date().toISOString();
 
     await this.#db.client.none(
@@ -136,14 +146,14 @@ export class ChannelsPG extends ChannelsStorage {
 
   async getInstallation(id: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
     return row ? this.#parseInstallationRow(row) : null;
   }
 
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     const row = await this.#db.client.oneOrNone(
       `SELECT * FROM ${tableName} WHERE "platform" = $1 AND "agentId" = $2 ORDER BY CASE "status" WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, "updatedAt" DESC LIMIT 1`,
       [platform, agentId],
@@ -153,14 +163,14 @@ export class ChannelsPG extends ChannelsStorage {
 
   async getInstallationByWebhookId(webhookId: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "webhookId" = $1`, [webhookId]);
     return row ? this.#parseInstallationRow(row) : null;
   }
 
   async listInstallations(platform: string): Promise<ChannelInstallation[]> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     const rows = await this.#db.client.manyOrNone(
       `SELECT * FROM ${tableName} WHERE "platform" = $1 ORDER BY "createdAt" DESC`,
       [platform],
@@ -170,13 +180,13 @@ export class ChannelsPG extends ChannelsStorage {
 
   async deleteInstallation(id: string): Promise<void> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     await this.#db.client.none(`DELETE FROM ${tableName} WHERE "id" = $1`, [id]);
   }
 
   async saveConfig(config: ChannelConfig): Promise<void> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_CONFIG, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
 
     await this.#db.client.none(
       `INSERT INTO ${tableName} ("platform", "data", "updatedAt")
@@ -190,7 +200,7 @@ export class ChannelsPG extends ChannelsStorage {
 
   async getConfig(platform: string): Promise<ChannelConfig | null> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_CONFIG, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
     const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "platform" = $1`, [platform]);
     if (!row) return null;
     return {
@@ -202,7 +212,7 @@ export class ChannelsPG extends ChannelsStorage {
 
   async deleteConfig(platform: string): Promise<void> {
     const schemaName = getSchemaName(this.#schema);
-    const tableName = getTableName({ indexName: TABLE_CONFIG, schemaName });
+    const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
     await this.#db.client.none(`DELETE FROM ${tableName} WHERE "platform" = $1`, [platform]);
   }
 
