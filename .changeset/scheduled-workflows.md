@@ -1,8 +1,9 @@
 ---
 '@mastra/core': minor
+'@mastra/server': minor
 '@mastra/libsql': minor
 '@mastra/client-js': minor
-'@mastra/playground': minor
+'@mastra/playground-ui': minor
 '@mastra/clickhouse': patch
 '@mastra/cloudflare': patch
 ---

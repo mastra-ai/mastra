@@ -110,9 +110,7 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
 
       it('skips paused schedules', async () => {
         if (!scheduleStore) return;
-        await scheduleStore.createSchedule(
-          createSampleSchedule({ id: 's1', status: 'paused', nextFireAt: 5_000 }),
-        );
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', status: 'paused', nextFireAt: 5_000 }));
         const due = await scheduleStore.listDueSchedules(10_000);
         expect(due).toHaveLength(0);
       });
