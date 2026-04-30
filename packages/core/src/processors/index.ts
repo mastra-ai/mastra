@@ -584,6 +584,7 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
     !('processOutputStream' in obj) &&
     !('processOutputResult' in obj) &&
     !('processOutputStep' in obj) &&
+    !('processToolResult' in obj) &&
     !('processAPIError' in obj)
   );
 }
