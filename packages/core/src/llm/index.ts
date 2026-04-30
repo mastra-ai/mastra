@@ -84,6 +84,7 @@ export {
   getProviderConfig,
   isProviderRegistered,
 } from './model/provider-registry.js';
+export type { ModelRouterModelId, Provider, ModelForProvider } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
@@ -164,5 +165,3 @@ export type { AzureOpenAIGatewayConfig, MastraGatewayConfig } from './model/gate
 export { GATEWAY_AUTH_HEADER } from './model/gateways/constants';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';
-
-export type { Provider, ModelForProvider, ModelRouterModelId } from './model';

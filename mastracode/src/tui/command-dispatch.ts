@@ -36,6 +36,8 @@ import {
   handleUpdateCommand,
   handleMemoryGatewayCommand,
   handleApiKeysCommand,
+  handleFeedbackCommand,
+  handleObservabilityCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -173,6 +175,12 @@ export async function dispatchSlashCommand(
       return true;
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());
+      return true;
+    case 'feedback':
+      await handleFeedbackCommand(buildCtx(), args);
+      return true;
+    case 'observability':
+      await handleObservabilityCommand(buildCtx(), args);
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

@@ -51,6 +51,8 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/BrandLoader';
 export * from './ds/components/Switch';
+export * from './ds/components/ThemeProvider';
+export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
 
@@ -143,7 +145,7 @@ export * from './lib/file';
 export * from './lib/template';
 
 // Store
-export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store/playground-store';
+export { usePlaygroundStore } from './store/playground-store';
 
 // Domains
 export * from './domains/metrics';

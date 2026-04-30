@@ -1921,6 +1921,7 @@ export class MastraClient extends BaseResource {
     if (params.runId) searchParams.set('runId', params.runId);
     if (params.threadId) searchParams.set('threadId', params.threadId);
     if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.taskId) searchParams.set('taskId', params.taskId);
     const qs = searchParams.toString();
     const response: Response = await this.request(`/background-tasks/stream${qs ? `?${qs}` : ''}`, { stream: true });
 

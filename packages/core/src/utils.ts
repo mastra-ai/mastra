@@ -345,7 +345,12 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
    */
   outputWriter?: OutputWriter;
-  requireApproval?: boolean;
+  requireApproval?:
+    | boolean
+    | ((
+        input: any,
+        ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
+      ) => boolean | Promise<boolean>);
   // Workflow-specific properties
   workflow?: any;
   workflowId?: string;
@@ -802,12 +807,13 @@ export function setNestedValue(obj: any, path: string, value: any): void {
       // Use a null-prototype object so intermediate containers cannot be
       // used as a prototype-pollution sink even if a sanitizer check is
       // bypassed upstream.
-      current[key] = Object.create(null);
+      const container = Object.create(null);
+      Object.defineProperty(current, key, { value: container, writable: true, enumerable: true, configurable: true });
     }
     current = current[key];
   }
 
-  current[lastKey] = value;
+  Object.defineProperty(current, lastKey, { value, writable: true, enumerable: true, configurable: true });
 }
 
 export const removeUndefinedValues = (obj: Record<string, any>) => {

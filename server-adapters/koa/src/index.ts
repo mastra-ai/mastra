@@ -400,6 +400,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        ctx.set(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       // Explicitly set content-type and handle null/undefined to ensure proper JSON response
       // Koa sets 204 No Content when body is null, but we want to return JSON null
@@ -562,9 +571,19 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       });
 
       if (authError) {
-        ctx.status = authError.status;
-        ctx.body = { error: authError.error };
-        return;
+        // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+        if (authError.headers) {
+          for (const [key, value] of Object.entries(authError.headers)) {
+            ctx.set(key, value);
+          }
+        }
+
+        // If this is an auth error (not just a success-with-headers), return error response
+        if (authError.error) {
+          ctx.status = authError.status;
+          ctx.body = { error: authError.error };
+          return;
+        }
       }
 
       const params = await this.getParams(route, ctx);
@@ -764,9 +783,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
 
         if (authError) {
-          ctx.status = authError.status;
-          ctx.body = { error: authError.error };
-          return;
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              ctx.set(key, value);
+            }
+          }
+          if (authError.error) {
+            ctx.status = authError.status;
+            ctx.body = { error: authError.error };
+            return;
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;

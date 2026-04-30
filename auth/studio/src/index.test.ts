@@ -384,6 +384,8 @@ describe('MastraAuthStudio', () => {
       expect(config).toEqual({
         provider: 'mastra-studio',
         text: 'Sign in with Mastra',
+        description:
+          'Your deployed Studio is secured by your Mastra account. Sign in with the same email you used to sign up on mastra.ai.',
       });
     });
   });

@@ -4,6 +4,15 @@ export const WORKING_MEMORY_END_TAG = '</working_memory>';
 export const SYSTEM_REMINDER_START_TAG = '<system-reminder>';
 export const SYSTEM_REMINDER_END_TAG = '</system-reminder>';
 
+/*
+ * Compatibility note: @mastra/memory intentionally copies the exported helpers
+ * in this file into packages/memory/src/index.ts instead of importing them.
+ * Its peer range permits older core versions that do not export these newer
+ * names, and importing them can crash published memory builds during ESM
+ * instantiation. Until v2 can tighten that peer contract, keep both sides
+ * manually in sync.
+ */
+
 /**
  * Extracts all working memory tag contents from text using indexOf-based parsing.
  * This avoids ReDoS vulnerability that exists with regex-based approaches.

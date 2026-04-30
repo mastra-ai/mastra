@@ -73,7 +73,13 @@ export async function uploadDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { gitBranch?: string; projectName?: string; envVars?: Record<string, string>; mastraVersion?: string },
+  meta?: {
+    gitBranch?: string;
+    projectName?: string;
+    envVars?: Record<string, string>;
+    mastraVersion?: string;
+    disablePlatformObservability?: boolean;
+  },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
@@ -87,7 +93,12 @@ export async function uploadDeploy(
         'x-mastra-version': meta?.mastraVersion,
       },
     },
-    body: { envVars: meta?.envVars },
+    body: {
+      envVars: meta?.envVars,
+      ...(meta?.disablePlatformObservability !== undefined
+        ? { disablePlatformObservability: meta.disablePlatformObservability }
+        : {}),
+    },
   });
 
   if (error) {

@@ -473,6 +473,7 @@ export class CoreToolBuilder extends MastraBase {
                 threadId,
                 resourceId,
                 outputWriter: execOptions.outputWriter,
+                flushMessages: execOptions.flushMessages,
               },
             };
           } else if (isWorkflowExecution) {

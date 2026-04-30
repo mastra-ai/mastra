@@ -145,7 +145,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
-      if (rest.onIterationComplete) {
+      if (rest.onIterationComplete && !typedInputData.backgroundTaskPending) {
         const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
         const iterationContext = {
           iteration: accumulatedSteps.length,

@@ -199,6 +199,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       this.deepCleanOptions,
     );
 
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+    }
+
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
