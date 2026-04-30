@@ -433,7 +433,14 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    *  - undefined/void: No changes (passthrough)
    */
-  processToolResult?(args: ProcessToolResultArgs<TTripwireMetadata>): ProcessorMessageResult;
+  processToolResult?(
+    args: ProcessToolResultArgs<TTripwireMetadata>,
+  ):
+    | Promise<MessageList | MastraDBMessage[] | undefined | void>
+    | MessageList
+    | MastraDBMessage[]
+    | void
+    | undefined;
 
   /**
    * Process an LLM API rejection error before it's surfaced as a final error.
