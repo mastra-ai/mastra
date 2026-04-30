@@ -9,10 +9,6 @@ const config: StorybookConfig = {
     name: getAbsolutePath('@storybook/react-vite'),
     options: {},
   },
-  viteFinal: async config => {
-    config.base = './';
-    return config;
-  },
 };
 
 export default config;
