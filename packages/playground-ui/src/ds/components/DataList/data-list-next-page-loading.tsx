@@ -9,8 +9,8 @@ export type DataListNextPageLoadingProps = {
 
 export function DataListNextPageLoading({
   isLoading,
-  hasMore,
   setEndOfListElement,
+  hasMore,
   loadingText = 'Loading more data...',
 }: DataListNextPageLoadingProps) {
   if (!setEndOfListElement) {
@@ -22,6 +22,7 @@ export function DataListNextPageLoading({
       ref={setEndOfListElement}
       className={cn('col-span-full text-ui-md text-neutral3 opacity-50 flex justify-center min-h-1', {
         'py-4': isLoading,
+        'py-0': !hasMore,
       })}
     >
       {isLoading && loadingText}
