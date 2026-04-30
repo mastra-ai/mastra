@@ -2847,19 +2847,13 @@ export class Mastra<
       return;
     }
 
-    // Reject declarative schedules on non-evented workflows. The scheduler
-    // publishes `workflow.start` events which only the evented engine consumes.
+    // Note on schedules: a workflow declaring a `schedule` is auto-promoted to
+    // the evented engine by the `createWorkflow` factory. We don't reject default-
+    // engine workflows that happen to carry schedule configs — those would only
+    // exist if a user constructed `Workflow` directly, in which case they've
+    // explicitly opted out of the factory's promotion behavior and we trust them.
     const scheduleConfigs = collectWorkflowScheduleConfigs(workflow);
     const hasSchedule = scheduleConfigs.length > 0;
-    if (hasSchedule && workflow.engineType !== 'evented') {
-      throw new MastraError({
-        id: 'MASTRA_WORKFLOW_SCHEDULE_REQUIRES_EVENTED_ENGINE',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Workflow "${workflow.id}" declares a schedule but is not using the evented engine. Schedule support requires importing createWorkflow from "@mastra/core/workflows/evented".`,
-        details: { workflowId: workflow.id, engineType: workflow.engineType },
-      });
-    }
 
     // Initialize the workflow with Mastra and primitives
     workflow.__registerMastra(this);

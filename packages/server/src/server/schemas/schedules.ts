@@ -10,6 +10,27 @@ export const scheduleTargetSchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const workflowRunStatusSchema = z.enum([
+  'running',
+  'success',
+  'failed',
+  'tripwire',
+  'suspended',
+  'waiting',
+  'pending',
+  'canceled',
+  'bailed',
+  'paused',
+]);
+
+export const scheduleRunSummarySchema = z.object({
+  status: workflowRunStatusSchema,
+  startedAt: z.number().optional(),
+  completedAt: z.number().optional(),
+  durationMs: z.number().optional(),
+  error: z.string().optional(),
+});
+
 export const scheduleResponseSchema = z.object({
   id: z.string(),
   target: scheduleTargetSchema,
@@ -19,6 +40,7 @@ export const scheduleResponseSchema = z.object({
   nextFireAt: z.number(),
   lastFireAt: z.number().optional(),
   lastRunId: z.string().optional(),
+  lastRun: scheduleRunSummarySchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -33,6 +55,7 @@ export const scheduleTriggerResponseSchema = z.object({
   actualFireAt: z.number(),
   status: scheduleTriggerStatusSchema,
   error: z.string().optional(),
+  run: scheduleRunSummarySchema.optional(),
 });
 
 export const listSchedulesQuerySchema = z.object({

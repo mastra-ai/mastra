@@ -2725,6 +2725,14 @@ export interface ScheduleTarget {
   requestContext?: Record<string, unknown>;
 }
 
+export interface ScheduleRunSummary {
+  status: WorkflowRunStatus;
+  startedAt?: number;
+  completedAt?: number;
+  durationMs?: number;
+  error?: string;
+}
+
 export interface ScheduleResponse {
   id: string;
   target: ScheduleTarget;
@@ -2734,6 +2742,7 @@ export interface ScheduleResponse {
   nextFireAt: number;
   lastFireAt?: number;
   lastRunId?: string;
+  lastRun?: ScheduleRunSummary;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -2748,6 +2757,7 @@ export interface ScheduleTriggerResponse {
   actualFireAt: number;
   status: ScheduleTriggerStatus;
   error?: string;
+  run?: ScheduleRunSummary;
 }
 
 export interface ListSchedulesParams {

@@ -1,3 +1,5 @@
+import type { Mastra } from '@mastra/core';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import {
   listSchedulesQuerySchema,
@@ -8,6 +10,50 @@ import {
   listScheduleTriggersResponseSchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+
+type RunSummary = {
+  status: WorkflowRunState['status'];
+  startedAt?: number;
+  completedAt?: number;
+  durationMs?: number;
+  error?: string;
+};
+
+function snapshotToRunSummary(run: {
+  snapshot: WorkflowRunState | string;
+  createdAt: Date;
+  updatedAt: Date;
+}): RunSummary | undefined {
+  const snapshot = typeof run.snapshot === 'string' ? null : run.snapshot;
+  if (!snapshot) return undefined;
+  const startedAt = run.createdAt instanceof Date ? run.createdAt.getTime() : undefined;
+  const isTerminal =
+    snapshot.status === 'success' ||
+    snapshot.status === 'failed' ||
+    snapshot.status === 'canceled' ||
+    snapshot.status === 'bailed' ||
+    snapshot.status === 'tripwire';
+  const completedAt = isTerminal ? (run.updatedAt instanceof Date ? run.updatedAt.getTime() : undefined) : undefined;
+  const durationMs = startedAt !== undefined && completedAt !== undefined ? completedAt - startedAt : undefined;
+  return {
+    status: snapshot.status,
+    startedAt,
+    completedAt,
+    durationMs,
+    error: snapshot.error?.message,
+  };
+}
+
+async function fetchRunSummary(mastra: Mastra, workflowName: string, runId: string): Promise<RunSummary | undefined> {
+  try {
+    const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+    const run = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
+    if (!run) return undefined;
+    return snapshotToRunSummary(run);
+  } catch {
+    return undefined;
+  }
+}
 
 export const LIST_SCHEDULES_ROUTE = createRoute({
   method: 'GET',
@@ -26,7 +72,16 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
       return { schedules: [] };
     }
     const schedules = await schedulesStore.listSchedules({ workflowId, status });
-    return { schedules };
+    const hydrated = await Promise.all(
+      schedules.map(async schedule => {
+        if (!schedule.lastRunId || schedule.target.type !== 'workflow') {
+          return schedule;
+        }
+        const lastRun = await fetchRunSummary(mastra, schedule.target.workflowId, schedule.lastRunId);
+        return lastRun ? { ...schedule, lastRun } : schedule;
+      }),
+    );
+    return { schedules: hydrated };
   },
 });
 
@@ -49,6 +104,10 @@ export const GET_SCHEDULE_ROUTE = createRoute({
     if (!schedule) {
       throw new HTTPException(404, { message: 'Schedule not found' });
     }
+    if (schedule.lastRunId && schedule.target.type === 'workflow') {
+      const lastRun = await fetchRunSummary(mastra, schedule.target.workflowId, schedule.lastRunId);
+      if (lastRun) return { ...schedule, lastRun };
+    }
     return schedule;
   },
 });
@@ -69,7 +128,19 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
     if (!schedulesStore) {
       return { triggers: [] };
     }
+    const schedule = await schedulesStore.getSchedule(scheduleId);
     const triggers = await schedulesStore.listTriggers(scheduleId, { limit, fromActualFireAt, toActualFireAt });
-    return { triggers };
+    if (!schedule || schedule.target.type !== 'workflow') {
+      return { triggers };
+    }
+    const workflowName = schedule.target.workflowId;
+    const hydrated = await Promise.all(
+      triggers.map(async trigger => {
+        if (trigger.status !== 'published' || !trigger.runId) return trigger;
+        const run = await fetchRunSummary(mastra, workflowName, trigger.runId);
+        return run ? { ...trigger, run } : trigger;
+      }),
+    );
+    return { triggers: hydrated };
   },
 });

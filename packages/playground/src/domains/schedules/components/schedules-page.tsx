@@ -30,7 +30,11 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
             <Txt variant="ui-md" className="mb-3">
               Trigger history — <code className="font-mono">{selected.id}</code>
             </Txt>
-            <ScheduleTriggersList triggers={triggers ?? []} isLoading={triggersLoading} />
+            <ScheduleTriggersList
+              triggers={triggers ?? []}
+              isLoading={triggersLoading}
+              workflowId={selected.target.type === 'workflow' ? selected.target.workflowId : undefined}
+            />
           </div>
         ) : null}
       </div>

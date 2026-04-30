@@ -107,23 +107,31 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.shutdown();
   });
 
-  it('throws when a non-evented workflow declares a schedule', () => {
+  it('auto-promotes a default `createWorkflow` to evented when a schedule is declared', async () => {
     const wf = createDefaultWorkflow({
-      id: 'default-engine-wf',
+      id: 'promoted-wf',
       inputSchema: z.object({}),
       outputSchema: z.object({}),
+      schedule: { cron: '*/5 * * * *', inputData: { hello: 'world' } },
     });
-    // Inject a fake schedule getter to simulate a default-engine workflow with a schedule.
-    (wf as unknown as { getScheduleConfig: () => unknown }).getScheduleConfig = () => ({ cron: '*/5 * * * *' });
 
-    expect(
-      () =>
-        new Mastra({
-          logger: false,
-          storage: new MockStore(),
-          workflows: { wf } as any,
-        }),
-    ).toThrow(/evented engine/i);
+    // The factory should have returned an evented-engine workflow instance.
+    expect(wf.engineType).toBe('evented');
+
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: wf as any },
+    });
+
+    // The scheduler picks the workflow up because it's evented now and has a schedule.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(mastra.scheduler).toBeDefined();
+    const schedulesStore = await mastra.getStorage()!.getStore('schedules');
+    const schedules = await schedulesStore!.listSchedules();
+    expect(schedules.find(s => s.id === 'wf_promoted-wf')).toBeDefined();
+
+    await mastra.shutdown();
   });
 
   it('starts the scheduler when scheduler.enabled is true even with no scheduled workflows', async () => {

@@ -1,9 +1,25 @@
 import { Mastra } from '@mastra/core/mastra';
 import type { Schedule, ScheduleTrigger } from '@mastra/core/storage';
 import { MockStore } from '@mastra/core/storage';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { GET_SCHEDULE_ROUTE, LIST_SCHEDULES_ROUTE, LIST_SCHEDULE_TRIGGERS_ROUTE } from './schedules';
+
+const makeSnapshot = (overrides: Partial<WorkflowRunState> = {}): WorkflowRunState => ({
+  runId: overrides.runId ?? 'run-1',
+  status: overrides.status ?? 'success',
+  value: {},
+  context: {},
+  serializedStepGraph: [],
+  activePaths: [],
+  activeStepsPath: {},
+  suspendedPaths: {},
+  resumeLabels: {},
+  waitingPaths: {},
+  timestamp: 0,
+  ...overrides,
+});
 
 const baseCtx = () => ({
   requestContext: {} as any,
@@ -183,6 +199,118 @@ describe('Schedules handlers', () => {
       } as any);
 
       expect(result).toEqual({ triggers: [] });
+    });
+
+    it('hydrates published triggers with run summary from workflows storage', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a' }));
+      await schedulesStore.recordTrigger(makeTrigger({ scheduleId: 'wf_a', runId: 'run-success', actualFireAt: 1 }));
+      await schedulesStore.recordTrigger(makeTrigger({ scheduleId: 'wf_a', runId: 'run-failed', actualFireAt: 2 }));
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'test',
+        runId: 'run-success',
+        snapshot: makeSnapshot({ runId: 'run-success', status: 'success' }),
+        createdAt: new Date(1_000),
+        updatedAt: new Date(1_500),
+      });
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'test',
+        runId: 'run-failed',
+        snapshot: makeSnapshot({ runId: 'run-failed', status: 'failed', error: { message: 'kaboom' } as any }),
+        createdAt: new Date(2_000),
+        updatedAt: new Date(2_750),
+      });
+
+      const result = await LIST_SCHEDULE_TRIGGERS_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      const successTrigger = result.triggers.find(t => t.runId === 'run-success')!;
+      expect(successTrigger.run?.status).toBe('success');
+      expect(successTrigger.run?.durationMs).toBe(500);
+
+      const failedTrigger = result.triggers.find(t => t.runId === 'run-failed')!;
+      expect(failedTrigger.run?.status).toBe('failed');
+      expect(failedTrigger.run?.error).toBe('kaboom');
+    });
+
+    it('omits run summary for failed publish triggers', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a' }));
+      await schedulesStore.recordTrigger(
+        makeTrigger({ scheduleId: 'wf_a', runId: 'run-x', status: 'failed', error: 'publish failed' }),
+      );
+
+      const result = await LIST_SCHEDULE_TRIGGERS_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.triggers[0].run).toBeUndefined();
+      expect(result.triggers[0].error).toBe('publish failed');
+    });
+
+    it('tolerates missing run records', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a' }));
+      await schedulesStore.recordTrigger(makeTrigger({ scheduleId: 'wf_a', runId: 'run-missing' }));
+
+      const result = await LIST_SCHEDULE_TRIGGERS_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.triggers).toHaveLength(1);
+      expect(result.triggers[0].run).toBeUndefined();
+    });
+  });
+
+  describe('lastRun hydration', () => {
+    it('hydrates lastRun on list response when lastRunId points at a run', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a', lastRunId: 'last-run' }));
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'test',
+        runId: 'last-run',
+        snapshot: makeSnapshot({ runId: 'last-run', status: 'success' }),
+        createdAt: new Date(1_000),
+        updatedAt: new Date(2_000),
+      });
+
+      const result = await LIST_SCHEDULES_ROUTE.handler({
+        mastra,
+        ...baseCtx(),
+      } as any);
+
+      expect(result.schedules[0].lastRun?.status).toBe('success');
+      expect(result.schedules[0].lastRun?.durationMs).toBe(1_000);
+    });
+
+    it('hydrates lastRun on get response', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a', lastRunId: 'last-run' }));
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'test',
+        runId: 'last-run',
+        snapshot: makeSnapshot({ runId: 'last-run', status: 'failed' }),
+        createdAt: new Date(1_000),
+        updatedAt: new Date(2_000),
+      });
+
+      const result = await GET_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.lastRun?.status).toBe('failed');
     });
   });
 });

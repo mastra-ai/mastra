@@ -13,5 +13,10 @@ export const useScheduleTriggers = (scheduleId: string | undefined, params: List
       const result = await client.listScheduleTriggers(scheduleId, params);
       return result.triggers;
     },
+    refetchInterval: query => {
+      const triggers = query.state.data ?? [];
+      const hasActive = triggers.some(t => t.run?.status === 'running' || (!t.run && t.status === 'published'));
+      return hasActive ? 5_000 : false;
+    },
   });
 };

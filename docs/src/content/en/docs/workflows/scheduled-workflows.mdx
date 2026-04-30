@@ -1,0 +1,119 @@
+---
+title: "Scheduled workflows | Workflows"
+description: "Run a workflow on a cron schedule by declaring a `schedule` field on the workflow definition."
+packages:
+  - "@mastra/core"
+---
+
+# Scheduled workflows
+
+Declare a `schedule` field on a workflow and Mastra will fire it on the cron you specify. The same workflow remains callable directly with `workflow.start()` — scheduled fires and manual runs share a single execution path.
+
+## Quickstart
+
+```typescript title="src/mastra/workflows/daily-report.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const sendReport = createStep({
+  id: 'send-report',
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ ok: z.boolean() }),
+  execute: async ({ inputData }) => {
+    // ...send the report for inputData.userId
+    return { ok: true }
+  },
+})
+
+export const dailyReport = createWorkflow({
+  id: 'daily-report',
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ ok: z.boolean() }),
+  schedule: {
+    cron: '0 9 * * *',
+    timezone: 'America/New_York',
+    inputData: { userId: 'system' },
+  },
+})
+  .then(sendReport)
+  .commit()
+```
+
+When you register `dailyReport` on `Mastra`, the scheduler picks it up automatically. There is no separate "register schedule" call.
+
+## What `schedule` changes
+
+A workflow that declares `schedule` is auto-promoted to the **evented execution engine**. The public API (`workflow.start()`, `workflow.startAsync()`, `streamLegacy()`, `resume()`) is unchanged — `EventedWorkflow extends Workflow` and overrides each method with matching signatures. From your code, scheduled fires and manual runs are indistinguishable.
+
+The promotion has two practical implications:
+
+- **Storage adapter.** Evented runs require a storage adapter that supports concurrent updates (for example `@mastra/libsql`). If your adapter does not, `createRun()` throws a clear error pointing at the schedule field. Switch adapters or remove the schedule.
+- **Crash resilience.** Evented runs are pubsub-driven and survive process crashes; default-engine runs do not. This is a behavior change you should be aware of even when running manually.
+
+## Single schedule
+
+Pass an object to `schedule` for a workflow that fires on one cadence:
+
+```typescript title="src/mastra/workflows/daily-report.ts"
+const dailyReport = createWorkflow({
+  id: 'daily-report',
+  schedule: {
+    cron: '0 9 * * *',
+    timezone: 'America/New_York',
+    inputData: { userId: 'system' },
+  },
+  // ...
+})
+```
+
+Fields:
+
+- `cron` (required): a 5-, 6-, or 7-part cron expression. Validated at workflow construction time.
+- `timezone` (optional): IANA timezone (for example `America/New_York`). Defaults to UTC.
+- `inputData` (optional): payload passed as the workflow's input on every fire.
+- `initialState` (optional): initial state for the run.
+- `requestContext` (optional): request context attached to the run.
+
+## Multiple schedules
+
+Pass an array to fire the same workflow on multiple cadences. Each entry needs a unique stable `id`:
+
+```typescript title="src/mastra/workflows/heartbeat.ts"
+const heartbeat = createWorkflow({
+  id: 'heartbeat',
+  schedule: [
+    { id: 'morning', cron: '0 9 * * *', inputData: { window: 'morning' } },
+    { id: 'evening', cron: '0 18 * * *', inputData: { window: 'evening' } },
+  ],
+  // ...
+})
+```
+
+Each entry creates an independent schedule row, fires on its own cron, and shows up separately in the Studio Schedules view.
+
+## Audit trail
+
+Every fire records a trigger row with the run id, scheduled time, actual fire time, and publish status. Studio's Schedules view (`/workflows/schedules`) joins each trigger to the corresponding workflow run and shows:
+
+- The run's status (`running`, `success`, `failed`, `suspended`, `canceled`, …) as a badge.
+- The run's start time and duration.
+- A link to the run's full graph view (`/workflows/:workflowId/graph/:runId`).
+- A `pending` badge for triggers whose run record hasn't been written yet (race between trigger publish and run snapshot).
+- A `publish failed` badge with the publish error when the scheduler couldn't enqueue the run at all.
+
+The schedules table itself shows the most recent run's status next to the schedule, so the cross-workflow list answers "is my schedule healthy?" at a glance. Triggers actively running cause the panel to poll every five seconds until they reach a terminal state.
+
+## Redeploying with changes
+
+When you change the `schedule` config and redeploy, Mastra diffs the existing schedule row against the new config:
+
+- If `cron` or `timezone` changed, `nextFireAt` is recomputed.
+- If only `inputData`, `initialState`, or `metadata` changed, the row is patched in place and the next fire time is preserved.
+- User-set status (for example, paused via direct storage edit) and fire history are never overwritten.
+
+Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
+
+## Related
+
+- [Workflow overview](/docs/workflows/overview)
+- [Suspend and resume](/docs/workflows/suspend-and-resume)

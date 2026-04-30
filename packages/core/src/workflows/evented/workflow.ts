@@ -36,6 +36,9 @@ import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
+// Direct import (bypassing the index) avoids a cycle: the index does a
+// side-effect import of `./evented`, so going through it from here would
+// re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
 import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
@@ -57,6 +60,7 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
+import { __registerEventedCreateWorkflow } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -1500,6 +1504,13 @@ export function createWorkflow<
   });
 }
 
+// Register this factory with the default `createWorkflow` so that workflows
+// declared with the default factory are auto-promoted to evented when they
+// declare a `schedule`. Done at module-load time; the registration slot is
+// initialized as `undefined` in `../workflow.ts` and is read lazily on user
+// call, so module evaluation order doesn't matter.
+__registerEventedCreateWorkflow(createWorkflow as Parameters<typeof __registerEventedCreateWorkflow>[0]);
+
 export class EventedWorkflow<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
@@ -1552,7 +1563,11 @@ export class EventedWorkflow<
         id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Atomic storage operations are not supported for this workflow store, please use a different storage or the default workflow engine',
+        text:
+          `Workflow "${this.id}" runs on the evented execution engine, which requires a storage adapter that supports concurrent updates. ` +
+          `Your current workflow storage adapter does not. Switch to an adapter that does (for example @mastra/libsql), or, if you do not need scheduled execution, ` +
+          `remove the \`schedule\` field from this workflow's definition to use the default execution engine.`,
+        details: { workflowId: this.id },
       });
     }
 
