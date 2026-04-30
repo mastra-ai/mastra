@@ -98,7 +98,7 @@ export class SlackProvider implements ChannelProvider {
 
   #mastra?: Mastra;
   #baseUrl?: string;
-  #initialized = false;
+  #initPromise: Promise<void> | null = null;
 
   constructor(config: SlackProviderConfig = {}) {
     this.#channelConfig = config;
@@ -197,7 +197,7 @@ export class SlackProvider implements ChannelProvider {
     // If attaching to a different Mastra instance (e.g., hot reload), reset initialization
     // so we re-register adapters with the new AgentChannels instances
     if (this.#mastra && this.#mastra !== mastra) {
-      this.#initialized = false;
+      this.#initPromise = null;
     }
     this.#mastra = mastra;
   }
@@ -271,12 +271,20 @@ export class SlackProvider implements ChannelProvider {
     const key = this.#getEncryptionKey();
     if (!key) return installation;
 
-    return {
-      ...installation,
-      clientSecret: decrypt(installation.clientSecret, key),
-      signingSecret: decrypt(installation.signingSecret, key),
-      botToken: decrypt(installation.botToken, key),
-    };
+    // Check if already decrypted (no colons = not encrypted format)
+    if (!installation.botToken.includes(':')) return installation;
+
+    try {
+      return {
+        ...installation,
+        clientSecret: decrypt(installation.clientSecret, key),
+        signingSecret: decrypt(installation.signingSecret, key),
+        botToken: decrypt(installation.botToken, key),
+      };
+    } catch {
+      console.warn('[Slack] Failed to decrypt installation - may be stored unencrypted');
+      return installation;
+    }
   }
 
   /**
@@ -573,12 +581,21 @@ export class SlackProvider implements ChannelProvider {
       throw new Error('SlackProvider not attached to Mastra. Call __attach() first.');
     }
 
-    // Prevent double initialization
-    if (this.#initialized) {
-      return;
-    }
-    this.#initialized = true;
+    // Concurrent callers share the same in-flight initialization
+    if (this.#initPromise) return this.#initPromise;
 
+    this.#initPromise = this.#doInitialize();
+
+    try {
+      await this.#initPromise;
+    } catch (err) {
+      // Allow retry on failure
+      this.#initPromise = null;
+      throw err;
+    }
+  }
+
+  async #doInitialize(): Promise<void> {
     // Load stored tokens if available (these are fresher than constructor tokens)
     const storedTokensEncrypted = await this.#getConfigTokens();
     if (storedTokensEncrypted) {
@@ -692,8 +709,7 @@ export class SlackProvider implements ChannelProvider {
       console.log(`[Slack] ✓ Manifest updated for "${installation.agentId}" (app: ${installation.appId})`);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      const isAppGone =
-        errMsg.includes('internal_error') || errMsg.includes('app_not_found') || errMsg.includes('no_permission');
+      const isAppGone = errMsg.includes('app_not_found') || errMsg.includes('no_permission');
 
       if (isAppGone) {
         console.warn(
@@ -1116,7 +1132,7 @@ export class SlackProvider implements ChannelProvider {
     if (error) {
       const errorUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
       const redirect = new URL(errorUrl, c.req.url);
-      redirect.searchParams.set('channel_error', encodeURIComponent(error));
+      redirect.searchParams.set('channel_error', error);
       redirect.searchParams.set('platform', 'slack');
       return c.redirect(redirect.toString());
     }
@@ -1214,7 +1230,7 @@ export class SlackProvider implements ChannelProvider {
       const message = error instanceof Error ? error.message : 'OAuth failed';
       const errorUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
       const redirect = new URL(errorUrl, c.req.url);
-      redirect.searchParams.set('channel_error', encodeURIComponent(message));
+      redirect.searchParams.set('channel_error', message);
       redirect.searchParams.set('platform', 'slack');
       return c.redirect(redirect.toString());
     }

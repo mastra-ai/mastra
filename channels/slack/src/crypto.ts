@@ -36,9 +36,15 @@ export function verifySlackRequest(params: {
 export function parseSlackFormBody(body: string): Record<string, string> {
   const params: Record<string, string> = {};
   for (const pair of body.split('&')) {
-    const [key, value] = pair.split('=');
+    const eqIndex = pair.indexOf('=');
+    if (eqIndex === -1) {
+      if (pair) params[decodeURIComponent(pair)] = '';
+      continue;
+    }
+    const key = pair.slice(0, eqIndex);
+    const value = pair.slice(eqIndex + 1);
     if (key) {
-      params[decodeURIComponent(key)] = decodeURIComponent(value ?? '');
+      params[decodeURIComponent(key)] = decodeURIComponent(value);
     }
   }
   return params;

@@ -16,6 +16,7 @@ export class SlackManifestClient {
   #token: string;
   #refreshToken: string;
   #onTokenRotation?: (tokens: { token: string; refreshToken: string }) => Promise<void>;
+  #rotationPromise: Promise<void> | null = null;
 
   constructor(config: SlackManifestClientConfig) {
     this.#token = config.token;
@@ -45,8 +46,21 @@ export class SlackManifestClient {
    * Rotate the configuration tokens.
    * Slack config access tokens expire after 12 hours; the refresh token is single-use
    * and each rotation returns a new access token + refresh token pair.
+   *
+   * Concurrent callers share the same in-flight rotation to avoid burning
+   * single-use refresh tokens.
    */
   async rotateToken(): Promise<void> {
+    if (this.#rotationPromise) return this.#rotationPromise;
+
+    this.#rotationPromise = this.#doRotateToken().finally(() => {
+      this.#rotationPromise = null;
+    });
+
+    return this.#rotationPromise;
+  }
+
+  async #doRotateToken(): Promise<void> {
     const response = await fetch(`${SLACK_API_BASE}/tooling.tokens.rotate`, {
       method: 'POST',
       headers: {

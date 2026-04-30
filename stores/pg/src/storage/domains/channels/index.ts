@@ -14,6 +14,38 @@ export class ChannelsPG extends ChannelsStorage {
 
   static readonly MANAGED_TABLES = [TABLE_INSTALLATIONS, TABLE_CONFIG] as const;
 
+  /**
+   * Returns all DDL statements for this domain: tables and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const sn = schemaName ? getSchemaName(schemaName) : '';
+    const installationsTable = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName: sn });
+    const configTable = getTableName({ indexName: TABLE_CONFIG, schemaName: sn });
+
+    return [
+      `CREATE TABLE IF NOT EXISTS ${installationsTable} (
+  "id" TEXT PRIMARY KEY,
+  "platform" TEXT NOT NULL,
+  "agentId" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'pending',
+  "webhookId" TEXT,
+  "data" JSONB NOT NULL DEFAULT '{}',
+  "configHash" TEXT,
+  "error" TEXT,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`,
+      `CREATE TABLE IF NOT EXISTS ${configTable} (
+  "platform" TEXT PRIMARY KEY,
+  "data" JSONB NOT NULL DEFAULT '{}',
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`,
+      `CREATE INDEX IF NOT EXISTS idx_channel_installations_webhook ON ${installationsTable} ("webhookId");`,
+      `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON ${installationsTable} ("platform", "agentId");`,
+    ];
+  }
+
   constructor(config: PgDomainConfig) {
     super();
     const { client, schemaName } = resolvePgConfig(config);

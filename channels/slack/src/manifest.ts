@@ -125,6 +125,7 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
     manifest.features!.slash_commands = slashCommands.map(cmd => ({
       command: cmd.command.startsWith('/') ? cmd.command : `/${cmd.command}`,
       description: cmd.description ?? `Run ${cmd.command}`,
+      ...(cmd.usageHint ? { usage_hint: cmd.usageHint } : {}),
       url: commandsUrl,
     }));
   }

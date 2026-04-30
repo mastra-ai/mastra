@@ -331,6 +331,7 @@ export class Agent<
     if (config.channels) {
       if (config.channels instanceof AgentChannels) {
         this.#agentChannels = config.channels;
+        this.#agentChannels.__setAgent(this);
       } else if (
         'adapters' in config.channels &&
         config.channels.adapters &&

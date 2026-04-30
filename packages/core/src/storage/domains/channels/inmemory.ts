@@ -14,7 +14,8 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
   }
 
   async getInstallation(id: string): Promise<ChannelInstallation | null> {
-    return this.#installations.get(id) ?? null;
+    const inst = this.#installations.get(id);
+    return inst ? { ...inst } : null;
   }
 
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
@@ -27,13 +28,13 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
         }
       }
     }
-    return best;
+    return best ? { ...best } : null;
   }
 
   async getInstallationByWebhookId(webhookId: string): Promise<ChannelInstallation | null> {
     for (const installation of this.#installations.values()) {
       if (installation.webhookId === webhookId) {
-        return installation;
+        return { ...installation };
       }
     }
     return null;
@@ -43,7 +44,7 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
     const results: ChannelInstallation[] = [];
     for (const installation of this.#installations.values()) {
       if (installation.platform === platform) {
-        results.push(installation);
+        results.push({ ...installation });
       }
     }
     return results;
@@ -58,7 +59,8 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
   }
 
   async getConfig(platform: string): Promise<ChannelConfig | null> {
-    return this.#configs.get(platform) ?? null;
+    const config = this.#configs.get(platform);
+    return config ? { ...config } : null;
   }
 
   async deleteConfig(platform: string): Promise<void> {

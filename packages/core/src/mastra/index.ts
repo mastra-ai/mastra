@@ -904,6 +904,8 @@ export class Mastra<
       const channelRoutes: ApiRoute[] = [];
 
       for (const [, channel] of Object.entries(config.channels)) {
+        if (channel == null) continue;
+
         // Attach the channel to this Mastra instance
         if (channel.__attach) {
           channel.__attach(this);

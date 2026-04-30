@@ -52,6 +52,7 @@ const ALL_DOMAINS = [
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
+  ChannelsPG,
 ] as const;
 
 /**

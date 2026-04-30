@@ -82,6 +82,8 @@ export class InMemoryStore extends MastraCompositeStore {
    */
   clear(): void {
     this.#db.clear();
+    // InMemoryChannelsStorage doesn't share the InMemoryDB
+    void this.stores.channels?.dangerouslyClearAll?.();
   }
 }
 
