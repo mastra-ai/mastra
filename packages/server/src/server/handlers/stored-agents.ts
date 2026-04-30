@@ -47,6 +47,13 @@ async function resolveBrowserField(browser: unknown, mastra: { getEditor?: () =>
     const editor = mastra.getEditor?.() as any;
     const builder = await editor?.resolveBuilder?.();
     const defaultBrowser = builder?.getConfiguration?.()?.agent?.browser;
+    if (!defaultBrowser) {
+      console.warn(
+        '[mastra:server] Browser enabled (browser: true) but no default browser config found ' +
+          'in builder configuration. The agent will be created/updated without browser access. ' +
+          'Set `editor.builder.configuration.agent.browser` to fix this.',
+      );
+    }
     return defaultBrowser ?? undefined;
   }
   if (browser === false) {

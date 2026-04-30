@@ -13,9 +13,13 @@ export class EditorAgentBuilder implements IAgentBuilder {
   private readonly options: AgentBuilderOptions;
   private readonly modelPolicyWarnings: string[] = [];
 
+  /** Non-fatal warnings for browser config issues (surfaced alongside model policy warnings). */
+  private readonly browserConfigWarnings: string[] = [];
+
   constructor(options?: AgentBuilderOptions) {
     this.options = options ?? {};
     this.validateModelPolicy();
+    this.validateBrowserConfig();
   }
 
   get enabled(): boolean {
@@ -31,7 +35,47 @@ export class EditorAgentBuilder implements IAgentBuilder {
   }
 
   getModelPolicyWarnings(): string[] {
-    return [...this.modelPolicyWarnings];
+    return [...this.modelPolicyWarnings, ...this.browserConfigWarnings];
+  }
+
+  /**
+   * If `features.agent.browser` is enabled but no default browser config
+   * is provided, the toggle would silently do nothing. Downgrade the
+   * feature flag and warn the admin.
+   */
+  private validateBrowserConfig(): void {
+    const browserFeature = this.options.features?.agent?.browser;
+    if (!browserFeature) return;
+
+    const browserConfig = this.options.configuration?.agent?.browser;
+    if (!browserConfig) {
+      const warning =
+        'Agent Builder browser feature is enabled but no default browser config was provided. ' +
+        'Set `editor.builder.configuration.agent.browser` to a valid browser config ' +
+        '(e.g. `{ type: "inline", config: { provider: "stagehand" } }`). ' +
+        'The browser toggle will be hidden until a default is configured.';
+      this.browserConfigWarnings.push(warning);
+      // eslint-disable-next-line no-console
+      console.warn(`[mastra:editor:builder] ${warning}`);
+      // Downgrade so the UI toggle never appears
+      if (this.options.features?.agent) {
+        this.options.features.agent.browser = false;
+      }
+      return;
+    }
+
+    if (!browserConfig.config?.provider) {
+      const warning =
+        'Agent Builder browser config is missing a `provider` field. ' +
+        'Set `editor.builder.configuration.agent.browser.config.provider` ' +
+        '(e.g. `"stagehand"`). The browser toggle will be hidden until a provider is configured.';
+      this.browserConfigWarnings.push(warning);
+      // eslint-disable-next-line no-console
+      console.warn(`[mastra:editor:builder] ${warning}`);
+      if (this.options.features?.agent) {
+        this.options.features.agent.browser = false;
+      }
+    }
   }
 
   private validateModelPolicy(): void {

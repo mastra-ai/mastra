@@ -1445,6 +1445,49 @@ describe('MastraEditor.resolveBuilder', () => {
     expect(result?.getFeatures()).toBe(features);
     expect(result?.getConfiguration()).toBe(configuration);
   });
+
+  it('downgrades browser feature when provider not registered in __browsers', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const editor = new MastraEditor({
+      builder: {
+        features: { agent: { browser: true } },
+        configuration: {
+          agent: {
+            browser: { type: 'inline' as const, config: { provider: 'stagehand' } },
+          },
+        },
+      },
+      // No browsers registered
+    });
+    const result = await editor.resolveBuilder();
+    expect(result?.getFeatures()?.agent?.browser).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no matching browser provider is registered'));
+    warnSpy.mockRestore();
+  });
+
+  it('keeps browser feature when provider is registered in __browsers', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const mockBrowserProvider = {
+      id: 'stagehand',
+      name: 'Stagehand',
+      createBrowser: () => ({}) as any,
+    };
+    const editor = new MastraEditor({
+      builder: {
+        features: { agent: { browser: true } },
+        configuration: {
+          agent: {
+            browser: { type: 'inline' as const, config: { provider: 'stagehand' } },
+          },
+        },
+      },
+      browsers: { stagehand: mockBrowserProvider },
+    });
+    const result = await editor.resolveBuilder();
+    expect(result?.getFeatures()?.agent?.browser).toBe(true);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
 
 // ============================================================================

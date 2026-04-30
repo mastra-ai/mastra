@@ -177,6 +177,27 @@ export class MastraEditor implements IMastraEditor {
 
     const { EditorAgentBuilder } = await import('./ee');
     this.__builderInstance = new EditorAgentBuilder(this.__builderConfig);
+
+    // Cross-validate: if the builder has a browser config with a provider that
+    // isn't registered in __browsers, downgrade the feature flag and warn.
+    const browserRef = this.__builderInstance.getConfiguration()?.agent?.browser;
+    const browserFeatureOn = this.__builderInstance.getFeatures()?.agent?.browser === true;
+    if (browserFeatureOn && browserRef?.config?.provider) {
+      const providerId = browserRef.config.provider;
+      if (!this.__browsers.has(providerId)) {
+        const warning =
+          `Agent Builder browser config references provider "${providerId}" but no matching browser ` +
+          `provider is registered in \`editor.browsers\`. The browser toggle will be hidden. ` +
+          `Register the provider: \`new MastraEditor({ browsers: { "${providerId}": yourProvider } })\`.`;
+        // eslint-disable-next-line no-console
+        console.warn(`[mastra:editor] ${warning}`);
+        const features = this.__builderInstance.getFeatures()?.agent;
+        if (features) {
+          features.browser = false;
+        }
+      }
+    }
+
     this.__builderResolved = true;
     return this.__builderInstance;
   }
