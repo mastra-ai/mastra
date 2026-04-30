@@ -283,6 +283,16 @@ Stream logs in real time.
 
 Number of recent log lines to show.
 
+### `mastra studio deploy suggestions`
+
+Shows diagnosis results and suggested fixes for a failed Studio deploy.
+
+```bash
+mastra studio deploy suggestions [deploy-id]
+```
+
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+
 ### `mastra studio projects`
 
 Lists all projects in the current organization.
@@ -298,6 +308,16 @@ Builds and deploys your project to Server on Mastra platform. Works the same as 
 ```bash
 mastra server deploy [dir]
 ```
+
+### `mastra server deploy suggestions`
+
+Shows diagnosis results and suggested fixes for a failed Server deploy.
+
+```bash
+mastra server deploy suggestions [deploy-id]
+```
+
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
 
 ## `mastra server pause`
 
