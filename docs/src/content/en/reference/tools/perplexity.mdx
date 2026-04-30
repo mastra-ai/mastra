@@ -8,29 +8,37 @@ packages:
 
 # Perplexity tools
 
-**Added in:** `@mastra/perplexity@0.1.0-alpha.0`
+Added in: `@mastra/perplexity@0.1.0-alpha.0`
 
 The `@mastra/perplexity` package wraps the [Perplexity Search API](https://docs.perplexity.ai/docs/search/quickstart) as a Mastra-compatible tool. It exposes a factory function that returns a tool created with [`createTool()`](./create-tool) and full Zod input/output schemas.
 
-For chat completions or agentic workflows powered by Perplexity, use Mastra's built-in [Perplexity model provider](/models/providers/perplexity) or [Perplexity Agent provider](/models/providers/perplexity-agent) — those are separate from this Search tool.
+For chat completions or agentic workflows powered by Perplexity, use Mastra's built-in [Perplexity model provider](/models/providers/perplexity) or [Perplexity Agent provider](/models/providers/perplexity-agent). Those are separate from this Search tool.
 
 ## Installation
+
+Install the package alongside Zod:
 
 ```sh npm2yarn
 npm install @mastra/perplexity zod
 ```
 
-## Quick start
+## Usage example
+
+The following example creates the search tool with the default configuration. By default, the tool reads `PERPLEXITY_API_KEY` (with `PPLX_API_KEY` as a fallback) from the environment. Pass `{ apiKey }` explicitly to override.
 
 ```typescript title="src/mastra/tools/index.ts"
 import { createPerplexitySearchTool } from '@mastra/perplexity'
 
 const searchTool = createPerplexitySearchTool()
-// Or pass an explicit API key:
-// const searchTool = createPerplexitySearchTool({ apiKey: 'pplx-...' })
 ```
 
-By default, the tool reads `PERPLEXITY_API_KEY` (with `PPLX_API_KEY` as a fallback) from the environment. Pass `{ apiKey }` explicitly to override.
+To pass an API key explicitly:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createPerplexitySearchTool } from '@mastra/perplexity'
+
+const searchTool = createPerplexitySearchTool({ apiKey: 'pplx-...' })
+```
 
 ## Configuration
 
@@ -61,9 +69,13 @@ All factory functions accept a `PerplexityClientOptions` object:
 ]}
 />
 
-## `createPerplexityTools()`
+## Methods
 
-Returns an object containing all Perplexity tools with a shared configuration.
+### Factory functions
+
+#### `createPerplexityTools(config?)`
+
+Returns an object containing all Perplexity tools that share the supplied configuration.
 
 ```typescript
 import { createPerplexityTools } from '@mastra/perplexity'
@@ -72,13 +84,13 @@ const tools = createPerplexityTools({ apiKey: 'pplx-...' })
 // tools.perplexitySearch
 ```
 
-**Returns:** `{ perplexitySearch }`
+Returns: `{ perplexitySearch }`
 
-## `createPerplexitySearchTool()`
+#### `createPerplexitySearchTool(config?)`
 
 Creates a tool that searches the web using the Perplexity Search API. Returns ranked results with titles, URLs, snippets, and optional publication dates.
 
-**Tool ID:** `perplexity-search`
+The tool is registered with the ID `perplexity-search`.
 
 ```typescript
 import { createPerplexitySearchTool } from '@mastra/perplexity'
@@ -86,7 +98,7 @@ import { createPerplexitySearchTool } from '@mastra/perplexity'
 const searchTool = createPerplexitySearchTool()
 ```
 
-### Input
+##### Input
 
 <PropertiesTable
   content={[
@@ -105,7 +117,7 @@ const searchTool = createPerplexitySearchTool()
     name: 'searchDomainFilter',
     type: 'string[]',
     description:
-      'Restrict (or exclude) results by domain. Prefix a domain with `-` to exclude it (e.g. `-pinterest.com`). Do not mix allow- and deny-list entries in the same call.',
+      'Restrict (or exclude) results by domain. Prefix a domain with `-` to exclude it (for example, `-pinterest.com`). Do not mix allow- and deny-list entries in the same call.',
     isOptional: true,
   },
   {
@@ -129,7 +141,7 @@ const searchTool = createPerplexitySearchTool()
 ]}
 />
 
-### Output
+##### Output
 
 <PropertiesTable
   content={[
@@ -158,6 +170,8 @@ const searchTool = createPerplexitySearchTool()
 />
 
 ## Agent example
+
+The following example registers the search tool on an agent so it can fetch fresh web results before answering.
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
