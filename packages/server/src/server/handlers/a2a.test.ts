@@ -1595,7 +1595,7 @@ describe('A2A Handler', () => {
       });
     });
 
-    it('resubscribes to an existing terminal task as a final status update event', async () => {
+    it('resubscribes to an existing terminal task by returning the current task snapshot and closing', async () => {
       const task: Task = {
         id: 'task-1',
         contextId: 'context-1',
@@ -1630,6 +1630,108 @@ describe('A2A Handler', () => {
       expect(first.value).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
+        result: task,
+      });
+
+      const done = await result.next();
+      expect(done.done).toBe(true);
+    });
+
+    it('returns the current task snapshot first, then streams live artifact and status updates', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [
+          {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+        ],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: task,
+      });
+
+      const secondPromise = result.next();
+      await expect(Promise.race([secondPromise.then(() => 'resolved'), Promise.resolve('pending')])).resolves.toBe(
+        'pending',
+      );
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          ...task,
+          artifacts: [
+            ...task.artifacts!,
+            {
+              artifactId: 'response:data',
+              name: 'response.json',
+              parts: [{ kind: 'data', data: { total: 33.98 } }],
+            },
+          ],
+          status: {
+            state: 'completed',
+            message: {
+              messageId: 'message-2',
+              kind: 'message',
+              role: 'agent',
+              parts: [{ kind: 'text', text: 'Done!' }],
+            },
+            timestamp: '2025-05-08T11:48:38.458Z',
+          },
+        },
+      });
+
+      const second = await secondPromise;
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: 'response:data',
+            name: 'response.json',
+            parts: [{ kind: 'data', data: { total: 33.98 } }],
+          },
+          contextId: 'context-1',
+          kind: 'artifact-update',
+          lastChunk: true,
+          taskId: 'task-1',
+        },
+      });
+
+      const third = await result.next();
+      expect(third.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
         result: {
           contextId: 'context-1',
           final: true,
@@ -1637,12 +1739,12 @@ describe('A2A Handler', () => {
           status: {
             message: {
               kind: 'message',
-              messageId: 'message-1',
+              messageId: 'message-2',
               parts: [{ kind: 'text', text: 'Done!' }],
               role: 'agent',
             },
             state: 'completed',
-            timestamp: '2025-05-08T11:47:38.458Z',
+            timestamp: '2025-05-08T11:48:38.458Z',
           },
           taskId: 'task-1',
         },
@@ -1652,7 +1754,7 @@ describe('A2A Handler', () => {
       expect(done.done).toBe(true);
     });
 
-    it('keeps the stream open for non-terminal tasks until a later update is saved', async () => {
+    it('streams artifact updates even when task status does not change', async () => {
       const task: Task = {
         id: 'task-1',
         contextId: 'context-1',
@@ -1687,43 +1789,22 @@ describe('A2A Handler', () => {
       expect(first.value).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
-        result: {
-          contextId: 'context-1',
-          final: false,
-          kind: 'status-update',
-          status: {
-            message: {
-              kind: 'message',
-              messageId: 'message-1',
-              parts: [{ kind: 'text', text: 'Still working...' }],
-              role: 'agent',
-            },
-            state: 'working',
-            timestamp: '2025-05-08T11:47:38.458Z',
-          },
-          taskId: 'task-1',
-        },
+        result: task,
       });
 
       const secondPromise = result.next();
-      await expect(Promise.race([secondPromise.then(() => 'resolved'), Promise.resolve('pending')])).resolves.toBe(
-        'pending',
-      );
 
       await mockTaskStore.save({
         agentId: 'test-agent',
         data: {
           ...task,
-          status: {
-            state: 'completed',
-            message: {
-              messageId: 'message-2',
-              kind: 'message',
-              role: 'agent',
-              parts: [{ kind: 'text', text: 'Done!' }],
+          artifacts: [
+            {
+              artifactId: 'response:text',
+              name: 'response.txt',
+              parts: [{ kind: 'text', text: 'Partial result' }],
             },
-            timestamp: '2025-05-08T11:48:38.458Z',
-          },
+          ],
         },
       });
 
@@ -1732,25 +1813,17 @@ describe('A2A Handler', () => {
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
-          contextId: 'context-1',
-          final: true,
-          kind: 'status-update',
-          status: {
-            message: {
-              kind: 'message',
-              messageId: 'message-2',
-              parts: [{ kind: 'text', text: 'Done!' }],
-              role: 'agent',
-            },
-            state: 'completed',
-            timestamp: '2025-05-08T11:48:38.458Z',
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Partial result' }],
           },
+          contextId: 'context-1',
+          kind: 'artifact-update',
+          lastChunk: false,
           taskId: 'task-1',
         },
       });
-
-      const done = await result.next();
-      expect(done.done).toBe(true);
     });
 
     it('unregisters resubscribe listeners when the abort signal is triggered', async () => {
@@ -1788,11 +1861,7 @@ describe('A2A Handler', () => {
 
       const first = await result.next();
       expect(first.value).toMatchObject({
-        result: {
-          final: false,
-          kind: 'status-update',
-          taskId: 'task-1',
-        },
+        result: task,
       });
 
       const pendingNext = result.next();

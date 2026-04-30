@@ -6,6 +6,8 @@ import type {
   AgentCard,
   TaskStatus,
   TaskState,
+  Task,
+  Artifact,
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -293,6 +295,38 @@ function extractFinalStructuredObject(value: unknown): Record<string, unknown> |
 
   const objectValue = chunk.payload?.object ?? chunk.object;
   return objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : undefined;
+}
+
+function isTerminalTaskState(state: TaskState) {
+  return ['completed', 'failed', 'canceled'].includes(state);
+}
+
+function artifactIdentity(artifact: Artifact) {
+  return artifact.artifactId || artifact.name;
+}
+
+function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefined) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function didTaskStatusChange(previous: Task, next: Task) {
+  return JSON.stringify(previous.status) !== JSON.stringify(next.status);
+}
+
+function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task }) {
+  const previousArtifacts = new Map((previous.artifacts ?? []).map(artifact => [artifactIdentity(artifact), artifact]));
+  const changedArtifacts = (next.artifacts ?? []).filter(artifact => {
+    const priorArtifact = previousArtifacts.get(artifactIdentity(artifact));
+    return !priorArtifact || !areArtifactsEqual(priorArtifact, artifact);
+  });
+
+  return changedArtifacts.map((artifact, index) => ({
+    kind: 'artifact-update' as const,
+    taskId: next.id,
+    contextId: next.contextId,
+    lastChunk: isTerminalTaskState(next.status.state) && index === changedArtifacts.length - 1,
+    artifact: structuredClone(artifact),
+  }));
 }
 
 export async function handleMessageSend({
@@ -622,30 +656,38 @@ export async function* handleTaskResubscribe({
     throw MastraA2AError.taskNotFound(taskId);
   }
 
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
+  yield createSuccessResponse(requestId, snapshot.task);
+
+  if (isTerminalTaskState(snapshot.task.status.state)) {
+    return;
+  }
 
   while (true) {
     const { task, version } = snapshot;
-    const isFinal = finalStates.includes(task.status.state);
-
-    yield createSuccessResponse(requestId, {
-      kind: 'status-update',
-      taskId: task.id,
-      contextId: task.contextId,
-      status: task.status,
-      final: isFinal,
-    });
-
-    if (isFinal) {
-      return;
-    }
-
     const nextUpdate = await taskStore.waitForNextUpdate({
       agentId,
       taskId,
       afterVersion: version,
       signal: abortSignal,
     });
+
+    for (const artifactUpdate of getTaskArtifactUpdates({ previous: task, next: nextUpdate.task })) {
+      yield createSuccessResponse(requestId, artifactUpdate);
+    }
+
+    if (didTaskStatusChange(task, nextUpdate.task)) {
+      yield createSuccessResponse(requestId, {
+        kind: 'status-update',
+        taskId: nextUpdate.task.id,
+        contextId: nextUpdate.task.contextId,
+        status: nextUpdate.task.status,
+        final: isTerminalTaskState(nextUpdate.task.status.state),
+      });
+    }
+
+    if (isTerminalTaskState(nextUpdate.task.status.state)) {
+      return;
+    }
 
     snapshot = nextUpdate;
   }
