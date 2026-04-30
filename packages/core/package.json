@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.29.1",
+  "version": "1.30.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,16 @@
       "require": {
         "types": "./dist/agent/index.d.ts",
         "default": "./dist/agent/index.cjs"
+      }
+    },
+    "./agent/durable": {
+      "import": {
+        "types": "./dist/agent/durable/index.d.ts",
+        "default": "./dist/agent/durable/index.js"
+      },
+      "require": {
+        "types": "./dist/agent/durable/index.d.ts",
+        "default": "./dist/agent/durable/index.cjs"
       }
     },
     "./agent/message-list": {

@@ -1,5 +1,33 @@
 # @mastra/hono
 
+## 1.4.10
+
+### Patch Changes
+
+- Fixed a regression in 1.29.0 where configuring an agent with channel adapters (e.g. `channels.adapters.slack`) caused server startup to crash with a "Custom API route ... must not start with /api" error. The custom-route prefix validation now skips framework-generated webhook routes. ([#15952](https://github.com/mastra-ai/mastra/pull/15952))
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8), [`5339dbe`](https://github.com/mastra-ai/mastra/commit/5339dbef397378847975bb93856353d6c6a722ca)]:
+  - @mastra/server@1.30.0
+  - @mastra/core@1.30.0
+
+## 1.4.10-alpha.1
+
+### Patch Changes
+
+- Fixed a regression in 1.29.0 where configuring an agent with channel adapters (e.g. `channels.adapters.slack`) caused server startup to crash with a "Custom API route ... must not start with /api" error. The custom-route prefix validation now skips framework-generated webhook routes. ([#15952](https://github.com/mastra-ai/mastra/pull/15952))
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/server@1.30.0-alpha.1
+  - @mastra/core@1.30.0-alpha.1
+
+## 1.4.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`5339dbe`](https://github.com/mastra-ai/mastra/commit/5339dbef397378847975bb93856353d6c6a722ca)]:
+  - @mastra/core@1.29.2-alpha.0
+  - @mastra/server@1.29.2-alpha.0
+
 ## 1.4.9
 
 ### Patch Changes

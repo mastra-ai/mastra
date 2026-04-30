@@ -2,7 +2,6 @@ export { MetricsProvider, useMetrics, isValidPreset, DATE_PRESETS } from './use-
 export type { DatePreset, DateRange } from './use-metrics';
 export { useMetricsFilters } from './use-metrics-filters';
 export { useAgentRunsKpiMetrics } from './use-agent-runs-kpi-metrics';
-export { useAvgScoreKpiMetrics } from './use-avg-score-kpi-metrics';
 export { useModelCostKpiMetrics } from './use-model-cost-kpi-metrics';
 export { useTotalTokensKpiMetrics } from './use-total-tokens-kpi-metrics';
 export { useModelUsageCostMetrics, type ModelUsageRow } from './use-model-usage-cost-metrics';

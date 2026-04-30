@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -38,6 +38,8 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   scores: '/scores/publish',
   feedback: '/feedback/publish',
 };
+
+const DEFAULT_CLOUD_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   traces: 'spans',
@@ -291,6 +293,10 @@ export class CloudExporter extends BaseExporter {
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     // Cloud Observability only process SPAN_ENDED events
     if (event.type !== TracingEventType.SPAN_ENDED) {
+      return;
+    }
+
+    if (!DEFAULT_CLOUD_SPAN_FILTER(event.exportedSpan)) {
       return;
     }
 

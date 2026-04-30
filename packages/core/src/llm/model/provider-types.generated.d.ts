@@ -79,10 +79,12 @@ export type ProviderModelsMap = {
     'gpt-5.1-chat-latest',
     'gpt-5.2',
     'gpt-5.2-chat-latest',
+    'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.4-mini-2026-03-17',
     'gpt-5.4-nano',
     'gpt-5.4-nano-2026-03-17',
+    'gpt-5.4-pro',
     'grok-4-1-fast-non-reasoning',
     'grok-4-1-fast-reasoning',
     'grok-4-fast-non-reasoning',
@@ -2561,7 +2563,7 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model'];
-  readonly 'wafer.ai': readonly ['GLM-5.1', 'Qwen3.5-397B-A17B'];
+  readonly 'wafer.ai': readonly ['DeepSeek-V4-Pro', 'GLM-5.1', 'Qwen3.5-397B-A17B'];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'meta-llama/Llama-3.3-70B-Instruct',
@@ -3167,7 +3169,6 @@ export type ProviderModelsMap = {
     'google/text-embedding-005',
     'google/text-multilingual-embedding-002',
     'inception/mercury-2',
-    'inception/mercury-coder-small',
     'inception/mercury-edit-2',
     'interfaze/interfaze-beta',
     'kwaipilot/kat-coder-pro-v1',

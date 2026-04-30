@@ -4,7 +4,6 @@ import './index.css';
 export * from './ds/components/Threads';
 
 // DS Components - Existing
-export * from './ds/components/Alert';
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Breadcrumb/index';

@@ -1,5 +1,38 @@
 # mastracode
 
+## 0.16.2
+
+### Patch Changes
+
+- Show user message in TUI immediately before async work (thread creation, hooks, sending) for instant feedback regardless of GC pressure or I/O delays ([#15942](https://github.com/mastra-ai/mastra/pull/15942))
+
+- Added changelog display to the update prompt. When a new version is available, the update screen now shows a summary of what's changed, fetched from the published npm package's CHANGELOG.md. ([#15924](https://github.com/mastra-ai/mastra/pull/15924))
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8), [`496e11d`](https://github.com/mastra-ai/mastra/commit/496e11d5b3c65d3a58e791de958554009cbd2eda), [`4b2e4f3`](https://github.com/mastra-ai/mastra/commit/4b2e4f3bc9f5a63dcbfccfa54f9474340c3cea58)]:
+  - @mastra/core@1.30.0
+  - @mastra/observability@1.10.3
+  - @mastra/memory@1.17.4
+
+## 0.16.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8), [`496e11d`](https://github.com/mastra-ai/mastra/commit/496e11d5b3c65d3a58e791de958554009cbd2eda)]:
+  - @mastra/core@1.30.0-alpha.1
+  - @mastra/observability@1.10.3-alpha.0
+
+## 0.16.2-alpha.0
+
+### Patch Changes
+
+- Show user message in TUI immediately before async work (thread creation, hooks, sending) for instant feedback regardless of GC pressure or I/O delays ([#15942](https://github.com/mastra-ai/mastra/pull/15942))
+
+- Added changelog display to the update prompt. When a new version is available, the update screen now shows a summary of what's changed, fetched from the published npm package's CHANGELOG.md. ([#15924](https://github.com/mastra-ai/mastra/pull/15924))
+
+- Updated dependencies [[`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`4b2e4f3`](https://github.com/mastra-ai/mastra/commit/4b2e4f3bc9f5a63dcbfccfa54f9474340c3cea58)]:
+  - @mastra/core@1.29.2-alpha.0
+  - @mastra/memory@1.17.4-alpha.0
+
 ## 0.16.1
 
 ### Patch Changes

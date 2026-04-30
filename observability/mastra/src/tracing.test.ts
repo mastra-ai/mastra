@@ -1479,6 +1479,7 @@ describe('Tracing', () => {
         serviceName: 'test-service',
         name: 'test',
         exporters: [testExporter],
+        logging: { level: 'info' },
       });
 
       const rootSpan = observability.startSpan({
