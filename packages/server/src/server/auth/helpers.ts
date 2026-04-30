@@ -4,7 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
-import { MASTRA_RESOURCE_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -370,6 +370,23 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set('user', user);
+
+    // Store the raw auth token so downstream code (e.g., editor MCP client
+    // resolution) can forward it when connecting to auth-protected MCP servers.
+    // The token may arrive via Authorization header, apiKey query param, or
+    // cookie (SimpleAuth sets `mastra-token`). Check all sources so the
+    // forwarded value is available regardless of how the user authenticated.
+    let effectiveToken = token;
+    if (!effectiveToken && rawRequest instanceof Request) {
+      const cookieHeader = rawRequest.headers.get('cookie');
+      if (cookieHeader) {
+        const match = cookieHeader.match(/mastra-token=([^;]+)/);
+        if (match?.[1]) effectiveToken = match[1];
+      }
+    }
+    if (effectiveToken) {
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, effectiveToken);
+    }
 
     if (typeof authConfig.mapUserToResourceId === 'function') {
       try {

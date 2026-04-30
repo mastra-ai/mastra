@@ -37,6 +37,8 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
+  ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS,
+  ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS,
   ATTR_GEN_AI_AGENT_ID,
   ATTR_GEN_AI_AGENT_NAME,
   ATTR_GEN_AI_TOOL_DESCRIPTION,
@@ -58,9 +60,9 @@ import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
 export interface OtelUsageMetrics {
   [ATTR_GEN_AI_USAGE_INPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]?: number;
+  [ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]?: number;
+  [ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS]?: number;
   'gen_ai.usage.reasoning_tokens'?: number;
-  'gen_ai.usage.cached_input_tokens'?: number;
-  'gen_ai.usage.cache_write_tokens'?: number;
   'gen_ai.usage.audio_input_tokens'?: number;
   'gen_ai.usage.audio_output_tokens'?: number;
 }
@@ -86,14 +88,14 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
     metrics['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
   }
 
-  // Cache read tokens from inputDetails
+  // Cache read input tokens (subset of input_tokens)
   if (usage.inputDetails?.cacheRead !== undefined) {
-    metrics['gen_ai.usage.cached_input_tokens'] = usage.inputDetails.cacheRead;
+    metrics[ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS] = usage.inputDetails.cacheRead;
   }
 
-  // Cache write tokens from inputDetails
+  // Cache creation input tokens (subset of input_tokens)
   if (usage.inputDetails?.cacheWrite !== undefined) {
-    metrics['gen_ai.usage.cache_write_tokens'] = usage.inputDetails.cacheWrite;
+    metrics[ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.inputDetails.cacheWrite;
   }
 
   // Audio tokens from inputDetails/outputDetails

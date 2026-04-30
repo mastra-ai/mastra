@@ -95,8 +95,8 @@ describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
   beforeEach<LocalTestContext>(async ctx => {
-    ctx.inngestPort = 4000;
-    ctx.handlerPort = 4001;
+    ctx.inngestPort = 4100;
+    ctx.handlerPort = 4101;
 
     globServer?.close();
 

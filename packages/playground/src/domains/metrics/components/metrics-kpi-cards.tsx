@@ -3,7 +3,6 @@ import {
   formatCompact,
   formatCost,
   useAgentRunsKpiMetrics,
-  useAvgScoreKpiMetrics,
   useModelCostKpiMetrics,
   useTotalTokensKpiMetrics,
 } from '@mastra/playground-ui';
@@ -43,20 +42,6 @@ export function TotalTokensKpiCard() {
       label="Total Tokens"
       value={data?.value != null ? formatCompact(data.value) : null}
       prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
-      changePct={data?.changePercent ?? null}
-      isLoading={isLoading}
-      isError={isError}
-    />
-  );
-}
-
-export function AvgScoreKpiCard() {
-  const { data, isLoading, isError } = useAvgScoreKpiMetrics();
-  return (
-    <KpiCardView
-      label="Avg Score"
-      value={data?.value != null ? String(data.value) : null}
-      prevValue={data?.previousValue != null ? String(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}

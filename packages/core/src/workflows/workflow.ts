@@ -1608,6 +1608,7 @@ export class Workflow<
       tracingPolicy: options.tracingPolicy,
       onFinish: options.onFinish,
       onError: options.onError,
+      sharePubsub: options.sharePubsub,
     };
 
     if (!executionEngine) {
@@ -2242,6 +2243,8 @@ export class Workflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
+    /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
+    pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -2282,6 +2285,7 @@ export class Workflow<
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
+        pubsub: options?.pubsub,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -2449,9 +2453,15 @@ export class Workflow<
 
     // Forward the parent run's resourceId into the nested run so that
     // child workflow snapshots preserve the tenant/resource association.
+    // When sharePubsub is enabled (e.g. durable agent workflows), pass the parent
+    // pubsub so inner step events are visible to the outer subscriber.
+    // Skip the watch relay in that case — events are already on the shared pubsub
+    // and relaying with the same runId would cause an infinite event loop.
+    const useSharedPubsub = !!this.#options?.sharePubsub;
+    const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     const run = isResume
-      ? await this.createRun({ runId: resume.runId, resourceId })
-      : await this.createRun({ runId, resourceId });
+      ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub })
+      : await this.createRun({ runId, resourceId, pubsub: nestedPubsub });
     const nestedAbortCb = () => {
       abort();
     };
@@ -2461,13 +2471,15 @@ export class Workflow<
       await run.cancel();
     });
 
-    const unwatch = run.watch(event => {
-      void pubsub.publish('nested-watch', {
-        type: 'nested-watch',
-        runId: run.runId,
-        data: { event, workflowId: this.id },
-      });
-    });
+    const unwatch = useSharedPubsub
+      ? () => {}
+      : run.watch(event => {
+          void pubsub.publish('nested-watch', {
+            type: 'nested-watch',
+            runId: run.runId,
+            data: { event, workflowId: this.id },
+          });
+        });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
       (requestContext as RequestContext).set('__mastraWorflowInputData', inputData);
@@ -2955,6 +2967,8 @@ export class Run<
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
     workflowEngineType: WorkflowEngineType;
+    /** Optional pubsub instance. If not provided, a new EventEmitterPubSub is created. */
+    pubsub?: PubSub;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -2963,7 +2977,7 @@ export class Run<
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
     this.#mastra = params.mastra;
-    this.pubsub = new EventEmitterPubSub();
+    this.pubsub = params.pubsub ?? new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;

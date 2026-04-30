@@ -463,6 +463,9 @@ function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
         test: {
           ...options,
           serviceName: 'integration-tests',
+          logging: {
+            level: 'info',
+          },
           exporters: [testExporter],
         },
       },

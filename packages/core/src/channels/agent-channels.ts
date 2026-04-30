@@ -694,6 +694,7 @@ export class AgentChannels {
         path: `/api/agents/${agentId}/channels/${platform}/webhook`,
         method: 'POST',
         requiresAuth: false,
+        _mastraInternal: true,
         createHandler: async () => {
           return async c => {
             // Await initialization to handle serverless cold starts where
