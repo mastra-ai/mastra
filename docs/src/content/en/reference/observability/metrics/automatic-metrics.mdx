@@ -125,7 +125,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 - **Observability is configured**: Verify that your `Mastra` instance has an `observability` config with at least one exporter.
 - **`DefaultExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't persist metrics to Mastra storage. `DefaultExporter` is required for the Studio dashboard.
-- **Storage supports metrics**: Metrics require an OLAP-capable store (ClickHouse or DuckDB). Relational databases such as PostgreSQL, LibSQL, MSSQL, and MongoDB are not supported for metrics.
+- **Storage supports metrics**: Metrics require an OLAP-capable store (ClickHouse or DuckDB). Row-oriented databases (PostgreSQL, LibSQL, MSSQL) and document stores (MongoDB) are not supported for metrics.
 - **Sampling isn't 0%**: If sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
 
 ### Duration metrics are missing
