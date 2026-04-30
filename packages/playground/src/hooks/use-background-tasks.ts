@@ -1,11 +1,12 @@
 import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { StreamBackgroundTasksParams } from '@mastra/client-js';
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
+import type { AgentChunkType } from '@mastra/core/stream';
 import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface BackgroundTaskEvent {
-  type: 'task.completed' | 'task.failed' | 'task.running' | 'task.cancelled' | 'task.output';
   taskId: string;
   toolName: string;
   toolCallId: string;
@@ -57,8 +58,29 @@ export interface UseBackgroundTaskStreamReturn {
  * const completedCount = completedTasks.length;
  * ```
  */
+
+type EventType = Extract<
+  AgentChunkType,
+  {
+    type:
+      | 'background-task-running'
+      | 'background-task-completed'
+      | 'background-task-failed'
+      | 'background-task-cancelled'
+      | 'background-task-output';
+  }
+>;
+
+const EVENT_STATUS_MAP: Record<EventType['type'], BackgroundTaskStatus> = {
+  'background-task-running': 'running',
+  'background-task-output': 'running',
+  'background-task-completed': 'completed',
+  'background-task-failed': 'failed',
+  'background-task-cancelled': 'cancelled',
+};
+
 export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions = {}): UseBackgroundTaskStreamReturn {
-  const { enabled = true, agentId, runId, threadId, resourceId } = options;
+  const { enabled = true, agentId, runId, threadId, resourceId, taskId } = options;
   const client = useMastraClient();
 
   const [tasks, setTasks] = useState<Record<string, BackgroundTaskEvent>>({});
@@ -97,7 +119,7 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
     abortRef.current = controller;
 
     try {
-      const stream = await client.streamBackgroundTasks({ agentId, runId, threadId, resourceId });
+      const stream = await client.streamBackgroundTasks({ agentId, runId, threadId, resourceId, taskId });
 
       if (!stream) {
         setError(new Error('Stream connection failed'));
@@ -116,9 +138,16 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
         const { done, value } = await reader.read();
         if (done) break;
 
-        const event = value as BackgroundTaskEvent;
-        if (event.type !== 'task.output') {
-          setTasks(prev => ({ ...prev, [event.taskId]: { ...prev[event.taskId], ...event } }));
+        const event = value as EventType;
+        if (event.type !== 'background-task-output') {
+          setTasks(prev => ({
+            ...prev,
+            [event.payload.taskId]: {
+              ...prev[event.payload.taskId],
+              ...event.payload,
+              status: EVENT_STATUS_MAP[event.type],
+            },
+          }));
         }
       }
     } catch (err: any) {
@@ -132,7 +161,7 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
         setIsConnected(false);
       }
     }
-  }, [client, agentId, runId, threadId, resourceId, cleanup]);
+  }, [client, agentId, runId, threadId, resourceId, taskId, cleanup]);
 
   useEffect(() => {
     if (!enabled) {
@@ -181,3 +210,12 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
     clearCompletedAndFailedTasks,
   };
 }
+
+export const useGetBackgroundTaskById = (backgroundTaskId: string, enabled: boolean = true) => {
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['background-task', backgroundTaskId],
+    queryFn: () => client.getBackgroundTask(backgroundTaskId),
+    enabled,
+  });
+};

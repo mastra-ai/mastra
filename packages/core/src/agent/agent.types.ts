@@ -613,6 +613,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
+
+  /**
+   * @internal
+   * When true, the in-loop `backgroundTaskCheckStep` returns immediately
+   * without waiting for running tasks to complete. Set by
+   * `agent.streamUntilIdle`, which drives continuation from outside the loop.
+   */
+  _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

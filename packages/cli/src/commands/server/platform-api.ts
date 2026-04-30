@@ -64,13 +64,20 @@ export async function uploadServerDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { projectName?: string; envVars?: Record<string, string> },
+  meta?: { projectName?: string; envVars?: Record<string, string>; disablePlatformObservability?: boolean },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
   // Step 1: Create the deploy — returns upload URL
   const { data, error, response } = await client.POST('/v1/server/deploys', {
-    body: { projectId, projectName: meta?.projectName, envVars: meta?.envVars },
+    body: {
+      projectId,
+      projectName: meta?.projectName,
+      envVars: meta?.envVars,
+      ...(meta?.disablePlatformObservability !== undefined
+        ? { disablePlatformObservability: meta.disablePlatformObservability }
+        : {}),
+    },
   });
 
   if (error) {

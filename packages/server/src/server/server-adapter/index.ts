@@ -373,7 +373,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
     },
-  ): Promise<{ status: number; error: string } | null> {
+  ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     const authConfig = this.mastra.getServer()?.auth;
 
     // No auth config means no auth required
@@ -409,12 +409,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     });
 
     if (result.action === 'next') {
+      // Pass through any refresh headers (e.g. Set-Cookie from transparent session refresh)
+      if (result.headers) {
+        return { status: 200, error: '', headers: result.headers };
+      }
       return null;
     }
 
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
-    return { status: result.status, error: errorBody?.error ?? 'Access denied' };
+    return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
   }
 
   /**
@@ -518,6 +522,25 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Validates that no custom route path collides with the built-in route prefix.
+   * Throws if any route path starts with the server's `apiPrefix`.
+   */
+  protected validateCustomRoutePaths(routes: ApiRoute[]): void {
+    const prefix = this.prefix ?? '';
+    if (!prefix) return;
+    for (const route of routes) {
+      if (route._mastraInternal) continue;
+      if (route.path.startsWith(`${prefix}/`) || route.path === prefix) {
+        throw new Error(
+          `Custom API route "${route.path}" must not start with "${prefix}" — ` +
+            `that path is reserved for built-in Mastra routes. ` +
+            `Choose a different path (e.g. "${route.path.replace(prefix, '/custom')}").`,
+        );
+      }
+    }
+  }
+
+  /**
    * Creates an internal Hono sub-app with all custom API routes registered.
    * Stores the handler on this instance for use by handleCustomRouteRequest().
    * Returns true if custom routes were found and registered.
@@ -540,6 +563,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       c.set('requestContext', c.env?.requestContext ?? new RequestContext());
       await next();
     });
+
+    // Propagate the server's onError handler so errors from custom route handlers
+    // are caught here (not swallowed by Hono's default plain-text 500).
+    const serverOnError = this.mastra.getServer()?.onError;
+    app.onError((err, c) => {
+      if (serverOnError) {
+        return serverOnError(err, c);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
+
+    this.validateCustomRoutePaths(routes);
 
     // Register each custom route
     for (const route of routes) {
@@ -574,7 +609,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   /**
    * Forwards a request to the internal custom route handler.
    * Returns the Response if a custom route matched, or null to fall through.
-   * Used by non-Hono adapter bridges.
    */
   protected async handleCustomRouteRequest(
     url: string,
@@ -596,13 +630,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const init: RequestInit = { method, headers: fetchHeaders };
     if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
-      const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
-      if (contentType.includes('application/json')) {
-        init.body = JSON.stringify(body);
-      } else if (typeof body === 'string') {
-        init.body = body;
-      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+      if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
+        if (body instanceof ReadableStream) {
+          (init as any).duplex = 'half';
+        }
+      } else {
+        const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
+        if (contentType.includes('application/json')) {
+          init.body = JSON.stringify(body);
+        } else if (typeof body === 'string') {
+          init.body = body;
+        }
       }
     }
 

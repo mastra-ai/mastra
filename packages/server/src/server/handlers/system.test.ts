@@ -14,10 +14,13 @@ type MockStorage = {
   };
 };
 
-const createMockMastra = (hasEditor: boolean, storage?: MockStorage) =>
+const createMockMastra = (hasEditor: boolean, storage?: MockStorage, hasObservability = false) =>
   ({
     getEditor: () => (hasEditor ? {} : undefined),
     getStorage: () => storage,
+    observability: {
+      getDefaultInstance: () => (hasObservability ? {} : undefined),
+    },
   }) as any;
 
 describe('System Handlers', () => {
@@ -56,6 +59,7 @@ describe('System Handlers', () => {
         packages,
         isDev: false,
         cmsEnabled: false,
+        observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -71,6 +75,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -87,6 +92,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -102,6 +108,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -118,6 +125,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: true,
         cmsEnabled: false,
+        observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -133,6 +141,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: true,
+        observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -148,6 +157,23 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        observabilityEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
+    });
+
+    it('should return observabilityEnabled true when observability is configured', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, true),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        observabilityEnabled: true,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
@@ -171,6 +197,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        observabilityEnabled: false,
         storageType: 'mock-storage',
         observabilityStorageType: 'MockObservabilityStore',
         observabilityRuntimeStrategy: 'realtime',

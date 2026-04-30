@@ -807,12 +807,13 @@ export function setNestedValue(obj: any, path: string, value: any): void {
       // Use a null-prototype object so intermediate containers cannot be
       // used as a prototype-pollution sink even if a sanitizer check is
       // bypassed upstream.
-      current[key] = Object.create(null);
+      const container = Object.create(null);
+      Object.defineProperty(current, key, { value: container, writable: true, enumerable: true, configurable: true });
     }
     current = current[key];
   }
 
-  current[lastKey] = value;
+  Object.defineProperty(current, lastKey, { value, writable: true, enumerable: true, configurable: true });
 }
 
 export const removeUndefinedValues = (obj: Record<string, any>) => {

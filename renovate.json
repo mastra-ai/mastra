@@ -124,6 +124,46 @@
       "automerge": true
     },
     {
+      "groupName": "Playground kitchen-sink",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/playground/e2e/kitchen-sink/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "kitchen-sink-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Memory integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/memory/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "memory-integration-tests-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Agent-builder integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/agent-builder/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "agent-builder-integration-tests-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "MCP integration tests",
+      "description": "Standalone --ignore-workspace project; needs its own pnpm install to refresh pnpm-lock.yaml",
+      "matchFileNames": ["packages/mcp/integration-tests/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "postUpdateOptions": ["pnpmDedupe"],
+      "additionalBranchPrefix": "mcp-integration-tests-",
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
       "matchPackageNames": ["typescript", "/^@typescript-eslint//", "typescript-eslint"],

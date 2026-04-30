@@ -4,6 +4,7 @@ import {
   AlertDescription,
   AlertTitle,
   Badge,
+  Button,
   Header,
   HeaderAction,
   HeaderTitle,
@@ -49,9 +50,20 @@ interface CmsPromptBlocksEditFormProps {
   blockId: string;
   selectedVersionId: string | null;
   hasDraft: boolean;
+  latestVersionId?: string;
+  activeVersionId?: string;
+  onClearVersion: () => void;
 }
 
-function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }: CmsPromptBlocksEditFormProps) {
+function CmsPromptBlocksEditForm({
+  block,
+  blockId,
+  selectedVersionId,
+  hasDraft,
+  latestVersionId,
+  activeVersionId,
+  onClearVersion,
+}: CmsPromptBlocksEditFormProps) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
@@ -65,6 +77,7 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
+  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
   const dataSource = isViewingVersion ? versionData : block;
 
   const initialValues: PromptBlockFormValues = useMemo(
@@ -142,6 +155,26 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
     }
   }, [form, updateStoredPromptBlock, client, blockId, navigate, paths, queryClient]);
 
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      setIsSubmitting(true);
+      try {
+        await client.getStoredPromptBlock(blockId).activateVersion(selectedVersionId);
+        void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
+        void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+        toast.success('Version published');
+        void navigate(paths.promptBlocksLink());
+      } catch (error) {
+        toast.error(`Failed to publish version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId, client, blockId, queryClient, navigate, paths]);
+
   return (
     <AgentEditLayout
       leftSlot={
@@ -159,10 +192,24 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
         />
       }
     >
-      {isViewingVersion && (
+      {isViewingPreviousVersion && (
         <Alert variant="info" className="m-4 mb-0">
           <AlertTitle>This is a previous version</AlertTitle>
           <AlertDescription as="p">You are seeing a specific version of the prompt block.</AlertDescription>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="light" size="sm" onClick={onClearVersion}>
+              View latest version
+            </Button>
+            <Button
+              type="button"
+              variant="light"
+              size="sm"
+              onClick={handlePublishVersion}
+              disabled={selectedVersionId === activeVersionId || isSubmitting}
+            >
+              {isSubmitting ? 'Publishing...' : 'Publish This Version'}
+            </Button>
+          </div>
         </Alert>
       )}
       <form className="h-full">
@@ -197,6 +244,10 @@ function CmsPromptBlocksEditPage() {
     },
     [setSearchParams],
   );
+
+  const handleClearVersion = useCallback(() => {
+    setSearchParams({});
+  }, [setSearchParams]);
 
   if (isLoading) {
     return (
@@ -268,6 +319,9 @@ function CmsPromptBlocksEditPage() {
         blockId={blockId}
         selectedVersionId={selectedVersionId}
         hasDraft={hasDraft}
+        latestVersionId={latestVersion?.id}
+        activeVersionId={activeVersionId}
+        onClearVersion={handleClearVersion}
       />
     </MainContentLayout>
   );

@@ -10,7 +10,8 @@ import type {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { MastraUnion } from '../action';
+import type { MastraPrimitives, MastraUnion } from '../action';
+export type { MastraPrimitives, MastraUnion };
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
@@ -47,6 +48,12 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
+
+  /**
+   * Flushes the parent stream's pending messages to persistent storage.
+   * See `MastraToolInvocationOptions.flushMessages` for details.
+   */
+  flushMessages?: () => Promise<void>;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
@@ -105,6 +112,19 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * their requestContext (e.g., authenticated API clients, feature flags) to tools.
      */
     requestContext?: RequestContext;
+    /**
+     * Flushes the parent stream's pending messages to persistent storage.
+     *
+     * The agent stream batches message saves through a `SaveQueueManager`
+     * (100ms debounce). Tools that read the thread's persisted history
+     * mid-stream (e.g. cloning the thread, exporting it, handing off to a
+     * sibling agent) must call this first, otherwise the store will be
+     * missing the latest user / assistant messages.
+     *
+     * Populated automatically by the agent tool-call step. No-op when the
+     * stream is not memory-backed.
+     */
+    flushMessages?: () => Promise<void>;
   };
 
 /**

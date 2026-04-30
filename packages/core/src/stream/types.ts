@@ -385,8 +385,11 @@ export interface BackgroundTaskResultPayload {
   taskId: string;
   toolName: string;
   toolCallId: string;
+  agentId: string;
   result: unknown;
   runId: string;
+  completedAt: Date;
+  isError?: boolean;
 }
 
 export interface BackgroundTaskFailedPayload {
@@ -394,13 +397,43 @@ export interface BackgroundTaskFailedPayload {
   toolName: string;
   toolCallId: string;
   runId: string;
+  agentId: string;
   error: { message: string };
+  completedAt: Date;
 }
 
 export interface BackgroundTaskProgressPayload {
   taskIds: string[];
   runningCount: number;
   elapsedMs: number;
+}
+
+export interface BackgroundTaskRunningPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
+export interface BackgroundTaskCancelledPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  completedAt: Date;
+}
+
+export interface BackgroundTaskOutputPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  payload: Extract<AgentChunkType, { type: 'tool-output' }>;
 }
 
 // Network-specific payload interfaces
@@ -728,6 +761,18 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & {
       type: 'background-task-progress';
       payload: BackgroundTaskProgressPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-running';
+      payload: BackgroundTaskRunningPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-cancelled';
+      payload: BackgroundTaskCancelledPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-output';
+      payload: BackgroundTaskOutputPayload;
     });
 
 export type WorkflowStreamEvent =
@@ -878,6 +923,7 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:

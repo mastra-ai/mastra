@@ -233,13 +233,12 @@ describe('Background Tasks handlers', () => {
       // Stream emits running lifecycle event first, then the completed event.
       const first = await reader.read();
       expect(first.done).toBe(false);
-      expect(first.value).toMatchObject({ type: 'task.running', toolName: 'tool' });
+      expect(first.value).toMatchObject({ type: 'background-task-running', payload: { toolName: 'tool' } });
 
       const second = await reader.read();
       expect(second.value).toMatchObject({
-        type: 'task.completed',
-        toolName: 'tool',
-        result: 'stream-result',
+        type: 'background-task-completed',
+        payload: { toolName: 'tool', result: 'stream-result' },
       });
 
       abortController.abort();
@@ -267,9 +266,8 @@ describe('Background Tasks handlers', () => {
 
       const { value } = await reader.read();
       expect(value).toMatchObject({
-        type: 'task.failed',
-        toolName: 'tool',
-        error: expect.objectContaining({ message: 'oops' }),
+        type: 'background-task-failed',
+        payload: { toolName: 'tool', error: { message: 'oops' } },
       });
 
       abortController.abort();
@@ -301,13 +299,12 @@ describe('Background Tasks handlers', () => {
 
       // Running event for target-agent first, then completed.
       const running = await reader.read();
-      expect(running.value).toMatchObject({ type: 'task.running', agentId: 'target-agent' });
+      expect(running.value).toMatchObject({ type: 'background-task-running', payload: { agentId: 'target-agent' } });
 
       const { value } = await reader.read();
       expect(value).toMatchObject({
-        type: 'task.completed',
-        agentId: 'target-agent',
-        result: 'target',
+        type: 'background-task-completed',
+        payload: { agentId: 'target-agent', result: 'target' },
       });
 
       abortController.abort();

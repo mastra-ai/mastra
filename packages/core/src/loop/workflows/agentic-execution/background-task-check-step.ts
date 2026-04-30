@@ -55,6 +55,14 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
         return typedInput;
       }
 
+      // When the outer caller (e.g. `agent.streamUntilIdle`) is driving
+      // continuation from outside, skip the in-loop wait entirely. The outer
+      // will re-enter via `stream([])` once tasks complete. We still mark the
+      // pending flag so `isTaskCompleteStep` knows to skip scoring.
+      if (_internal?.skipBgTaskWait) {
+        return { ...typedInput, backgroundTaskPending: true };
+      }
+
       const taskIds = runningTasks.map(task => task.id);
 
       // Resolve wait timeout: agent config → manager config → undefined (wait forever)
