@@ -1,6 +1,7 @@
 import type { SlackAppManifest, SlackAppCredentials } from './types';
 
 const SLACK_API_BASE = 'https://slack.com/api';
+const SLACK_API_TIMEOUT_MS = 30_000;
 
 export interface SlackManifestClientConfig {
   token: string;
@@ -69,6 +70,7 @@ export class SlackManifestClient {
       body: new URLSearchParams({
         refresh_token: this.#refreshToken,
       }),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
     });
 
     const data = (await response.json()) as {
@@ -113,6 +115,7 @@ export class SlackManifestClient {
         Authorization: `Bearer ${this.#token}`,
       },
       body: JSON.stringify({ manifest }),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
     });
 
     const data = (await response.json()) as {
@@ -163,6 +166,7 @@ export class SlackManifestClient {
         Authorization: `Bearer ${this.#token}`,
       },
       body: JSON.stringify({ app_id: appId }),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
     });
 
     const data = (await response.json()) as {
@@ -188,6 +192,7 @@ export class SlackManifestClient {
         Authorization: `Bearer ${this.#token}`,
       },
       body: JSON.stringify({ app_id: appId, manifest }),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
     });
 
     const data = (await response.json()) as {
@@ -221,6 +226,7 @@ export class SlackManifestClient {
         Authorization: `Bearer ${this.#token}`,
       },
       body: formData,
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
     });
 
     const data = (await response.json()) as {

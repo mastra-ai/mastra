@@ -895,7 +895,9 @@ export class SlackProvider implements ChannelProvider {
     // Set app icon if provided
     if (config.iconUrl) {
       try {
-        const iconResponse = await fetch(config.iconUrl);
+        const iconResponse = await fetch(config.iconUrl, {
+          signal: AbortSignal.timeout(30_000),
+        });
         const iconData = await iconResponse.arrayBuffer();
         await client.setAppIcon(appCredentials.appId, iconData);
       } catch (error) {
@@ -1157,6 +1159,7 @@ export class SlackProvider implements ChannelProvider {
           code,
           redirect_uri: `${baseUrl}/slack/oauth/callback`,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       const tokenData = (await tokenResponse.json()) as {
@@ -1384,6 +1387,7 @@ export class SlackProvider implements ChannelProvider {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ response_type: 'in_channel', text: message }),
+        signal: AbortSignal.timeout(30_000),
       });
     };
 

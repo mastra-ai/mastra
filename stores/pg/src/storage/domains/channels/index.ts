@@ -41,7 +41,7 @@ export class ChannelsPG extends ChannelsStorage {
   "data" JSONB NOT NULL DEFAULT '{}',
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );`,
-      `CREATE INDEX IF NOT EXISTS idx_channel_installations_webhook ON ${installationsTable} ("webhookId");`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook ON ${installationsTable} ("webhookId");`,
       `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON ${installationsTable} ("platform", "agentId");`,
     ];
   }
@@ -90,7 +90,7 @@ export class ChannelsPG extends ChannelsStorage {
 
     // Indexes
     await this.#db.client.none(`
-      CREATE INDEX IF NOT EXISTS idx_channel_installations_webhook
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook
       ON ${installationsTable} ("webhookId")
     `);
     await this.#db.client.none(`

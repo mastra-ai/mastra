@@ -60,7 +60,7 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
               window.location.href = result.authorizationUrl;
               break;
             case 'deep_link':
-              window.open(result.url, '_blank');
+              window.open(result.url, '_blank', 'noopener,noreferrer');
               break;
             case 'immediate':
               // No user action needed — just refetch installations

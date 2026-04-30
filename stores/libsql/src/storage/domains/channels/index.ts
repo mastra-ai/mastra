@@ -43,7 +43,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
 
     // Indexes
     await this.#client.execute(
-      `CREATE INDEX IF NOT EXISTS idx_channel_installations_webhook ON "${TABLE_INSTALLATIONS}" ("webhookId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook ON "${TABLE_INSTALLATIONS}" ("webhookId")`,
     );
     await this.#client.execute(
       `CREATE INDEX IF NOT EXISTS idx_channel_installations_platform_agent ON "${TABLE_INSTALLATIONS}" ("platform", "agentId")`,

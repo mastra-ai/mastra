@@ -520,6 +520,9 @@ export class Agent<
    * @internal
    */
   setChannels(agentChannels: AgentChannels): void {
+    if (this.#agentChannels && this.#agentChannels !== agentChannels) {
+      this.logger?.debug(`Replacing existing AgentChannels on agent "${this.name}"`);
+    }
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
   }
