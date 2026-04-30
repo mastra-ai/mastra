@@ -24,6 +24,10 @@ export function sanitizePipedOutput(raw: string): string {
   // Strip ANSI escapes first
   let text = raw.replace(ANSI_RE, '');
 
+  // Strip binary control characters (everything below 0x20 except \t, \n, \r)
+  // eslint-disable-next-line no-control-regex
+  text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
   // Simulate \r overwrites: for each line, the last \r-segment wins
   text = text
     .split('\n')
