@@ -8,7 +8,7 @@ import {
   AgentChannels,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
-import { type ChannelsStorage, type ChannelInstallation, InMemoryChannelsStorage } from '@mastra/core/storage';
+import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/storage';
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
@@ -341,17 +341,16 @@ export class SlackProvider implements ChannelProvider {
           }
         }
       } catch (err) {
-        console.warn('[Slack] Mastra storage not available, using in-memory (data will not persist)', err);
+        throw new Error(
+          '[Slack] Failed to resolve Mastra storage. Ensure your Mastra instance has storage configured (e.g. LibSQLStore or PostgresStore).',
+          { cause: err },
+        );
       }
     }
 
-    // Fall back to in-memory
-    if (!this.#storage) {
-      console.warn('[Slack] No persistent storage available, using in-memory (data will not persist across restarts)');
-      this.#storage = new InMemoryChannelsStorage();
-    }
-    this.#storageResolved = true;
-    return this.#storage;
+    throw new Error(
+      '[Slack] No storage available. SlackProvider requires persistent storage — configure a storage backend on your Mastra instance.',
+    );
   }
 
   // ===========================================================================

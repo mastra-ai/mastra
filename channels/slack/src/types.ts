@@ -42,7 +42,7 @@ export interface SlackProviderConfig {
   /**
    * Custom storage for installations.
    * Defaults to using Mastra's ChannelsStorage from the global storage.
-   * Falls back to InMemoryChannelsStorage if no global storage is configured.
+   * Throws if no persistent storage is available.
    */
   storage?: ChannelsStorage;
 
