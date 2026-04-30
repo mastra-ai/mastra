@@ -49,10 +49,7 @@ export function McpAppViewer({ html, title = 'MCP App', onToolCall, className }:
         const { id, toolName, args } = data;
         try {
           const result = await onToolCall(toolName, args ?? {});
-          iframeRef.current.contentWindow?.postMessage(
-            { type: 'mcp-app:tool-result', id, result },
-            '*',
-          );
+          iframeRef.current.contentWindow?.postMessage({ type: 'mcp-app:tool-result', id, result }, '*');
         } catch (err) {
           iframeRef.current.contentWindow?.postMessage(
             {
