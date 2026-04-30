@@ -1229,7 +1229,8 @@ export class SlackProvider implements ChannelProvider {
         await this.#channelConfig.onInstall(installation);
       }
 
-      console.log(`[Slack] ✓ Agent "${pending.agentId}" installed to team "${tokenData.team!.name}"`);
+      const teamName = tokenData.team?.name ?? '';
+      console.log(`[Slack] ✓ Agent "${pending.agentId}" installed to team "${teamName}"`);
 
       // Redirect back to the page the user came from, or the configured redirect path
       const successUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
@@ -1237,7 +1238,7 @@ export class SlackProvider implements ChannelProvider {
       redirect.searchParams.set('channel_connected', 'true');
       redirect.searchParams.set('platform', 'slack');
       redirect.searchParams.set('agent', pending.agentId);
-      redirect.searchParams.set('team', tokenData.team!.name);
+      redirect.searchParams.set('team', teamName);
       return c.redirect(redirect.toString());
     } catch (error) {
       console.error('[Slack] OAuth callback error:', error);

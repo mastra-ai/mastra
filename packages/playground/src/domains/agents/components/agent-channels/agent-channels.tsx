@@ -59,9 +59,13 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
             case 'oauth':
               window.location.href = result.authorizationUrl;
               break;
-            case 'deep_link':
-              window.open(result.url, '_blank', 'noopener,noreferrer');
+            case 'deep_link': {
+              const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
+              if (!popup) {
+                toast.error('Popup blocked — please allow popups and try again');
+              }
               break;
+            }
             case 'immediate':
               // No user action needed — just refetch installations
               break;
@@ -103,6 +107,7 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
             </Txt>
           </div>
           <button
+            type="button"
             onClick={handleDisconnect}
             disabled={isDisconnecting}
             className="shrink-0 text-[11px] text-neutral5 hover:text-accent2 transition-colors disabled:opacity-50"
