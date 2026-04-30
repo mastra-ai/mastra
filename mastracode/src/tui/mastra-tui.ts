@@ -2,11 +2,12 @@
  * Main TUI class for Mastra Code.
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
-import { ANTHROPIC_OAUTH_PROVIDER_ID } from '../auth/claude-max-warning.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
   OnboardingInlineComponent,
@@ -17,15 +18,19 @@ import {
   saveSettings,
 } from '../onboarding/index.js';
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
-import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
+import {
+  resolveThreadActiveModelPackId,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  MEMORY_GATEWAY_PROVIDER,
+} from '../onboarding/settings.js';
 import {
   detectPackageManager,
+  fetchChangelog,
   fetchLatestVersion,
   getInstallCommand,
   isNewerVersion,
   runUpdate,
 } from '../utils/update-check.js';
-import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 
 import type { SlashCommandContext } from './commands/types.js';
@@ -73,6 +78,11 @@ export type { MastraTUIOptions } from './state.js';
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
+const CAFFEINATE_ARGS = ['-i', '-m'];
+
+function shouldUseCaffeinate(): boolean {
+  return process.platform === 'darwin' && process.env.MASTRACODE_DISABLE_CAFFEINATE !== '1';
+}
 
 export function consumePendingImages(
   text: string,
@@ -91,6 +101,8 @@ export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
+  private caffeinateProcess: ChildProcess | null = null;
+  private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -161,16 +173,52 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided
+    // Process initial message if provided (e.g. piped stdin content).
+    // Runs the same validation as interactive input: model check, prompt hooks.
     if (this.state.options.initialMessage) {
-      this.fireMessage(this.state.options.initialMessage);
+      const msg = this.state.options.initialMessage;
+
+      if (!this.state.harness.hasModelSelected()) {
+        showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+      } else {
+        const messageId = `user-${Date.now()}`;
+        addUserMessage(this.state, {
+          id: messageId,
+          role: 'user',
+          content: [{ type: 'text', text: msg }],
+          createdAt: new Date(),
+        });
+        this.state.ui.requestRender();
+
+        const allowed = await this.runUserPromptHook(msg);
+        if (!allowed) {
+          const comp = this.state.messageComponentsById.get(messageId);
+          if (comp) {
+            this.state.chatContainer.removeChild(comp as never);
+            this.state.messageComponentsById.delete(messageId);
+            this.state.ui.requestRender();
+          }
+        } else {
+          try {
+            if (this.state.pendingNewThread) {
+              await this.state.harness.createThread();
+              this.state.pendingNewThread = false;
+            }
+            this.fireMessage(msg);
+          } catch (error) {
+            this.state.pendingNewThread = false;
+            showError(this.state, error instanceof Error ? error.message : 'Failed to start thread');
+          }
+        }
+      }
     }
 
     // Main interactive loop — never blocks on streaming,
     // so the editor stays responsive for queued follow-ups.
     while (true) {
       const userInput = await this.getUserInput();
-      if (!userInput.trim()) continue;
+      // allow space as transparent continue (for recovering from api errors manually)
+      if (!userInput.trim() && userInput !== ' ') continue;
 
       try {
         // Handle slash commands
@@ -185,29 +233,21 @@ export class MastraTUI {
           continue;
         }
 
-        // Create thread lazily on first message (may load last-used model)
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
-        // Check if a model is selected
+        // Check if a model is selected (sync — fast, no reason to defer)
         if (!this.state.harness.hasModelSelected()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
-          continue;
-        }
-
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
           continue;
         }
 
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        // Add user message to chat immediately
+        // Show the user message in the TUI right away — before any async work
+        // (thread creation, hooks, sending) so the UI feels instant even when
+        // GC pauses or I/O slow things down.
+        const messageId = `user-${Date.now()}`;
         addUserMessage(this.state, {
-          id: `user-${Date.now()}`,
+          id: messageId,
           role: 'user',
           content: [
             { type: 'text', text: content },
@@ -220,6 +260,25 @@ export class MastraTUI {
           createdAt: new Date(),
         });
         this.state.ui.requestRender();
+
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          // Hook blocked the message — remove it from the chat
+          const comp = this.state.messageComponentsById.get(messageId);
+          if (comp) {
+            this.state.chatContainer.removeChild(comp as never);
+            this.state.messageComponentsById.delete(messageId);
+            this.state.ui.requestRender();
+          }
+          continue;
+        }
+
+        // Create thread lazily on first message (may load last-used model).
+        // Runs after the hook check so we don't create a thread for blocked messages.
+        if (this.state.pendingNewThread) {
+          await this.state.harness.createThread();
+          this.state.pendingNewThread = false;
+        }
 
         // Normal send — fire and forget; events handle the rest
         this.fireMessage(content, images);
@@ -262,6 +321,8 @@ export class MastraTUI {
    * Stop the TUI and clean up.
    */
   stop(): void {
+    this.stopCaffeinate();
+
     // Run SessionEnd hooks (best-effort, don't await)
     const hookMgr = this.state.hookManager;
     if (hookMgr) {
@@ -365,9 +426,6 @@ export class MastraTUI {
     // Render existing tasks if any
     await renderExistingTasks(this.state);
 
-    // One-time Claude Max OAuth warning at startup
-    await this.checkClaudeMaxOAuthWarning();
-
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
@@ -401,18 +459,117 @@ export class MastraTUI {
   }
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
-    await dispatchEvent(event, this.getEventContext(), this.state);
-
-    if (event.type === 'thread_created') {
-      await this.syncThreadActivePackMetadata(event.thread);
-    } else if (event.type === 'thread_changed') {
-      await this.syncThreadActivePackMetadata();
+    if (event.type === 'agent_start') {
+      this.startCaffeinate();
+      this.lastStreamError = null;
     }
 
-    if (event.type === 'agent_end') {
-      const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
-      await this.runStopHook(stopReason);
+    if (event.type === 'error' && 'error' in event && !event.retryable) {
+      // Only capture errors that look like stream/agent failures, not OM or tool errors
+      const msg = event.error?.message || String(event.error);
+      const isOmError = /observational memory/i.test(msg);
+      if (!isOmError) {
+        this.lastStreamError = msg;
+      }
     }
+
+    try {
+      await dispatchEvent(event, this.getEventContext(), this.state);
+
+      if (event.type === 'thread_created') {
+        await this.syncThreadActivePackMetadata(event.thread);
+      } else if (event.type === 'thread_changed') {
+        await this.syncThreadActivePackMetadata();
+      }
+
+      if (event.type === 'agent_end') {
+        const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+        await this.runStopHook(stopReason);
+
+        if (event.reason === 'error' && this.lastStreamError) {
+          this.emitErrorFeedback(this.lastStreamError);
+          this.lastStreamError = null;
+        }
+      }
+    } finally {
+      if (event.type === 'agent_end') {
+        this.stopCaffeinate();
+      }
+    }
+  }
+
+  private emitErrorFeedback(errorMessage: string): void {
+    const harness = this.state.harness;
+    const traceId = harness.getCurrentTraceId() ?? undefined;
+    const runId = harness.getCurrentRunId() ?? undefined;
+    const threadId = harness.getCurrentThreadId() ?? undefined;
+
+    if (!traceId && !runId && !threadId) return;
+
+    const mastra = harness.getMastra();
+    const observability = mastra?.observability;
+    if (!observability?.addFeedback) return;
+
+    const comment = errorMessage.length > 500 ? errorMessage.slice(0, 500) + '…' : errorMessage;
+
+    observability
+      .addFeedback({
+        traceId,
+        correlationContext: { traceId, runId },
+        feedback: {
+          feedbackType: 'thumbs',
+          feedbackSource: 'mastracode',
+          feedbackUserId: 'system',
+          value: 0,
+          comment: `Stream error: ${comment}`,
+          metadata: {
+            ...(threadId ? { threadId } : {}),
+            ...(runId ? { runId } : {}),
+            autoGenerated: true,
+          },
+        },
+      })
+      .catch(() => {
+        // Fire-and-forget — don't let feedback failures affect the TUI
+      });
+  }
+
+  private startCaffeinate(): void {
+    if (!shouldUseCaffeinate() || this.caffeinateProcess) {
+      return;
+    }
+
+    try {
+      const child = spawn('caffeinate', CAFFEINATE_ARGS, {
+        stdio: 'ignore',
+      });
+
+      child.once('error', () => {
+        if (this.caffeinateProcess === child) {
+          this.caffeinateProcess = null;
+        }
+      });
+
+      child.once('exit', () => {
+        if (this.caffeinateProcess === child) {
+          this.caffeinateProcess = null;
+        }
+      });
+
+      this.caffeinateProcess = child;
+    } catch {
+      this.caffeinateProcess = null;
+    }
+  }
+
+  private stopCaffeinate(): void {
+    const child = this.caffeinateProcess;
+    if (!child) {
+      return;
+    }
+
+    this.caffeinateProcess = null;
+    child.kill();
   }
 
   private async buildProviderAccess(): Promise<ProviderAccess> {
@@ -431,6 +588,13 @@ export class MastraTUI {
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
     };
+    // Gateway covers all providers
+    const mgKey =
+      this.state.authStorage?.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    if (mgKey) {
+      if (!access.anthropic) access.anthropic = 'apikey';
+      if (!access.openai) access.openai = 'apikey';
+    }
     // Include all other providers that have API keys configured
     const seen = new Set(Object.keys(access));
     for (const m of models) {
@@ -552,31 +716,6 @@ export class MastraTUI {
         resolve(text);
       };
     });
-  }
-
-  /**
-   * One-time startup check: if the user has Anthropic OAuth credentials and
-   * hasn't yet acknowledged the Claude Max ToS warning, show it now.
-   */
-  private async checkClaudeMaxOAuthWarning(): Promise<void> {
-    const authStorage = this.state.authStorage;
-    if (!authStorage || !authStorage.isLoggedIn(ANTHROPIC_OAUTH_PROVIDER_ID)) return;
-
-    const settings = loadSettings();
-    if (settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt) return;
-
-    const result = await showClaudeMaxOAuthWarning(this.state, 'startup');
-
-    if (result === 'continue') {
-      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
-      saveSettings(settings);
-    } else if (result === 'remove') {
-      authStorage.logout(ANTHROPIC_OAUTH_PROVIDER_ID);
-      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
-      saveSettings(settings);
-      await this.refreshModelAuthStatus();
-    }
-    // 'cancel' (Esc) — leave settings unchanged, will show again next startup
   }
 
   /**
@@ -766,13 +905,6 @@ export class MastraTUI {
           resolve();
         },
         onLogin: (providerId: string, done: () => void) => {
-          // Persist Claude Max OAuth warning acknowledgement when proceeding
-          // through onboarding (the warning step already showed in the wizard).
-          if (providerId === ANTHROPIC_OAUTH_PROVIDER_ID) {
-            const s = loadSettings();
-            s.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
-            saveSettings(s);
-          }
           this.performLogin(providerId).then(async () => {
             try {
               const updatedAccess = await this.buildProviderAccess();
@@ -899,6 +1031,10 @@ export class MastraTUI {
 
     settings.models.activeOmPackId = omPack.id;
     settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+    // Clear any per-role overrides from prior /om use so the newly-selected
+    // pack (or custom modelId above) applies to both observer and reflector.
+    settings.models.observerModelOverride = null;
+    settings.models.reflectorModelOverride = null;
     settings.preferences.yolo = result.yolo;
 
     // Clear any manual subagent overrides so they derive from the active pack
@@ -962,11 +1098,11 @@ export class MastraTUI {
       return;
     }
 
-    const pm = await detectPackageManager();
+    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
   }
 
   /**
@@ -976,11 +1112,18 @@ export class MastraTUI {
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
+    changelog: string | null,
   ): Promise<void> {
+    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
+    if (changelog) {
+      question += `\n\nWhat's new:\n${changelog}`;
+    }
+    question += `\n\nWould you like to update now?`;
+
     return new Promise<void>(resolve => {
       const questionComponent = new AskQuestionInlineComponent(
         {
-          question: `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}). Would you like to update now?`,
+          question,
           options: [
             { label: 'Yes', description: 'Update and restart' },
             { label: 'No', description: 'Skip this version' },

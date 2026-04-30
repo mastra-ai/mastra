@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -14,7 +14,7 @@ import type {
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import type { ToolAction } from '../tools';
-import { MastraMemory } from './memory';
+import { filterSystemReminderMessages, MastraMemory } from './memory';
 import type {
   StorageThreadType,
   MemoryConfigInternal,
@@ -96,7 +96,11 @@ export class MockMemory extends MastraMemory {
   }
 
   async recall(
-    args: StorageListMessagesInput & { threadConfig?: MemoryConfigInternal; vectorSearchString?: string },
+    args: StorageListMessagesInput & {
+      threadConfig?: MemoryConfigInternal;
+      vectorSearchString?: string;
+      includeSystemReminders?: boolean;
+    },
   ): Promise<{
     messages: MastraDBMessage[];
     usage?: { tokens: number };
@@ -107,10 +111,18 @@ export class MockMemory extends MastraMemory {
   }> {
     const memoryStorage = await this.getMemoryStore();
     // Extract only the StorageListMessagesInput properties, excluding threadConfig and vectorSearchString
-    const { threadConfig: _threadConfig, vectorSearchString: _vectorSearchString, ...listMessagesArgs } = args;
+    const {
+      threadConfig: _threadConfig,
+      vectorSearchString: _vectorSearchString,
+      includeSystemReminders,
+      ...listMessagesArgs
+    } = args;
     const result = await memoryStorage.listMessages(listMessagesArgs);
 
-    return result;
+    return {
+      ...result,
+      messages: filterSystemReminderMessages(result.messages, includeSystemReminders),
+    };
   }
 
   async deleteThread(threadId: string) {

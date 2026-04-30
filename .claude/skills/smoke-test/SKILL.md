@@ -1,12 +1,14 @@
 ---
 name: smoke-test
-description: Create a Mastra project using create-mastra and smoke test the studio in Chrome
+description: Create a Mastra project using create-mastra and smoke test the studio in Chrome using Chrome MCP server
 model: claude-opus-4-5
 ---
 
 # Smoke Test Skill
 
 Creates a new Mastra project using `create-mastra@<tag>` and performs smoke testing of the Mastra Studio in Chrome.
+
+**This skill is for Claude Code with Chrome MCP server.** For MastraCode with built-in browser tools, use `mastracode-smoke-test` instead.
 
 ## Usage
 
@@ -62,7 +64,9 @@ Creates a new Mastra project using `create-mastra@<tag>` and performs smoke test
 
 ## Prerequisites
 
-This skill requires the Claude-in-Chrome MCP server for browser automation. Ensure it's configured and running.
+This skill requires the **Chrome MCP server** (Claude-in-Chrome) for browser automation. Ensure it's configured and running.
+
+The Chrome MCP server provides tools like `tabs_create_mcp`, `tabs_context_mcp`, `navigate_mcp`, `click_mcp`, `type_mcp`, and `screenshot_mcp`.
 
 ## Execution Steps
 
@@ -102,54 +106,45 @@ After creation, verify the project has:
 - `src/mastra/index.ts` exporting a Mastra instance
 - `.env` file (may need to be created)
 
-### Step 2.5: Add Agent Network for Network Mode Testing
+### Step 2.5: Add Browser Agent for Browser Testing
 
-To enable Network mode testing, add an agent network configuration:
+To test browser functionality, add a browser-enabled agent:
 
-1. **Create activity-agent.ts** in `src/mastra/agents/`:
+1. **Install browser packages**:
+
+```sh
+<pm> add @mastra/stagehand
+# or for deterministic browser automation:
+<pm> add @mastra/agent-browser
+```
+
+2. **Create browser-agent.ts** in `src/mastra/agents/`:
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { StagehandBrowser } from '@mastra/stagehand';
 
-export const activityAgent = new Agent({
-  id: 'activity-agent',
-  name: 'Activity Agent',
-  instructions: `You are a helpful activity planning assistant that suggests activities based on weather conditions.`,
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  name: 'Browser Agent',
+  instructions: `You are a helpful assistant that can browse the web to find information.`,
   model: '<provider>/<model>', // e.g., 'openai/gpt-4o'
   memory: new Memory(),
+  browser: new StagehandBrowser({
+    headless: false,
+  }),
 });
 ```
 
-2. **Create planner-network.ts** in `src/mastra/agents/`:
+3. **Update index.ts** to register the browser agent:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { weatherAgent } from './weather-agent';
-import { activityAgent } from './activity-agent';
-
-export const plannerNetwork = new Agent({
-  id: 'planner-network',
-  name: 'Planner Network',
-  instructions: `You are a coordinator that manages weather and activity agents.`,
-  model: '<provider>/<model>',
-  agents: { weatherAgent, activityAgent }, // This makes it a network agent
-  memory: new Memory(), // Memory is REQUIRED for network agents
-});
-```
-
-3. **Update index.ts** to register the new agents:
-
-```typescript
-import { activityAgent } from './agents/activity-agent';
-import { plannerNetwork } from './agents/planner-network';
+import { browserAgent } from './agents/browser-agent';
 
 // In Mastra config:
-agents: { weatherAgent, activityAgent, plannerNetwork },
+agents: { weatherAgent, browserAgent },
 ```
-
-**Note**: Network mode requires `agents` property (sub-agents) and `memory` (mandatory).
 
 ### Step 3: Configure Environment Variables
 
@@ -223,29 +218,28 @@ Perform the following smoke tests using the Chrome automation tools:
 
 **Agent Chat**
 
-- [ ] Send a test message to the agent (e.g., "Hello, can you help me?")
+- [ ] Send a test message to the agent (e.g., "What's the weather in Tokyo?")
 - [ ] Wait for response
 - [ ] Verify response appears in the chat
 - [ ] Take a screenshot of the conversation
 
-**Network Mode** (`/agents/planner-network/chat`)
+**Browser Agent** (`/agents/browser-agent/chat`) - if browser agent was added
 
-- [ ] Navigate to the planner-network agent
-- [ ] Select "Network" in Chat Method settings
-- [ ] Send a message: "What activities can I do in [city] based on the weather?"
-- [ ] Verify network coordination (shows weatherAgent indicator)
-- [ ] Verify completion check shows success
+- [ ] Navigate to the browser-agent
+- [ ] Send a message: "Go to example.com and tell me what you see"
+- [ ] Verify the agent launches a browser and extracts content
+- [ ] Verify response includes page content
 - [ ] Take a screenshot
 
 **Tools Page** (`/tools`)
 
 - [ ] Navigate to tools page
-- [ ] Verify tools list loads (should show weatherTool)
+- [ ] Verify tools list loads (should show get-weather tool)
 - [ ] Take a screenshot
 
-**Tool Execution** (`/tools/weatherTool`)
+**Tool Execution** (`/tools/get-weather`)
 
-- [ ] Click on the weatherTool to open detail page
+- [ ] Click on the get-weather tool to open detail page
 - [ ] Find the city input field and enter a test city (e.g., "Tokyo")
 - [ ] Click Submit button
 - [ ] Wait for execution to complete
@@ -255,12 +249,12 @@ Perform the following smoke tests using the Chrome automation tools:
 **Workflows Page** (`/workflows`)
 
 - [ ] Navigate to workflows page
-- [ ] Verify workflows list loads (should show weatherWorkflow)
+- [ ] Verify workflows list loads (should show weather-workflow)
 - [ ] Take a screenshot
 
-**Workflow Execution** (`/workflows/weatherWorkflow`)
+**Workflow Execution** (`/workflows/weather-workflow`)
 
-- [ ] Click on the weatherWorkflow to open detail page
+- [ ] Click on the weather-workflow to open detail page
 - [ ] Verify visual graph displays (shows workflow steps)
 - [ ] Find the city input field and enter a test city (e.g., "London")
 - [ ] Click Run button
@@ -284,18 +278,11 @@ Perform the following smoke tests using the Chrome automation tools:
 - [ ] Verify timeline view shows steps and timing
 - [ ] Take a screenshot
 
-**Scorers Page** (`/scorers`)
+**Scorers Page** (`/evaluation?tab=scorers`)
 
-- [ ] Navigate to scorers page
+- [ ] Navigate to `/evaluation?tab=scorers` (NOT `/scorers` - that route doesn't exist)
 - [ ] Verify scorers list loads (shows 3 example scorers)
 - [ ] Take a screenshot
-
-**Scorer Detail** (use direct URL navigation)
-
-- [ ] Navigate directly to `/scorers/completeness-scorer` (don't click - use URL navigation)
-- [ ] Verify scorer detail page loads with name, description, and scores table
-- [ ] Take a screenshot
-- [ ] Note: Use direct URL navigation for scorer details due to client-side routing timing issues
 
 **Additional Pages (verify load only)**
 
@@ -343,20 +330,27 @@ After completing all tests, provide a summary:
 - Check server logs for errors
 - Ensure LLM provider API is accessible
 
+**Browser agent fails**
+
+- Ensure Playwright browsers are installed: `pnpm exec playwright install chromium`
+- Check that no other browser instance is blocking
+
 ## Studio Routes
 
-| Feature         | Route              |
-| --------------- | ------------------ |
-| Agents          | `/agents`          |
-| Workflows       | `/workflows`       |
-| Tools           | `/tools`           |
-| Scorers         | `/scorers`         |
-| Observability   | `/observability`   |
-| MCP Servers     | `/mcps`            |
-| Processors      | `/processors`      |
-| Templates       | `/templates`       |
-| Request Context | `/request-context` |
-| Settings        | `/settings`        |
+| Feature         | Route                     |
+| --------------- | ------------------------- |
+| Agents          | `/agents`                 |
+| Workflows       | `/workflows`              |
+| Tools           | `/tools`                  |
+| Evaluation      | `/evaluation`             |
+| Scorers         | `/evaluation?tab=scorers` |
+| Observability   | `/observability/traces`   |
+| Logs            | `/observability/logs`     |
+| MCP Servers     | `/mcps`                   |
+| Processors      | `/processors`             |
+| Templates       | `/templates`              |
+| Request Context | `/request-context`        |
+| Settings        | `/settings`               |
 
 ## Notes
 
@@ -365,6 +359,5 @@ After completing all tests, provide a summary:
 - Take screenshots at each major step for documentation/debugging
 - Keep the dev server running in the background during testing
 - Always use explicit flags (`-c`, `-l`, `-e`) to ensure non-interactive execution
-- Network mode requires the `agents` property AND `memory` in the Agent constructor
-- Scorer detail pages may have issues with browser automation but work manually
+- Browser agent testing validates the new browser automation features
 - Observability traces appear automatically after running agents or workflows

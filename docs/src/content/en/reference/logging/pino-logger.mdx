@@ -10,8 +10,6 @@ packages:
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/mastra-cloud/observability#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
-
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
@@ -57,8 +55,85 @@ export const mastra = new Mastra({
     isOptional: true,
     description: 'Custom Pino formatters for log serialization.',
   },
+  {
+    name: 'redact',
+    type: "pino.LoggerOptions['redact']",
+    isOptional: true,
+    description: 'Paths or options for redacting sensitive fields from log output (Pino `redact`).',
+  },
+  {
+    name: 'prettyPrint',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'When false, disables `pino-pretty` and writes raw JSON lines (useful for log aggregators).',
+  },
+  {
+    name: 'mixin',
+    type: 'pino.MixinFn',
+    isOptional: true,
+    description:
+      'Pino mixin function merged into every log object (for example request-scoped `traceId` or other shared metadata).',
+  },
+  {
+    name: 'customLevels',
+    type: 'Record<string, number>',
+    isOptional: true,
+    description:
+      'Custom log levels and numeric values, forwarded to Pino. Standard severity is still logged via `debug`, `info`, `warn`, and `error`; extra levels follow Pino’s custom-level behavior.',
+  },
 ]}
 />
+
+## Log enrichment with `mixin`
+
+Use `mixin` when you want the same structured fields on every line (for correlation with the rest of your services):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+
+function getTraceContext() {
+  return { traceId: 'abc-123' }
+}
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+    mixin() {
+      return getTraceContext()
+    },
+  }),
+})
+```
+
+## Custom levels
+
+`customLevels` is passed through to Pino. `PinoLogger` only exposes `debug`, `info`, `warn`, and `error`; for any extra level name (for example `audit`), subclass and forward to the underlying Pino instance:
+
+```typescript title="src/mastra/logger.ts"
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+
+type AuditLevel = 'audit'
+
+class MastraPinoWithAudit extends PinoLogger<AuditLevel> {
+  audit(message: string, meta: Record<string, unknown> = {}) {
+    this.logger.audit(meta, message)
+  }
+}
+
+const logger = new MastraPinoWithAudit({
+  name: 'Mastra',
+  level: 'info',
+  customLevels: { audit: 35 },
+})
+
+export const mastra = new Mastra({ logger })
+```
+
+Numeric values follow Pino’s ordering (built-in levels use 10–60). A level of `35` sits between `info` (30) and `warn` (40), so with `level: 'info'` both `info` and `audit` lines are emitted.
 
 ## File transport (structured logs)
 

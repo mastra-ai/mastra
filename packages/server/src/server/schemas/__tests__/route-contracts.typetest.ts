@@ -6,7 +6,7 @@
  * This file is NOT executed — it's only type-checked by `tsc --noEmit`.
  * If this file compiles without errors, the route contract types work correctly.
  */
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createRoute } from '../../server-adapter/routes/route-builder';
 import type {
@@ -51,6 +51,12 @@ type _ListTools = RouteContract<'GET /tools'>;
 
 // Memory routes
 type _GetThreads = RouteContract<'GET /memory/threads'>;
+
+// Conversation routes
+type _CreateConversation = RouteContract<'POST /v1/conversations'>;
+type _GetConversation = RouteContract<'GET /v1/conversations/:conversationId'>;
+type _GetConversationItems = RouteContract<'GET /v1/conversations/:conversationId/items'>;
+type _DeleteConversation = RouteContract<'DELETE /v1/conversations/:conversationId'>;
 
 // Auth routes
 type _AuthCapabilities = RouteContract<'GET /auth/capabilities'>;

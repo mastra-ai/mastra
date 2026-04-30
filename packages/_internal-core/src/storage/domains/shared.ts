@@ -4,8 +4,12 @@ import { z } from 'zod/v4';
 export enum EntityType {
   /** Agent/Model execution */
   AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
+  /** Scorer definition/execution */
+  SCORER = 'scorer',
+  /** RAG ingestion pipeline execution */
+  RAG_INGESTION = 'rag_ingestion',
+  /** Trajectory evaluation target */
+  TRAJECTORY = 'trajectory',
   /** Input Processor */
   INPUT_PROCESSOR = 'input_processor',
   /** Input Step Processor */
@@ -20,6 +24,8 @@ export enum EntityType {
   TOOL = 'tool',
   /** Workflow */
   WORKFLOW_RUN = 'workflow_run',
+  /** Memory */
+  MEMORY = 'memory',
 }
 
 /**
@@ -85,6 +91,52 @@ export type DateRange = z.input<typeof dateRangeSchema>;
 
 export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direction: 'ASC' | 'DESC'");
 
+/** Aggregation type schema shared across OLAP-style observability queries. */
+export const aggregationTypeSchema = z
+  .enum(['sum', 'avg', 'min', 'max', 'count', 'last'])
+  .describe('Aggregation function');
+export type AggregationType = z.infer<typeof aggregationTypeSchema>;
+
+/** Aggregation interval schema shared across OLAP-style observability queries. */
+export const aggregationIntervalSchema = z.enum(['1m', '5m', '15m', '1h', '1d']).describe('Time bucket interval');
+export type AggregationInterval = z.infer<typeof aggregationIntervalSchema>;
+
+/** Compare period for aggregate queries with period-over-period comparison. */
+export const comparePeriodSchema = z
+  .enum(['previous_period', 'previous_day', 'previous_week'])
+  .describe('Comparison period for aggregate queries');
+export type ComparePeriod = z.infer<typeof comparePeriodSchema>;
+
+/** Shared groupBy schema for OLAP-style breakdown and time-series queries. */
+export const groupBySchema = z.array(z.string()).min(1).describe('Fields to group by');
+export type GroupBy = z.infer<typeof groupBySchema>;
+
+/** Shared percentiles schema for percentile queries. */
+export const percentilesSchema = z.array(z.number().min(0).max(1)).min(1).describe('Percentile values (0-1)');
+export type Percentiles = z.infer<typeof percentilesSchema>;
+
+/** Shared fields for aggregate OLAP responses across observability signals. */
+export const aggregateResponseFields = {
+  value: z.number().nullable().describe('Aggregated value'),
+  previousValue: z.number().nullable().optional().describe('Value from comparison period'),
+  changePercent: z.number().nullable().optional().describe('Percentage change from comparison period'),
+} as const;
+
+/** Shared field for OLAP breakdown dimension values. */
+export const dimensionsField = z.record(z.string(), z.string().nullable()).describe('Dimension values for this group');
+
+/** Shared field for non-null OLAP aggregated values. */
+export const aggregatedValueField = z.number().describe('Aggregated value');
+
+/** Shared field for OLAP bucket timestamps. */
+export const bucketTimestampField = z.date().describe('Bucket timestamp');
+
+/** Shared field for percentile identifiers in OLAP responses. */
+export const percentileField = z.number().describe('Percentile value');
+
+/** Shared field for percentile values within a time bucket. */
+export const percentileBucketValueField = z.number().describe('Percentile value at this bucket');
+
 export const entityTypeField = z
   .nativeEnum(EntityType)
   .describe(`Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow')`);
@@ -110,6 +162,7 @@ export const requestIdField = z.string().describe('HTTP request ID for log corre
 export const environmentField = z.string().describe(`Environment (e.g., "production" | "staging" | "development")`);
 
 export const sourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
+export const executionSourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
 
 export const serviceNameField = z.string().describe('Name of the service');
 
@@ -122,6 +175,15 @@ export const parentEntityNameField = z.string().describe('Name of the parent ent
 export const rootEntityTypeField = z.nativeEnum(EntityType).describe('Entity type of the root entity');
 export const rootEntityIdField = z.string().describe('ID of the root entity');
 export const rootEntityNameField = z.string().describe('Name of the root entity');
+
+// Entity versioning
+export const entityVersionIdField = z
+  .string()
+  .describe('Version ID of the entity that produced this signal (e.g., agent version, workflow version)');
+export const parentEntityVersionIdField = z
+  .string()
+  .describe('Version ID of the parent entity that produced this signal');
+export const rootEntityVersionIdField = z.string().describe('Version ID of the root entity that produced this signal');
 
 // Experimentation
 export const experimentIdField = z.string().describe('Experiment or eval run identifier');
@@ -139,10 +201,11 @@ export const metadataField = z.record(z.string(), z.unknown()).describe('User-de
 export const tagsField = z.array(z.string()).describe('Labels for filtering');
 
 /**
- * Context fields shared across observability signals (metrics, logs).
- * All fields are nullish — each signal uses them as optional context.
+ * Base context fields shared across tracing and non-tracing observability records.
+ * Source/provenance is intentionally excluded because tracing uses `source`
+ * while signals use `executionSource`.
  */
-export const contextFields = {
+const contextFieldsBase = {
   // Entity identification
   entityType: entityTypeField.nullish(),
   entityId: entityIdField.nullish(),
@@ -171,12 +234,35 @@ export const contextFields = {
 
   // Deployment context
   environment: environmentField.nullish(),
-  source: sourceField.nullish(),
   serviceName: serviceNameField.nullish(),
   scope: scopeField.nullish(),
 
+  // Entity versioning
+  entityVersionId: entityVersionIdField.nullish(),
+  parentEntityVersionId: parentEntityVersionIdField.nullish(),
+  rootEntityVersionId: rootEntityVersionIdField.nullish(),
+
   // Experimentation
   experimentId: experimentIdField.nullish(),
+} as const;
+
+/**
+ * Context fields shared across observability signals other than spans (metrics, logs, scores, feedback).
+ * These use `executionSource` to avoid colliding with signal-specific provenance fields.
+ */
+export const contextFields = {
+  ...contextFieldsBase,
+  executionSource: executionSourceField.nullish(),
+  tags: tagsField.nullish(),
+} as const;
+
+/**
+ * Context fields used by tracing/span records.
+ * Tracing continues to expose execution provenance as `source`.
+ */
+export const spanContextFields = {
+  ...contextFieldsBase,
+  source: sourceField.nullish(),
 } as const;
 
 /**
@@ -189,11 +275,25 @@ export const commonFilterFields = {
   spanId: z.string().optional().describe('Filter by span ID'),
   entityType: entityTypeField.optional(),
   entityName: entityNameField.optional(),
+  entityVersionId: entityVersionIdField.optional(),
+  parentEntityVersionId: parentEntityVersionIdField.optional(),
+  rootEntityVersionId: rootEntityVersionIdField.optional(),
   userId: userIdField.optional(),
   organizationId: organizationIdField.optional(),
   experimentId: experimentIdField.optional(),
   serviceName: serviceNameField.optional(),
   environment: environmentField.optional(),
+  parentEntityType: parentEntityTypeField.optional(),
+  parentEntityName: parentEntityNameField.optional(),
+  rootEntityType: rootEntityTypeField.optional(),
+  rootEntityName: rootEntityNameField.optional(),
+  resourceId: resourceIdField.optional(),
+  runId: runIdField.optional(),
+  sessionId: sessionIdField.optional(),
+  threadId: threadIdField.optional(),
+  requestId: requestIdField.optional(),
+  executionSource: executionSourceField.optional(),
+  tags: z.array(z.string()).optional().describe('Filter by tags (must have all specified tags)'),
 } as const;
 
 // ============================================================================

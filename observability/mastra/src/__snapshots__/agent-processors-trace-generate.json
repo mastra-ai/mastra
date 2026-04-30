@@ -1,0 +1,618 @@
+{
+  "__structure__": [
+    "agent_run: \"agent run: 'test-agent'\"",
+    "├── processor_run: \"input processor: validator\"",
+    "│   └── agent_run: \"agent run: 'validator-agent'\"",
+    "│       └── model_generation: \"llm: 'mock-model-id'\"",
+    "│           └── model_step: \"step: 0\"",
+    "│               └── model_chunk: \"chunk: 'text'\"",
+    "├── model_generation: \"llm: 'mock-model-id'\"",
+    "│   └── model_step: \"step: 0\"",
+    "│       └── model_chunk: \"chunk: 'text'\"",
+    "└── processor_run: \"output processor: summarizer\"",
+    "    └── agent_run: \"agent run: 'summarizer-agent'\"",
+    "        └── model_generation: \"llm: 'mock-model-id'\"",
+    "            └── model_step: \"step: 0\"",
+    "                └── model_chunk: \"chunk: 'text'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "agent run: 'test-agent'",
+        "type": "agent_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "agent",
+        "entityId": "test-agent",
+        "attributes": {
+          "instructions": "You are a helpful assistant"
+        },
+        "metadata": {
+          "runId": "<runId-1>",
+          "environment": "test"
+        },
+        "input": "  Hello! How are you?  ",
+        "output": {
+          "text": "Mock V2 generate response",
+          "files": []
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "input processor: validator",
+            "type": "processor_run",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "input_processor",
+            "entityId": "validator",
+            "attributes": {
+              "processorExecutor": "workflow",
+              "processorIndex": 0
+            },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
+            "input": {
+              "messages": [
+                {
+                  "id": "<id-1>",
+                  "role": "user",
+                  "createdAt": "<date>",
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "type": "text",
+                        "text": "  Hello! How are you?  ",
+                        "createdAt": "<date>"
+                      }
+                    ],
+                    "content": "  Hello! How are you?  "
+                  }
+                }
+              ],
+              "systemMessages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful assistant"
+                }
+              ],
+              "retryCount": 0
+            },
+            "output": {}
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "agent run: 'validator-agent'",
+                "type": "agent_run",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "validator-agent",
+                "attributes": {
+                  "instructions": "You validate input messages"
+                },
+                "metadata": {
+                  "runId": "<runId-2>",
+                  "environment": "test"
+                },
+                "input": "Validate:   Hello! How are you?  ",
+                "output": {
+                  "text": "Mock V2 generate response",
+                  "files": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-4>",
+                    "traceId": "<trace-1>",
+                    "name": "llm: 'mock-model-id'",
+                    "type": "model_generation",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "validator-agent",
+                    "attributes": {
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "parameters": {},
+                      "finishReason": "stop",
+                      "responseId": "<responseId-1>",
+                      "responseModel": "mock-model-id",
+                      "completionStartTime": "<date>",
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
+                      }
+                    },
+                    "metadata": {
+                      "runId": "<runId-2>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "messages": [
+                        {
+                          "role": "system",
+                          "content": "You validate input messages"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Validate:   Hello! How are you?  "
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "output": {
+                      "files": [],
+                      "reasoning": [],
+                      "sources": [],
+                      "text": "Mock V2 generate response",
+                      "warnings": []
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-5>",
+                        "traceId": "<trace-1>",
+                        "name": "step: 0",
+                        "type": "model_step",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "validator-agent",
+                        "attributes": {
+                          "stepIndex": 0,
+                          "messageId": "<messageId-1>",
+                          "usage": {
+                            "inputTokens": 15,
+                            "outputTokens": 25,
+                            "inputDetails": {
+                              "text": 15
+                            },
+                            "outputDetails": {
+                              "text": 25
+                            }
+                          },
+                          "isContinued": false,
+                          "finishReason": "stop",
+                          "warnings": []
+                        },
+                        "metadata": {
+                          "runId": "<runId-2>",
+                          "modelMetadata": {
+                            "modelId": "mock-model-id",
+                            "modelVersion": "v2",
+                            "modelProvider": "mock-provider"
+                          },
+                          "environment": "test"
+                        },
+                        "input": {},
+                        "output": {
+                          "text": "Mock V2 generate response",
+                          "toolCalls": []
+                        }
+                      },
+                      "children": [
+                        {
+                          "span": {
+                            "id": "<span-6>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-5>",
+                            "entityType": "agent",
+                            "entityId": "validator-agent",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
+                            "output": {
+                              "text": "Mock V2 generate response"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "span": {
+            "id": "<span-7>",
+            "traceId": "<trace-1>",
+            "name": "llm: 'mock-model-id'",
+            "type": "model_generation",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "test-agent",
+            "attributes": {
+              "model": "mock-model-id",
+              "provider": "mock-provider",
+              "streaming": true,
+              "parameters": {},
+              "finishReason": "stop",
+              "responseId": "<responseId-2>",
+              "responseModel": "mock-model-id",
+              "completionStartTime": "<date>",
+              "usage": {
+                "inputTokens": 15,
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 15
+                },
+                "outputDetails": {
+                  "text": 25
+                }
+              }
+            },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
+            "input": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful assistant"
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "  Hello! How are you?  "
+                    }
+                  ]
+                }
+              ]
+            },
+            "output": {
+              "files": [],
+              "reasoning": [],
+              "sources": [],
+              "text": "Mock V2 generate response",
+              "warnings": []
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-8>",
+                "traceId": "<trace-1>",
+                "name": "step: 0",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-7>",
+                "entityType": "agent",
+                "entityId": "test-agent",
+                "attributes": {
+                  "stepIndex": 0,
+                  "messageId": "<messageId-2>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
+                  },
+                  "isContinued": false,
+                  "finishReason": "stop",
+                  "warnings": []
+                },
+                "metadata": {
+                  "runId": "<runId-1>",
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  },
+                  "environment": "test"
+                },
+                "input": {},
+                "output": {
+                  "text": "Mock V2 generate response",
+                  "toolCalls": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-9>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-8>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "output": {
+                      "text": "Mock V2 generate response"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "span": {
+            "id": "<span-10>",
+            "traceId": "<trace-1>",
+            "name": "output processor: summarizer",
+            "type": "processor_run",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "output_processor",
+            "entityId": "summarizer",
+            "attributes": {
+              "processorExecutor": "workflow",
+              "processorIndex": 0
+            },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
+            "input": {
+              "messages": [
+                {
+                  "id": "<id-2>",
+                  "role": "assistant",
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "type": "text",
+                        "text": "Mock V2 generate response",
+                        "createdAt": "<date>"
+                      }
+                    ],
+                    "metadata": {
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider"
+                    },
+                    "content": "Mock V2 generate response"
+                  },
+                  "createdAt": "<date>"
+                }
+              ],
+              "result": {
+                "text": "Mock V2 generate response",
+                "finishReason": "stop",
+                "stepCount": 1
+              },
+              "retryCount": 0
+            },
+            "output": {}
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-11>",
+                "traceId": "<trace-1>",
+                "name": "agent run: 'summarizer-agent'",
+                "type": "agent_run",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-10>",
+                "entityType": "agent",
+                "entityId": "summarizer-agent",
+                "attributes": {
+                  "instructions": "You summarize text concisely"
+                },
+                "metadata": {
+                  "runId": "<runId-3>",
+                  "environment": "test"
+                },
+                "input": "Summarize: Mock V2 generate response",
+                "output": {
+                  "text": "Mock V2 generate response",
+                  "files": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-12>",
+                    "traceId": "<trace-1>",
+                    "name": "llm: 'mock-model-id'",
+                    "type": "model_generation",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "agent",
+                    "entityId": "summarizer-agent",
+                    "attributes": {
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "parameters": {},
+                      "finishReason": "stop",
+                      "responseId": "<responseId-3>",
+                      "responseModel": "mock-model-id",
+                      "completionStartTime": "<date>",
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
+                      }
+                    },
+                    "metadata": {
+                      "runId": "<runId-3>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "messages": [
+                        {
+                          "role": "system",
+                          "content": "You summarize text concisely"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Summarize: Mock V2 generate response"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "output": {
+                      "files": [],
+                      "reasoning": [],
+                      "sources": [],
+                      "text": "Mock V2 generate response",
+                      "warnings": []
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-13>",
+                        "traceId": "<trace-1>",
+                        "name": "step: 0",
+                        "type": "model_step",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-12>",
+                        "entityType": "agent",
+                        "entityId": "summarizer-agent",
+                        "attributes": {
+                          "stepIndex": 0,
+                          "messageId": "<messageId-3>",
+                          "usage": {
+                            "inputTokens": 15,
+                            "outputTokens": 25,
+                            "inputDetails": {
+                              "text": 15
+                            },
+                            "outputDetails": {
+                              "text": 25
+                            }
+                          },
+                          "isContinued": false,
+                          "finishReason": "stop",
+                          "warnings": []
+                        },
+                        "metadata": {
+                          "runId": "<runId-3>",
+                          "modelMetadata": {
+                            "modelId": "mock-model-id",
+                            "modelVersion": "v2",
+                            "modelProvider": "mock-provider"
+                          },
+                          "environment": "test"
+                        },
+                        "input": {},
+                        "output": {
+                          "text": "Mock V2 generate response",
+                          "toolCalls": []
+                        }
+                      },
+                      "children": [
+                        {
+                          "span": {
+                            "id": "<span-14>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-13>",
+                            "entityType": "agent",
+                            "entityId": "summarizer-agent",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-3>",
+                              "environment": "test"
+                            },
+                            "output": {
+                              "text": "Mock V2 generate response"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

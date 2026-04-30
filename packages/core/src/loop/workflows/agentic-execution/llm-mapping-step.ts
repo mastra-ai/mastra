@@ -1,5 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
@@ -102,14 +102,23 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      // Compute toModelOutput for a successful tool call and return providerMetadata
-      // with the result stored at mastra.modelOutput
+      /**
+       * Compute toModelOutput for a successful tool call and return providerMetadata
+       * with the result stored at mastra.modelOutput.
+       *
+       * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
+       * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
+       */
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         result?: unknown;
         providerMetadata?: Record<string, unknown>;
       }) {
-        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+        const tool = ((
+          _internal?.stepTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+        )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
+          | { toModelOutput?: (output: unknown) => unknown }
+          | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
           modelOutput = await tool.toModelOutput(toolCall.result);

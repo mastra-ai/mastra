@@ -13,6 +13,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -278,6 +280,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   ): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        response.setHeader(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -289,13 +300,27 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        response.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             response.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          response.off('error', onResError);
           response.end();
         }
       } else {
@@ -409,7 +434,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         if (authError) {
-          return res.status(authError.status).json({ error: authError.error });
+          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              res.setHeader(key, value);
+            }
+          }
+
+          // If this is an auth error (not just a success-with-headers), return error response
+          if (authError.error) {
+            return res.status(authError.status).json({ error: authError.error });
+          }
         }
 
         const params = await this.getParams(route, req);
@@ -567,7 +602,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         if (authError) {
-          return res.status(authError.status).json({ error: authError.error });
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              res.setHeader(key, value);
+            }
+          }
+          if (authError.error) {
+            return res.status(authError.status).json({ error: authError.error });
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;

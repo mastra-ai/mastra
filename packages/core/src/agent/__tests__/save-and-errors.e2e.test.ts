@@ -5,7 +5,7 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';

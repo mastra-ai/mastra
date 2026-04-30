@@ -67,6 +67,11 @@ export const mastra = new Mastra({
             clearTasks.push(scorerDefinitionsStore.dangerouslyClearAll());
           }
 
+          const datasetsStore = await storage.getStore('datasets');
+          if (datasetsStore) {
+            clearTasks.push(datasetsStore.dangerouslyClearAll());
+          }
+
           await Promise.all(clearTasks);
 
           return c.json({ message: 'Custom route' }, 201);

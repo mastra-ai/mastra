@@ -1,5 +1,96 @@
 # @mastra/schema-compat
 
+## 1.2.9
+
+### Patch Changes
+
+- Fixed MCP tool validation failures when tools use JSON Schema draft 2020-12. Tools from providers like Firecrawl that declare `$schema: "https://json-schema.org/draft/2020-12/schema"` now validate correctly instead of throwing "no schema with key or ref" errors. ([#14530](https://github.com/mastra-ai/mastra/pull/14530))
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
+## 1.2.9-alpha.1
+
+### Patch Changes
+
+- Fixed MCP tool validation failures when tools use JSON Schema draft 2020-12. Tools from providers like Firecrawl that declare `$schema: "https://json-schema.org/draft/2020-12/schema"` now validate correctly instead of throwing "no schema with key or ref" errors. ([#14530](https://github.com/mastra-ai/mastra/pull/14530))
+
+## 1.2.9-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
+## 1.2.8
+
+### Patch Changes
+
+- --- ([#14624](https://github.com/mastra-ai/mastra/pull/14624))
+  `@mastra/schema-compat`: patch
+
+  ***
+
+  Improved provider schema compatibility for structured outputs and tool calls.
+  Fixed validation for optional, nullable, and defaulted fields, and for ISO date strings returned for date fields.
+
+## 1.2.8-alpha.0
+
+### Patch Changes
+
+- --- ([#14624](https://github.com/mastra-ai/mastra/pull/14624))
+  `@mastra/schema-compat`: patch
+
+  ***
+
+  Improved provider schema compatibility for structured outputs and tool calls.
+  Fixed validation for optional, nullable, and defaulted fields, and for ISO date strings returned for date fields.
+
+## 1.2.7
+
+### Patch Changes
+
+- Fixed schema-compat ESM imports for Zod JSON Schema helpers. ([#14617](https://github.com/mastra-ai/mastra/pull/14617))
+
+  @mastra/schema-compat no longer uses createRequire in its Zod v4 adapter or runtime eval tests, which avoids createRequire-related ESM issues while preserving support for zod/v3 and zod/v4.
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+## 1.2.7-alpha.1
+
+### Patch Changes
+
+- Fixed schema-compat ESM imports for Zod JSON Schema helpers. ([#14617](https://github.com/mastra-ai/mastra/pull/14617))
+
+  @mastra/schema-compat no longer uses createRequire in its Zod v4 adapter or runtime eval tests, which avoids createRequire-related ESM issues while preserving support for zod/v3 and zod/v4.
+
+## 1.2.7-alpha.0
+
+### Patch Changes
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+## 1.2.6
+
+### Patch Changes
+
+- fix(schema-compat): map Mastra draft target names to Zod v4 format ([#14401](https://github.com/mastra-ai/mastra/pull/14401))
+
+  Zod v4's `z.toJSONSchema()` expects `"draft-7"` / `"draft-4"` while
+  Mastra uses `"draft-07"` / `"draft-04"`. The mismatch caused repeated
+  `Invalid target: draft-07` console warnings and suppressed the `$schema`
+  field in generated JSON Schemas.
+
+  Adds `ZOD_V4_TARGET_MAP` in the zod-v4 adapter to translate target names
+  before calling `z.toJSONSchema()`. `"draft-2020-12"` is unchanged as both
+  sides already agree on that name.
+
+  Fixes `#14399`
+
+- Add support for `draft-2020-12` and `draft-04` JSON Schema targets in the Zod v3 adapter, and fix the `toJSONSchema` target mapping to properly translate all `zod-to-json-schema` target names (like `openApi3`) to standard-schema target names. Fixes "Unsupported JSON Schema target" errors when serializing tool schemas. ([#14471](https://github.com/mastra-ai/mastra/pull/14471))
+
 ## 1.2.6-alpha.1
 
 ### Patch Changes

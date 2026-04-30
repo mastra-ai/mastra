@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import type { JsonSchema } from '@/lib/json-schema';
 import { JSONSchemaFormProvider } from './json-schema-form-context';
 import type { SchemaField } from './types';
 import { createField } from './types';
 import { fieldsToJSONSchema, addFieldAtPath, removeFieldAtPath, updateFieldAtPath } from './utils';
+import type { JsonSchema } from '@/lib/json-schema';
+import { cn } from '@/lib/utils';
 
 export interface JSONSchemaFormRootProps {
   onChange?: (schema: JsonSchema) => void;

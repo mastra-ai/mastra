@@ -21,7 +21,8 @@
           "instructions": "You are a test agent"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Hello",
         "output": {
@@ -46,19 +47,24 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "resp-1",
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 10,
-                "outputTokens": 5
+                "outputTokens": 5,
+                "inputDetails": {
+                  "text": 10
+                },
+                "outputDetails": {
+                  "text": 5
+                }
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -103,7 +109,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 10,
-                    "outputTokens": 5
+                    "outputTokens": 5,
+                    "inputDetails": {
+                      "text": 10
+                    },
+                    "outputDetails": {
+                      "text": 5
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
@@ -114,7 +126,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -140,7 +153,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Hello world"

@@ -31,27 +31,27 @@ describeIfAstGrep('workspace_ast_edit', () => {
   // Tool Creation
   // ===========================================================================
   describe('tool creation', () => {
-    it('should create ast_edit tool when filesystem is available and ast-grep installed', () => {
+    it('should create ast_edit tool when filesystem is available and ast-grep installed', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
     });
 
-    it('should not create ast_edit tool when filesystem is read-only', () => {
+    it('should not create ast_edit tool when filesystem is read-only', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir, readOnly: true }),
       });
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
     });
 
-    it('should not create ast_edit tool when disabled via config', () => {
+    it('should not create ast_edit tool when disabled via config', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
@@ -59,7 +59,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
         },
       });
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
     });
@@ -76,7 +76,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -102,7 +102,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -123,7 +123,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -147,7 +147,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -172,7 +172,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -196,7 +196,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -217,7 +217,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -242,7 +242,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -266,7 +266,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -292,7 +292,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -317,7 +317,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -336,13 +336,13 @@ describeIfAstGrep('workspace_ast_edit', () => {
   // ===========================================================================
   describe('remove-import transform', () => {
     it('should remove import by module name', async () => {
-      const code = `import { useState } from 'react';\nimport { z } from 'zod';\n\nconst x = 1;`;
+      const code = `import { useState } from 'react';\nimport { z } from 'zod/v4';\n\nconst x = 1;`;
       await fs.writeFile(path.join(tempDir, 'test.ts'), code);
 
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -367,7 +367,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -392,7 +392,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -421,7 +421,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -450,7 +450,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -476,7 +476,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -497,7 +497,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -521,7 +521,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -544,7 +544,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -566,7 +566,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -588,7 +588,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
@@ -611,7 +611,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {

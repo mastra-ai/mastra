@@ -1,0 +1,274 @@
+---
+title: "Reference: Channels | Agents"
+description: "API reference for agent channels, which connect agents to messaging platforms like Slack, Discord, and Telegram."
+packages:
+  - "@mastra/core"
+---
+
+# Channels
+
+**Added in:** `@mastra/core@1.22.0`
+
+Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
+
+## Usage example
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+      discord: createDiscordAdapter(),
+    },
+  },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'adapters',
+    type: 'Record<string, Adapter | ChannelAdapterConfig>',
+    isOptional: false,
+    description:
+      'Platform adapters keyed by name (e.g. `slack`, `discord`). Pass an `Adapter` directly for defaults, or a `ChannelAdapterConfig` object to customize per-adapter options.',
+  },
+  {
+    name: 'handlers',
+    type: 'ChannelHandlers',
+    isOptional: true,
+    description: 'Override default message handlers for DMs, mentions, and subscribed threads.',
+  },
+  {
+    name: 'inlineMedia',
+    type: 'string[] | ((mimeType: string) => boolean)',
+    isOptional: true,
+    defaultValue: "['image/*']",
+    description:
+      'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function.',
+  },
+  {
+    name: 'inlineLinks',
+    type: 'InlineLinkEntry[]',
+    isOptional: true,
+    description:
+      'Promote URLs found in message text to file parts so the model can process linked content. Each entry matches a domain. Disabled by default.',
+  },
+  {
+    name: 'tools',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Include channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling.',
+  },
+  {
+    name: 'state',
+    type: 'StateAdapter',
+    isOptional: true,
+    defaultValue: 'MastraStateAdapter (from Mastra storage)',
+    description:
+      'State adapter for subscriptions and deduplication. Defaults to `MastraStateAdapter` backed by the Mastra instance storage. Channels require storage to be configured.',
+  },
+  {
+    name: 'userName',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "agent's `name`",
+    description:
+      "Bot display name shown in platform messages. Defaults to the agent's `name`, or `'Mastra'` if no name is set.",
+  },
+  {
+    name: 'threadContext',
+    type: '{ maxMessages?: number }',
+    isOptional: true,
+    defaultValue: '{ maxMessages: 10 }',
+    description:
+      'Fetch recent messages from the platform when the agent is first mentioned in a thread. Set `maxMessages: 0` to disable. Only applies to non-DM threads.',
+  },
+  {
+    name: 'chatOptions',
+    type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
+    isOptional: true,
+    description:
+      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+  },
+]}
+/>
+
+## Per-adapter options
+
+Wrap an adapter in a `ChannelAdapterConfig` object to set per-adapter options:
+
+```typescript title="src/mastra/agents/example.ts"
+import { Agent } from '@mastra/core/agent'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  name: 'Example',
+  instructions: '...',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      discord: {
+        adapter: createDiscordAdapter(),
+        cards: false,
+        gateway: false,
+      },
+      slack: createSlackAdapter(), // Plain adapter uses defaults
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'adapter',
+    type: 'Adapter',
+    isOptional: false,
+    description: 'The Chat SDK adapter instance for this platform.',
+  },
+  {
+    name: 'gateway',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Start a persistent Gateway WebSocket listener for receiving DMs, @mentions, and reactions. Set to `false` for serverless deployments that only need webhook-based interactions.',
+  },
+  {
+    name: 'cards',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Render tool calls as interactive rich cards with buttons. Set to `false` to use plain text formatting instead. When disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on conversation context.',
+  },
+  {
+    name: 'formatToolCall',
+    type: '(info: { toolName, args, result, isError? }) => PostableMessage | null',
+    isOptional: true,
+    description:
+      'Override how tool calls are rendered in the chat. Called once per tool invocation after the result is available. Return `null` to suppress the message entirely.',
+  },
+  {
+    name: 'formatError',
+    type: '(error: Error) => PostableMessage',
+    isOptional: true,
+    defaultValue: '"❌ Error: <error.message>"',
+    description:
+      'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
+  },
+]}
+/>
+
+## Handlers
+
+Override built-in event handlers. Each handler can be:
+
+- **Omitted**: uses the default Mastra handler (routes to `agent.stream` and posts the response)
+- **`false`**: disables the handler entirely
+- **A function** `(thread, message, defaultHandler) => Promise<void>`: wraps or replaces the default
+
+```typescript title="src/mastra/agents/custom-handlers.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  name: 'Custom Handler Agent',
+  instructions: '...',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    handlers: {
+      onMention: async (thread, message, defaultHandler) => {
+        console.log('Received mention:', message.text)
+        await defaultHandler(thread, message)
+      },
+      onDirectMessage: false,
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'onDirectMessage',
+    type: 'ChannelHandler | false',
+    isOptional: true,
+    description: 'Called when the bot receives a direct message.',
+  },
+  {
+    name: 'onMention',
+    type: 'ChannelHandler | false',
+    isOptional: true,
+    description: 'Called when the bot is @mentioned in a channel or thread.',
+  },
+  {
+    name: 'onSubscribedMessage',
+    type: 'ChannelHandler | false',
+    isOptional: true,
+    description: 'Called for messages in threads the agent has subscribed to.',
+  },
+]}
+/>
+
+The `ChannelHandler` function signature:
+
+```typescript
+type ChannelHandler = (
+  thread: Thread,
+  message: Message,
+  defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+) => Promise<void>
+```
+
+## Inline media
+
+Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that do not match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+
+Supported glob patterns:
+
+| Pattern | Matches |
+| - | - |
+| `image/*` | All image types (`image/png`, `image/jpeg`, etc.) |
+| `video/*` | All video types |
+| `*` or `*/*` | All types |
+| `application/pdf` | Exact type match |
+
+For platforms with private CDNs (e.g. Slack), attachments are fetched with authenticated credentials from the Chat SDK. For platforms with public CDNs (e.g. Discord), the URL is passed directly to the model.
+
+## Inline links
+
+Promotes URLs found in message text to file parts so the model can process linked content instead of seeing raw URL text. Each entry can be a string (domain pattern) or an object with a forced mime type.
+
+**String entries** match a domain and perform a HEAD request to detect the Content-Type. The resolved type is checked against `inlineMedia` and only matching types become file parts.
+
+**Object entries** match a domain and force a specific mime type, skipping the HEAD request and bypassing the `inlineMedia` check. This is useful for sites like YouTube where a HEAD request returns `text/html`, but the model treats the URL as video content.
+
+```typescript
+type InlineLinkEntry =
+  | string // Domain pattern (HEAD determines mime type)
+  | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
+```
+
+## Related
+
+- [Channels guide](/docs/agents/channels): Concepts, quickstart, and platform setup
+- [Agent class](/reference/agents/agent): Constructor parameters and methods
+- [Chat SDK adapters](https://chat-sdk.dev/adapters): Adapter configuration and platform setup

@@ -1,5 +1,5 @@
 import type { ToolCallOptions } from '@internal/ai-sdk-v5';
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 
 // Client-side tool execution context (simplified version without server dependencies)
 export interface ClientToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {

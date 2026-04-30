@@ -1,6 +1,6 @@
 {
   "name": "@mastra/daytona",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Daytona cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -66,13 +66,5 @@
   },
   "engines": {
     "node": ">=22.13.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "fast-xml-parser@<=5.3.8": "5.3.8",
-      "@aws-sdk/client-dynamodb@<=3.974.0": "3.974.0",
-      "@aws-sdk/lib-dynamodb@<=3.974.0": "3.974.0",
-      "@aws-sdk/client-s3vectors@<=3.974.0": "3.974.0"
-    }
   }
 }

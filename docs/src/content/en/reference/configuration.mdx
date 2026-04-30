@@ -43,6 +43,174 @@ export const mastra = new Mastra({
 })
 ```
 
+### backgroundTasks
+
+**Type:** `BackgroundTaskManagerConfig`
+
+Enables and configures the background task manager. When enabled, agents can dispatch long-running tool calls (including subagent invocations) to run asynchronously while the agentic loop continues. Tasks are persisted, so a configured `storage` backend is required.
+
+Visit the [Background tasks documentation](/docs/agents/background-tasks) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 10,
+    perAgentConcurrency: 5,
+    backpressure: 'queue',
+    defaultTimeoutMs: 300_000,
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'enabled',
+    type: 'boolean',
+    defaultValue: 'false',
+    description:
+      'Whether background tasks are enabled. The manager only initializes when this is true and a storage backend is configured.',
+  },
+  {
+    name: 'globalConcurrency',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Maximum number of background tasks running concurrently across all agents.',
+  },
+  {
+    name: 'perAgentConcurrency',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '5',
+    description: 'Maximum number of background tasks running concurrently for a single agent.',
+  },
+  {
+    name: 'backpressure',
+    type: "'queue' | 'reject' | 'fallback-sync'",
+    isOptional: true,
+    defaultValue: "'queue'",
+    description:
+      "Behavior when a concurrency limit is reached. 'queue' waits for a slot, 'reject' throws on enqueue, 'fallback-sync' runs the tool synchronously in the agentic loop instead.",
+  },
+  {
+    name: 'defaultTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '300000',
+    description: 'Default per-task timeout in milliseconds. Can be overridden per-tool or per-call.',
+  },
+  {
+    name: 'defaultRetries',
+    type: 'RetryConfig',
+    isOptional: true,
+    description: 'Default retry policy applied to tasks that fail.',
+    properties: [
+      {
+        parameters: [
+          {
+            name: 'maxRetries',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '0',
+            description: 'Maximum retry attempts before the task is marked failed.',
+          },
+          {
+            name: 'retryDelayMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '1000',
+            description: 'Delay between retries in milliseconds.',
+          },
+          {
+            name: 'backoffMultiplier',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '2',
+            description: 'Multiplier applied to retryDelayMs on each subsequent attempt.',
+          },
+          {
+            name: 'maxRetryDelayMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '30000',
+            description: 'Upper bound on the retry delay regardless of backoff.',
+          },
+          {
+            name: 'retryableErrors',
+            type: '(error: Error) => boolean',
+            isOptional: true,
+            description: 'Predicate that decides whether a given error should be retried. Default: retry all errors.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'cleanup',
+    type: 'CleanupConfig',
+    isOptional: true,
+    description: 'Controls how long task records are kept and how often the cleanup process runs.',
+    properties: [
+      {
+        parameters: [
+          {
+            name: 'completedTtlMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '3600000',
+            description: 'How long to keep completed task records, in milliseconds. Default: 1 hour.',
+          },
+          {
+            name: 'failedTtlMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '86400000',
+            description: 'How long to keep failed task records, in milliseconds. Default: 24 hours.',
+          },
+          {
+            name: 'cleanupIntervalMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '60000',
+            description: 'How often the cleanup process runs, in milliseconds. Default: 1 minute.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'waitTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    description:
+      'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
+  },
+  {
+    name: 'onTaskComplete',
+    type: '(task: BackgroundTask) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Global callback invoked when any background task completes successfully. Fires in addition to per-tool and per-agent callbacks.',
+  },
+  {
+    name: 'onTaskFailed',
+    type: '(task: BackgroundTask) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Global callback invoked when any background task fails. Fires in addition to per-tool and per-agent callbacks.',
+  },
+]}
+/>
+
 ### deployer
 
 **Type:** `MastraDeployer`
@@ -475,7 +643,7 @@ const mastra = new Mastra({
 
 When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
 
-By default, `mastra build` sets this option to `true`. If you deploy your project to [Mastra Cloud](/docs/mastra-cloud/overview), it also sets this option to `true`.
+By default, `mastra build` sets this option to `true`.
 
 Here's an overview of what the different values mean:
 
@@ -577,10 +745,13 @@ export const mastra = new Mastra({
   server: {
     auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
+      mapUserToResourceId: user => user.id,
     }),
   },
 })
 ```
+
+The `mapUserToResourceId` callback maps the authenticated user to a resource ID for memory/thread scoping. When provided, it's called after successful authentication and the returned value is set on the request context as `MASTRA_RESOURCE_ID_KEY`. See [Authorization (User Isolation)](/docs/server/middleware#authorization-user-isolation) for details.
 
 ### server.bodySizeLimit
 
@@ -595,6 +766,30 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   server: {
     bodySizeLimit: 10 * 1024 * 1024, // 10mb
+  },
+})
+```
+
+### server.mcpOptions
+
+**Type:** `object`\
+**Default:** `undefined`
+
+MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state are not available.
+
+| Property | Type | Default | Description |
+| - | - | - | - |
+| `serverless` | `boolean` | `false` | Run MCP in stateless mode without session management |
+| `sessionIdGenerator` | `() => string` | `undefined` | Custom session ID generator function |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcpOptions: {
+      serverless: true,
+    },
   },
 })
 ```
@@ -758,9 +953,9 @@ Return a `{ status, body }` object to override the default `400` response, or `u
 
 The `context` parameter indicates which part of the request failed validation:
 
-- `'query'` — query parameters
-- `'body'` — request body
-- `'path'` — path parameters
+- `'query'`: query parameters
+- `'body'`: request body
+- `'path'`: path parameters
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -806,7 +1001,7 @@ export const mastra = new Mastra({
 **Type:** `string`\
 **Default:** `/`
 
-Base path for hosting Mastra Studio. Use this to host the Studio on a sub-path of your existing application instead of the root.
+Base path for hosting [Studio](/docs/studio/overview). Use this to host the Studio on a sub-path of your existing application instead of the root.
 
 This is useful when integrating with existing applications, using authentication tools like Cloudflare Zero Trust that benefit from shared domains, or managing multiple services under a single domain.
 

@@ -90,6 +90,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/auth/sso/callback',
       '/auth/credentials/sign-in',
       '/auth/credentials/sign-up',
+      '/auth/refresh',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
@@ -105,6 +106,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/memory/observational-memory/buffer-status',
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
+      // Long-lived SSE streams: stay open until the client disconnects, so the
+      // test harness's real-HTTP-server cleanup (server.close awaiting drain)
+      // hangs. These routes' behavior is exercised in unit tests.
+      '/background-tasks/stream',
+      '/agents/:agentId/observe',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = ['/datasets'];
@@ -202,6 +208,25 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
               it('should return 404 when workflow not found', async () => {
                 const request = buildRouteRequest(route, {
                   pathParams: { workflowId: 'non-existent-workflow' },
+                });
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBe(404);
+              });
+            }
+
+            if (route.path.includes(':backgroundTaskId')) {
+              it('should return 404 when background task not found', async () => {
+                const request = buildRouteRequest(route, {
+                  pathParams: { backgroundTaskId: 'non-existent-background-task' },
                 });
 
                 const httpRequest: HttpRequest = {

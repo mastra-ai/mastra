@@ -15,6 +15,10 @@ import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { HonoAuthMiddlewareOptions } from './auth-middleware';
+// Browser stream setup (Hono-specific WebSocket implementation)
+export { setupBrowserStream } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -282,6 +286,15 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        response.header(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
@@ -294,32 +307,41 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
-      try {
-        // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+      // Merge class-level mcpOptions with route-specific options (route takes precedence)
+      const options = { ...this.mcpOptions, ...routeMcpOptions };
 
-        await server.startHTTP({
+      // Do NOT await startHTTP — let it run in the background so SSE
+      // notifications stream to the client as they are written.
+      // toFetchResponse resolves when headers are sent, not when the body finishes.
+      server
+        .startHTTP({
           url: new URL(response.req.url),
           httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
           options: Object.keys(options).length > 0 ? options : undefined,
+        })
+        .catch((e: unknown) => {
+          this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
+          try {
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  error: { code: -32603, message: 'Internal server error' },
+                  id: null,
+                }),
+              );
+            }
+          } catch {
+            // Response stream already closed or destroyed - nothing more to do
+          }
         });
-        return await toFetchResponse(res);
-      } catch {
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null,
-            }),
-          );
-          return await toFetchResponse(res);
-        }
-        return await toFetchResponse(res);
-      }
+
+      return await toFetchResponse(res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
@@ -370,7 +392,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       ...middlewares,
       async (c: Context) => {
         // Check route-level authentication/authorization
-        const authError = await this.checkRouteAuth(route, {
+        const authResult = await this.checkRouteAuth(route, {
           path: c.req.path,
           method: c.req.method,
           getHeader: name => c.req.header(name),
@@ -380,8 +402,18 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           buildAuthorizeContext: () => c,
         });
 
-        if (authError) {
-          return c.json({ error: authError.error }, authError.status as any);
+        if (authResult) {
+          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+          if (authResult.headers) {
+            for (const [key, value] of Object.entries(authResult.headers)) {
+              c.header(key, value as string);
+            }
+          }
+
+          // If this is an auth error (not just a success-with-headers), return error response
+          if (authResult.error) {
+            return c.json({ error: authResult.error }, authResult.status as any);
+          }
         }
 
         const params = await this.getParams(route, c.req);
@@ -546,21 +578,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
-    if (!routes || routes.length === 0) return;
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
 
     for (const route of routes) {
-      const handler =
-        'handler' in route && route.handler
-          ? route.handler
-          : 'createHandler' in route
-            ? await route.createHandler({ mastra: this.mastra })
-            : undefined;
-      if (!handler) continue;
-
-      const middlewares: MiddlewareHandler[] = [];
-
-      // Add per-route auth check middleware (same pattern as registerRoute)
       const serverRoute: ServerRoute = {
         method: route.method as any,
         path: route.path,
@@ -569,7 +591,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         requiresAuth: route.requiresAuth,
       };
 
-      middlewares.push(async (c: Context, next) => {
+      const routeHandler: MiddlewareHandler = async (c: Context) => {
+        // Per-route auth check (same pattern as registerRoute)
         const authError = await this.checkRouteAuth(serverRoute, {
           path: c.req.path,
           method: c.req.method,
@@ -581,7 +604,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         });
 
         if (authError) {
-          return c.json({ error: authError.error }, authError.status as any);
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              c.header(key, value as string);
+            }
+          }
+          if (authError.error) {
+            return c.json({ error: authError.error }, authError.status as any);
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;
@@ -599,16 +629,25 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        return next();
-      });
+        const reqHeaders: Record<string, string | string[] | undefined> = {};
+        c.req.raw.headers.forEach((v, k) => {
+          reqHeaders[k] = v;
+        });
+        const response = await this.handleCustomRouteRequest(
+          c.req.url,
+          c.req.method,
+          reqHeaders,
+          c.req.raw.body,
+          c.get('requestContext'),
+        );
+        if (!response) {
+          return c.json({ error: 'Not Found' }, 404);
+        }
+        return response;
+      };
 
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-
-      const allHandlers = [...middlewares, handler];
       const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
-      this.app[method](route.path, allHandlers[0]!, ...allHandlers.slice(1));
+      this.app[method](route.path, routeHandler);
     }
   }
 

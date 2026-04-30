@@ -6,7 +6,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { IdGeneratorContext } from '../../types';
-import { AIV4Adapter, AIV5Adapter } from './adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
   aiV4CoreMessageToV1PromptMessage,
@@ -35,8 +35,9 @@ import type {
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
-import type { AIV5Type, AIV5ResponseMessage, MessageInput, MessageListInput } from './types';
+import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { stampPart } from './utils/stamp-part';
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -79,6 +80,7 @@ export class MessageList {
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
+  private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
 
   // Event recording for observability
@@ -98,6 +100,7 @@ export class MessageList {
     resourceId,
     generateMessageId,
     logger,
+    filterIncompleteToolCalls,
     // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
   }: {
@@ -105,12 +108,14 @@ export class MessageList {
     resourceId?: string;
     generateMessageId?: (context?: IdGeneratorContext) => string;
     logger?: IMastraLogger;
+    filterIncompleteToolCalls?: boolean;
   } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
     this.generateMessageId = generateMessageId;
     this.logger = logger;
+    this.filterIncompleteToolCalls = filterIncompleteToolCalls ?? true;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -361,8 +366,11 @@ export class MessageList {
           this.createAdapterContext(),
           this.messages,
         );
-        // Filter incomplete tool calls when sending messages TO the LLM
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.all.aiV5.ui(),
+          this.messages,
+          this.filterIncompleteToolCalls,
+        );
 
         const messages = [...systemMessages, ...modelMessages];
 
@@ -380,9 +388,47 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        // Filter incomplete tool calls when sending messages TO the LLM
-        // Stored toModelOutput results from providerMetadata are applied automatically
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.all.aiV5.ui(),
+          this.messages,
+          this.filterIncompleteToolCalls,
+        );
+
+        const storedModelOutputs = new Map<string, unknown>();
+        for (const dbMsg of this.messages) {
+          if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
+
+          for (const part of dbMsg.content.parts) {
+            if (
+              part.type === 'tool-invocation' &&
+              part.toolInvocation?.state === 'result' &&
+              part.providerMetadata?.mastra &&
+              typeof part.providerMetadata.mastra === 'object' &&
+              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+            ) {
+              storedModelOutputs.set(
+                part.toolInvocation.toolCallId,
+                (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
+              );
+            }
+          }
+        }
+
+        if (storedModelOutputs.size > 0) {
+          for (const modelMsg of modelMessages) {
+            if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
+
+            for (let i = 0; i < modelMsg.content.length; i++) {
+              const part = modelMsg.content[i]!;
+              if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+                modelMsg.content[i] = {
+                  ...part,
+                  output: storedModelOutputs.get(part.toolCallId) as any,
+                };
+              }
+            }
+          }
+        }
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -402,7 +448,7 @@ export class MessageList {
         // Check if any messages have image/file content that needs processing
         const hasImageOrFileContent = modelMessages.some(
           message =>
-            message.role === 'user' &&
+            (message.role === 'user' || message.role === 'assistant') &&
             typeof message.content !== 'string' &&
             message.content.some(part => part.type === 'image' || part.type === 'file'),
         );
@@ -434,6 +480,20 @@ export class MessageList {
               } as AIV5Type.ModelMessage;
             }
 
+            if (message.role === 'assistant' && typeof message.content !== 'string') {
+              const convertedContent = message.content.map(part => {
+                if (part.type === 'file') {
+                  return convertImageFilePart(part, downloadedAssets);
+                }
+                return part;
+              });
+
+              return {
+                ...message,
+                content: convertedContent,
+              };
+            }
+
             return message;
           });
         }
@@ -446,6 +506,9 @@ export class MessageList {
             message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
           );
       },
+    },
+    aiV6: {
+      ui: () => this.all.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
@@ -488,6 +551,9 @@ export class MessageList {
       model: () => convertAIV5UIToModelMessages(this.remembered.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.remembered.db().map(AIV5Adapter.toUIMessage),
     },
+    aiV6: {
+      ui: () => this.remembered.db().map(AIV6Adapter.toUIMessage),
+    },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
     ui: (): UIMessageWithMetadata[] => this.remembered.db().map(AIV4Adapter.toUIMessage),
@@ -505,6 +571,9 @@ export class MessageList {
     aiV5: {
       model: () => convertAIV5UIToModelMessages(this.rememberedPersisted.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.rememberedPersisted.db().map(AIV5Adapter.toUIMessage),
+    },
+    aiV6: {
+      ui: () => this.rememberedPersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.remembered.aiV4.ui() */
@@ -525,6 +594,9 @@ export class MessageList {
       model: () => convertAIV5UIToModelMessages(this.input.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.input.db().map(AIV5Adapter.toUIMessage),
     },
+    aiV6: {
+      ui: () => this.input.db().map(AIV6Adapter.toUIMessage),
+    },
 
     /* @deprecated use list.get.input.aiV4.ui() instead */
     ui: () => this.input.db().map(AIV4Adapter.toUIMessage),
@@ -542,6 +614,9 @@ export class MessageList {
     aiV5: {
       model: () => convertAIV5UIToModelMessages(this.inputPersisted.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.inputPersisted.db().map(AIV5Adapter.toUIMessage),
+    },
+    aiV6: {
+      ui: () => this.inputPersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.input.aiV4.ui() */
@@ -583,6 +658,9 @@ export class MessageList {
         );
       },
     },
+    aiV6: {
+      ui: () => this.response.db().map(AIV6Adapter.toUIMessage),
+    },
 
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.response.db().map(AIV4Adapter.toUIMessage),
@@ -595,6 +673,9 @@ export class MessageList {
     aiV5: {
       model: () => convertAIV5UIToModelMessages(this.responsePersisted.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.responsePersisted.db().map(AIV5Adapter.toUIMessage),
+    },
+    aiV6: {
+      ui: () => this.responsePersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.response.aiV4.ui() */
@@ -635,7 +716,10 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+  public updateToolInvocation(
+    inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
+    metadata?: Record<string, unknown>,
+  ): boolean {
     if (!inputPart.toolInvocation?.toolCallId) {
       return false;
     }
@@ -671,6 +755,22 @@ export class MessageList {
               : {}),
           };
 
+          // `backgroundTasks` is a per-toolCallId record — merge instead of
+          // overwrite so multiple concurrent background dispatches on the
+          // same assistant message don't clobber each other's metadata.
+          const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+          const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+          const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+          const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+
+          msg.content.metadata = {
+            ...existingMeta,
+            ...incomingMeta,
+            ...(existingBgTasks || incomingBgTasks
+              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
+              : {}),
+          };
+
           // Move the message to the response source so it gets
           // picked up by drainUnsavedMessages for re-saving.
           if (!this.stateManager.isResponseMessage(msg)) {
@@ -683,6 +783,81 @@ export class MessageList {
       }
     }
     this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    return false;
+  }
+
+  /**
+   * Append a `step-start` boundary to the last assistant message.
+   * This marks the beginning of a new loop iteration so that
+   * `convertToModelMessages` splits sequential tool-call turns into
+   * separate message blocks instead of collapsing them into one.
+   *
+   * Respects sealed messages (post-observation) — if the last assistant
+   * message is sealed, the step-start is not added.
+   *
+   * If the message was loaded from memory it is moved to the response
+   * source so the updated content is re-saved.
+   */
+  public stepStart(): boolean {
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
+      return false;
+    }
+
+    if (MessageMerger.isSealed(lastMsg)) {
+      return false;
+    }
+
+    // Don't add a duplicate step-start
+    const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
+    if (lastPart?.type === 'step-start') {
+      return false;
+    }
+
+    lastMsg.content.parts.push(stampPart({ type: 'step-start' as const }));
+
+    // Ensure the mutated message is persisted
+    if (!this.stateManager.isResponseMessage(lastMsg)) {
+      this.stateManager.removeMessage(lastMsg);
+      this.stateManager.addToSource(lastMsg, 'response');
+    }
+
+    return true;
+  }
+
+  public enrichLastStepStart(model: string): boolean {
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
+      return false;
+    }
+
+    if (MessageMerger.isSealed(lastMsg)) {
+      return false;
+    }
+
+    for (let i = lastMsg.content.parts.length - 1; i >= 0; i--) {
+      const part = lastMsg.content.parts[i];
+      if (part?.type !== 'step-start') {
+        continue;
+      }
+
+      // Only stamp step-starts that haven't already been attributed. A prior
+      // iteration (or a re-used message loaded from memory) may have already
+      // stamped its model, and overwriting it would mis-attribute history.
+      if (part.model) {
+        return false;
+      }
+
+      part.model = model;
+
+      if (!this.stateManager.isResponseMessage(lastMsg)) {
+        this.stateManager.removeMessage(lastMsg);
+        this.stateManager.addToSource(lastMsg, 'response');
+      }
+
+      return true;
+    }
+
     return false;
   }
 
@@ -738,6 +913,8 @@ export class MessageList {
     messages:
       | CoreMessageV4
       | CoreMessageV4[]
+      | AIV6Type.ModelMessage
+      | AIV6Type.ModelMessage[]
       | AIV5Type.ModelMessage
       | AIV5Type.ModelMessage[]
       | MastraDBMessage
@@ -754,7 +931,10 @@ export class MessageList {
     return this;
   }
 
-  private addOneSystem(message: CoreMessageV4 | AIV5Type.ModelMessage | MastraDBMessage | string, tag?: string) {
+  private addOneSystem(
+    message: CoreMessageV4 | AIV6Type.ModelMessage | AIV5Type.ModelMessage | MastraDBMessage | string,
+    tag?: string,
+  ) {
     const coreMessage = systemMessageToAIV4Core(message);
 
     if (coreMessage.role !== `system`) {
@@ -850,6 +1030,7 @@ export class MessageList {
       // Check if the message is in a supported format for system messages
       const isSupportedSystemFormat =
         TypeDetector.isAIV4CoreMessage(message) ||
+        TypeDetector.isAIV6CoreMessage(message) ||
         TypeDetector.isAIV5CoreMessage(message) ||
         TypeDetector.isMastraDBMessage(message);
 
@@ -874,7 +1055,10 @@ export class MessageList {
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
+    const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
     const latestMessage = this.messages.at(-1);
+    const latestMessageIndex = this.messages.length - 1;
+    const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
 
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
@@ -893,6 +1077,7 @@ export class MessageList {
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
+      latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
@@ -912,6 +1097,8 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
+        const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
+
         // If the existing message is sealed (e.g., after observation), don't replace it.
         // Instead, generate a new ID for the incoming message and add it as a new message.
         if (MessageMerger.isSealed(existingMessage)) {
@@ -967,6 +1154,12 @@ export class MessageList {
             this.messages.push(messageV2);
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
+        } else if (existingIsAtOrBeforeSealedBoundary) {
+          messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+          if (messageV2.createdAt <= existingMessage.createdAt) {
+            messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+          }
+          this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting = MessageMerger.shouldMerge(

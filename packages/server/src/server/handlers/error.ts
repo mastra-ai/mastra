@@ -3,8 +3,8 @@ import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
 
 /**
- * Duck-typed interface for ZodError-like objects (works with both Zod v3 and v4)
- * Note: Zod v4 uses PropertyKey[] (string | number | symbol) for path
+ * Duck-typed interface for ZodError-like objects.
+ * Note: Zod v4 uses PropertyKey[] (string | number | symbol) for path.
  */
 interface ZodErrorLike {
   issues: Array<{
@@ -16,7 +16,6 @@ interface ZodErrorLike {
 /**
  * Formats a ZodError into a structured validation error response.
  * Returns an object with an error message and an array of field-specific issues.
- * Accepts both Zod v3 and v4 ZodError objects via duck typing.
  */
 export function formatZodError(
   error: ZodErrorLike,

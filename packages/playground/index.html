@@ -19,16 +19,14 @@
       window.MASTRA_TEMPLATES = '%%MASTRA_TEMPLATES%%';
       window.MASTRA_AUTO_DETECT_URL = '%%MASTRA_AUTO_DETECT_URL%%';
       window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
-      window.MASTRA_THEME_TOGGLE = '%%MASTRA_THEME_TOGGLE%%';
+      window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';
 
       try {
-        const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
         const storageValue = window.localStorage.getItem('mastra-playground-store');
         const parsedStorage = storageValue ? JSON.parse(storageValue) : null;
         const persistedTheme = parsedStorage?.state?.theme;
 
-        const selectedTheme =
-          themeToggleEnabled && (persistedTheme === 'light' || persistedTheme === 'system') ? persistedTheme : 'dark';
+        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'system' ? persistedTheme : 'dark';
 
         const resolvedTheme =
           selectedTheme === 'system'
@@ -89,7 +87,7 @@
   </head>
 
   <body class="overflow-hidden">
-    <div id="root" class="dark"></div>
+    <div id="root"></div>
     <script type="module">
       // Use relative import to work with any base path
       // Vite transforms this during build to reference compiled output with correct paths

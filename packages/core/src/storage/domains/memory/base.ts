@@ -13,6 +13,7 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -21,8 +22,13 @@ import type {
   SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import { StorageDomain } from '../base';
+
+function isPlainObj(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 // Constants for metadata key validation
 const SAFE_METADATA_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -183,6 +189,7 @@ export abstract class MemoryStorage extends StorageDomain {
     _threadId: string | null,
     _resourceId: string,
     _limit?: number,
+    _options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
@@ -316,6 +323,32 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   async setPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Update the config of an existing observational memory record.
+   * The provided config is deep-merged into the record's existing config.
+   */
+  async updateObservationalMemoryConfig(_input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Deep-merge two plain objects. Available for subclasses to merge
+   * partial config overrides into existing record configs.
+   */
+  protected deepMergeConfig(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+    const output: Record<string, unknown> = { ...target };
+    for (const key of Object.keys(source)) {
+      const tVal = target[key];
+      const sVal = source[key];
+      if (isPlainObj(tVal) && isPlainObj(sVal)) {
+        output[key] = this.deepMergeConfig(tVal, sVal);
+      } else if (sVal !== undefined) {
+        output[key] = sVal;
+      }
+    }
+    return output;
   }
 
   /**

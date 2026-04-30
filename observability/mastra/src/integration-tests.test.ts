@@ -4,8 +4,9 @@ import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType, getOrCreateSpan, executeWithContext } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
+import { executeWithContext } from '@mastra/core/observability/context-storage';
 
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
@@ -14,12 +15,17 @@ import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 // Tracing imports
 import { Observability } from './default';
 import { TestExporter } from './exporters';
+import { PricingRegistry } from './metrics/pricing-registry';
+
+const testPricingRegistry = PricingRegistry.fromText(`
+{"i":"mock-provider-mock-model-id","p":"mock-provider","m":"mock-model-id","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-7},"ot":{"c":2e-7}}}]}}}
+`);
 
 /**
  * Performs final test expectations that are common to all tracing tests.
@@ -457,6 +463,9 @@ function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
         test: {
           ...options,
           serviceName: 'integration-tests',
+          logging: {
+            level: 'info',
+          },
           exporters: [testExporter],
         },
       },
@@ -706,6 +715,11 @@ describe('Tracing Integration Tests', () => {
     const mastra = new Mastra({
       ...getBaseMastraConfig(testExporter),
       workflows: { metadataWorkflow },
+      // Mastra-level environment should auto-attach to spans, logs, and metrics
+      // for this run. The snapshot below verifies it lands on root and child
+      // span metadata; explicit assertions below verify it propagates to
+      // log/metric correlationContext.
+      environment: 'production',
     });
 
     const workflow = mastra.getWorkflow('metadataWorkflow');
@@ -722,13 +736,16 @@ describe('Tracing Integration Tests', () => {
     expect(stepLog!.data).toEqual({ value: 'tacos' });
     expect(stepLog!.traceId).toBe(result.traceId);
     expect(stepLog!.spanId).toBeDefined();
+    // Mastra-level environment should be attached to log correlationContext
+    expect(stepLog!.correlationContext?.environment).toBe('production');
 
     // Verify auto-extracted workflow metrics
     const workflowDuration = testExporter.getMetricsByName('mastra_workflow_duration_ms');
     expect(workflowDuration).toHaveLength(1);
     expect(workflowDuration[0]!.value).toBeGreaterThanOrEqual(0);
-    expect(workflowDuration[0]!.labels.entity_name).toBeDefined();
     expect(workflowDuration[0]!.labels.status).toBe('ok');
+    // Mastra-level environment should be attached to metric correlationContext
+    expect(workflowDuration[0]!.correlationContext?.environment).toBe('production');
   });
 
   it('should add child spans in workflow step', async () => {
@@ -787,7 +804,7 @@ describe('Tracing Integration Tests', () => {
 
   describe.each(agentMethods)(
     'should trace agent with multiple tools HIDING internal spans using $name',
-    ({ method, model }) => {
+    ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
           id: 'test-agent',
@@ -815,7 +832,9 @@ describe('Tracing Integration Tests', () => {
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
-        await testExporter.assertMatchesSnapshot('agent-tool-call-trace.json');
+        await testExporter.assertMatchesSnapshot(
+          name === 'generate' ? 'agent-tool-call-trace-generate.json' : 'agent-tool-call-trace.json',
+        );
 
         // Verify timing (not covered by snapshot)
         const agentRunSpan = testExporter.getSpansByType(SpanType.AGENT_RUN)[0];
@@ -823,6 +842,12 @@ describe('Tracing Integration Tests', () => {
         expect(llmGenerationSpan?.endTime).toBeDefined();
         expect(agentRunSpan?.endTime).toBeDefined();
         expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
+        // Verify availableTools is populated on the AGENT_RUN span
+        expect(agentRunSpan?.attributes?.availableTools).toBeDefined();
+        expect(agentRunSpan?.attributes?.availableTools).toEqual(
+          expect.arrayContaining(['calculator', 'apiCall', 'workflowExecutor']),
+        );
       });
     },
   );
@@ -943,44 +968,49 @@ describe('Tracing Integration Tests', () => {
     finalExpectations(testExporter);
   });
 
-  describe.each(agentMethods)('should trace agent using structuredOutput format using $name', ({ method, model }) => {
-    it(`should trace spans correctly`, async () => {
-      const testAgent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'Return a simple response',
-        model,
+  describe.each(agentMethods)(
+    'should trace agent using structuredOutput format using $name',
+    ({ name, method, model }) => {
+      it(`should trace spans correctly`, async () => {
+        const testAgent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'Return a simple response',
+          model,
+        });
+
+        const outputSchema = z.object({
+          items: z.string(),
+        });
+
+        const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
+          schema: outputSchema,
+          model,
+        };
+
+        const mastra = new Mastra({
+          ...getBaseMastraConfig(testExporter),
+          agents: { testAgent },
+        });
+
+        const agent = mastra.getAgent('testAgent');
+        const result = await method(agent, 'Return a list of items separated by commas', { structuredOutput });
+        expect(result.object).toBeDefined();
+        expect(result.traceId).toBeDefined();
+
+        // Validate trace structure matches snapshot
+        await testExporter.assertMatchesSnapshot(
+          name === 'generate' ? 'agent-structured-output-trace-generate.json' : 'agent-structured-output-trace.json',
+        );
+
+        // Verify structured output result (not covered by snapshot)
+        expect(result.object).toHaveProperty('items');
+        expect((result.object as any).items).toBe('test structured output');
       });
+    },
+  );
 
-      const outputSchema = z.object({
-        items: z.string(),
-      });
-
-      const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
-        schema: outputSchema,
-        model,
-      };
-
-      const mastra = new Mastra({
-        ...getBaseMastraConfig(testExporter),
-        agents: { testAgent },
-      });
-
-      const agent = mastra.getAgent('testAgent');
-      const result = await method(agent, 'Return a list of items separated by commas', { structuredOutput });
-      expect(result.object).toBeDefined();
-      expect(result.traceId).toBeDefined();
-
-      // Validate trace structure matches snapshot
-      await testExporter.assertMatchesSnapshot(`agent-structured-output-trace.json`);
-
-      // Verify structured output result (not covered by snapshot)
-      expect(result.object).toHaveProperty('items');
-      expect((result.object as any).items).toBe('test structured output');
-    });
-  });
-
-  describe.each(agentMethods)('agent with input and output processors using $name', ({ method, model }) => {
+  describe.each(agentMethods)('agent with input and output processors using $name', ({ name, method, model }) => {
     it('should trace all processor spans including internal agent spans', async () => {
       // Create a custom input processor that uses an agent internally
       class ValidatorProcessor implements Processor {
@@ -1073,11 +1103,13 @@ describe('Tracing Integration Tests', () => {
       expect(result.traceId).toBeDefined();
 
       // Validate trace structure matches snapshot
-      await testExporter.assertMatchesSnapshot(`agent-processors-trace.json`);
+      await testExporter.assertMatchesSnapshot(
+        name === 'generate' ? 'agent-processors-trace-generate.json' : 'agent-processors-trace.json',
+      );
     });
   });
 
-  describe.each(agentMethods)('agent launched inside workflow step using $name', ({ method, model }) => {
+  describe.each(agentMethods)('agent launched inside workflow step using $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({
         id: 'test-agent',
@@ -1119,11 +1151,13 @@ describe('Tracing Integration Tests', () => {
       expect(result.status).toBe('success');
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('workflow-agent-step-trace.json');
+      await testExporter.assertMatchesSnapshot(
+        name === 'generate' ? 'workflow-agent-step-trace-generate.json' : 'workflow-agent-step-trace.json',
+      );
     });
   });
 
-  describe.each(agentMethods)('workflow launched inside agent tool using $name', ({ method, model }) => {
+  describe.each(agentMethods)('workflow launched inside agent tool using $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const simpleWorkflow = createSimpleWorkflow();
 
@@ -1153,11 +1187,13 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('agent-workflow-tool-trace.json');
+      await testExporter.assertMatchesSnapshot(
+        name === 'generate' ? 'agent-workflow-tool-trace-generate.json' : 'agent-workflow-tool-trace.json',
+      );
     });
   });
 
-  describe.each(agentMethods)('workflow launched inside agent directly $name', ({ method, model }) => {
+  describe.each(agentMethods)('workflow launched inside agent directly $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const simpleWorkflow = createSimpleWorkflow();
 
@@ -1182,11 +1218,13 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot(`agent-workflow-direct-trace.json`);
+      await testExporter.assertMatchesSnapshot(
+        name === 'generate' ? 'agent-workflow-direct-trace-generate.json' : 'agent-workflow-direct-trace.json',
+      );
     });
   });
 
-  describe.each(agentMethods)('metadata added in tool call using $name', ({ method, model }) => {
+  describe.each(agentMethods)('metadata added in tool call using $name', ({ name, method, model }) => {
     it(`should add metadata correctly`, async () => {
       // Create a tool that adds custom metadata via tracingContext
       const inputSchema = z.object({ input: z.string() });
@@ -1231,12 +1269,16 @@ describe('Tracing Integration Tests', () => {
         agents: { testAgent },
       });
 
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+
       const agent = mastra.getAgent('testAgent');
       const result = await method(agent, 'Use metadata tool to process some data');
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('tool-metadata-trace.json');
+      await testExporter.assertMatchesSnapshot(
+        name === 'generate' ? 'tool-metadata-trace-generate.json' : 'tool-metadata-trace.json',
+      );
 
       // Verify loggerVNext delivered the log to the exporter with trace correlation
       const infoLogs = testExporter.getLogsByLevel('info');
@@ -1251,7 +1293,7 @@ describe('Tracing Integration Tests', () => {
       expect(counterMetrics, 'metrics.counter() in tool should be captured by the exporter').toHaveLength(1);
       expect(counterMetrics[0]!.value).toBe(1);
       expect(counterMetrics[0]!.labels.tool_id).toBe('metadata-tool');
-      expect(counterMetrics[0]!.labels.service_name).toBe('integration-tests');
+      expect(counterMetrics[0]!.correlationContext?.serviceName).toBe('integration-tests');
 
       const histoMetrics = testExporter.getMetricsByName('metadata_tool_input_length');
       expect(histoMetrics, 'metrics.histogram() in tool should be captured by the exporter').toHaveLength(1);
@@ -1260,7 +1302,7 @@ describe('Tracing Integration Tests', () => {
       // Verify auto-extracted metrics from the agent run
       const agentDuration = testExporter.getMetricsByName('mastra_agent_duration_ms');
       expect(agentDuration).toHaveLength(1);
-      expect(agentDuration[0]!.labels.entity_name).toBe('Metadata Agent');
+      expect(agentDuration[0]!.correlationContext?.entityName).toBe('Metadata Agent');
       expect(agentDuration[0]!.labels.status).toBe('ok');
       expect(agentDuration[0]!.value).toBeGreaterThanOrEqual(0);
 
@@ -1271,21 +1313,41 @@ describe('Tracing Integration Tests', () => {
       const inputTokens = testExporter.getMetricsByName('mastra_model_total_input_tokens');
       expect(inputTokens.length).toBeGreaterThanOrEqual(1);
       expect(inputTokens[0]!.value).toBeGreaterThan(0);
+      expect(
+        inputTokens.some(
+          metric =>
+            metric.costContext?.provider === 'mock-provider' &&
+            metric.costContext?.model === 'mock-model-id' &&
+            metric.costContext?.costUnit === 'USD' &&
+            metric.costContext?.estimatedCost === 0.000003,
+        ),
+      ).toBe(true);
 
       const outputTokens = testExporter.getMetricsByName('mastra_model_total_output_tokens');
       expect(outputTokens.length).toBeGreaterThanOrEqual(1);
       expect(outputTokens[0]!.value).toBeGreaterThan(0);
+      expect(
+        outputTokens.some(
+          metric =>
+            metric.costContext?.provider === 'mock-provider' &&
+            metric.costContext?.model === 'mock-model-id' &&
+            metric.costContext?.costUnit === 'USD' &&
+            metric.costContext?.estimatedCost === 0.000007,
+        ),
+      ).toBe(true);
 
       // Auto-extracted tool call metrics
       const toolDuration = testExporter.getMetricsByName('mastra_tool_duration_ms');
       expect(toolDuration).toHaveLength(1);
-      expect(toolDuration[0]!.labels.entity_name).toBe('metadataTool');
+      expect(toolDuration[0]!.correlationContext?.entityName).toBe('metadataTool');
       expect(toolDuration[0]!.labels.status).toBe('ok');
       expect(toolDuration[0]!.value).toBeGreaterThanOrEqual(0);
+
+      pricingRegistrySpy.mockRestore();
     });
   });
 
-  describe.each(agentMethods)('child spans added in tool call using $name', ({ method, model }) => {
+  describe.each(agentMethods)('child spans added in tool call using $name', ({ name, method, model }) => {
     it(`should create child spans correctly`, async () => {
       // Create a tool that creates child spans via tracingContext
       const inputSchema = z.object({ input: z.string() });
@@ -1345,7 +1407,9 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('tool-child-spans-trace.json');
+      await testExporter.assertMatchesSnapshot(
+        name === 'generate' ? 'tool-child-spans-trace-generate.json' : 'tool-child-spans-trace.json',
+      );
 
       // Verify logs emitted from tool are trace-correlated and delivered to the exporter
       const allLogs = testExporter.getAllLogs();
@@ -1651,7 +1715,11 @@ describe('Tracing Integration Tests', () => {
         expect(agentRunSpan.output?.text).toBe(fullText);
         expect(llmGenerationSpan.output?.text).toBe(fullText);
 
-        await testExporter.assertMatchesSnapshot('multi-step-text-accumulation-trace.json');
+        await testExporter.assertMatchesSnapshot(
+          name === 'generate'
+            ? 'multi-step-text-accumulation-trace-generate.json'
+            : 'multi-step-text-accumulation-trace.json',
+        );
       });
     },
   );
@@ -1686,7 +1754,7 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('tags-from-default-options-trace.json');
+      await testExporter.assertMatchesSnapshot('tags-from-default-options-trace-generate.json');
     });
 
     it('should pass tags from generate call tracingOptions to exported spans', async () => {
@@ -1713,7 +1781,7 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('tags-from-generate-call-trace.json');
+      await testExporter.assertMatchesSnapshot('tags-from-generate-call-trace-generate.json');
     });
 
     it('should merge tags from defaultOptions and generate call tracingOptions', async () => {
@@ -1747,7 +1815,7 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('tags-call-overrides-defaults-trace.json');
+      await testExporter.assertMatchesSnapshot('tags-call-overrides-defaults-trace-generate.json');
     });
 
     it('should preserve defaultOptions.tracingOptions.tags when call passes other tracingOptions properties', async () => {
@@ -1780,7 +1848,7 @@ describe('Tracing Integration Tests', () => {
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
-      await testExporter.assertMatchesSnapshot('tags-preserved-with-other-options-trace.json');
+      await testExporter.assertMatchesSnapshot('tags-preserved-with-other-options-trace-generate.json');
     });
 
     it('should pass tags from stream call tracingOptions to exported spans', async () => {

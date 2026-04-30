@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* Scan playground-ui package for Tailwind classes */
+@source '../../node_modules/@mastra/playground-ui';
+@custom-variant dark (&:is(.dark *));
 
 @font-face {
   font-family: 'TasaExplorer';
@@ -103,6 +105,9 @@ html.light {
   --overlay: rgba(15, 23, 42, 0.45);
   --border1: rgba(15, 23, 42, 0.12);
   --border2: rgba(15, 23, 42, 0.2);
+
+  --color-thumb: #e2e8f0;
+  --color-thumb-hover: #d2d7df;
 }
 
 /* width */
@@ -117,33 +122,52 @@ html.light {
   border-radius: 5px;
 }
 
+html.light::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
+}
+
+html.light::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
+}
+
 /* Handle */
-::-webkit-scrollbar-thumb {
-  background: #303030;
+html::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
   border-radius: 4px;
 }
 
 /* Handle on hover */
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
+}
+
+@theme {
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+  --font-serif: var(--tasa-explorer), ui-serif, georgia, cambria, 'Times New Roman', times, serif;
+  --font-mono:
+    var(--geist-mono), ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New',
+    monospace;
 }
 
 @layer base {
   :root {
     --radius: 0.5rem;
     --top-bar-height: 40px;
-    --color-thumb: rgb(64, 64, 64);
-    --color-thumb-hover: rgb(96, 96, 96);
+    --color-thumb: #404040;
+    --color-thumb-hover: #606060;
     --color-track: transparent;
   }
 }
 
 @layer base {
   * {
-    @apply border-border1;
+    border-color: var(--border1);
   }
   body {
-    @apply bg-surface1 text-neutral6;
+    background-color: var(--surface1);
+    color: var(--neutral6);
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);
@@ -152,16 +176,20 @@ html.light {
 
   *:focus,
   *:focus-visible {
-    @apply outline-none;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
   }
 
   *:focus-visible {
-    @apply outline outline-accent1;
+    outline-style: solid;
+    outline-color: var(--accent1);
   }
 }
 
 .react-flow__controls-button {
-  @apply !text-neutral5 !bg-surface2 !border-none;
+  color: var(--neutral5) !important;
+  background-color: var(--surface2) !important;
+  border: none !important;
 }
 
 .scorerListItem:has(+ .expanded) {

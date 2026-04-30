@@ -97,7 +97,7 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
   </StepItem>
 
   <StepItem>
-    Call your agent, for example in [Mastra Studio](/docs/getting-started/studio). Inside Studio, start a new chat with your agent and take a look at the right sidebar. It'll now display various memory-related information.
+    Call your agent, for example in [Studio](/docs/studio/overview). Inside Studio, start a new chat with your agent and take a look at the right sidebar. It'll now display various memory-related information.
   </StepItem>
 </Steps>
 
@@ -166,7 +166,7 @@ See [Observational Memory](../memory/observational-memory) for details on how ob
 
 ## Memory in multi-agent systems
 
-When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. There is no flag to enable this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
+When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
 
 ### How delegation scopes memory
 
@@ -176,7 +176,7 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 - **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
 - **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance. If the subagent defines its own, that takes precedence.
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation is not stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
 
 :::note
 
@@ -211,7 +211,7 @@ Because both calls use `resource: 'project-42'`, the writer can access the resea
 
 Enable [Tracing](/docs/observability/tracing/overview) to monitor and debug memory in action. Traces show you exactly which messages and observations the agent included in its context for each request, helping you understand agent behavior and verify that memory retrieval is working as expected.
 
-Open [Mastra Studio](/docs/getting-started/studio) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request, then look for spans of LLMs calls.
+Open [Studio](/docs/studio/overview) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request, then look for spans of LLMs calls.
 
 ## Switch memory per request
 

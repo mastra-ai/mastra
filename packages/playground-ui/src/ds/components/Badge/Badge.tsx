@@ -1,8 +1,8 @@
 import React from 'react';
 
 import { Icon } from '../../icons/Icon';
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface BadgeProps {
   icon?: React.ReactNode;

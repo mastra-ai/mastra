@@ -1,0 +1,248 @@
+---
+title: "Reference: ModalSandbox | Workspace"
+description: "Documentation for the ModalSandbox provider for isolated cloud code execution via Modal."
+packages:
+  - "@mastra/modal"
+---
+
+# ModalSandbox
+
+Executes commands in isolated [Modal](https://modal.com) cloud sandboxes. Provides secure, ephemeral environments backed by Modal's infrastructure.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/modal
+```
+
+## Usage
+
+Add a `ModalSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { ModalSandbox } from '@mastra/modal'
+
+const workspace = new Workspace({
+  sandbox: new ModalSandbox({
+    id: 'dev-sandbox',
+    baseImage: 'ubuntu:22.04',
+    timeoutMs: 60_000,
+  }),
+})
+
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'anthropic/claude-opus-4-6',
+  workspace,
+})
+```
+
+## Authentication
+
+Set Modal credentials via environment variables or constructor options:
+
+```bash
+MODAL_TOKEN_ID=ak-...
+MODAL_TOKEN_SECRET=as-...
+```
+
+Or pass them directly:
+
+```typescript
+const sandbox = new ModalSandbox({
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET,
+})
+```
+
+Get your credentials from the [Modal dashboard](https://modal.com/settings/tokens).
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Unique identifier / name for this sandbox. Used as the Modal sandbox name so the sandbox can be reconnected on subsequent start() calls.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'appName',
+    type: 'string',
+    description: 'Modal App name to associate sandboxes with.',
+    isOptional: true,
+    defaultValue: "'mastra'",
+  },
+  {
+    name: 'baseImage',
+    type: 'string',
+    description: 'Docker image to use for the sandbox.',
+    isOptional: true,
+    defaultValue: "'ubuntu:22.04'",
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    description:
+      "Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires, regardless of activity. Modal's maximum is 24 hours (86_400_000).",
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables baked into the sandbox at create time.',
+    isOptional: true,
+  },
+  {
+    name: 'workdir',
+    type: 'string',
+    description: 'Default working directory inside the sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'tokenId',
+    type: 'string',
+    description: 'Modal token ID. Falls back to MODAL_TOKEN_ID environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'tokenSecret',
+    type: 'string',
+    description: 'Modal token secret. Falls back to MODAL_TOKEN_SECRET environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | function',
+    description:
+      'Custom instructions returned by getInstructions(). Pass a string to fully replace the default, or a function to extend it.',
+    isOptional: true,
+  },
+  {
+    name: 'onStart',
+    type: 'function',
+    description: 'Lifecycle hook called after the sandbox reaches running status.',
+    isOptional: true,
+  },
+  {
+    name: 'onStop',
+    type: 'function',
+    description: 'Lifecycle hook called before the sandbox stops.',
+    isOptional: true,
+  },
+  {
+    name: 'onDestroy',
+    type: 'function',
+    description: 'Lifecycle hook called before the sandbox is destroyed.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('ModalSandbox')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('modal')",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
+  },
+  {
+    name: 'modal',
+    type: 'Sandbox',
+    description:
+      'The underlying Modal Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+  },
+  {
+    name: 'processes',
+    type: 'ModalProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+]}
+/>
+
+## Sandbox lifecycle
+
+- **`_start()`**: Attempts to reconnect to an existing running sandbox. If none is found, creates a sandbox from the latest snapshot (if available from a previous `_stop()`), or from the baseImage.
+- **`_stop()`**: Snapshots the filesystem, then terminates the sandbox. Snapshot is kept in memory on the same instance for future starts.
+- **`_destroy()`**: Terminates the sandbox and discards any snapshot.
+
+```typescript
+const sandbox = new ModalSandbox({
+  id: 'dev-sandbox',
+  baseImage: 'ubuntu:22.04',
+  timeoutMs: 300_000,
+})
+
+await sandbox._start()
+await sandbox.processes.spawn('npm install')
+await sandbox._stop()
+await sandbox._start()
+```
+
+## Background processes
+
+`ModalSandbox` includes a built-in process manager for spawning and managing background processes. Each `spawn()` call creates a new `ContainerProcess` via the Modal SDK's `Sandbox.exec()` API.
+
+```typescript
+const sandbox = new ModalSandbox({ id: 'dev-sandbox' })
+await sandbox._start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node script.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Wait for the process to complete
+const result = await handle.wait()
+console.log(result.exitCode)
+
+// Kill the process
+await handle.kill()
+```
+
+:::note
+
+`sendStdin()` is not supported — the Modal JS SDK does not expose stdin on `Sandbox.exec()`.
+
+:::
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
+## Related
+
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [E2BSandbox reference](/reference/workspace/e2b-sandbox)
+- [DaytonaSandbox reference](/reference/workspace/daytona-sandbox)
+- [Workspace overview](/docs/workspace/overview)

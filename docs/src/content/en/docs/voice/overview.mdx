@@ -290,7 +290,7 @@ For detailed configuration options and advanced features, check out our [Text-to
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
+      speaker: 'shubh', // Optional: specify a bulbul:v3 speaker
     })
 
     playAudio(audioStream)
@@ -794,12 +794,15 @@ Each voice provider can be configured with different models and options. Below a
     // Sarvam Voice Configuration
     const voice = new SarvamVoice({
       speechModel: {
-        name: 'sarvam-voice', // Example model name
+        model: 'bulbul:v3', // TTS model (bulbul:v2 or bulbul:v3)
         apiKey: process.env.SARVAM_API_KEY,
-        language: 'en-IN', // Language code
-        style: 'conversational', // Style setting
+        language: 'en-IN', // BCP-47 language code
       },
-      // Sarvam may not have a separate listening model
+      listeningModel: {
+        model: 'saarika:v2.5', // STT model (saarika:v2.5 or saaras:v3)
+        apiKey: process.env.SARVAM_API_KEY,
+      },
+      speaker: 'shubh', // Default bulbul:v3 speaker
     })
     ```
 

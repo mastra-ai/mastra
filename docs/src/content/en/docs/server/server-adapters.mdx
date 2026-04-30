@@ -23,7 +23,7 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/server/mastra-server).
 
-If you want to use [Studio](/docs/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
+If you want to use [Studio](/docs/studio/overview) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
 
 :::
 
@@ -200,7 +200,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
 Calling `init()` runs three steps in order. Understanding this flow helps when you need to insert your own middleware at specific points.
 
 1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to every request. This makes Mastra available to all subsequent middleware and route handlers.
-1. `registerAuthMiddleware()`: Adds authentication and authorization middleware, but only if `server.auth` is configured in your Mastra instance. Skipped entirely if no auth is configured.
+1. `registerAuthMiddleware()`: Runs the adapter auth hook during initialization. Official adapters enforce auth inline when Mastra registers built-in routes and `registerApiRoute()` routes, so raw framework routes should use the adapter's exported `createAuthMiddleware()` helper when they need Mastra auth.
 1. `registerRoutes()`: Registers all Mastra API routes for agents, workflows, and other features. Also registers MCP routes if MCP servers are configured.
 
 ### Manual initialization
@@ -218,7 +218,6 @@ server.registerContextMiddleware();
 // Middleware that needs Mastra context
 app.use(customMiddleware);
 
-server.registerAuthMiddleware();
 await server.registerRoutes();
 
 // Routes after Mastra
@@ -237,6 +236,8 @@ You can add your own routes to the app alongside Mastra's routes.
 
 - Routes added **before** `init()` won't have Mastra context available.
 - Routes added **after** `init()` have access to the Mastra context (the Mastra instance, request context, authenticated user, etc.).
+- When you want Mastra-managed auth and route metadata such as `requiresAuth`, prefer `registerApiRoute()`.
+- When you mount routes directly on the framework app, use the adapter's exported `createAuthMiddleware()` helper if those routes need Mastra auth.
 
 :::info
 
@@ -395,7 +396,21 @@ The adapter registers routes for both HTTP and SSE (Server-Sent Events) transpor
 
 ### Serverless mode
 
-For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`:
+For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`.
+
+When using the Mastra deployer (the standard `mastra dev` / `mastra build` path), set `mcpOptions` in your server config:
+
+```typescript
+const mastra = new Mastra({
+  server: {
+    mcpOptions: {
+      serverless: true,
+    },
+  },
+})
+```
+
+When manually creating a server adapter, pass `mcpOptions` directly:
 
 ```typescript
 const server = new MastraServer({
@@ -413,10 +428,10 @@ See [MCP](/docs/mcp/overview) for configuration details and how to set up MCP se
 
 ## Related
 
-- [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
-- [Express Adapter](/reference/server/express-adapter) - Express-specific setup
-- [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
-- [Server Configuration](/docs/server/mastra-server) - Using `mastra build` instead
-- [Authentication](/docs/server/auth) - Configuring auth for your server
-- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/server/create-route) - Creating type-safe custom routes
+- [Hono Adapter](/reference/server/hono-adapter): Hono-specific setup
+- [Express Adapter](/reference/server/express-adapter): Express-specific setup
+- [Custom Adapters](/docs/server/custom-adapters): Building adapters for other frameworks
+- [Server Configuration](/docs/server/mastra-server): Using `mastra build` instead
+- [Authentication](/docs/server/auth): Configuring auth for your server
+- [MastraServer Reference](/reference/server/mastra-server): Full API reference
+- [createRoute() Reference](/reference/server/create-route): Creating type-safe custom routes

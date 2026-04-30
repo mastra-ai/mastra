@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import { listScoresResponseSchema } from '@mastra/core/evals';
+import { extractTrajectoryFromTrace, listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
 import type { ScoresStorage } from '@mastra/core/storage';
 import {
@@ -12,9 +12,12 @@ import {
   scoreTracesResponseSchema,
   getTraceArgsSchema,
   getTraceResponseSchema,
+  getTraceLightResponseSchema,
+  getSpanArgsSchema,
+  getSpanResponseSchema,
   dateRangeSchema,
 } from '@mastra/core/storage';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -149,6 +152,94 @@ export const GET_TRACE_ROUTE = createRoute({
       return trace;
     } catch (error) {
       return handleError(error, 'Error getting trace');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/light - lightweight trace for timeline rendering. */
+export const GET_TRACE_LIGHT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/light',
+  responseType: 'json',
+  pathParamSchema: getTraceArgsSchema,
+  responseSchema: getTraceLightResponseSchema,
+  summary: 'Get lightweight AI trace by ID',
+  description:
+    'Returns a trace with lightweight span data (timeline fields only, excludes input/output/attributes/metadata/tags/links)',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const trace = await observabilityStore.getTraceLight({ traceId });
+
+      if (!trace) {
+        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+      }
+
+      return trace;
+    } catch (error) {
+      return handleError(error, 'Error getting lightweight trace');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/spans/:spanId - get a single span with full details. */
+export const GET_SPAN_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/spans/:spanId',
+  responseType: 'json',
+  pathParamSchema: getSpanArgsSchema,
+  responseSchema: getSpanResponseSchema,
+  summary: 'Get a single span by ID',
+  description: 'Returns a complete span record with all details by trace ID and span ID',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId, spanId }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const span = await observabilityStore.getSpan({ traceId, spanId });
+
+      if (!span) {
+        throw new HTTPException(404, { message: `Span not found` });
+      }
+
+      return span;
+    } catch (error) {
+      return handleError(error, 'Error getting span');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/trajectory - extract trajectory from a trace. */
+export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/trajectory',
+  responseType: 'json',
+  pathParamSchema: getTraceArgsSchema,
+  responseSchema: z.object({
+    steps: z.array(z.unknown()),
+    totalDurationMs: z.number().optional(),
+    rawOutput: z.unknown().optional(),
+    rawWorkflowResult: z.unknown().optional(),
+  }),
+  summary: 'Extract trajectory from trace',
+  description: 'Extracts a structured trajectory (ordered steps) from a trace by analyzing its spans',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const trace = await observabilityStore.getTrace({ traceId });
+
+      if (!trace) {
+        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+      }
+
+      const trajectory = extractTrajectoryFromTrace(trace.spans);
+      return trajectory;
+    } catch (error) {
+      return handleError(error, 'Error extracting trajectory from trace');
     }
   },
 });

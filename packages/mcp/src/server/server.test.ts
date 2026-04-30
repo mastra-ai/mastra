@@ -251,6 +251,38 @@ describe('MCPServer', () => {
       // @ts-expect-error - accessing internal for testing - accessing private property for testing
       expect(sdkServer._instructions).toBe(instructions);
     });
+
+    it('should forward jsonSchemaValidator to underlying SDK Server', () => {
+      const customValidator = {
+        getValidator: vi.fn(() => (input: unknown) => ({
+          valid: true as const,
+          data: input,
+          errorMessage: undefined,
+        })),
+      };
+
+      const server = new MCPServer({
+        ...minimalConfig,
+        jsonSchemaValidator: customValidator,
+      });
+
+      const sdkServer = server.getServer();
+
+      // @ts-expect-error - accessing internal SDK property for testing
+      expect(sdkServer._jsonSchemaValidator).toBe(customValidator);
+    });
+
+    it('should not set jsonSchemaValidator on the SDK Server when omitted', () => {
+      const server = new MCPServer(minimalConfig);
+      const sdkServer = server.getServer();
+
+      // When omitted, the SDK falls back to its default (AJV) validator. The
+      // important assertion is that we do not pass undefined through, which
+      // would force a default-import of the AJV provider in environments
+      // (Cloudflare Workers) that cannot evaluate it.
+      // @ts-expect-error - accessing internal SDK property for testing
+      expect(sdkServer._jsonSchemaValidator).not.toBeUndefined();
+    });
   });
 
   describe('getServerInfo()', () => {
@@ -1436,6 +1468,44 @@ describe('MCPServer', () => {
       expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
+    });
+
+    it('should return 404 when a stale session ID is provided', async () => {
+      sessionServer = new MCPServer({
+        name: 'StaleSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      // Send a POST request with a session ID that doesn't exist on the server
+      const response = await fetch(`http://localhost:${currentTestPort}/http`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'mcp-session-id': 'non-existent-session-id',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/list',
+          id: 1,
+        }),
+      });
+
+      expect(response.status).toBe(404);
+      const body = await response.json();
+      expect(body.error.message).toBe('Session not found');
     });
   });
 });
@@ -2852,6 +2922,70 @@ describe('MCPServer - Tool Input Validation', () => {
     expect(invalidResult.error).toBe(true);
     expect(invalidResult.message).toMatch(/Tool(?: input)? validation failed/i);
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
+  });
+
+  it('should return isError for builder-level validation failures on tools with output schemas', async () => {
+    // This test verifies the fix for a bug where input that passes the MCP server's
+    // JSON Schema validation but fails the builder's Zod validation would cause a
+    // confusing output schema error instead of a clear input validation error.
+    // We use .refine() because it cannot be expressed in JSON Schema, so the
+    // first-pass validation will pass but the builder's Zod validation will fail.
+    const toolWithOutputSchema = createTool({
+      id: 'toolWithOutputSchema',
+      description: 'Tool with output schema and strict input validation',
+      inputSchema: z.object({
+        value: z.string().refine(val => val.startsWith('ok:'), {
+          message: 'Value must start with "ok:"',
+        }),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ value }) => ({
+        result: `Processed: ${value}`,
+      }),
+    });
+
+    const server = new MCPServer({
+      name: 'OutputSchemaValidationServer',
+      version: '1.0.0',
+      tools: { toolWithOutputSchema },
+    });
+
+    const serverInstance = server.getServer();
+    // @ts-expect-error - accessing internal for testing
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+    expect(callToolHandler).toBeDefined();
+
+    const mockExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'test-session',
+      requestId: 'test-request',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    // "bad" is a valid string (passes JSON Schema) but fails the .refine() check
+    const result = await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-validation-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'toolWithOutputSchema',
+          arguments: { value: 'bad' },
+        },
+      },
+      mockExtra,
+    );
+
+    // Should return isError: true with the validation message, NOT an output schema error
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/validation failed/i);
+    expect(result.content[0].text).toContain('Value must start with "ok:"');
+    // Should NOT contain output schema error
+    expect(result.content[0].text).not.toContain('Invalid structured content');
   });
 });
 
