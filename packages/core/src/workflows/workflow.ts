@@ -1608,6 +1608,7 @@ export class Workflow<
       tracingPolicy: options.tracingPolicy,
       onFinish: options.onFinish,
       onError: options.onError,
+      sharePubsub: options.sharePubsub,
     };
 
     if (!executionEngine) {
@@ -2452,9 +2453,15 @@ export class Workflow<
 
     // Forward the parent run's resourceId into the nested run so that
     // child workflow snapshots preserve the tenant/resource association.
+    // When sharePubsub is enabled (e.g. durable agent workflows), pass the parent
+    // pubsub so inner step events are visible to the outer subscriber.
+    // Skip the watch relay in that case — events are already on the shared pubsub
+    // and relaying with the same runId would cause an infinite event loop.
+    const useSharedPubsub = !!this.#options?.sharePubsub;
+    const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     const run = isResume
-      ? await this.createRun({ runId: resume.runId, resourceId })
-      : await this.createRun({ runId, resourceId });
+      ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub })
+      : await this.createRun({ runId, resourceId, pubsub: nestedPubsub });
     const nestedAbortCb = () => {
       abort();
     };
@@ -2464,13 +2471,15 @@ export class Workflow<
       await run.cancel();
     });
 
-    const unwatch = run.watch(event => {
-      void pubsub.publish('nested-watch', {
-        type: 'nested-watch',
-        runId: run.runId,
-        data: { event, workflowId: this.id },
-      });
-    });
+    const unwatch = useSharedPubsub
+      ? () => {}
+      : run.watch(event => {
+          void pubsub.publish('nested-watch', {
+            type: 'nested-watch',
+            runId: run.runId,
+            data: { event, workflowId: this.id },
+          });
+        });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
       (requestContext as RequestContext).set('__mastraWorflowInputData', inputData);

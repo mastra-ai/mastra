@@ -357,7 +357,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             } catch (error) {
               logger?.error?.('Error processing LLM stream', { error, runId });
 
-              // Record error in MODEL_GENERATION span via tracker (but don't emit error event yet)
               const errorObj = error instanceof Error ? error : new Error(String(error));
               if (modelSpanTracker) {
                 modelSpanTracker.reportGenerationError({ error: errorObj });
@@ -365,10 +364,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 modelSpan.error({ error: errorObj });
               }
 
-              // DON'T emit error event here - we might have fallback models to try
-              // Error event will be emitted after all models are exhausted
-
-              throw error;
+              lastError = errorObj;
+              if (attempt < maxRetries) continue; // retry same model
+              break; // exhausted retries, try next model
             }
 
             // Check if the stream captured an error (MastraModelOutput swallows errors internally)
@@ -376,17 +374,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             if (streamError) {
               logger?.error?.('Stream captured error', { error: streamError, runId });
 
-              // Record error in MODEL_GENERATION span via tracker (but don't emit error event yet)
               if (modelSpanTracker) {
                 modelSpanTracker.reportGenerationError({ error: streamError });
               } else if (modelSpan) {
                 modelSpan.error({ error: streamError });
               }
 
-              // DON'T emit error event here - we might have fallback models to try
-              // Error event will be emitted after all models are exhausted
-
-              throw streamError;
+              lastError = streamError;
+              if (attempt < maxRetries) continue; // retry same model
+              break; // exhausted retries, try next model
             }
 
             // 12. Add assistant response to message list

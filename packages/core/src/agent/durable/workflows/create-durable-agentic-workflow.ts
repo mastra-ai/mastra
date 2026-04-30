@@ -113,6 +113,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      sharePubsub: true,
     },
   })
     // Step 0: Convert iteration state to LLM input format
