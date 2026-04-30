@@ -96,6 +96,48 @@ describe('createPerplexitySearchTool', () => {
 
     await expect(tool.execute!({ query: 'q' }, {} as any)).rejects.toThrow(/403/);
   });
+
+  it('truncates long error response bodies to 1000 chars', async () => {
+    const huge = 'x'.repeat(5000);
+    const fetchMock = vi.fn(async () => new Response(huge, { status: 500 }));
+    const tool = createPerplexitySearchTool({ apiKey: 'k', fetch: fetchMock });
+
+    await expect(tool.execute!({ query: 'q' }, {} as any)).rejects.toThrow(
+      new RegExp(`status 500: x{1000}…$`),
+    );
+  });
+
+  it('rejects searchDomainFilter that mixes allow and deny entries', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ results: [] }));
+    const tool = createPerplexitySearchTool({ apiKey: 'k', fetch: fetchMock });
+
+    const parsed = tool.inputSchema!.safeParse({
+      query: 'q',
+      searchDomainFilter: ['mastra.ai', '-pinterest.com'],
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]!.message).toMatch(/cannot mix allow and deny/i);
+    }
+  });
+
+  it('accepts searchDomainFilter with only allow entries', () => {
+    const tool = createPerplexitySearchTool({ apiKey: 'k' });
+    const parsed = tool.inputSchema!.safeParse({
+      query: 'q',
+      searchDomainFilter: ['mastra.ai', 'docs.mastra.ai'],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('accepts searchDomainFilter with only deny entries', () => {
+    const tool = createPerplexitySearchTool({ apiKey: 'k' });
+    const parsed = tool.inputSchema!.safeParse({
+      query: 'q',
+      searchDomainFilter: ['-pinterest.com', '-quora.com'],
+    });
+    expect(parsed.success).toBe(true);
+  });
 });
 
 describe('createPerplexityTools', () => {

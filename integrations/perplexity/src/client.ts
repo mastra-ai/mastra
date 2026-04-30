@@ -67,7 +67,10 @@ export async function perplexitySearchRequest(
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
+    const rawText = await response.text().catch(() => '');
+    const MAX_ERROR_BODY = 1000;
+    const text =
+      rawText.length > MAX_ERROR_BODY ? `${rawText.slice(0, MAX_ERROR_BODY)}…` : rawText;
     throw new Error(
       `Perplexity Search request failed with status ${response.status}${text ? `: ${text}` : ''}`,
     );

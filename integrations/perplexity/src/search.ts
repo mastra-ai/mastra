@@ -16,6 +16,15 @@ const inputSchema = z.object({
   searchDomainFilter: z
     .array(z.string())
     .optional()
+    .refine(
+      domains => {
+        if (!domains || domains.length === 0) return true;
+        const hasAllow = domains.some(d => !d.startsWith('-'));
+        const hasDeny = domains.some(d => d.startsWith('-'));
+        return !(hasAllow && hasDeny);
+      },
+      { message: 'searchDomainFilter cannot mix allow and deny domain entries in the same call.' },
+    )
     .describe(
       'Restrict (or exclude) results by domain. Prefix a domain with `-` to exclude it (e.g. `-pinterest.com`). Do not mix allow and deny entries in the same call.',
     ),
