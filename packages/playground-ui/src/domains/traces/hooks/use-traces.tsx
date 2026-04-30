@@ -3,7 +3,6 @@ import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useInView } from '@/hooks/use-in-view';
-import { is403ForbiddenError } from '@/lib/query-utils';
 
 const fetchTracesFn = async ({
   client,
@@ -84,8 +83,6 @@ export const useTraces = ({ filters }: TracesFilters) => {
     select: selectUniqueTraces,
     placeholderData: keepPreviousData,
     retry: false,
-    // Disable polling on 403 to prevent flickering
-    refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
