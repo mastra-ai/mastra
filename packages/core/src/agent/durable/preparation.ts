@@ -3,7 +3,7 @@ import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
-import type { MemoryConfig, MemoryConfig as _MemoryConfig } from '../../memory/types';
+import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
@@ -138,9 +138,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
 
   // 4. Resolve thread/memory context
-  const threadId =
-    typeof execOptions?.memory?.thread === 'string' ? execOptions.memory.thread : execOptions?.memory?.thread?.id;
+  const thread =
+    typeof execOptions?.memory?.thread === 'string' ? { id: execOptions.memory.thread } : execOptions?.memory?.thread;
+  const threadId = thread?.id;
   const resourceId = execOptions?.memory?.resource;
+  let threadObject: StorageThreadType | undefined;
+  let threadExists = false;
 
   // 5. Create MessageList
   const messageList = new MessageList({
@@ -197,8 +200,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       // Set MastraMemory context so processors that need it (OM, message history) can access it
       const memory = await typedAgent.getMemory({ requestContext });
       const memoryConfig = execOptions?.memory?.options;
-      if (memory) {
-        requestContext.set('MastraMemory', { thread: threadId, resourceId, memoryConfig });
+      if (memory && threadId && resourceId) {
+        const existingThread = await memory.getThreadById({ threadId });
+        threadObject =
+          existingThread ??
+          (await memory.createThread({
+            threadId,
+            metadata: thread?.metadata,
+            title: thread?.title,
+            memoryConfig,
+            resourceId,
+            saveThread: true,
+          }));
+        threadExists = true;
+        requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
       }
 
       const { ProcessorRunner } = await import('../../processors/runner');
@@ -323,7 +338,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       memoryConfig,
       threadId,
       resourceId,
-      threadExists: false,
+      threadExists,
       savePerStep,
       observationalMemory,
     },

@@ -116,7 +116,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
     inputSchema: durableLLMInputSchema,
     outputSchema: durableLLMOutputSchema,
     execute: async params => {
-      const { inputData, mastra, tracingContext, requestContext } = params;
+      const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -184,11 +184,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               );
             }
 
-            // Get messages for LLM (using async llmPrompt for proper format conversion)
-            const inputMessages = (await messageList.get.all.aiV5.llmPrompt()) as LanguageModelV2Prompt;
+            let currentMessageId = messageId;
 
             // 5. Prepare tools - cast through unknown as CoreTool and ToolSet are structurally compatible at runtime
-            const toolSet = tools as unknown as ToolSet;
+            let currentModel = model;
+            let currentTools = tools as unknown as ToolSet;
+            let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
+            let currentModelSettings = { temperature: execOptions.temperature };
 
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
@@ -211,6 +213,67 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepIndex = (inputData as any).stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
+            // Build structured output for AI SDK if configured
+            const structuredOutputConfig = execOptions.structuredOutput;
+            const structuredOutput =
+              structuredOutputConfig?.schema && !structuredOutputConfig?.structuringModelConfig
+                ? {
+                    schema: structuredOutputConfig.schema,
+                    jsonPromptInjection: structuredOutputConfig.jsonPromptInjection,
+                  }
+                : undefined;
+
+            const registryEntry = globalRunRegistry.get(runId);
+            const executionAbortSignal = (registryEntry as any)?.abortSignal ?? abortSignal;
+            if (registryEntry?.inputProcessors?.length) {
+              const inputStepWriter = pubsub
+                ? {
+                    custom: async (data: { type: string }) => {
+                      await emitChunkEvent(pubsub, runId, data as any);
+                    },
+                  }
+                : undefined;
+              const runner = new ProcessorRunner({
+                inputProcessors: registryEntry.inputProcessors,
+                outputProcessors: registryEntry.outputProcessors ?? [],
+                errorProcessors: registryEntry.errorProcessors ?? [],
+                logger: logger as any,
+                agentName: typedInput.agentName ?? typedInput.agentId,
+                processorStates: registryEntry.processorStates,
+              });
+              const processInputStepResult = await runner.runProcessInputStep({
+                messageList,
+                stepNumber: stepIndex,
+                steps: (inputData as any).accumulatedSteps ?? [],
+                tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                requestContext,
+                model: currentModel,
+                messageId: currentMessageId,
+                rotateResponseMessageId: () => {
+                  currentMessageId = crypto.randomUUID();
+                  return currentMessageId;
+                },
+                tools: currentTools,
+                toolChoice: currentToolChoice,
+                modelSettings: currentModelSettings,
+                structuredOutput: structuredOutput as any,
+                retryCount: (inputData as any).processorRetryCount ?? 0,
+                abortSignal: executionAbortSignal,
+                writer: inputStepWriter,
+              });
+              currentMessageId = processInputStepResult.messageId ?? currentMessageId;
+              currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
+              currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
+              currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentModelSettings = {
+                ...currentModelSettings,
+                ...(processInputStepResult.modelSettings ?? {}),
+              };
+            }
+
+            // Get messages for LLM (using async llmPrompt for proper format conversion)
+            const inputMessages = (await messageList.get.all.aiV5.llmPrompt()) as LanguageModelV2Prompt;
+
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
             modelSpanTracker?.setDeferStepClose(true);
@@ -228,26 +291,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 8. Start MODEL_STEP span at the beginning of LLM execution
             modelSpanTracker?.startStep();
 
-            // 9. Build structured output for AI SDK if configured
-            const structuredOutputConfig = execOptions.structuredOutput;
-            const structuredOutput =
-              structuredOutputConfig?.schema && !structuredOutputConfig?.structuringModelConfig
-                ? {
-                    schema: structuredOutputConfig.schema,
-                    jsonPromptInjection: structuredOutputConfig.jsonPromptInjection,
-                  }
-                : undefined;
-
             // 10. Execute LLM call
             const modelResult = execute({
               runId,
-              model,
+              model: currentModel,
               inputMessages,
-              tools: toolSet,
-              toolChoice: execOptions.toolChoice as ToolChoice<ToolSet> | undefined,
-              options: {},
+              tools: currentTools,
+              toolChoice: currentToolChoice,
+              options: { abortSignal: executionAbortSignal },
               modelSettings: {
-                temperature: execOptions.temperature,
+                ...currentModelSettings,
                 maxRetries: 0,
               },
               includeRawChunks: execOptions.includeRawChunks,
@@ -272,13 +325,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Note: We cast through any to handle the web/node ReadableStream type mismatch
             const outputStream = new MastraModelOutput({
               model: {
-                modelId: model.modelId,
-                provider: model.provider,
-                version: model.specificationVersion,
+                modelId: currentModel.modelId,
+                provider: currentModel.provider,
+                version: currentModel.specificationVersion,
               },
               stream: modelResult as any,
               messageList,
-              messageId,
+              messageId: currentMessageId,
               options: {
                 runId,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
@@ -409,7 +462,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               const assistantMessage: MastraDBMessage = {
-                id: messageId,
+                id: currentMessageId,
                 role: 'assistant' as const,
                 content: {
                   format: 2,
@@ -444,7 +497,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               },
               metadata: {
                 id: responseMetadata.id,
-                modelId: responseMetadata.modelId || model.modelId,
+                modelId: responseMetadata.modelId || currentModel.modelId,
                 timestamp: responseMetadata.timestamp || new Date().toISOString(),
                 providerMetadata: responseMetadata,
                 headers: rawResponse?.headers,

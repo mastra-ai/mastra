@@ -103,6 +103,70 @@ function createTextThenToolModel(text: string, toolName: string, toolArgs: objec
   });
 }
 
+function createRepeatedToolThenTextModel(
+  toolName: string,
+  toolArgs: object,
+  toolIterations: number,
+  finalText: string,
+) {
+  let callCount = 0;
+  const model = new MockLanguageModelV2({
+    doStream: async () => {
+      callCount += 1;
+      const stream: ReadableStream<any> =
+        callCount <= toolIterations
+          ? convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallType: 'function',
+                toolCallId: `call-${callCount}`,
+                toolName,
+                input: JSON.stringify(toolArgs),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ])
+          : convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', textDelta: finalText },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]);
+
+      return {
+        stream,
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+
+  return { model, getCallCount: () => callCount };
+}
+
+async function drain(stream: ReadableStream<any>): Promise<any[]> {
+  const reader = stream.getReader();
+  const chunks: any[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
+}
+
 // ============================================================================
 // DurableAgent StopWhen Tests
 // ============================================================================
@@ -258,6 +322,39 @@ describe('DurableAgent stopWhen callback', () => {
 
       expect(runId).toBeDefined();
       cleanup();
+    });
+
+    it('should honor per-stream maxSteps above the durable agent default', async () => {
+      const { model: mockModel, getCallCount } = createRepeatedToolThenTextModel(
+        'loopTool',
+        { value: 'next' },
+        5,
+        'done',
+      );
+
+      const loopTool = createTool({
+        id: 'loopTool',
+        description: 'Continue the loop',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async () => ({ ok: true }),
+      });
+
+      const baseAgent = new Agent({
+        id: 'stream-maxsteps-agent',
+        name: 'Stream MaxSteps Agent',
+        instructions: 'Use tools until done.',
+        model: mockModel as LanguageModelV2,
+        tools: { loopTool },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('Loop until final answer', {
+        maxSteps: 6,
+      });
+      await drain(result.fullStream as ReadableStream<any>);
+
+      expect(getCallCount()).toBe(6);
+      result.cleanup();
     });
 
     it('should handle stopWhen returning true immediately', async () => {

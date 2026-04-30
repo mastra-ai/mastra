@@ -229,7 +229,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
         // Check if we should continue
         const shouldContinue = state.lastStepResult?.isContinued === true;
-        const underMaxSteps = state.iterationCount < maxSteps;
+        const runMaxSteps = state.options?.maxSteps ?? maxSteps;
+        const underMaxSteps = state.iterationCount < runMaxSteps;
 
         return shouldContinue && underMaxSteps;
       })
@@ -278,10 +279,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             !durableState.observationalMemory
           ) {
             try {
-              const memoryMessageList = registryEntry.messageList ?? new MessageList();
-              if (!registryEntry.messageList) {
-                memoryMessageList.deserialize(state.messageListState);
-              }
+              const memoryMessageList = new MessageList();
+              memoryMessageList.deserialize(state.messageListState);
 
               if (!durableState.threadExists) {
                 await registryEntry.memory.createThread?.({

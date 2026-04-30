@@ -10,6 +10,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
+import type { InputProcessor } from '../../../processors';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -140,6 +142,56 @@ describe('DurableAgent memory configuration', () => {
       expect(result.resourceId).toBe('user-456');
     });
 
+    it('should apply processInputStep model overrides before model execution', async () => {
+      let originalModelCalls = 0;
+      let overrideModelCalls = 0;
+      const createTrackingTextModel = (text: string, onStream: () => void) =>
+        new MockLanguageModelV2({
+          doStream: async () => {
+            onStream();
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: text },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+
+      const modelOverrideProcessor: InputProcessor = {
+        id: 'model-override-processor',
+        processInputStep: async () => ({
+          model: createTrackingTextModel('processed response', () => overrideModelCalls++) as LanguageModelV2,
+        }),
+      };
+
+      const baseAgent = new Agent({
+        id: 'model-override-agent',
+        name: 'Model Override Agent',
+        instructions: 'Test processInputStep model override',
+        model: createTrackingTextModel('original response', () => originalModelCalls++) as LanguageModelV2,
+        inputProcessors: [modelOverrideProcessor],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('Hello');
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      expect(originalModelCalls).toBe(0);
+      expect(overrideModelCalls).toBe(1);
+    });
+
     it('should handle missing memory options gracefully', async () => {
       const mockModel = createTextModel('Hello!');
 
@@ -155,6 +207,34 @@ describe('DurableAgent memory configuration', () => {
 
       expect(result.threadId).toBeUndefined();
       expect(result.resourceId).toBeUndefined();
+    });
+
+    it('should persist both user input and assistant response after a completed stream', async () => {
+      const mockMemory = new MockMemory();
+      const baseAgent = new Agent({
+        id: 'persist-response-agent',
+        name: 'Persist Response Agent',
+        instructions: 'Test response persistence',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: { thread: 'thread-persist-response', resource: 'resource-persist-response' },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const messages = await mockMemory.recall({
+        threadId: 'thread-persist-response',
+        resourceId: 'resource-persist-response',
+      });
+
+      expect(messages.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(JSON.stringify(messages.messages[0]?.content)).toContain('user input');
+      expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
+      result.cleanup();
     });
   });
 
