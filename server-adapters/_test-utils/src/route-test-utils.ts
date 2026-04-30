@@ -346,6 +346,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
     params.agentId = 'test-agent';
   }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
+  if (route.path.includes(':scheduleId')) params.scheduleId = 'test-schedule';
   if (route.path.includes(':backgroundTaskId')) params.backgroundTaskId = 'test-background-task-id';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';

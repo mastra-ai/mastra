@@ -110,12 +110,22 @@ test('pausing a schedule from the detail page persists across reload', async ({ 
 test('workflow header shows Schedules link only when the workflow has schedules', async ({ page }) => {
   await page.goto('/workflows/scheduledWorkflow/graph');
 
+  // scheduledWorkflow has exactly one schedule, so the header link goes straight
+  // to that schedule's detail page (smart routing: 1 schedule → detail page).
   const scheduledHeaderLink = page.getByRole('link', { name: /Schedules/ });
   await expect(scheduledHeaderLink).toBeVisible();
 
-  // Clicking the link navigates to the per-workflow schedules sub-route.
   await scheduledHeaderLink.click();
-  await expect(page).toHaveURL(/\/workflows\/scheduledWorkflow\/schedules$/);
+  await expect(page).toHaveURL(/\/workflows\/schedules\/[^/]+$/);
+
+  // multiScheduledWorkflow has 2 schedules, so the header link goes to the
+  // filtered list view (?workflowId=...) instead of a detail page.
+  await page.goto('/workflows/multiScheduledWorkflow/graph');
+  const multiHeaderLink = page.getByRole('link', { name: /Schedules/ });
+  await expect(multiHeaderLink).toBeVisible();
+
+  await multiHeaderLink.click();
+  await expect(page).toHaveURL(/\/workflows\/schedules\?workflowId=multiScheduledWorkflow$/);
 
   // A workflow without any declared schedules should NOT render the link.
   await page.goto('/workflows/complexWorkflow/graph');
