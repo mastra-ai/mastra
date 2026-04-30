@@ -1304,6 +1304,23 @@ export class AgentChannels {
           await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
           continue;
         }
+
+        // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
+        // Without this branch the chunk is skipped, stream.error stays unset, and the
+        // user sees silence (see #15344).
+        if (chunk.type === 'tripwire') {
+          // retry=true means the agent will retry internally with the tripwire reason as
+          // feedback and produce a new response on this same stream, so nothing to post yet.
+          if (chunk.payload.retry) continue;
+
+          await flushText();
+          const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
+          const display = chunk.payload.processorId
+            ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
+            : `🛡️ ${reason}`;
+          await sdkThread.post(display);
+          continue;
+        }
       }
     } finally {
       clearTimeout(typingFallbackTimer);

@@ -22,6 +22,8 @@ export interface PublicAuthCapabilities {
     type: 'sso' | 'credentials' | 'both';
     /** Whether sign-up is enabled (defaults to true) */
     signUpEnabled?: boolean;
+    /** Optional description explaining the auth requirement and what credentials to use */
+    description?: string;
     /** SSO configuration */
     sso?: {
       /** Provider name */
@@ -30,6 +32,8 @@ export interface PublicAuthCapabilities {
       text: string;
       /** Icon URL */
       icon?: string;
+      /** Description of the auth requirement */
+      description?: string;
       /** Login URL */
       url: string;
     };
@@ -216,6 +220,7 @@ export async function buildCapabilities(
     login = {
       type: 'both',
       signUpEnabled,
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -225,6 +230,7 @@ export async function buildCapabilities(
     const ssoConfig = (auth as ISSOProvider).getLoginButtonConfig();
     login = {
       type: 'sso',
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,

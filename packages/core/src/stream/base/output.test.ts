@@ -315,6 +315,67 @@ describe('MastraModelOutput', () => {
       expect((await output.steps).at(-1)?.providerMetadata).toEqual(providerMetadata);
       expect(onFinishPayload?.providerMetadata).toEqual(providerMetadata);
     });
+
+    it('should merge args from real tool-call into synthetic tool-call when synthetic args are empty', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        // Simulate streaming start (creates synthetic later)
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId,
+            toolName: 'my-tool',
+          },
+        },
+
+        // No delta → synthetic will have empty args {}
+
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId,
+          },
+        },
+
+        // Real tool-call arrives with actual args
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId,
+            toolName: 'my-tool',
+            args: { query: 'SELECT 1' } as any,
+          },
+        },
+
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const toolCalls = await output.toolCalls;
+
+      expect(toolCalls.length).toBeGreaterThan(0);
+      expect(toolCalls[0].payload.args).toEqual({ query: 'SELECT 1' });
+    });
   });
 
   describe('usage raw passthrough', () => {
@@ -451,6 +512,63 @@ describe('MastraModelOutput', () => {
       expect(finishPayload?.totalUsage?.raw).toEqual(secondRaw);
       expect(finishPayload?.totalUsage?.inputTokens).toBe(250);
       expect(finishPayload?.totalUsage?.outputTokens).toBe(50);
+    });
+
+    it('should sum cacheCreationInputTokens across multi-step Anthropic runs', async () => {
+      // Regression for PR #14674: per-step cacheWrite must be summed, not overwritten.
+      const runId = 'test-run';
+      const stepUsages = [
+        {
+          inputTokens: 4557,
+          outputTokens: 113,
+          totalTokens: 4670,
+          cachedInputTokens: 3584,
+          cacheCreationInputTokens: 967,
+        },
+        {
+          inputTokens: 4848,
+          outputTokens: 117,
+          totalTokens: 4965,
+          cachedInputTokens: 4551,
+          cacheCreationInputTokens: 296,
+        },
+        {
+          inputTokens: 8557,
+          outputTokens: 1270,
+          totalTokens: 9827,
+          cachedInputTokens: 4551,
+          cacheCreationInputTokens: 4005,
+        },
+      ];
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, stepUsages[0]),
+        createStepFinishChunk(runId, undefined, stepUsages[1]),
+        createStepFinishChunk(runId, undefined, stepUsages[2]),
+        createFinishChunk(runId, undefined, stepUsages[2]),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBe(17962);
+      expect(finishPayload?.totalUsage?.outputTokens).toBe(1500);
+      expect(finishPayload?.totalUsage?.cachedInputTokens).toBe(12686);
+      expect(finishPayload?.totalUsage?.cacheCreationInputTokens).toBe(5268);
     });
 
     it('should omit raw when upstream usage has no raw field', async () => {

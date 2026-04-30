@@ -2,6 +2,7 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
@@ -32,7 +33,7 @@ export function createAnswerRelevancyScorer({
   model: MastraModelConfig;
   options?: Record<'uncertaintyWeight' | 'scale', number>;
 }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'answer-relevancy-scorer',
     name: 'Answer Relevancy Scorer',
     description: 'A scorer that evaluates the relevancy of an LLM output to an input',

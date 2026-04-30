@@ -51,6 +51,9 @@ async function tuiMain() {
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
   }
+  if (result.observabilityWarning) {
+    console.info(`⚠ ${result.observabilityWarning}`);
+  }
 
   if (browser) {
     console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);

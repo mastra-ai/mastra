@@ -568,12 +568,6 @@ You can handle both at the same time — start a background research while answe
       cryptoResearchTool: true,
     },
     waitTimeoutMs: 10000,
-    onTaskComplete: async task => {
-      console.log(`Tool ${task.toolName} completed, result: ${JSON.stringify(task.result)}`);
-    },
-    onTaskFailed: async task => {
-      console.log(`Tool ${task.toolName} failed, error: ${JSON.stringify(task.error)}`);
-    },
   },
 });
 
@@ -597,13 +591,13 @@ export const subscriptionOrchestratorAgent = new Agent({
     generalAgent: generalSubAgent,
     cryptoResearchAgent,
   },
+  backgroundTasks: {
+    tools: {
+      cryptoResearchAgent: true,
+    },
+  },
   memory: new Memory(),
   defaultOptions: {
     maxSteps: 10,
   },
-  // backgroundTasks: {
-  //   tools: {
-  //     cryptoResearchAgent: true,
-  //   },
-  // },
 });

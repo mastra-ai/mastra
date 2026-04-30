@@ -974,7 +974,7 @@
       }
     },
     {
-      "hash": "fc442148efdf06c7",
+      "hash": "75686791d02556a7",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -1878,7 +1878,7 @@
       }
     },
     {
-      "hash": "3e9ba5b252abaf92",
+      "hash": "8f3ff4c97ea191f1",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",

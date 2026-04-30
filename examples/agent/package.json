@@ -71,13 +71,15 @@
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
     "mastra:studio": "mastra studio",
-    "dev:ui": "mastra dev & pnpm --dir ../.. dev:playground & wait"
+    "dev:ui": "concurrently --kill-others-on-fail --names mastra,playground \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
+    "clean": "rm -rf .mastra mastra-observability.duckdb* vector.db src/mastra/public/*.duckdb* database.sqlite"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc",
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "msw": "^2.12.2"
   }
 }

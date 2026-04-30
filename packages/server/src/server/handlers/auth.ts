@@ -19,6 +19,7 @@ import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
+import { supportsSessionRefresh } from '../auth/helpers';
 import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
@@ -145,12 +146,58 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       }
       const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
 
+      // If capabilities came back without a user, the session may have expired.
+      // Attempt a transparent refresh (same logic as coreAuthMiddleware) and retry.
+      if (!('user' in capabilities) && supportsSessionRefresh(auth)) {
+        try {
+          const sessionId = await auth.getSessionIdFromRequest(request);
+          if (sessionId) {
+            const refreshedSession = await auth.refreshSession(sessionId);
+            if (refreshedSession) {
+              const sessionHeaders = await auth.getSessionHeaders(refreshedSession);
+              const cookieValue = extractCookieFromHeaders(sessionHeaders);
+              if (cookieValue) {
+                // Rebuild capabilities with the refreshed cookie
+                const refreshedRequest = new Request(request.url, {
+                  method: request.method,
+                  headers: new Headers(request.headers),
+                });
+                refreshedRequest.headers.set('Cookie', cookieValue);
+                const refreshedCapabilities = await buildCapabilities(auth, refreshedRequest, {
+                  rbac,
+                  apiPrefix: routePrefix,
+                });
+
+                // Attach refresh headers so the adapter can set the new cookie
+                if ('user' in refreshedCapabilities) {
+                  (refreshedCapabilities as any).__refreshHeaders = sessionHeaders;
+                }
+                return refreshedCapabilities;
+              }
+            }
+          }
+        } catch {
+          // Refresh failed — return original unauthenticated capabilities
+        }
+      }
+
       return capabilities;
     } catch (error) {
       return handleError(error, 'Error getting auth capabilities');
     }
   },
 });
+
+/**
+ * Extract a full cookie string from session headers (e.g. Set-Cookie → Cookie).
+ */
+function extractCookieFromHeaders(headers: Record<string, string>): string | null {
+  const setCookie = headers['Set-Cookie'] || headers['set-cookie'];
+  if (!setCookie) return null;
+  // Set-Cookie value is "name=value; Path=/; ..." — extract "name=value"
+  const match = setCookie.match(/^([^;]+)/);
+  return match ? (match[1] ?? null) : null;
+}
 
 // ============================================================================
 // GET /auth/me

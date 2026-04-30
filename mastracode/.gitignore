@@ -1,3 +1,4 @@
 .env
 .test-tmp/
 .test-tmp-editor/
+.mastra-project.json
