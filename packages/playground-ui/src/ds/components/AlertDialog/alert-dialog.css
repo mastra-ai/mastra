@@ -1,0 +1,63 @@
+/* Alert dialog motion. Tailwind v4 sets `translate: -50% -50%` via the standalone
+ * `translate` property — keyframes only animate `transform: scale(...)` so
+ * the two don't compose and double-offset the centering. */
+
+@keyframes alert-dialog-content-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes alert-dialog-content-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes alert-dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes alert-dialog-overlay-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+.alert-dialog-overlay-anim[data-state='open'] {
+  animation: alert-dialog-overlay-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.alert-dialog-overlay-anim[data-state='closed'] {
+  animation: alert-dialog-overlay-out 240ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+.alert-dialog-content-anim[data-state='open'] {
+  animation: alert-dialog-content-in 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alert-dialog-content-anim[data-state='closed'] {
+  animation: alert-dialog-content-out 180ms cubic-bezier(0.5, 0, 0.75, 0);
+}
