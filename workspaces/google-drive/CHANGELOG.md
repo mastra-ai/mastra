@@ -1,5 +1,14 @@
 # @mastra/google-drive
 
+## 0.1.0-alpha.1
+
+### Patch Changes
+
+- GoogleDriveFilesystem tweaks: mkdir defaults to recursive, appendFile uses optimistic concurrency, rmdir skips redundant child listing, JSON body requests include Content-Type header, readFile uses consistent searchParams, and concurrent token refreshes are deduplicated. ([#16010](https://github.com/mastra-ai/mastra/pull/16010))
+
+- Updated dependencies [[`e109607`](https://github.com/mastra-ai/mastra/commit/e10960749251e34d46b480a20648c490fd30381b)]:
+  - @mastra/core@1.31.0-alpha.1
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes
