@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix `buildMessagesFromChunks` to preserve semantic stream order. Previously the `parts` array followed end-event timing, so when `text-end` arrived before `reasoning-end` the reasoning part was emitted after the text even though its first delta arrived first — confusing downstream prompt assembly. Each text and reasoning span now reserves its slot at first-seen-delta (or at start for redacted reasoning) and fills the slot at end. Closes #15914.
+Assistant message `parts` now preserve the correct order when reasoning, text, and tool chunks interleave. Previously, parts followed the order of end events, so a span whose end arrived first appeared earlier in the message even when its content actually started streaming later — for example a tool call could be emitted before reasoning that began first. Order now tracks when content actually started arriving. Closes #15914.

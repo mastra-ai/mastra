@@ -80,9 +80,10 @@ describe('buildMessagesFromChunks', () => {
       { type: 'text-end', payload: { id: 't1' } },
     ]);
     expect(result).toHaveLength(2);
-    // Parts are emitted in text-end order
-    expect(result[0]).toMatchObject({ type: 'text', text: 'Goodbye' });
-    expect(result[1]).toMatchObject({ type: 'text', text: 'Hello, world!' });
+    // Parts are emitted in first-seen-delta order (#15914): t1 receives its first delta
+    // before t2, so 'Hello, world!' precedes 'Goodbye' even though t2 ends first.
+    expect(result[0]).toMatchObject({ type: 'text', text: 'Hello, world!' });
+    expect(result[1]).toMatchObject({ type: 'text', text: 'Goodbye' });
   });
 
   // ── ProviderMetadata cascading ──────────────────────────────
