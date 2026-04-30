@@ -58,11 +58,6 @@ export class ChannelsPG extends ChannelsStorage {
     const installationsTable = getTableName({ indexName: TABLE_INSTALLATIONS, schemaName });
     const configTable = getTableName({ indexName: TABLE_CONFIG, schemaName });
 
-    // Ensure schema exists (required for per-test schemas in CI)
-    if (this.#schema && this.#schema !== 'public') {
-      await this.#db.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-    }
-
     // Create installations table
     await this.#db.client.none(`
       CREATE TABLE IF NOT EXISTS ${installationsTable} (
