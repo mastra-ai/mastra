@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.31.0-alpha.2
+
+### Patch Changes
+
+- Fixed BatchPartsProcessor using a hardcoded id in batched text-delta chunks. The real message id and runId are now preserved from the original chunks, preventing AI SDK UIMessage stream from dropping batched deltas. ([#14974](https://github.com/mastra-ai/mastra/pull/14974))
+
+## 1.31.0-alpha.1
+
+### Patch Changes
+
+- Fixed `SkillSearchProcessor` so agents use it as the on-demand skill discovery path without also adding eager skill context. ([#15916](https://github.com/mastra-ai/mastra/pull/15916))
+
+  When `SkillSearchProcessor` is configured, agents no longer auto-add the eager `SkillsProcessor`, and they hide the overlapping `skill` and `skill_search` tools while keeping `skill_read` available for supporting skill files. Workspace file tools can still read `SKILL.md` files during explicit file inspection or editing workflows.
+
 ## 1.31.0-alpha.0
 
 ### Minor Changes

@@ -131,9 +131,11 @@
     "@mastra/modal": "0.2.0",
     "@mastra/s3": "0.5.0",
     "@mastra/vercel": "0.1.0",
-    "@mastra/google-drive": "0.0.1"
+    "@mastra/google-drive": "0.0.1",
+    "@mastra/perplexity": "0.1.0-alpha.0"
   },
   "changesets": [
+    "@mastra_deployer-15211-dependencies",
     "all-paws-shake",
     "automated-provider-registry-20260430-184308",
     "brown-lamps-lie",
@@ -145,8 +147,12 @@
     "fastify-multipart-test-fix",
     "fifty-planets-refuse",
     "five-hands-punch",
+    "fix-batch-parts-processor-id",
+    "fix-dataset-experiment-compare-row-click",
+    "fix-pg-sanitize-surrogate-escape-15920",
     "fix-toolcallfilter-per-step",
     "four-owls-flow",
+    "frank-trees-swim",
     "google-drive-filesystem",
     "green-birds-knock",
     "icy-trains-wait",
@@ -155,8 +161,10 @@
     "public-jeans-dance",
     "semantic-recall-readonly",
     "sharp-facts-work",
+    "sixty-results-sniff",
     "slow-regions-help",
     "tame-teeth-lie",
+    "three-hornets-wait",
     "tricky-papayas-feel",
     "twelve-coats-punch",
     "witty-dolls-beg"

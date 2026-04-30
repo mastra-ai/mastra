@@ -1,5 +1,25 @@
 # @mastra/playground-ui
 
+## 24.1.0-alpha.3
+
+### Patch Changes
+
+- Fixed row click behavior in the dataset experiments compare view. Clicking a row while selection mode is active now toggles the row's selection instead of navigating to the experiment. Clicking directly on the checkbox no longer also triggers the row click handler. ([#15492](https://github.com/mastra-ai/mastra/pull/15492))
+
+- Updated dependencies [[`2b0f355`](https://github.com/mastra-ai/mastra/commit/2b0f3553be3e9e5524da539a66e5cf82668440a4)]:
+  - @mastra/core@1.31.0-alpha.2
+  - @mastra/client-js@1.15.3-alpha.2
+  - @mastra/react@0.2.33-alpha.2
+
+## 24.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e109607`](https://github.com/mastra-ai/mastra/commit/e10960749251e34d46b480a20648c490fd30381b)]:
+  - @mastra/core@1.31.0-alpha.1
+  - @mastra/client-js@1.15.3-alpha.1
+  - @mastra/react@0.2.33-alpha.1
+
 ## 24.1.0-alpha.1
 
 ### Minor Changes

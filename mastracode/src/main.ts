@@ -11,6 +11,7 @@ import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
+import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
@@ -32,7 +33,7 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain() {
+async function tuiMain(pipedInput?: string | null) {
   // Load browser from settings (before creating harness)
   const settings = loadSettings();
   const browser = await createBrowserFromSettings(settings.browser);
@@ -93,6 +94,7 @@ async function tuiMain() {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
 
   tui.run().catch(error => {
@@ -159,7 +161,29 @@ function handleFatalError(error: unknown): never {
   process.exit(1);
 }
 
-const main = hasHeadlessFlag(process.argv) ? headlessMain : tuiMain;
+async function main() {
+  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+    return headlessMain();
+  }
+
+  // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
+  // before starting the TUI.  The drain blocks until the sender process exits
+  // and closes its stdout, so we never see partial output.
+  let pipedInput: string | null = null;
+  if (!process.stdin.isTTY) {
+    process.stderr.write('Reading piped input...\n');
+    pipedInput = await drainPipedStdin();
+
+    // Always reopen a real TTY — even if the pipe was empty, the original
+    // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
+    if (!reopenStdinFromTTY()) {
+      process.stderr.write('No TTY available — falling back to headless mode.\n');
+      return headlessMain(pipedInput);
+    }
+  }
+
+  return tuiMain(pipedInput);
+}
 
 main().catch(error => {
   handleFatalError(error);

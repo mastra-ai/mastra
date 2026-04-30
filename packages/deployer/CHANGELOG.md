@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 1.31.0-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#15211](https://github.com/mastra-ai/mastra/pull/15211))
+  - Updated dependency [`typescript-paths@^1.5.2` ↗︎](https://www.npmjs.com/package/typescript-paths/v/1.5.2) (from `^1.5.1`, in `dependencies`)
+- Updated dependencies [[`2b0f355`](https://github.com/mastra-ai/mastra/commit/2b0f3553be3e9e5524da539a66e5cf82668440a4)]:
+  - @mastra/core@1.31.0-alpha.2
+  - @mastra/server@1.31.0-alpha.2
+
+## 1.31.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`e109607`](https://github.com/mastra-ai/mastra/commit/e10960749251e34d46b480a20648c490fd30381b)]:
+  - @mastra/core@1.31.0-alpha.1
+  - @mastra/server@1.31.0-alpha.1
+
 ## 1.31.0-alpha.0
 
 ### Patch Changes

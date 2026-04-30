@@ -94,6 +94,7 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
 
   private accessToken?: string;
   private tokenExpiresAt = 0;
+  private tokenRefreshPromise?: Promise<string>;
   private readonly folderId: string;
   private readonly getAccessToken?: () => string | Promise<string>;
   private readonly serviceAccount?: GoogleDriveServiceAccount;
@@ -161,7 +162,10 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     await this.ensureReady();
     const file = await this.getFile(path);
     if (file.mimeType === FOLDER_MIME_TYPE) throw new IsDirectoryError(path);
-    const response = await this.fetch(`${DRIVE_API}/files/${encodeURIComponent(file.id)}?alt=media`, { method: 'GET' });
+    const response = await this.fetch(`${DRIVE_API}/files/${encodeURIComponent(file.id)}`, {
+      method: 'GET',
+      searchParams: { alt: 'media' },
+    });
     const buffer = Buffer.from(await response.arrayBuffer());
     return options?.encoding ? buffer.toString(options.encoding) : buffer;
   }
@@ -189,8 +193,19 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
   }
 
   async appendFile(path: string, content: FileContent): Promise<void> {
-    const current = (await this.exists(path)) ? await this.readFile(path) : Buffer.alloc(0);
-    await this.writeFile(path, Buffer.concat([this.toBuffer(current), this.toBuffer(content)]), { recursive: true });
+    await this.ensureReady();
+    this.assertWritable('appendFile');
+    const existing = await this.findFile(path);
+    if (existing) {
+      if (existing.mimeType === FOLDER_MIME_TYPE) throw new IsDirectoryError(path);
+      const current = await this.readFile(path);
+      const expectedMtime = existing.modifiedTime ? new Date(existing.modifiedTime) : undefined;
+      await this.writeFile(path, Buffer.concat([this.toBuffer(current), this.toBuffer(content)]), {
+        expectedMtime,
+      });
+    } else {
+      await this.writeFile(path, content, { recursive: true });
+    }
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
@@ -253,7 +268,7 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
       if (existing.mimeType !== FOLDER_MIME_TYPE) throw new FileExistsError(path);
       return;
     }
-    const { parentId, name } = await this.resolveParent(path, options?.recursive ?? false);
+    const { parentId, name } = await this.resolveParent(path, options?.recursive ?? true);
     await this.createFolder(parentId, name);
   }
 
@@ -266,8 +281,10 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
       throw new DirectoryNotFoundError(path);
     }
     if (dir.mimeType !== FOLDER_MIME_TYPE) throw new NotDirectoryError(path);
-    const children = await this.listChildren(dir.id);
-    if (children.length && !options?.recursive) throw new DirectoryNotEmptyError(path);
+    if (!options?.recursive) {
+      const children = await this.listChildren(dir.id);
+      if (children.length) throw new DirectoryNotEmptyError(path);
+    }
     await this.request<void>(`${DRIVE_API}/files/${encodeURIComponent(dir.id)}`, { method: 'DELETE' });
   }
 
@@ -497,9 +514,14 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     const token = await this.getToken();
     const target = new URL(url);
     for (const [key, value] of Object.entries(init.searchParams ?? {})) target.searchParams.set(key, value);
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    // Auto-apply Content-Type for JSON bodies when not explicitly set (e.g. multipart uploads).
+    if (init.body && typeof init.body === 'string' && !init.headers) {
+      headers['Content-Type'] = 'application/json';
+    }
     const response = await globalThis.fetch(target, {
       ...init,
-      headers: { Authorization: `Bearer ${token}`, ...init.headers },
+      headers: { ...headers, ...(init.headers as Record<string, string>) },
     });
     if (!response.ok) {
       const message = await response.text().catch(() => response.statusText);
@@ -511,7 +533,15 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
   private async getToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiresAt - 60_000) return this.accessToken;
     if (this.getAccessToken) return this.getAccessToken();
-    if (this.serviceAccount) return this.getServiceAccountToken();
+    if (this.serviceAccount) {
+      // Dedup concurrent refresh attempts — all callers share the same in-flight promise.
+      if (!this.tokenRefreshPromise) {
+        this.tokenRefreshPromise = this.getServiceAccountToken().finally(() => {
+          this.tokenRefreshPromise = undefined;
+        });
+      }
+      return this.tokenRefreshPromise;
+    }
     if (this.accessToken) return this.accessToken;
     throw new Error('GoogleDriveFilesystem requires accessToken, getAccessToken, or serviceAccount authentication.');
   }
