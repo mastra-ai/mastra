@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MockMemory } from '../../../memory/mock';
+import type { InputProcessor } from '../../../processors';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -139,6 +140,56 @@ describe('DurableAgent memory configuration', () => {
 
       expect(result.threadId).toBe('thread-from-object');
       expect(result.resourceId).toBe('user-456');
+    });
+
+    it('should apply processInputStep model overrides before model execution', async () => {
+      let originalModelCalls = 0;
+      let overrideModelCalls = 0;
+      const createTrackingTextModel = (text: string, onStream: () => void) =>
+        new MockLanguageModelV2({
+          doStream: async () => {
+            onStream();
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: text },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+
+      const modelOverrideProcessor: InputProcessor = {
+        id: 'model-override-processor',
+        processInputStep: async () => ({
+          model: createTrackingTextModel('processed response', () => overrideModelCalls++) as LanguageModelV2,
+        }),
+      };
+
+      const baseAgent = new Agent({
+        id: 'model-override-agent',
+        name: 'Model Override Agent',
+        instructions: 'Test processInputStep model override',
+        model: createTrackingTextModel('original response', () => originalModelCalls++) as LanguageModelV2,
+        inputProcessors: [modelOverrideProcessor],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('Hello');
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      expect(originalModelCalls).toBe(0);
+      expect(overrideModelCalls).toBe(1);
     });
 
     it('should handle missing memory options gracefully', async () => {
