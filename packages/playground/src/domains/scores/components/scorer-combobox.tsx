@@ -23,7 +23,7 @@ export function ScorerCombobox({
   emptyText = 'No scorers found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
 }: ScorerComboboxProps) {
   const { data: scorers = {}, isLoading, isError, error } = useScorers();
   const { navigate, paths } = useLinkComponent();

@@ -90,7 +90,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                       emptyText="No tools available"
                       disabled={isLoading || readOnly}
                       error={error}
-                      variant="light"
+                      variant="default"
                     />
                     {selectedOptions.length > 0 && (
                       <div className="flex flex-col gap-3 mt-2">

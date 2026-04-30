@@ -32,7 +32,6 @@ export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
-export * from './ds/components/IconButton';
 export * from './ds/components/Input';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';
