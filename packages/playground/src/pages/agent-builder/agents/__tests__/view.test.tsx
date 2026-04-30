@@ -230,7 +230,7 @@ describe('AgentBuilderAgentView', () => {
     expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
     expect(configurePanel.getAttribute('data-active-tab')).toBe('chat');
 
-    fireEvent.mouseDown(getByTestId('agent-builder-tab-configure'));
+    fireEvent.click(getByTestId('agent-builder-tab-configure'));
 
     expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
     expect(configurePanel.getAttribute('data-active-tab')).toBe('configure');

@@ -1,4 +1,4 @@
-import { cn, IconButton, Tabs, TabList, Tab } from '@mastra/playground-ui';
+import { cn, IconButton } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -88,17 +88,49 @@ export const WorkspaceLayout = ({
         </div>
       </div>
       {showConfigure && (
-        <div className="lg:hidden px-4 pt-2 md:px-10">
-          <Tabs<ActiveTab> defaultTab="chat" value={activeTab} onValueChange={value => setActiveTab(value)}>
-            <TabList>
-              <Tab value="chat" className="px-4">
-                <span data-testid="agent-builder-tab-chat">Chat</span>
-              </Tab>
-              <Tab value="configure" className="px-4">
-                <span data-testid="agent-builder-tab-configure">Configuration</span>
-              </Tab>
-            </TabList>
-          </Tabs>
+        <div className="lg:hidden px-4 pt-3 md:px-10">
+          <div
+            role="tablist"
+            aria-label="Workspace view"
+            className="relative mx-auto flex h-9 w-full max-w-sm items-center rounded-full border border-border1 bg-surface3 p-0.5"
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                'absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-surface4',
+                'transition-transform duration-200 ease-out',
+                activeTab === 'configure' && 'translate-x-full',
+              )}
+            />
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'chat'}
+              data-testid="agent-builder-tab-chat"
+              onClick={() => setActiveTab('chat')}
+              className={cn(
+                'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
+                'transition-colors duration-200',
+                activeTab === 'chat' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
+              )}
+            >
+              Chat
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'configure'}
+              data-testid="agent-builder-tab-configure"
+              onClick={() => setActiveTab('configure')}
+              className={cn(
+                'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
+                'transition-colors duration-200',
+                activeTab === 'configure' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
+              )}
+            >
+              Configuration
+            </button>
+          </div>
         </div>
       )}
       <div className="flex flex-1 min-h-0 min-w-0 flex-col px-4 pb-6 pt-4 md:px-10">
