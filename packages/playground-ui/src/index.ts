@@ -108,6 +108,9 @@ export * from './ds/components/PrevNextNav';
 export * from './ds/components/ScrollableContainer';
 export * from './ds/components/StatusBadge';
 
+// DS Components - MCP Apps
+export * from './ds/components/McpAppViewer';
+
 // DS Icons
 export * from './ds/icons/index';
 

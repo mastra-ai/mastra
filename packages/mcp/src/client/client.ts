@@ -165,6 +165,11 @@ export class InternalMastraMCPClient extends MastraBase {
       },
       // Auto-enable roots capability if roots are provided
       ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
+      // Advertise MCP Apps extension support so servers know we can render UI resources
+      extensions: {
+        ...(capabilities.extensions ?? {}),
+        'io.modelcontextprotocol/ui': {},
+      },
     };
 
     this.client = new Client(
@@ -680,11 +685,15 @@ export class InternalMastraMCPClient extends MastraBase {
         // When requireToolApproval is false/undefined, requireApproval stays undefined
         // and createTool defaults it to false
 
+        const toolMeta = (tool as { _meta?: Record<string, unknown> })._meta;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
-          strict: getMastraToolStrictMeta((tool as { _meta?: Record<string, unknown> })._meta),
+          strict: getMastraToolStrictMeta(toolMeta),
+          // Preserve the full _meta from the remote MCP server (including ui.resourceUri
+          // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
+          ...(toolMeta ? { mcp: { _meta: toolMeta } } : {}),
           // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult

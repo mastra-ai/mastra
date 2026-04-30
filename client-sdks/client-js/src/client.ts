@@ -711,6 +711,40 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists resources available on an MCP server.
+   * @param serverId - The ID of the MCP server.
+   * @returns Promise containing the list of resources.
+   */
+  public getMcpServerResources(serverId: string): Promise<{
+    resources: Array<{
+      uri: string;
+      name: string;
+      description?: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+    }>;
+  }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources`);
+  }
+
+  /**
+   * Reads the content of a resource from an MCP server.
+   * Used for fetching ui:// MCP App HTML content.
+   * @param serverId - The ID of the MCP server.
+   * @param uri - The resource URI to read.
+   * @returns Promise containing the resource content.
+   */
+  public readMcpServerResource(
+    serverId: string,
+    uri: string,
+  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
+      method: 'POST',
+      body: { uri },
+    });
+  }
+
+  /**
    * Gets an A2A client for interacting with an agent via the A2A protocol
    * @param agentId - ID of the agent to interact with
    * @returns A2A client instance
