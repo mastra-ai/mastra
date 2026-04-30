@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.61",
+  "version": "0.0.64",
   "description": "",
   "type": "module",
   "main": "src/index.js",

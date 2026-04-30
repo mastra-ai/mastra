@@ -15,13 +15,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   _internal,
   ...rest
 }: OuterLLMRun<Tools, OUTPUT>) {
-  // Track how many response model messages existed before each LLM call.
-  // This lets add-response-to-messagelist only add truly NEW messages from the current
-  // iteration, preventing historical is-task-complete and iteration-feedback messages
-  // from being re-added (which would bypass the isTaskCompleteResult merge guard because
-  // the metadata is lost in the MastraDBMessage → ModelMessage round-trip).
-  let existingResponseModelCount = 0;
-
   const llmExecutionStep = createLLMExecutionStep({
     models,
     _internal,
@@ -100,35 +93,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       validateInputs: false,
     },
   })
-    .map(
-      async ({ inputData }) => {
-        // Capture response model message count BEFORE the LLM runs.
-        // This snapshot is used below to add only NEW messages to the messageList,
-        // preventing historical messages (e.g. is-task-complete, iteration-feedback)
-        // from being re-added on subsequent iterations.
-        existingResponseModelCount = rest.messageList.get.response.aiV5.model().length;
-        return inputData as LLMIterationData<Tools, OUTPUT>;
-      },
-      { id: 'capture-response-count' },
-    )
     .then(llmExecutionStep)
-    .map(
-      async ({ inputData }) => {
-        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        // Add assistant response messages to messageList BEFORE processing tool calls
-        // This ensures messages are available for persistence before suspension.
-        // IMPORTANT: only add messages beyond existingResponseModelCount to avoid
-        // re-adding historical is-task-complete / iteration-feedback messages whose
-        // isTaskCompleteResult metadata is stripped during the ModelMessage round-trip.
-        const responseMessages = typedInputData.messages.nonUser;
-        const newMessages = responseMessages ? responseMessages.slice(existingResponseModelCount) : [];
-        if (newMessages.length > 0) {
-          rest.messageList.add(newMessages, 'response');
-        }
-        return typedInputData;
-      },
-      { id: 'add-response-to-messagelist' },
-    )
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;

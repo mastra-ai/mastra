@@ -548,6 +548,7 @@ describe('convertFullStreamChunkToMastra', () => {
           inputTokens: 10,
           outputTokens: 20,
           totalTokens: 30,
+          cacheCreationInputTokens: 7,
         },
         providerMetadata: {},
         messages: {
@@ -562,6 +563,7 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(result?.type).toBe('finish');
       if (result?.type === 'finish') {
         expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(7);
         expect(result.payload.providerMetadata).toEqual({});
         expect(result.payload.metadata.providerMetadata).toEqual({});
       }
@@ -595,6 +597,7 @@ describe('convertFullStreamChunkToMastra', () => {
       if (result?.type === 'finish') {
         expect(result.payload.stepResult.reason).toBe('stop');
         expect(result.payload.output.usage.cachedInputTokens).toBe(94);
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }

@@ -12,7 +12,12 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import { AgentsMDInjector, PrefillErrorHandler, ProviderHistoryCompat } from '@mastra/core/processors';
+import {
+  AgentsMDInjector,
+  PrefillErrorHandler,
+  ProviderHistoryCompat,
+  StreamErrorRetryProcessor,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -350,7 +355,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
     ],
-    errorProcessors: [new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];

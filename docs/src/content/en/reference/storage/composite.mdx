@@ -250,12 +250,12 @@ const storage = new MastraCompositeStore({
 
 Observability data can quickly overwhelm general-purpose databases in production. A single agent interaction can generate hundreds of spans, and high-traffic applications can produce thousands of traces per day.
 
-**ClickHouse** is recommended for production observability because it's optimized for high-volume, write-heavy analytics workloads. Use composite storage to route observability to ClickHouse while keeping other data in your primary database:
+**[ClickHouse](/reference/storage/clickhouse)** is recommended for production observability because it's optimized for high-volume, write-heavy analytics workloads. Use composite storage to route observability to ClickHouse while keeping other data in your primary database:
 
 ```typescript
 import { MastraCompositeStore } from '@mastra/core/storage'
 import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
-import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 
 const storage = new MastraCompositeStore({
   id: 'composite',
@@ -263,7 +263,7 @@ const storage = new MastraCompositeStore({
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
     workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
     scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-    observability: new ObservabilityStorageClickhouse({
+    observability: new ObservabilityStorageClickhouseVNext({
       url: process.env.CLICKHOUSE_URL,
       username: process.env.CLICKHOUSE_USERNAME,
       password: process.env.CLICKHOUSE_PASSWORD,
@@ -271,6 +271,12 @@ const storage = new MastraCompositeStore({
   },
 })
 ```
+
+:::note
+
+`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. The legacy `ObservabilityStorageClickhouse` class is also exported and remains supported for projects that have not migrated. See the [ClickHouse storage reference](/reference/storage/clickhouse) for details.
+
+:::
 
 :::info
 

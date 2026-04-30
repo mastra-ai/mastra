@@ -1,14 +1,6 @@
 import type { AttachmentState } from '@assistant-ui/react';
 import { AttachmentPrimitive, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
-import {
-  IconButton,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Icon,
-  fileToBase64,
-} from '@mastra/playground-ui';
+import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger, Icon, fileToBase64 } from '@mastra/playground-ui';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -103,16 +95,16 @@ const AttachmentThumbnail = () => {
 const AttachmentRemove = () => {
   return (
     <AttachmentPrimitive.Remove asChild>
-      <IconButton
-        variant="light"
-        size="md"
+      <Button
+        variant="default"
+        size="icon-md"
         tooltip="Remove file"
         className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2 rounded-full p-1"
       >
         <Icon>
           <CircleXIcon />
         </Icon>
-      </IconButton>
+      </Button>
     </AttachmentPrimitive.Remove>
   );
 };

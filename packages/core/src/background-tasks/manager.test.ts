@@ -884,6 +884,124 @@ describe('BackgroundTaskManager', () => {
       abortController.abort();
     });
 
+    it('emits every progress output chunk by default', async () => {
+      const abortController = new AbortController();
+      const stream = manager.stream({ abortSignal: abortController.signal });
+      const reader = stream.getReader();
+
+      const chunk = (output: string) => ({
+        type: 'tool-output',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: { output, toolCallId: 'c1', toolName: 'tool' },
+      });
+
+      const executeFn = vi.fn().mockImplementation(async (_args: any, opts: { onProgress?: (chunk: any) => void }) => {
+        await opts.onProgress?.(chunk('first'));
+        await opts.onProgress?.(chunk('second'));
+        await opts.onProgress?.(chunk('third'));
+        return 'done';
+      });
+
+      await manager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+
+      await tick();
+
+      await reader.read(); // running
+
+      const firstOutput = await reader.read();
+      expect(firstOutput.value).toMatchObject({
+        type: 'background-task-output',
+        payload: { payload: { payload: { output: 'first' } } },
+      });
+
+      const secondOutput = await reader.read();
+      expect(secondOutput.value).toMatchObject({
+        type: 'background-task-output',
+        payload: { payload: { payload: { output: 'second' } } },
+      });
+
+      const thirdOutput = await reader.read();
+      expect(thirdOutput.value).toMatchObject({
+        type: 'background-task-output',
+        payload: { payload: { payload: { output: 'third' } } },
+      });
+
+      const completed = await reader.read();
+      expect(completed.value).toMatchObject({
+        type: 'background-task-completed',
+        payload: { result: 'done' },
+      });
+
+      abortController.abort();
+    });
+
+    it('throttles progress output chunks while still emitting completion', async () => {
+      const isolatedPubsub = new EventEmitterPubSub();
+      const mgr = new BackgroundTaskManager({ enabled: true, progressThrottleMs: 100 });
+      mgr.__registerMastra(mastra);
+      await mgr.init(isolatedPubsub);
+
+      const abortController = new AbortController();
+      const stream = mgr.stream({ abortSignal: abortController.signal });
+      const reader = stream.getReader();
+      let now = 1_000;
+      const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+      const chunk = (output: string) => ({
+        type: 'tool-output',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: { output, toolCallId: 'c1', toolName: 'tool' },
+      });
+
+      const executeFn = vi.fn().mockImplementation(async (_args: any, opts: { onProgress?: (chunk: any) => void }) => {
+        await opts.onProgress?.(chunk('first'));
+        now += 50;
+        await opts.onProgress?.(chunk('dropped'));
+        now += 100;
+        await opts.onProgress?.(chunk('third'));
+        return 'done';
+      });
+
+      try {
+        await mgr.enqueue(
+          { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+          ctx(executeFn),
+        );
+
+        await tick();
+
+        await reader.read(); // running
+
+        const firstOutput = await reader.read();
+        expect(firstOutput.value).toMatchObject({
+          type: 'background-task-output',
+          payload: { payload: { payload: { output: 'first' } } },
+        });
+
+        const thirdOutput = await reader.read();
+        expect(thirdOutput.value).toMatchObject({
+          type: 'background-task-output',
+          payload: { payload: { payload: { output: 'third' } } },
+        });
+
+        const completed = await reader.read();
+        expect(completed.value).toMatchObject({
+          type: 'background-task-completed',
+          payload: { result: 'done' },
+        });
+      } finally {
+        dateNow.mockRestore();
+        abortController.abort();
+        await mgr.shutdown();
+        await isolatedPubsub.close();
+      }
+    });
+
     it('emits cancel event with cancelled status', async () => {
       const abortController = new AbortController();
       const stream = manager.stream({ abortSignal: abortController.signal });

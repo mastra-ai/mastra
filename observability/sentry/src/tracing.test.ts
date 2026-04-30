@@ -404,8 +404,8 @@ describe('SentryExporter', () => {
         expect.objectContaining({
           'gen_ai.usage.input_tokens': 150,
           'gen_ai.usage.output_tokens': 75,
-          'gen_ai.usage.cached_input_tokens': 100,
-          'gen_ai.usage.cache_write_tokens': 50,
+          'gen_ai.usage.cache_read.input_tokens': 100,
+          'gen_ai.usage.cache_creation.input_tokens': 50,
         }),
       );
     });
@@ -892,8 +892,8 @@ describe('SentryExporter', () => {
       // Verify tokens were copied to the parent span
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.input_tokens', 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.output_tokens', 50);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read_input_tokens', 20);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_write_input_tokens', 10);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read.input_tokens', 20);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_creation.input_tokens', 10);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning_tokens', 30);
     });
 

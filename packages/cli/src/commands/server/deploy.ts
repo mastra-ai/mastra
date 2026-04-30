@@ -9,7 +9,7 @@ import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
 
 /* ------------------------------------------------------------------ */
@@ -73,7 +73,10 @@ async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
 
   return entries
     .filter(
-      entry => (entry.isFile() || entry.isSymbolicLink()) && (entry.name === '.env' || entry.name.startsWith('.env.')),
+      entry =>
+        (entry.isFile() || entry.isSymbolicLink()) &&
+        (entry.name === '.env' || entry.name.startsWith('.env.')) &&
+        !entry.name.endsWith('.example'),
     )
     .map(entry => entry.name)
     .sort((a, b) => a.localeCompare(b));
@@ -323,12 +326,7 @@ export async function serverDeployAction(
 
     await saveProjectConfig(
       targetDir,
-      {
-        projectId,
-        projectName,
-        projectSlug,
-        organizationId: orgId,
-      },
+      getProjectConfigToSave(projectId, projectName, projectSlug, orgId, projectConfig),
       opts.config,
     );
     p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
@@ -361,13 +359,12 @@ export async function serverDeployAction(
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive`);
 
-  s.start('Reading environment variables...');
   const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
-    s.stop(`Found ${envCount} env var(s)`);
+    p.log.step(`Found ${envCount} env var(s)`);
   } else {
-    s.stop('No .env file found');
+    p.log.step('No env vars found in selected env file');
   }
 
   s.start('Uploading...');
@@ -375,6 +372,7 @@ export async function serverDeployAction(
   const deployResult = await uploadServerDeploy(token, orgId, projectId, zipBuffer, {
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
+    disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 
