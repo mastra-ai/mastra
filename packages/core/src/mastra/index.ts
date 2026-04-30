@@ -310,6 +310,27 @@ export interface Config<
    * while the conversation continues.
    */
   backgroundTasks?: BackgroundTaskManagerConfig;
+
+  /**
+   * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
+   * When set, the value is automatically attached to all observability signals
+   * so they can be filtered by environment without passing
+   * `tracingOptions.metadata.environment` on every call.
+   *
+   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
+   * is left undefined rather than guessed.
+   *
+   * Per-call `tracingOptions.metadata.environment` always takes precedence.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   environment: 'production',
+   *   observability: new Observability({ ... }),
+   * })
+   * ```
+   */
+  environment?: string;
 }
 
 /**
@@ -390,6 +411,7 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
+  #environment?: string;
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -465,6 +487,19 @@ export class Mastra<
    */
   public getVersionOverrides(): VersionOverrides | undefined {
     return this.#versions;
+  }
+
+  /**
+   * Returns the deployment environment name configured on this Mastra instance,
+   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
+   * is provided.
+   *
+   * Observability automatically reads this and attaches it to all signals so
+   * consumers can filter by environment without passing
+   * `tracingOptions.metadata.environment` on each call.
+   */
+  public getEnvironment(): string | undefined {
+    return this.#environment;
   }
 
   /**
@@ -640,6 +675,10 @@ export class Mastra<
 
     // Store global version overrides
     this.#versions = config?.versions;
+
+    // Resolve deployment environment: explicit config wins, else fall back to
+    // NODE_ENV. Leave undefined if neither is set rather than guessing.
+    this.#environment = config?.environment ?? process.env.NODE_ENV;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;

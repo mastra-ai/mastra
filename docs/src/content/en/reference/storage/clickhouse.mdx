@@ -89,7 +89,27 @@ New projects should use `ObservabilityStorageClickhouseVNext` instead.
 
 ### ClickHouse for every domain
 
-`ClickhouseStore` implements the `memory`, `workflows`, and `observability` domains, and is suitable when you want ClickHouse to back the entire application. Its built-in observability domain uses the legacy adapter, so wrap it in a composite store that overrides the `observability` domain with `ObservabilityStorageClickhouseVNext`:
+`ClickhouseStoreVNext` backs the `memory`, `workflows`, and `observability` domains with ClickHouse and uses the vNext observability adapter automatically. Use it when you want ClickHouse to back the entire application without wiring a composite store manually.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { ClickhouseStoreVNext } from '@mastra/clickhouse'
+
+export const mastra = new Mastra({
+  storage: new ClickhouseStoreVNext({
+    id: 'clickhouse-storage',
+    url: process.env.CLICKHOUSE_URL!,
+    username: process.env.CLICKHOUSE_USERNAME!,
+    password: process.env.CLICKHOUSE_PASSWORD!,
+  }),
+})
+```
+
+`ClickhouseStoreVNext` accepts the same configuration as `ClickhouseStore` and reuses the same ClickHouse client across every domain.
+
+#### Manual composition
+
+`ClickhouseStore` is the long-standing class that backs every domain with the legacy observability adapter. New projects should prefer `ClickhouseStoreVNext`. If you need to customize the composite (for example, to override one domain with a different backend), build it manually:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
