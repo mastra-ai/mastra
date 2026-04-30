@@ -1,0 +1,125 @@
+name: Fork CodeRabbit CLI Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: fork-coderabbit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  coderabbit:
+    name: CodeRabbit CLI review
+    if: >-
+      github.repository == 'mbenhamd/mastra' &&
+      github.event.pull_request.user.login == 'mbenhamd' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check CodeRabbit secret
+        id: config
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+        run: |
+          if [ -n "$CODERABBIT_API_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CODERABBIT_API_KEY is not configured; skipping CodeRabbit CLI review."
+          fi
+
+      - name: Checkout PR head
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        if: steps.config.outputs.enabled == 'true'
+        run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+      - name: Install CodeRabbit CLI
+        if: steps.config.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o /tmp/coderabbit-install.sh https://cli.coderabbit.ai/install.sh
+          sh /tmp/coderabbit-install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run CodeRabbit CLI review
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          coderabbit review \
+            --plain \
+            --no-color \
+            --base "origin/${BASE_REF}" \
+            --api-key "$CODERABBIT_API_KEY" \
+            > coderabbit-review.md
+
+      - name: Comment CodeRabbit result
+        if: steps.config.outputs.enabled == 'true' && always()
+        uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- fork-coderabbit-cli-review -->';
+            const outputPath = 'coderabbit-review.md';
+            let review = fs.existsSync(outputPath)
+              ? fs.readFileSync(outputPath, 'utf8').trim()
+              : 'CodeRabbit CLI did not write a review output file.';
+            if (review.length > 60000) {
+              review = review.slice(0, 59900) + '\n\n_Output truncated to fit GitHub comment limits._';
+            }
+
+            const status = process.env.JOB_STATUS === 'success' ? 'completed' : 'failed';
+            const body = [
+              marker,
+              '### CodeRabbit CLI review',
+              '',
+              `Status: ${status}`,
+              '',
+              review || '_No findings returned._',
+              '',
+              '---',
+              `_Fork-only CodeRabbit CLI workflow: ${process.env.RUN_URL}_`,
+            ].join('\n');
+
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              comment => comment.user?.type === 'Bot' && comment.body?.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number,
+                body,
+              });
+            }
