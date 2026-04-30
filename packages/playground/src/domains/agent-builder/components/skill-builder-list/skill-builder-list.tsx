@@ -28,9 +28,10 @@ function formatRelativeTime(iso: string): string {
 export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];
   search?: string;
+  onSkillClick?: (skill: StoredSkillResponse) => void;
 };
 
-export function SkillBuilderList({ skills, search }: SkillBuilderListProps) {
+export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderListProps) {
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return skills;
@@ -56,8 +57,8 @@ export function SkillBuilderList({ skills, search }: SkillBuilderListProps) {
   return (
     <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
       {filtered.map(skill => {
-        return (
-          <div key={skill.id} className="px-6 py-5 flex items-center gap-4">
+        const row = (
+          <>
             <div className="bg-surface3 p-2 rounded-md text-neutral5 flex items-center justify-center">
               <SparklesIcon className="h-5 w-5" />
             </div>
@@ -84,6 +85,20 @@ export function SkillBuilderList({ skills, search }: SkillBuilderListProps) {
               size="sm"
               className="shrink-0"
             />
+          </>
+        );
+
+        return onSkillClick ? (
+          <button
+            key={skill.id}
+            className="px-6 py-5 flex items-center gap-4 w-full text-left hover:bg-surface3/50 transition-colors"
+            onClick={() => onSkillClick(skill)}
+          >
+            {row}
+          </button>
+        ) : (
+          <div key={skill.id} className="px-6 py-5 flex items-center gap-4">
+            {row}
           </div>
         );
       })}
