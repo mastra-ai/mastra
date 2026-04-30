@@ -151,6 +151,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // processOutputResult. In production, getInputProcessors() and
       // getOutputProcessors() each call createOMProcessor(), producing two
       // different instances that share only the processorStates map.
+      const activeTurn = (state.__omTurn as ObservationTurn | undefined) ?? this.turn;
+      if (activeTurn && activeTurn.messageList !== messageList) {
+        // Durable runs may deserialize a fresh MessageList between loop iterations. End the
+        // old turn first so any messages tracked on that list are flushed before OM moves on.
+        await activeTurn.end().catch(() => {});
+        if (this.turn === activeTurn) {
+          this.turn = undefined;
+        }
+        state.__omTurn = undefined;
+      }
+
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
