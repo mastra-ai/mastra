@@ -1,6 +1,6 @@
 import type { UpdateModelParams } from '@mastra/client-js';
 import { Notice, Button, Spinner } from '@mastra/playground-ui';
-import { RotateCcw, TriangleAlertIcon } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
@@ -198,20 +198,16 @@ export const AgentMetadataModelSwitcher = ({
       {/* Show warning if selected provider is not connected */}
       {currentProvider && !currentProvider.connected && (
         <div className="pt-2 p-2">
-          <Notice variant="warning">
-            <TriangleAlertIcon />
-            <Notice.Column>
-              <Notice.Title>Provider not connected</Notice.Title>
-              <Notice.Message>
-                Set the{' '}
-                <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                  {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
-                </code>{' '}
-                environment{' '}
-                {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1 ? 'variables' : 'variable'}{' '}
-                to use this provider.
-              </Notice.Message>
-            </Notice.Column>
+          <Notice variant="warning" title="Provider not connected">
+            <Notice.Message>
+              Set the{' '}
+              <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
+                {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
+              </code>{' '}
+              environment{' '}
+              {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1 ? 'variables' : 'variable'} to
+              use this provider.
+            </Notice.Message>
           </Notice>
         </div>
       )}

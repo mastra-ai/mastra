@@ -1,6 +1,6 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
-import { BracesIcon, FileInputIcon, FileOutputIcon, TriangleAlertIcon } from 'lucide-react';
+import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
@@ -137,12 +137,8 @@ function SpanDataPanelContent({
     <>
       {isTokenLimitExceeded(span) && (
         <div className="mb-3">
-          <Notice variant="warning">
-            <TriangleAlertIcon />
-            <Notice.Column>
-              <Notice.Title>Token Limit Exceeded</Notice.Title>
-              <Notice.Message>{getTokenLimitMessage(span)}</Notice.Message>
-            </Notice.Column>
+          <Notice variant="warning" title="Token Limit Exceeded">
+            <Notice.Message>{getTokenLimitMessage(span)}</Notice.Message>
           </Notice>
         </div>
       )}

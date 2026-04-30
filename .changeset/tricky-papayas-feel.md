@@ -16,13 +16,9 @@ Deprecated `<Alert>` in favor of `<Notice>`. The two components had significant 
 </Alert>
 
 // After
-<Notice variant="warning">
-  <TriangleAlertIcon />
-  <Notice.Column>
-    <Notice.Title>Provider not connected</Notice.Title>
-    <Notice.Message>Set the API key environment variable.</Notice.Message>
-  </Notice.Column>
+<Notice variant="warning" title="Provider not connected">
+  <Notice.Message>Set the API key environment variable.</Notice.Message>
 </Notice>
 ```
 
-Also cleans up `<Notice>`: replaces a hardcoded hex background in the `warning` variant with the `accent6Dark` design token and fixes a CSS selector typo that prevented nested icons from inheriting size/opacity styles.
+`<Notice>` is also redesigned with a flatter API: `title` and `icon` are now props, each variant ships a default icon, an optional `action` prop renders a button aligned to the title, and a new `note` variant has been added. Tokens (`notice-warning`, `notice-destructive`, `notice-info`, `notice-success`, `notice-note`) replace the previous hardcoded colors.

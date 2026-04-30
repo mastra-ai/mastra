@@ -18,7 +18,7 @@ import {
   WorkflowIcon,
 } from '@mastra/playground-ui';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
-import { GaugeIcon, Folder, Globe, TriangleAlertIcon } from 'lucide-react';
+import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
@@ -127,23 +127,19 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
             <span aria-hidden="true">On</span>
           </Badge>
         ) : (
-          <Notice variant="warning">
-            <TriangleAlertIcon />
-            <Notice.Column>
-              <Notice.Title>Memory not enabled</Notice.Title>
-              <Notice.Message>
-                Thread messages will not be stored. To activate memory, see the{' '}
-                <a
-                  href="https://mastra.ai/en/docs/agents/agent-memory"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  documentation
-                </a>
-                .
-              </Notice.Message>
-            </Notice.Column>
+          <Notice variant="warning" title="Memory not enabled">
+            <Notice.Message>
+              Thread messages will not be stored. To activate memory, see the{' '}
+              <a
+                href="https://mastra.ai/en/docs/agents/agent-memory"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </Notice.Message>
           </Notice>
         )}
       </AgentMetadataSection>
@@ -238,24 +234,20 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           theme={codemirrorTheme}
         />
         {!isCmsLoading && !isCmsAvailable && (
-          <Notice variant="warning">
-            <TriangleAlertIcon />
-            <Notice.Column>
-              <Notice.Title>Read-only</Notice.Title>
-              <Notice.Message>
-                To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-                project. See the{' '}
-                <a
-                  href="https://mastra.ai/docs/editor/overview"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  documentation
-                </a>
-                .
-              </Notice.Message>
-            </Notice.Column>
+          <Notice variant="warning" title="Read-only">
+            <Notice.Message>
+              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+              project. See the{' '}
+              <a
+                href="https://mastra.ai/docs/editor/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </Notice.Message>
           </Notice>
         )}
       </AgentMetadataSection>
