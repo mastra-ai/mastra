@@ -517,9 +517,11 @@ export type StorageUpdateAgentInput = {
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
-} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+} & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
     memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    /** Browser configuration (inline ref), or null to disable browser */
+    browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
 
 export type StorageListAgentsInput = {

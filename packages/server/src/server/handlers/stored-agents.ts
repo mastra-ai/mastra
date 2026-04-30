@@ -538,7 +538,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
-        browser,
+        browser: resolvedBrowser,
         requestContextSchema,
       };
 
