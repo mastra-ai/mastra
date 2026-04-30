@@ -122,6 +122,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      // Clear per-thread ephemeral state first so renderExistingMessages
+      // and other downstream observers see clean state.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks([]);
+        state.ui.requestRender();
+      }
+      state.taskWriteInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -135,14 +143,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
       }
-      // Restore tasks from thread state
-      const threadState = state.harness.getState() as {
-        tasks?: TaskItem[];
-      };
-      if (state.taskProgress) {
-        state.taskProgress.updateTasks(threadState.tasks ?? []);
-        state.ui.requestRender();
-      }
       break;
     }
 
@@ -155,7 +155,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
-      // Clear stale tasks from the previous thread
+      // Clear per-thread ephemeral state so new threads start clean.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
@@ -217,9 +218,28 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       handleOMBufferingFailed(ectx, event.operationType, event.error);
       break;
 
-    case 'om_activation':
-      handleOMActivation(ectx, event.operationType, event.tokensActivated, event.observationTokens);
+    case 'om_activation': {
+      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+        triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+        lastActivityAt?: number;
+        ttlExpiredMs?: number;
+        activateAfterIdle?: number;
+        previousModel?: string;
+        currentModel?: string;
+      };
+      handleOMActivation(
+        ectx,
+        activationEvent.operationType,
+        activationEvent.tokensActivated,
+        activationEvent.observationTokens,
+        activationEvent.triggeredBy,
+        activationEvent.activateAfterIdle,
+        activationEvent.ttlExpiredMs,
+        activationEvent.previousModel,
+        activationEvent.currentModel,
+      );
       break;
+    }
 
     case 'om_thread_title_updated':
       state.currentThreadTitle = event.newTitle;
@@ -248,7 +268,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     // Subagent / Task delegation events
     case 'subagent_start':
-      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId);
+      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId, event.forked);
       break;
 
     case 'subagent_tool_start':

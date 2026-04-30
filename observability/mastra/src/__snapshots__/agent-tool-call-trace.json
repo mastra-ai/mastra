@@ -29,7 +29,8 @@
         "metadata": {
           "runId": "<runId-1>",
           "resourceId": "test-resource-id",
-          "threadId": "test-thread-id"
+          "threadId": "test-thread-id",
+          "environment": "test"
         },
         "input": "Calculate 5 + 3",
         "output": {
@@ -56,21 +57,27 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
-                "outputTokens": 35
+                "outputTokens": 35,
+                "inputDetails": {
+                  "text": 30
+                },
+                "outputDetails": {
+                  "text": 35
+                }
               }
             },
             "metadata": {
               "runId": "<runId-1>",
-              "resourceId": "test-resource-id"
+              "resourceId": "test-resource-id",
+              "threadId": "test-thread-id",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -117,7 +124,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 10
+                    "outputTokens": 10,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 10
+                    }
                   },
                   "isContinued": true,
                   "finishReason": "tool-calls"
@@ -125,11 +138,13 @@
                 "metadata": {
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
+                  "threadId": "test-thread-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -166,7 +181,9 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -198,7 +215,9 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "input": {
                       "operation": "add",
@@ -229,11 +248,10 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
                       "toolCallId": "call-calc-1",
-                      "toolName": "calculator"
-                    },
-                    "output": {
-                      "result": 8
+                      "toolName": "calculator",
+                      "environment": "test"
                     }
                   }
                 }
@@ -256,7 +274,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
@@ -264,11 +288,13 @@
                 "metadata": {
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
+                  "threadId": "test-thread-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -297,7 +323,9 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "output": {
                       "text": {

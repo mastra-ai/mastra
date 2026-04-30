@@ -1,0 +1,233 @@
+---
+title: "Okta | Auth"
+description: Authenticate your Mastra server and Studio using Okta with SSO login and group-based RBAC.
+packages:
+  - "@mastra/auth-okta"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Okta
+
+The `@mastra/auth-okta` package provides authentication and role-based access control for Mastra using Okta. It supports an OAuth 2.0 / OIDC login flow with encrypted session cookies and maps Okta groups to Mastra permissions.
+
+## Prerequisites
+
+This guide uses Okta authentication. Make sure to:
+
+1. Create an Okta account at [okta.com](https://www.okta.com/)
+1. Set up an OAuth application in the Okta Admin Console (Web app, Authorization Code grant)
+1. Add your redirect URI to the application's sign-in redirect URIs
+1. Create an API token (required for RBAC)
+
+Make sure your environment variables are set.
+
+```env title=".env"
+OKTA_DOMAIN=dev-123456.okta.com
+OKTA_CLIENT_ID=your-client-id
+OKTA_CLIENT_SECRET=your-client-secret
+OKTA_REDIRECT_URI=http://localhost:4111/api/auth/callback
+OKTA_COOKIE_PASSWORD=a-random-string-at-least-32-characters-long
+OKTA_API_TOKEN=your-api-token
+```
+
+:::note
+
+`OKTA_COOKIE_PASSWORD` encrypts session cookies. If omitted, an auto-generated value is used that does not survive server restarts. Set it explicitly for production.
+
+`OKTA_API_TOKEN` is only required when using `MastraRBACOkta` to map Okta groups to permissions.
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/auth-okta
+```
+
+## Usage examples
+
+### Basic usage with environment variables
+
+With the environment variables above set, all constructor parameters are optional:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOkta } from '@mastra/auth-okta'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOkta(),
+  },
+})
+```
+
+### Auth with RBAC
+
+Add `MastraRBACOkta` to map Okta groups to Mastra permissions:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOkta(),
+    rbac: new MastraRBACOkta({
+      roleMapping: {
+        Admin: ['*'],
+        Engineering: ['agents:*', 'workflows:*', 'tools:*'],
+        Viewer: ['agents:read', 'workflows:read'],
+        _default: [], // users with unmapped groups get no permissions
+      },
+    }),
+  },
+})
+```
+
+### Cross-provider usage
+
+Use a different auth provider (Auth0, Clerk, etc.) for login and Okta for RBAC. Pass a `getUserId` function to resolve the Okta user ID from the other provider's user object:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
+import { MastraRBACOkta } from '@mastra/auth-okta'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0(),
+    rbac: new MastraRBACOkta({
+      getUserId: user => user.metadata?.oktaUserId || user.email,
+      roleMapping: {
+        Engineering: ['agents:*', 'workflows:*'],
+        Admin: ['*'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+:::note
+
+To link users between providers, store the Okta user ID in the other provider's user metadata. Mastra uses this ID to fetch groups from Okta.
+
+:::
+
+:::info
+
+Visit [MastraAuthOkta](/reference/auth/okta) for all available configuration options.
+
+:::
+
+## Role mapping
+
+The `roleMapping` option maps Okta group names to arrays of Mastra permission strings. Permissions follow a `resource:action` pattern and support wildcards:
+
+```typescript
+const rbac = new MastraRBACOkta({
+  roleMapping: {
+    // full access to everything
+    Admin: ['*'],
+
+    // full access to agents and workflows
+    Engineering: ['agents:*', 'workflows:*'],
+
+    // read-only access
+    Viewer: ['agents:read', 'workflows:read'],
+
+    // users whose groups don't match any key above
+    _default: [],
+  },
+})
+```
+
+The `_default` key assigns permissions to users whose Okta groups do not match any other key.
+
+## Client-side setup
+
+When auth is enabled, requests to Mastra routes require authentication. `MastraAuthOkta` uses SSO, so users authenticate through Okta's hosted login page. After login, an encrypted session cookie is set automatically.
+
+### Cookie session (recommended)
+
+For cross-origin requests (e.g. a frontend on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOkta(),
+    cors: {
+      origin: 'http://localhost:3000',
+      credentials: true,
+    },
+  },
+})
+```
+
+Configure the client to include credentials:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const mastraClient = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+  credentials: 'include',
+})
+```
+
+### Bearer token
+
+You can also pass an Okta access token as a Bearer token. The token is verified against Okta's JWKS endpoint:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const createMastraClient = (accessToken: string) => {
+  return new MastraClient({
+    baseUrl: 'http://localhost:4111',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+}
+```
+
+:::info
+
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
+
+:::
+
+### Making authenticated requests
+
+<Tabs>
+  <TabItem value="client" label="MastraClient">
+    ```typescript title="src/api/agents.ts"
+    import { mastraClient } from '../lib/mastra-client'
+
+    const agent = mastraClient.getAgent('weatherAgent')
+    const response = await agent.generate('Weather in London')
+    console.log(response)
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-okta-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>
+
+## Troubleshooting
+
+- **401 on every request**: Verify your Okta domain, client ID, and client secret are correct. Check that the redirect URI in your Okta application matches `OKTA_REDIRECT_URI`.
+- **Cookies not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
+- **Session lost on restart**: Set `OKTA_COOKIE_PASSWORD` to a stable value (at least 32 characters). Without it, an auto-generated key is used that changes on each restart.
+- **RBAC returns empty permissions**: Verify `OKTA_API_TOKEN` is set and the token has permission to list user groups. Check that group names in `roleMapping` match your Okta group names exactly.

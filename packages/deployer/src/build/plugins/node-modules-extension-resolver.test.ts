@@ -69,6 +69,11 @@ describe('nodeModulesExtensionResolver', () => {
       expect(result).toBeNull();
     });
 
+    it('protocol imports', async () => {
+      const result = await resolveId('cloudflare:workers', '/project/src/index.ts');
+      expect(result).toBeNull();
+    });
+
     it('direct package imports (non-scoped)', async () => {
       const result = await resolveId('lodash', '/project/src/index.ts');
       expect(result).toBeNull();

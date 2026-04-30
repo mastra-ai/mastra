@@ -18,6 +18,7 @@ import type {
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
+import { supportsSessionRefresh } from '../auth/helpers';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -26,6 +27,7 @@ import {
   currentUserResponseSchema,
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
+  refreshResponseSchema,
 } from '../schemas/auth';
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -64,16 +66,35 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 
 /**
  * Get the public-facing origin from a request, respecting reverse proxy headers.
- * Behind a proxy (e.g. edge router), request.url contains the internal hostname.
- * X-Forwarded-Host tells us the real public hostname.
- * Always uses https when behind a proxy — Knative's queue-proxy overwrites
- * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
+ * Behind a proxy (e.g. edge router), request.url contains the internal hostname,
+ * so we rely on forwarded headers to reconstruct the real public origin.
+ *
+ * Assumes the server is behind a trusted proxy (or running locally). When
+ * exposed directly to untrusted clients, the Host header is attacker-controlled
+ * and must be validated upstream.
+ *
+ * Priority:
+ * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS. Knative's
+ *    queue-proxy overwrites X-Forwarded-Proto based on the internal HTTP
+ *    connection, so X-Forwarded-Proto is ignored here.
+ * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto.
+ * 3. Host header alone → use the scheme from request.url (covers both direct
+ *    HTTP access and proxies that preserve Host but don't set a proto header).
+ * 4. No Host header → fall back to request.url.origin (local dev / direct access).
  */
 export function getPublicOrigin(request: Request): string {
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (forwardedHost) {
     return `https://${forwardedHost}`;
   }
+
+  const host = request.headers.get('host');
+  if (host) {
+    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
+    return `${proto}://${host}`;
+  }
+
   return new URL(request.url).origin;
 }
 
@@ -123,12 +144,58 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       }
       const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
 
+      // If capabilities came back without a user, the session may have expired.
+      // Attempt a transparent refresh (same logic as coreAuthMiddleware) and retry.
+      if (!('user' in capabilities) && supportsSessionRefresh(auth)) {
+        try {
+          const sessionId = await auth.getSessionIdFromRequest(request);
+          if (sessionId) {
+            const refreshedSession = await auth.refreshSession(sessionId);
+            if (refreshedSession) {
+              const sessionHeaders = await auth.getSessionHeaders(refreshedSession);
+              const cookieValue = extractCookieFromHeaders(sessionHeaders);
+              if (cookieValue) {
+                // Rebuild capabilities with the refreshed cookie
+                const refreshedRequest = new Request(request.url, {
+                  method: request.method,
+                  headers: new Headers(request.headers),
+                });
+                refreshedRequest.headers.set('Cookie', cookieValue);
+                const refreshedCapabilities = await buildCapabilities(auth, refreshedRequest, {
+                  rbac,
+                  apiPrefix: routePrefix,
+                });
+
+                // Attach refresh headers so the adapter can set the new cookie
+                if ('user' in refreshedCapabilities) {
+                  (refreshedCapabilities as any).__refreshHeaders = sessionHeaders;
+                }
+                return refreshedCapabilities;
+              }
+            }
+          }
+        } catch {
+          // Refresh failed — return original unauthenticated capabilities
+        }
+      }
+
       return capabilities;
     } catch (error) {
       return handleError(error, 'Error getting auth capabilities');
     }
   },
 });
+
+/**
+ * Extract a full cookie string from session headers (e.g. Set-Cookie → Cookie).
+ */
+function extractCookieFromHeaders(headers: Record<string, string>): string | null {
+  const setCookie = headers['Set-Cookie'] || headers['set-cookie'];
+  if (!setCookie) return null;
+  // Set-Cookie value is "name=value; Path=/; ..." — extract "name=value"
+  const match = setCookie.match(/^([^;]+)/);
+  return match ? (match[1] ?? null) : null;
+}
 
 // ============================================================================
 // GET /auth/me
@@ -430,6 +497,64 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// POST /auth/refresh
+// ============================================================================
+
+export const POST_REFRESH_ROUTE = createPublicRoute({
+  method: 'POST',
+  path: '/auth/refresh',
+  responseType: 'datastream-response',
+  responseSchema: refreshResponseSchema,
+  summary: 'Refresh session',
+  description: 'Refreshes the current session, extending its expiry. Sets a new session cookie on success.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, request } = ctx as any;
+
+    try {
+      const auth = getAuthProvider(mastra);
+
+      if (
+        !auth ||
+        !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
+        !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
+      ) {
+        throw new HTTPException(404, { message: 'Session refresh not configured' });
+      }
+
+      // Get session ID from request
+      const sessionId = auth.getSessionIdFromRequest(request);
+      if (!sessionId) {
+        throw new HTTPException(401, { message: 'No session' });
+      }
+
+      // Refresh the session
+      const newSession = await auth.refreshSession(sessionId);
+      if (!newSession) {
+        throw new HTTPException(401, { message: 'Session expired' });
+      }
+
+      // Build response with new session headers
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
+        const sessionHeaders = auth.getSessionHeaders(newSession);
+        for (const [key, value] of Object.entries(sessionHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error refreshing session');
+    }
+  },
+});
+
+// ============================================================================
 // POST /auth/credentials/sign-in
 // ============================================================================
 
@@ -554,6 +679,7 @@ export const AUTH_ROUTES = [
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
   POST_LOGOUT_ROUTE,
+  POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
 ] as const;

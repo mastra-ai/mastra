@@ -18,9 +18,13 @@ type MockSkillSource = SkillSource & {
 // Mock Skill Source
 // =============================================================================
 
-function createMockFilesystem(files: Record<string, string | Buffer> = {}): MockSkillSource {
+function createMockFilesystem(
+  files: Record<string, string | Buffer> = {},
+  options?: { realpaths?: Record<string, string> },
+): MockSkillSource {
   const fileSystem = new Map<string, string | Buffer>(Object.entries(files));
   const directories = new Set<string>();
+  const realpaths = options?.realpaths ?? {};
 
   // Initialize directories from file paths
   for (const path of Object.keys(files)) {
@@ -132,6 +136,7 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
       }
       throw new Error(`Path not found: ${path}`);
     }),
+    realpath: vi.fn(async (path: string) => realpaths[path] ?? path),
   };
 }
 
@@ -420,6 +425,7 @@ describe('WorkspaceSkillsImpl', () => {
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
 
     it('should use search engine when configured', async () => {
@@ -440,7 +446,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       // Verify skill was indexed
       expect(searchEngine.indexedDocs.length).toBeGreaterThan(0);
-      expect(searchEngine.indexedDocs[0]?.metadata?.skillName).toBe('test-skill');
+      expect(searchEngine.indexedDocs[0]?.metadata?.skillPath).toBe('skills/test-skill');
     });
 
     it('should filter by skill names', async () => {
@@ -472,6 +478,51 @@ describe('WorkspaceSkillsImpl', () => {
 
       const results = await skills.search('test', { topK: 2 });
       expect(results.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should de-duplicate canonical aliases in search results', async () => {
+      const searchEngine = createMockSearchEngine();
+      const canonicalSkillMd = `---
+name: test-skill
+description: API design skill
+---
+
+# API Design
+
+Use this skill to design REST APIs.
+
+## Tools
+
+This skill helps with endpoint design and API patterns.`;
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': canonicalSkillMd,
+          'skills/test-skill/references/doc.md': 'API reference for canonical skill.',
+          'linked-skills/test-skill/SKILL.md': canonicalSkillMd,
+          'linked-skills/test-skill/references/doc.md': 'API reference for canonical skill.',
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills'],
+        searchEngine,
+      });
+
+      await skills.list();
+
+      const results = await skills.search('API', { topK: 2 });
+      expect(results).toHaveLength(2);
+      expect(results).toEqual([
+        expect.objectContaining({ skillPath: 'linked-skills/test-skill', source: 'SKILL.md' }),
+        expect.objectContaining({ skillPath: 'linked-skills/test-skill', source: 'references/doc.md' }),
+      ]);
     });
   });
 
@@ -744,7 +795,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['node_modules/@company/skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('node_modules/@company/skills/test-skill');
       expect(skill?.source.type).toBe('external');
     });
 
@@ -758,7 +809,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['.mastra/skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('.mastra/skills/test-skill');
       expect(skill?.source.type).toBe('managed');
     });
   });
@@ -1047,6 +1098,314 @@ Instructions for the new skill.`;
     });
   });
 
+  describe('maybeRefresh SKILL.md file mtime detection', () => {
+    /**
+     * Helper to mock stat with separate mtimes for directories vs files.
+     * This simulates the real filesystem behavior where editing a file's content
+     * updates the file's mtime but not its parent directory's mtime.
+     */
+    function mockSplitMtimeStat(filesystem: MockSkillSource, getDirMtime: () => Date, getFileMtime: () => Date) {
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => {
+          const exists = await filesystem.exists(path);
+          if (!exists) {
+            throw new Error(`ENOENT: no such file or directory, stat '${path}'`);
+          }
+          const isFile = path.endsWith('.md');
+          const mtime = isFile ? getFileMtime() : getDirMtime();
+          return {
+            name: path.split('/').pop() || path,
+            type: isFile ? ('file' as const) : ('directory' as const),
+            size: 0,
+            createdAt: mtime,
+            modifiedAt: mtime,
+          };
+        },
+      );
+    }
+
+    it('should detect SKILL.md content changes even when directory mtime unchanged', async () => {
+      vi.useFakeTimers();
+      try {
+        // Separate mtimes for directories vs files
+        const dirMtime = new Date(Date.now() - 10000); // Old, never changes
+        let fileMtime = new Date(Date.now() - 10000); // Starts old, will be updated
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': `---
+name: bad-name
+description: A test skill with invalid name
+---
+# Test Skill
+Instructions here.`,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+          validateOnLoad: true,
+          checkSkillFileMtime: true, // Enable opt-in file mtime detection
+        });
+
+        // Initial discovery - skill has invalid name, should not be loaded
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(0);
+
+        // Advance past the staleness check cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Fix the SKILL.md content (only file mtime changes, not directory)
+        const fixedSkillMd = `---
+name: test-skill
+description: A test skill with valid name
+---
+# Test Skill
+Instructions here.`;
+        await filesystem.writeFile('skills/test-skill/SKILL.md', fixedSkillMd);
+
+        // Update only the file mtime, directory stays old
+        fileMtime = new Date(Date.now() + 1000);
+
+        // maybeRefresh should detect the file change and reload
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        // With checkSkillFileMtime: true, SKILL.md file changes are detected
+        expect(afterRefresh).toHaveLength(1);
+        expect(afterRefresh[0]!.name).toBe('test-skill');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect SKILL.md content updates for existing valid skills', async () => {
+      vi.useFakeTimers();
+      try {
+        const dirMtime = new Date(Date.now() - 10000);
+        let fileMtime = new Date(Date.now() - 10000);
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+          checkSkillFileMtime: true, // Enable opt-in file mtime detection
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+        expect(initialList[0]!.description).toBe('A test skill for unit testing');
+
+        const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+        // Advance past cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Update SKILL.md content (description change)
+        const updatedSkillMd = `---
+name: test-skill
+description: Updated description for the skill
+---
+# Test Skill
+Updated instructions.`;
+        await filesystem.writeFile('skills/test-skill/SKILL.md', updatedSkillMd);
+
+        // Only file mtime changes
+        fileMtime = new Date(Date.now() + 1000);
+
+        await skills.maybeRefresh();
+        const afterRefreshCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+        // Should have re-read the file
+        expect(afterRefreshCalls).toBeGreaterThan(initialReadFileCalls);
+
+        const afterRefresh = await skills.list();
+        expect(afterRefresh).toHaveLength(1);
+        expect(afterRefresh[0]!.description).toBe('Updated description for the skill');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect new agent-created skills via directory mtime change (checkSkillFileMtime not required)', async () => {
+      vi.useFakeTimers();
+      try {
+        let dirMtime = new Date(Date.now() - 10000);
+        let fileMtime = new Date(Date.now() - 10000);
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD, // name: test-skill matches directory
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        // Note: checkSkillFileMtime is NOT enabled - directory mtime detection should still work
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+
+        // Advance past cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Agent creates a new skill by writing files directly
+        const newSkillMd = `---
+name: agent-created-skill
+description: A skill created by the agent
+---
+# Agent Created Skill
+This skill was created programmatically.`;
+        await filesystem.writeFile('skills/agent-created-skill/SKILL.md', newSkillMd);
+
+        // Creating new directory updates parent directory mtime - this triggers refresh
+        dirMtime = new Date(Date.now() + 1000);
+        fileMtime = new Date(Date.now() + 1000);
+
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        expect(afterRefresh).toHaveLength(2);
+        expect(afterRefresh.map(s => s.name).sort()).toEqual(['agent-created-skill', 'test-skill']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should NOT detect SKILL.md file changes by default (checkSkillFileMtime: false)', async () => {
+      vi.useFakeTimers();
+      try {
+        const dirMtime = new Date(Date.now() - 10000);
+        let fileMtime = new Date(Date.now() - 10000);
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': `---
+name: bad-name
+description: A test skill with invalid name
+---
+# Test Skill
+Instructions here.`,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        // Default: checkSkillFileMtime is false
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+          validateOnLoad: true,
+        });
+
+        // Initial discovery - skill has invalid name
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(0);
+
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Fix the SKILL.md content (only file mtime changes)
+        const fixedSkillMd = `---
+name: test-skill
+description: A test skill with valid name
+---
+# Test Skill
+Instructions here.`;
+        await filesystem.writeFile('skills/test-skill/SKILL.md', fixedSkillMd);
+        fileMtime = new Date(Date.now() + 1000);
+
+        // Without checkSkillFileMtime, this should NOT detect the change
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        // Still 0 because file mtime change was not detected
+        expect(afterRefresh).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect SKILL.md changes for direct skill paths (e.g., **/SKILL.md glob)', async () => {
+      vi.useFakeTimers();
+      try {
+        // Separate mtimes for directories vs files
+        const dirMtime = new Date(Date.now() - 10000); // Old, never changes
+        let fileMtime = new Date(Date.now() - 10000); // Starts old, will be updated
+
+        const filesMap: Record<string, string> = {
+          'skills/my-skill/SKILL.md': VALID_SKILL_MD,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        // Direct skill path (simulates glob that resolved directly to a skill directory)
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills/my-skill'], // Direct skill path
+          validateOnLoad: false,
+          checkSkillFileMtime: true,
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+        expect(initialList[0]!.description).toBe('A test skill for unit testing');
+
+        // Advance past the staleness check cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Update the skill content (only file mtime changes, not directory)
+        const updatedSkillMd = VALID_SKILL_MD.replace('A test skill for unit testing', 'An updated skill description');
+        await filesystem.writeFile('skills/my-skill/SKILL.md', updatedSkillMd);
+
+        // Update only the file mtime, directory stays old
+        fileMtime = new Date(Date.now() + 1000);
+
+        // maybeRefresh should detect the SKILL.md mtime change via direct skill path check
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        expect(afterRefresh).toHaveLength(1);
+        expect(afterRefresh[0]!.description).toBe('An updated skill description');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('read-only mode (SkillSource)', () => {
     // Create a mock read-only source (no write methods)
     function createMockReadOnlySource(files: Record<string, string | Buffer> = {}) {
@@ -1136,6 +1495,7 @@ Instructions for the new skill.`;
           }
           throw new Error(`Path not found: ${path}`);
         }),
+        realpath: vi.fn(async (path: string) => path),
         // NOTE: No writeFile, mkdir, rmdir - this is a read-only source
       };
     }
@@ -1188,6 +1548,7 @@ Instructions for the new skill.`;
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
   });
 
@@ -1455,6 +1816,216 @@ Instructions for the new skill.`;
       const result = await skills.list();
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
+    });
+
+    it('should de-duplicate same-named local skills that resolve to the same canonical path', async () => {
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills'],
+      });
+
+      const listed = await skills.list();
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.path).toBe('linked-skills/test-skill');
+
+      const winner = await skills.get('test-skill');
+      expect(winner?.path).toBe('linked-skills/test-skill');
+      expect(winner?.instructions).toContain('This is the test skill instructions.');
+    });
+
+    it('should de-duplicate canonical aliases in list() while preserving distinct local skills', async () => {
+      const shadowSkillMd = `---
+name: test-skill
+description: Shadow copy of the test skill
+license: MIT
+---
+
+Shadow instructions.`;
+
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+            'custom-skills/test-skill': '/real/custom-skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills', 'custom-skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      const paths = result.map(s => s.path).sort();
+      expect(paths).toEqual(['custom-skills/test-skill', 'linked-skills/test-skill']);
+
+      await expect(skills.get('test-skill')).rejects.toThrow(
+        'Cannot resolve skill "test-skill": multiple local skills found',
+      );
+
+      const specific = await skills.get('skills/test-skill');
+      expect(specific?.instructions).toContain('This is the test skill instructions.');
+
+      const shadow = await skills.get('custom-skills/test-skill');
+      expect(shadow?.instructions).toContain('Shadow instructions.');
+    });
+
+    it('should prefer local skills over external skills with same name', async () => {
+      const externalSkillMd = `---
+name: test-skill
+description: External copy of the test skill
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['node_modules/@company/skills', 'skills'],
+      });
+
+      // list() returns canonical skills only; distinct source types still both appear
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      const paths = result.map(s => s.path).sort();
+      expect(paths).toEqual(['node_modules/@company/skills/test-skill', 'skills/test-skill']);
+
+      // get() by name returns local (tie-break winner: local > external)
+      const winner = await skills.get('test-skill');
+      expect(winner?.source.type).toBe('local');
+      expect(winner?.instructions).toContain('This is the test skill instructions.');
+
+      // Path-based escape hatch still works for the external one
+      const external = await skills.get('node_modules/@company/skills/test-skill');
+      expect(external?.source.type).toBe('external');
+      expect(external?.instructions).toContain('External instructions.');
+    });
+
+    it('should keep the higher-priority source when canonical aliases collapse into one listed skill', async () => {
+      const externalSkillMd = `---
+name: test-skill
+description: External copy of the test skill
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem(
+        {
+          'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        },
+        {
+          realpaths: {
+            'node_modules/@company/skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['node_modules/@company/skills', 'linked-skills'],
+      });
+
+      await expect(skills.list()).resolves.toMatchObject([{ path: 'linked-skills/test-skill' }]);
+      await expect(skills.get('test-skill')).resolves.toMatchObject({
+        path: 'linked-skills/test-skill',
+        source: { type: 'local' },
+      });
+    });
+
+    it('should emit a warning when tie-breaking resolves same-named skills across source types', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const externalSkillMd = `---
+name: test-skill
+description: External copy
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'node_modules/@company/skills'],
+      });
+
+      // Trigger resolution — local wins over external, emits warning
+      const winner = await skills.get('test-skill');
+      expect(winner?.source.type).toBe('local');
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Multiple skills named "test-skill"'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should resolve skill by path with /SKILL.md suffix (issue #14918)', async () => {
+      // The SkillsProcessor tells the LLM to use the "location" field
+      // (which is `${skill.path}/SKILL.md`) to disambiguate same-named skills.
+      // #resolveByPath must accept paths that include the trailing /SKILL.md.
+      const shadowSkillMd = `---
+name: test-skill
+description: Shadow copy of the test skill
+license: MIT
+---
+
+Shadow instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'custom-skills'],
+      });
+
+      // get() by exact path works without /SKILL.md (baseline)
+      const specific = await skills.get('skills/test-skill');
+      expect(specific?.instructions).toContain('This is the test skill instructions.');
+
+      // get() by path WITH /SKILL.md suffix — this is what the LLM sends
+      // because SkillsProcessor.formatLocation() returns `${skill.path}/SKILL.md`
+      const specificWithSuffix = await skills.get('skills/test-skill/SKILL.md');
+      expect(specificWithSuffix).not.toBeNull();
+      expect(specificWithSuffix?.instructions).toContain('This is the test skill instructions.');
+
+      const shadowWithSuffix = await skills.get('custom-skills/test-skill/SKILL.md');
+      expect(shadowWithSuffix).not.toBeNull();
+      expect(shadowWithSuffix?.instructions).toContain('Shadow instructions.');
     });
   });
 
@@ -1772,7 +2343,7 @@ These are the updated instructions.
       expect(await skills.has('api-skill')).toBe(true);
 
       // Surgically remove one
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
 
       expect(await skills.has('test-skill')).toBe(false);
       expect(await skills.has('api-skill')).toBe(true);
@@ -1827,7 +2398,7 @@ These are the updated instructions.
 
       await skills.list();
 
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
       const readFileCallsAfterRemove = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
 
       // maybeRefresh should NOT trigger a full refresh since removeSkill bumped the timestamp
@@ -1859,11 +2430,11 @@ These are the updated instructions.
 
       await skills.list();
 
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
 
       // Should have removed SKILL.md and reference entries
-      expect(removedIds).toContain('skill:test-skill:SKILL.md');
-      expect(removedIds).toContain('skill:test-skill:doc.md');
+      expect(removedIds).toContain('skill:skills/test-skill:SKILL.md');
+      expect(removedIds).toContain('skill:skills/test-skill:doc.md');
     });
   });
 
@@ -2169,5 +2740,216 @@ Premium instructions.
 
       warnSpy.mockRestore();
     });
+  });
+
+  // ===========================================================================
+  // Parallel I/O performance tests
+  // ===========================================================================
+
+  describe('parallel I/O performance', () => {
+    /**
+     * Simulates a slow filesystem backend (e.g. S3, GCS, remote AgentFS).
+     * Each I/O operation adds a configurable delay.
+     * Tracks call counts and total wall-clock time spent waiting.
+     */
+    function createSlowFilesystem(
+      files: Record<string, string | Buffer>,
+      delayMs: number,
+    ): MockSkillSource & { ioCalls: number; peakConcurrency: number } {
+      const fast = createMockFilesystem(files);
+      const tracker = { ioCalls: 0, peakConcurrency: 0, _inflight: 0 };
+
+      function trackConcurrency() {
+        tracker._inflight++;
+        if (tracker._inflight > tracker.peakConcurrency) {
+          tracker.peakConcurrency = tracker._inflight;
+        }
+      }
+
+      const delay = () =>
+        new Promise<void>(resolve => {
+          trackConcurrency();
+          setTimeout(() => {
+            tracker.ioCalls++;
+            tracker._inflight--;
+            resolve();
+          }, delayMs);
+        });
+
+      return {
+        ...fast,
+        get ioCalls() {
+          return tracker.ioCalls;
+        },
+        get peakConcurrency() {
+          return tracker.peakConcurrency;
+        },
+        exists: vi.fn(async (path: string) => {
+          await delay();
+          return fast.exists(path);
+        }),
+        stat: vi.fn(async (path: string) => {
+          await delay();
+          // Return a fixed past time so staleness check doesn't re-trigger discovery
+          const result = await fast.stat(path);
+          result.modifiedAt = new Date(Date.now() - 60_000);
+          result.createdAt = new Date(Date.now() - 60_000);
+          return result;
+        }),
+        readFile: vi.fn(async (path: string) => {
+          await delay();
+          return fast.readFile(path);
+        }),
+        readdir: vi.fn(async (path: string) => {
+          await delay();
+          return fast.readdir(path);
+        }),
+      };
+    }
+
+    function makeSkillMd(name: string, description: string): string {
+      return `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\nInstructions for ${name}.\n`;
+    }
+
+    /**
+     * Build a filesystem with N skills, each having references/scripts/assets subdirs.
+     */
+    function buildSkillsFilesystem(skillCount: number): Record<string, string | Buffer> {
+      const files: Record<string, string | Buffer> = {};
+      for (let i = 0; i < skillCount; i++) {
+        const name = `skill-${i}`;
+        files[`skills/${name}/SKILL.md`] = makeSkillMd(name, `Skill number ${i}`);
+        files[`skills/${name}/references/guide.md`] = `# Guide for ${name}`;
+      }
+      return files;
+    }
+
+    it('should parallelize initial discovery I/O calls', async () => {
+      const SKILL_COUNT = 6;
+      const DELAY_MS = 50; // 50ms per I/O op (conservative; real cloud FS can be 200-500ms)
+      const files = buildSkillsFilesystem(SKILL_COUNT);
+      const filesystem = createSlowFilesystem(files, DELAY_MS);
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      const start = performance.now();
+      const list = await skills.list();
+      const elapsed = performance.now() - start;
+
+      // All 6 skills should be discovered
+      expect(list).toHaveLength(SKILL_COUNT);
+
+      // The total I/O call count should still be high — we do the same work,
+      // just in parallel instead of serial.
+      expect(filesystem.ioCalls).toBeGreaterThanOrEqual(20);
+
+      // KEY ASSERTION: Peak concurrency > 1 proves operations are parallelized.
+      expect(filesystem.peakConcurrency).toBeGreaterThan(1);
+
+      // With parallelization, elapsed time should be significantly less than
+      // the serial estimate (ioCalls * DELAY_MS).
+      const serialEstimate = filesystem.ioCalls * DELAY_MS;
+      expect(elapsed).toBeLessThan(serialEstimate * 0.8);
+
+      // Log for visibility when running tests
+      console.log(
+        `[skills-perf] Initial discovery: ${filesystem.ioCalls} I/O ops, ` +
+          `peak concurrency: ${filesystem.peakConcurrency}, ` +
+          `elapsed: ${elapsed.toFixed(0)}ms (serial estimate: ${serialEstimate.toFixed(0)}ms)`,
+      );
+    });
+
+    it('should parallelize staleness check I/O calls', async () => {
+      const SKILL_COUNT = 6;
+      const DELAY_MS = 50;
+      const files = buildSkillsFilesystem(SKILL_COUNT);
+      const filesystem = createSlowFilesystem(files, DELAY_MS);
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      // Initial discovery
+      await skills.list();
+      const ioAfterInit = filesystem.ioCalls;
+
+      // Wait for the STALENESS_CHECK_COOLDOWN (2s) to expire so maybeRefresh
+      // actually runs the staleness check
+      await new Promise(resolve => setTimeout(resolve, WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100));
+
+      const ioBeforeRefresh = filesystem.ioCalls;
+
+      const start = performance.now();
+      await skills.maybeRefresh();
+      const elapsed = performance.now() - start;
+
+      const stalenessIoCalls = filesystem.ioCalls - ioBeforeRefresh;
+
+      // Staleness check does: stat(base) + readdir(base) + stat(each skill dir)
+      // = 1 + 1 + 6 = 8 I/O calls for 6 skills
+      expect(stalenessIoCalls).toBeGreaterThanOrEqual(8);
+
+      // The subdirectory stats are now parallelized, so peak concurrency across
+      // the whole test run (including init) should be > 1
+      expect(filesystem.peakConcurrency).toBeGreaterThan(1);
+
+      console.log(
+        `[skills-perf] Staleness check: ${stalenessIoCalls} I/O ops, ` +
+          `peak concurrency: ${filesystem.peakConcurrency}, ` +
+          `elapsed: ${elapsed.toFixed(0)}ms (after init used ${ioAfterInit} ops)`,
+      );
+    }, 10_000); // Extended timeout for the 2s cooldown wait
+
+    it('should show that parallelization reduces wall-clock time scaling', async () => {
+      const DELAY_MS = 50;
+      const counts = [3, 6, 12];
+      const results: Array<{ count: number; elapsed: number; ioCalls: number; peakConcurrency: number }> = [];
+
+      for (const count of counts) {
+        const files = buildSkillsFilesystem(count);
+        const filesystem = createSlowFilesystem(files, DELAY_MS);
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+        });
+
+        const start = performance.now();
+        await skills.list();
+        const elapsed = performance.now() - start;
+
+        results.push({ count, elapsed, ioCalls: filesystem.ioCalls, peakConcurrency: filesystem.peakConcurrency });
+      }
+
+      // I/O calls should scale roughly linearly with skill count
+      // (each additional skill adds ~4-6 I/O operations)
+      const ioPerSkill3 = results[0]!.ioCalls / results[0]!.count;
+      const ioPerSkill12 = results[2]!.ioCalls / results[2]!.count;
+      // The per-skill I/O count should be similar (within 2x) regardless of total count
+      expect(ioPerSkill12).toBeGreaterThan(ioPerSkill3 * 0.5);
+      expect(ioPerSkill12).toBeLessThan(ioPerSkill3 * 2);
+
+      // With parallelization, wall-clock time should scale sub-linearly:
+      // 12 skills should take less than 4x the time of 3 skills
+      // (serial would be ~4x, parallel should be much less)
+      const ratio = results[2]!.elapsed / results[0]!.elapsed;
+      expect(ratio).toBeLessThan(4); // Sub-linear scaling due to parallelization
+
+      // All runs should show concurrent I/O
+      for (const r of results) {
+        expect(r.peakConcurrency).toBeGreaterThan(1);
+      }
+
+      for (const r of results) {
+        console.log(
+          `[skills-perf] ${r.count} skills: ${r.ioCalls} I/O ops, ${r.elapsed.toFixed(0)}ms, ` +
+            `peak concurrency: ${r.peakConcurrency}`,
+        );
+      }
+    }, 30_000);
   });
 });

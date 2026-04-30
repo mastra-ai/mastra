@@ -158,6 +158,33 @@ export async function POST(req: Request) {
 }
 ```
 
+## Agent versioning
+
+All route handlers and standalone stream functions accept an optional `agentVersion` parameter to target a specific agent version. This requires the [Editor](https://mastra.ai/docs/editor/overview) to be configured.
+
+Pass a version ID or resolve by status:
+
+```typescript
+chatRoute({
+  path: '/chat',
+  agent: 'weatherAgent',
+  agentVersion: { status: 'published' },
+});
+```
+
+For route handlers (`chatRoute`, `networkRoute`), callers can also override the version at request time with query parameters: `?versionId=<id>` or `?status=draft|published`. Query parameters take precedence over the static `agentVersion` option.
+
+The standalone handlers (`handleChatStream`, `handleNetworkStream`) accept `agentVersion` directly:
+
+```typescript
+const stream = await handleChatStream({
+  mastra,
+  agentId: 'weatherAgent',
+  agentVersion: { versionId: 'ver_abc123' },
+  params,
+});
+```
+
 ## Manual transformation
 
 If you have a raw Mastra `stream`, you can manually transform it to AI SDK UI message parts:
@@ -201,4 +228,18 @@ const uiMessageStream = createUIMessageStream({
     }
   },
 });
+```
+
+## Loading stored messages
+
+Use `toAISdkMessages` from `@mastra/ai-sdk/ui` to convert stored Mastra messages for `useChat()` and other AI SDK UI hooks.
+
+The helper keeps the existing v5/default behavior. If your app is typed against `ai@6`, pass `version: 'v6'`.
+That uses the MessageList AI SDK v6 UI output path. MessageList input detection and ingestion remain unchanged.
+
+```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk/ui';
+
+const v5Messages = toAISdkMessages(storedMessages);
+const v6Messages = toAISdkMessages(storedMessages, { version: 'v6' });
 ```

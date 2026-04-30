@@ -29,6 +29,20 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15998
+    // Core gates auto-generated thread titles on `!thread.title`, so adapters
+    // must preserve an empty title round-trip rather than substituting a
+    // placeholder like `Thread <id>`.
+    it('should preserve an empty thread title (issue #15998)', async () => {
+      const thread = { ...createSampleThread(), title: '' };
+
+      const savedThread = await memoryStorage.saveThread({ thread });
+      expect(savedThread.title).toBe('');
+
+      const retrievedThread = await memoryStorage.getThreadById({ threadId: thread.id });
+      expect(retrievedThread?.title).toBe('');
+    });
+
     it('should create and retrieve a thread with the same given threadId and resourceId', async () => {
       const exampleThreadId = '1346362547862769664';
       const exampleResourceId = '532374164040974346';

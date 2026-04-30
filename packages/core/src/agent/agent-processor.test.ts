@@ -7,6 +7,7 @@ import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
+import { createTool } from '../tools/tool';
 import { createStep, createWorkflow, isProcessor } from '../workflows';
 import type { MastraDBMessage } from './types';
 import { Agent } from './index';
@@ -3272,6 +3273,116 @@ describe('Workflow as Processor', () => {
       const found = await agent.resolveProcessorById('findable-processor');
       expect(found).toBeDefined();
       expect(found).toHaveProperty('id', 'findable-processor');
+    });
+  });
+
+  describe('processInputStep steps accumulation', () => {
+    it('should pass accumulated steps to processInputStep across agentic loop iterations', async () => {
+      const stepLog: { stepNumber: number; stepsLength: number }[] = [];
+
+      const greetTool = createTool({
+        id: 'greet',
+        description: 'Greets a person by name',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ greeting: z.string() }),
+        execute: async ({ name }) => ({ greeting: `Hello, ${name}!` }),
+      });
+
+      let callCount = 0;
+      const multiStepModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  id: 'tc-1',
+                  toolCallId: 'call-1',
+                  toolName: 'greet',
+                  args: JSON.stringify({ name: 'World' }),
+                },
+              ],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: [], rawSettings: {} },
+              warnings: [],
+            };
+          }
+          return {
+            content: [{ type: 'text' as const, text: 'Done!' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  id: 'tc-1',
+                  toolCallId: 'call-1',
+                  toolName: 'greet',
+                  args: JSON.stringify({ name: 'World' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+              rawCall: { rawPrompt: [], rawSettings: {} },
+              warnings: [],
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'resp-2', modelId: 'mock', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Done!' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 },
+              },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const trackingProcessor: Processor = {
+        id: 'step-tracker',
+        processInputStep: async ({ stepNumber, steps }) => {
+          stepLog.push({ stepNumber, stepsLength: steps.length });
+          return {};
+        },
+      };
+
+      const agent = new Agent({
+        id: 'steps-accumulation-test-agent',
+        name: 'Steps Accumulation Test Agent',
+        instructions: 'Use the greet tool when asked.',
+        model: multiStepModel,
+        tools: { greet: greetTool },
+        inputProcessors: [trackingProcessor],
+      });
+
+      const result = await agent.generate('Greet World');
+
+      expect(result.text).toBe('Done!');
+      expect(stepLog.length).toBeGreaterThanOrEqual(2);
+      expect(stepLog[0]).toEqual({ stepNumber: 0, stepsLength: 0 });
+      expect(stepLog[1]).toEqual({ stepNumber: 1, stepsLength: 1 });
     });
   });
 });

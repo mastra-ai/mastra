@@ -76,6 +76,7 @@ function createState(isRunning: boolean) {
     toolOutputExpanded: false,
     allToolComponents: [],
     allSlashCommandComponents: [],
+    allSystemReminderComponents: [],
     ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
   } as any;
 
@@ -99,6 +100,9 @@ describe('setupKeyboardShortcuts', () => {
 
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
+    expect(commandNames).toContain('thread');
+    expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
+    expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
     expect(commandNames.slice(-2)).toEqual(['/deploy', '/ship']);
   });
@@ -140,5 +144,28 @@ describe('setupKeyboardShortcuts', () => {
     expect(queueFollowUpMessage).toHaveBeenCalledWith('/help');
     expect(editor.setText).toHaveBeenCalledWith('');
     expect(editor.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('toggles system reminder expansion with Ctrl+E', () => {
+    const { state, actions } = createState(false);
+    const reminder = { setExpanded: vi.fn() };
+    state.allSystemReminderComponents = [reminder] as any;
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    const expandTools = actions.get('expandTools');
+    expect(expandTools).toBeDefined();
+
+    expandTools?.();
+    expect(state.toolOutputExpanded).toBe(true);
+    expect(reminder.setExpanded).toHaveBeenCalledWith(true);
+
+    expandTools?.();
+    expect(state.toolOutputExpanded).toBe(false);
+    expect(reminder.setExpanded).toHaveBeenLastCalledWith(false);
   });
 });

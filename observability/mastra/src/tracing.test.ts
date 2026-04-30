@@ -7,6 +7,8 @@ import type {
   ModelGenerationAttributes,
   ObservabilityInstance,
   ExportedSpan,
+  LogEvent,
+  MetricEvent,
 } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
@@ -78,9 +80,19 @@ afterAll(() => {
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  logEvents: LogEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
+  }
+
+  async onLogEvent(event: LogEvent): Promise<void> {
+    this.logEvents.push(event);
+  }
+
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
   }
 
   async shutdown(): Promise<void> {
@@ -93,6 +105,8 @@ class TestExporter implements ObservabilityExporter {
 
   reset(): void {
     this.events = [];
+    this.logEvents = [];
+    this.metricEvents = [];
   }
 }
 
@@ -357,6 +371,69 @@ describe('Tracing', () => {
       // Should emit span_updated (not ended)
       expect(testExporter.events).toHaveLength(2); // start + update
       expect(testExporter.events[1].type).toBe(TracingEventType.SPAN_UPDATED);
+    });
+
+    it('should prefer original cause stack when error is a MastraError wrapper', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'error-tool',
+        attributes: { toolId: 'failing-tool' },
+      });
+
+      const originalError = new Error('Original failure');
+      const originalStack =
+        'Error: Original failure\n    at userCode (/app/src/tool.ts:42:7)\n    at run (/app/src/runner.ts:10:3)';
+      originalError.stack = originalStack;
+
+      const wrappedError = new MastraError(
+        {
+          id: 'TOOL_ERROR',
+          text: 'Tool failed',
+          domain: 'TOOL',
+          category: 'SYSTEM',
+        },
+        originalError,
+      );
+
+      span.error({ error: wrappedError });
+
+      // errorInfo should carry the original cause's stack, not the wrapper's
+      expect(span.errorInfo?.stack).toBe(originalStack);
+      expect(span.errorInfo?.message).toBe('Tool failed');
+      expect(span.errorInfo?.id).toBe('TOOL_ERROR');
+    });
+
+    it('should fall back to MastraError stack when there is no cause', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'error-tool',
+        attributes: { toolId: 'failing-tool' },
+      });
+
+      const wrappedError = new MastraError({
+        id: 'TOOL_ERROR',
+        text: 'Tool failed',
+        domain: 'TOOL',
+        category: 'SYSTEM',
+      });
+
+      span.error({ error: wrappedError });
+
+      expect(span.errorInfo?.stack).toBe(wrappedError.stack);
     });
   });
 
@@ -1368,6 +1445,154 @@ describe('Tracing', () => {
       expect(endedEvent.exportedSpan.tags).toEqual(['batch-processing', 'priority-high']);
     });
 
+    it('should include root tags in correlation context for root and child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'root-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      expect(rootSpan.getCorrelationContext().tags).toEqual(['batch-processing', 'priority-high']);
+      expect(childSpan.getCorrelationContext().tags).toEqual(['batch-processing', 'priority-high']);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('getLoggerContext should emit logs with span correlation and root tags in correlationContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'root-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      observability.getLoggerContext(childSpan).info('tool running', { attempt: 1 });
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log).toMatchObject({
+        traceId: childSpan.traceId,
+        spanId: childSpan.id,
+        message: 'tool running',
+        data: { attempt: 1 },
+        correlationContext: {
+          entityName: childSpan.entityName,
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('getLoggerContext should respect logging.level config', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'warn' },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should be filtered');
+      loggerCtx.info('should be filtered');
+      loggerCtx.warn('should pass');
+      loggerCtx.error('should pass');
+
+      expect(testExporter.logEvents).toHaveLength(2);
+      expect(testExporter.logEvents.map(e => e.log.level)).toEqual(['warn', 'error']);
+    });
+
+    it('getLoggerContext should return noOp when logging.enabled is false', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { enabled: false },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should not emit');
+      loggerCtx.info('should not emit');
+      loggerCtx.warn('should not emit');
+      loggerCtx.error('should not emit');
+
+      expect(testExporter.logEvents).toHaveLength(0);
+    });
+
+    it('getMetricsContext should emit user metrics with correlationContext only', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent-run',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const modelSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: {
+          model: 'gpt-4o-mini',
+          provider: 'openai',
+        } satisfies Partial<ModelGenerationAttributes>,
+      });
+
+      observability.getMetricsContext(modelSpan).emit('user_metric', 1, { status: 'ok' });
+
+      expect(testExporter.metricEvents).toHaveLength(1);
+      expect(testExporter.metricEvents[0]!.metric).toMatchObject({
+        traceId: modelSpan.traceId,
+        spanId: modelSpan.id,
+        name: 'user_metric',
+        value: 1,
+        labels: { status: 'ok' },
+        correlationContext: {
+          entityName: modelSpan.entityName,
+        },
+      });
+      expect(testExporter.metricEvents[0]!.metric.costContext).toBeUndefined();
+      expect(testExporter.metricEvents[0]!.metric.labels.provider).toBeUndefined();
+      expect(testExporter.metricEvents[0]!.metric.labels.model).toBeUndefined();
+
+      modelSpan.end();
+      rootSpan.end();
+    });
+
     it('should not include tags in exported child spans', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
@@ -2201,6 +2426,207 @@ describe('Tracing', () => {
       const updateEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_UPDATED);
       expect(updateEvent?.exportedSpan.input).toBeUndefined();
       expect(updateEvent?.exportedSpan.output).toBeUndefined();
+
+      span.end();
+    });
+  });
+
+  describe('Mastra environment fallback', () => {
+    it('injects the Mastra-pushed environment into root-span metadata so it persists on the SpanRecord', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      expect(span.metadata).toMatchObject({ environment: 'production' });
+      expect(span.getCorrelationContext().environment).toBe('production');
+
+      span.end();
+
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.metadata).toMatchObject({ environment: 'production' });
+    });
+
+    it('lets per-span metadata.environment override the Mastra-pushed environment', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          metadata: { environment: 'staging' },
+        },
+      });
+
+      expect(span.metadata).toMatchObject({ environment: 'staging' });
+      expect(span.getCorrelationContext().environment).toBe('staging');
+
+      span.end();
+    });
+
+    it('leaves environment undefined when neither metadata nor Mastra environment is set', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      expect(span.metadata?.environment).toBeUndefined();
+      expect(span.getCorrelationContext().environment).toBeUndefined();
+
+      span.end();
+    });
+
+    it('child spans inherit the Mastra environment through parent metadata propagation', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('staging');
+
+      const parent = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'parent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const child = parent.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child',
+        attributes: { toolId: 'tool-1', toolType: 'function' },
+      });
+
+      expect(child.metadata).toMatchObject({ environment: 'staging' });
+      expect(child.getCorrelationContext().environment).toBe('staging');
+
+      child.end();
+      parent.end();
+    });
+
+    it('attaches environment to log events emitted via getLoggerContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      observability.getLoggerContext(span).info('hello');
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log.correlationContext?.environment).toBe('production');
+
+      span.end();
+    });
+
+    it('attaches environment to metric events emitted via getMetricsContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      observability.getMetricsContext(span).emit('user_metric', 1, { status: 'ok' });
+
+      expect(testExporter.metricEvents.length).toBeGreaterThanOrEqual(1);
+      const userMetric = testExporter.metricEvents.find(e => e.metric.name === 'user_metric');
+      expect(userMetric?.metric.correlationContext?.environment).toBe('production');
+
+      span.end();
+    });
+
+    it('attaches environment to score events when correlationContext comes from a live span', async () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const { buildScoreEvent } = await import('./recorded');
+      const event = buildScoreEvent({
+        traceId: span.traceId,
+        spanId: span.id,
+        correlationContext: span.getCorrelationContext(),
+        score: { scorerId: 'test-scorer', score: 1 },
+      });
+
+      expect(event.score.correlationContext?.environment).toBe('production');
+
+      span.end();
+    });
+
+    it('attaches environment to feedback events when correlationContext comes from a live span', async () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const { buildFeedbackEvent } = await import('./recorded');
+      const event = buildFeedbackEvent({
+        traceId: span.traceId,
+        spanId: span.id,
+        correlationContext: span.getCorrelationContext(),
+        feedback: { feedbackType: 'thumbs', value: 'up' },
+      });
+
+      expect(event.feedback.correlationContext?.environment).toBe('production');
 
       span.end();
     });

@@ -4,15 +4,30 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
+  FeedbackInput,
+  FeedbackEvent,
   ObservabilityEntrypoint,
   ObservabilityInstance,
+  RecordedTrace,
+  ScoreInput,
+  ScoreEvent,
 } from '@mastra/core/observability';
+import type { ObservabilityStorage } from '@mastra/core/storage';
+import { routeToHandler } from './bus/route-event';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
+import {
+  buildFeedbackEvent,
+  buildScoreEvent,
+  buildRecordedFeedbackEventFromTrace,
+  buildRecordedScoreEventFromTrace,
+  hydrateRecordedTrace,
+} from './recorded';
 import { ObservabilityRegistry } from './registry';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -31,6 +46,7 @@ function isInstance(
  */
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
+  #mastra?: Mastra;
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -134,8 +150,15 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   setMastraContext(options: { mastra: Mastra }): void {
     const instances = this.listInstances();
     const { mastra } = options;
+    this.#mastra = mastra;
+
+    const mastraEnvironment = mastra.getEnvironment?.();
 
     instances.forEach(instance => {
+      // Propagate the Mastra-level environment so spans can fall back to it
+      // when `metadata.environment` isn't set on a specific span.
+      instance.__setMastraEnvironment?.(mastraEnvironment);
+
       const config = instance.getConfig();
       const exporters = instance.getExporters();
       exporters.forEach(exporter => {
@@ -167,9 +190,131 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     return this.#registry.getSelected(options);
   }
 
+  async getRecordedTrace(args: { traceId: string }): Promise<RecordedTrace | null> {
+    const observabilityStorage = await this.#getObservabilityStorage();
+    if (!observabilityStorage) {
+      return null;
+    }
+
+    const trace = await observabilityStorage.getTrace({ traceId: args.traceId });
+    if (!trace) {
+      return null;
+    }
+
+    return hydrateRecordedTrace({
+      trace,
+      emitRecordedEvent: event => this.#emitRecordedEvent(event),
+      canEmitRecordedEvent: () => !!this.#getRecordedTraceInstance(),
+      debugRecordedAnnotationUnavailable: ({ kind, traceId, spanId }) => {
+        this.logger?.debug(
+          kind === 'score'
+            ? 'addScore() is unavailable; rehydrate the trace before calling addScore()'
+            : 'addFeedback() is unavailable; rehydrate the trace before calling addFeedback()',
+          {
+            traceId,
+            spanId,
+          },
+        );
+      },
+    });
+  }
+
+  async addScore(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void> {
+    const targetTraceId = args.traceId ?? args.correlationContext?.traceId;
+    const targetSpanId = args.spanId ?? args.correlationContext?.spanId;
+
+    if (args.correlationContext) {
+      await this.#emitRecordedEvent(
+        buildScoreEvent({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          correlationContext: args.correlationContext,
+          score: args.score,
+        }),
+      );
+      return;
+    }
+
+    if (!args.traceId) {
+      return;
+    }
+
+    const trace = await this.#getStoredTrace(args.traceId);
+    if (!trace) {
+      return;
+    }
+
+    const event = buildRecordedScoreEventFromTrace({
+      trace,
+      spanId: args.spanId,
+      score: args.score,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    await this.#emitRecordedEvent(event);
+  }
+
+  async addFeedback(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void> {
+    const targetTraceId = args.traceId ?? args.correlationContext?.traceId;
+    const targetSpanId = args.spanId ?? args.correlationContext?.spanId;
+
+    if (args.correlationContext) {
+      await this.#emitRecordedEvent(
+        buildFeedbackEvent({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          correlationContext: args.correlationContext,
+          feedback: args.feedback,
+        }),
+      );
+      return;
+    }
+
+    if (!args.traceId) {
+      return;
+    }
+
+    const trace = await this.#getStoredTrace(args.traceId);
+    if (!trace) {
+      return;
+    }
+
+    const event = buildRecordedFeedbackEventFromTrace({
+      trace,
+      spanId: args.spanId,
+      feedback: args.feedback,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    await this.#emitRecordedEvent(event);
+  }
+
   /** Register a named observability instance, optionally marking it as default. */
   registerInstance(name: string, instance: ObservabilityInstance, isDefault = false): void {
     this.#registry.register(name, instance, isDefault);
+
+    // If Mastra context has already been set, propagate the environment to
+    // this late-registered instance so it auto-tags spans like instances
+    // registered before setMastraContext.
+    if (this.#mastra) {
+      instance.__setMastraEnvironment?.(this.#mastra.getEnvironment?.());
+    }
   }
 
   /** Get a registered instance by name. */
@@ -210,5 +355,55 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
+  }
+
+  async #getObservabilityStorage(): Promise<ObservabilityStorage | null> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      return null;
+    }
+
+    return (await storage.getStore('observability')) ?? null;
+  }
+
+  async #getStoredTrace(traceId: string) {
+    const observabilityStorage = await this.#getObservabilityStorage();
+    if (!observabilityStorage) {
+      return null;
+    }
+
+    return observabilityStorage.getTrace({ traceId });
+  }
+
+  #getRecordedTraceInstance(): ObservabilityInstance | undefined {
+    return this.getDefaultInstance() ?? Array.from(this.listInstances().values())[0];
+  }
+
+  async #emitRecordedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
+    const instance = this.#getRecordedTraceInstance();
+    if (!instance) {
+      this.logger?.debug(
+        event.type === 'score'
+          ? 'Score event was dropped because no observability instance is registered'
+          : 'Feedback event was dropped because no observability instance is registered',
+        { eventType: event.type },
+      );
+      return;
+    }
+
+    if (instance instanceof BaseObservabilityInstance) {
+      instance.__emitRecordedEvent(event);
+      return;
+    }
+
+    const bridge = instance.getBridge();
+    const handlerResults = [
+      ...instance.getExporters().map(exporter => routeToHandler(exporter, event, this.logger)),
+      ...(bridge ? [routeToHandler(bridge, event, this.logger)] : []),
+    ].filter((result): result is Promise<void> => !!result && typeof result.then === 'function');
+
+    if (handlerResults.length > 0) {
+      await Promise.allSettled(handlerResults);
+    }
   }
 }

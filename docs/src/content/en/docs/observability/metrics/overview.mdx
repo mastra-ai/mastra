@@ -1,0 +1,105 @@
+---
+title: "Metrics overview | Observability"
+description: "Understand the automatic metrics Mastra emits from traced execution."
+packages:
+  - "@mastra/observability"
+---
+
+# Metrics overview
+
+Mastra automatically emits performance and usage metrics from traced execution. There's no manual instrumentation needed. Metrics are derived from spans as they complete.
+
+Three categories of metrics are emitted automatically:
+
+- **Duration metrics**: Execution time for agents, workflows, tools, model calls, and processors.
+- **Token usage metrics**: Input and output token counts broken down by type (text, cache, audio, image, reasoning).
+- **Cost estimation**: Estimated cost per model call based on an embedded pricing registry.
+
+:::note
+
+Metrics require an OLAP-capable store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
+
+For local development, use [DuckDB](https://duckdb.org/) through `@mastra/duckdb`. For production, use [ClickHouse](https://clickhouse.com/) through `@mastra/clickhouse`.
+
+:::
+
+## When to use metrics
+
+- Monitor latency across agents, tools, workflows, and model calls
+- Track token consumption and cost trends over time
+- Identify error-heavy agents or tools by comparing success and error rates
+- Compare performance before and after prompt, model, or code changes
+
+## Get started
+
+Install the required packages:
+
+```bash npm2yarn
+npm install @mastra/observability @mastra/libsql @mastra/duckdb
+```
+
+Then configure observability with a composite store that routes the observability domain to DuckDB:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  }),
+})
+```
+
+## Studio
+
+The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
+
+## What Mastra measures
+
+Mastra emits three categories of metrics automatically:
+
+- **Duration**: Execution time in milliseconds for agents, workflows, tools, model calls, and processors.
+- **Token usage**: Input and output token counts, broken down by type (text, cache, audio, image, reasoning).
+- **Cost estimation**: Estimated cost per model call, based on an embedded pricing registry.
+
+Each metric carries trace correlation context so you can drill from a dashboard spike to the exact span that caused it.
+
+For the full list of metric names, labels, and cost fields, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
+
+## How automatic metrics work
+
+Mastra auto-instruments agent runs, workflow steps, tool calls, and model generations as spans. When a span ends, the observability layer extracts metrics from it:
+
+1. **Duration**: Calculated from the span's start and end timestamps.
+1. **Token usage**: Extracted from the `usage` attribute on model generation spans.
+1. **Cost estimation**: Runs each token metric through an embedded pricing registry that matches by provider and model name.
+
+Before storage, all metric labels pass through a cardinality filter that blocks known high-cardinality values (such as trace IDs and UUIDs) to keep storage efficient. Metrics are then batched by an internal event buffer and flushed to storage by the `DefaultExporter`.
+
+## Next steps
+
+- [Automatic metrics reference](/reference/observability/metrics/automatic-metrics)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Studio observability](/docs/studio/observability)
+- [Observability overview](/docs/observability/overview)
+- [DefaultExporter reference](/docs/observability/tracing/exporters/default)

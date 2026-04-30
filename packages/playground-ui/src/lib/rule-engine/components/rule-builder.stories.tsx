@@ -3,9 +3,9 @@ import * as React from 'react';
 
 import type { RuleGroup } from '../types';
 
+import { complexSchema } from './fixtures';
 import { RuleBuilder } from './rule-builder';
 import type { JsonSchema } from './types';
-import { complexSchema } from './fixtures';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const meta: Meta<typeof RuleBuilder> = {

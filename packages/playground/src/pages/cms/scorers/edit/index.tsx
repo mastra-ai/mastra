@@ -1,34 +1,31 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
 import {
-  toast,
-  useLinkComponent,
-  useStoredScorer,
-  useStoredScorerMutations,
-  useScorerVersions,
-  useScorerVersion,
-  ScorerEditMain,
-  ScorerEditSidebar,
-  ScorerVersionCombobox,
-  AgentEditLayout,
-  useScorerEditForm,
+  Notice,
+  Badge,
+  Button,
   Header,
-  HeaderTitle,
   HeaderAction,
+  HeaderTitle,
   Icon,
-  Spinner,
   MainContentLayout,
   Skeleton,
-  Badge,
-  Alert,
-  AlertTitle,
-  AlertDescription,
+  Spinner,
+  toast,
 } from '@mastra/playground-ui';
-import type { ScorerFormValues } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { GaugeIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
+import { ScorerEditMain } from '@/domains/scores/components/scorer-edit-page/scorer-edit-main';
+import { ScorerEditSidebar } from '@/domains/scores/components/scorer-edit-page/scorer-edit-sidebar';
+import { useScorerEditForm } from '@/domains/scores/components/scorer-edit-page/use-scorer-edit-form';
+import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-page/utils/form-validation';
+import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
+import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
+import { useLinkComponent } from '@/lib/framework';
 
 type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
 
@@ -51,9 +48,19 @@ interface CmsScorersEditFormProps {
   scorer: StoredScorerData;
   scorerId: string;
   selectedVersionId: string | null;
+  latestVersionId?: string;
+  activeVersionId?: string;
+  onClearVersion: () => void;
 }
 
-function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersEditFormProps) {
+function CmsScorersEditForm({
+  scorer,
+  scorerId,
+  selectedVersionId,
+  latestVersionId,
+  activeVersionId,
+  onClearVersion,
+}: CmsScorersEditFormProps) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
@@ -68,6 +75,7 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
+  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
   const dataSource = isViewingVersion ? versionData : scorer;
 
   const initialValues: ScorerFormValues = useMemo(
@@ -148,6 +156,26 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
     }
   }, [form, updateStoredScorer, client, scorerId, navigate, paths, queryClient]);
 
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      setIsSubmitting(true);
+      try {
+        await client.getStoredScorer(scorerId).activateVersion(selectedVersionId);
+        void queryClient.invalidateQueries({ queryKey: ['scorers'] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
+        void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
+        toast.success('Version published');
+        void navigate(paths.scorerLink(scorerId));
+      } catch (error) {
+        toast.error(`Failed to publish version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId, client, scorerId, queryClient, navigate, paths]);
+
   return (
     <AgentEditLayout
       leftSlot={
@@ -162,11 +190,24 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
         />
       }
     >
-      {isViewingVersion && (
-        <Alert variant="info" className="m-4 mb-0">
-          <AlertTitle>This is a previous version</AlertTitle>
-          <AlertDescription as="p">You are seeing a specific version of the scorer.</AlertDescription>
-        </Alert>
+      {isViewingPreviousVersion && (
+        <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
+          <Notice.Message>You are seeing a specific version of the scorer.</Notice.Message>
+          <div className="flex gap-2">
+            <Button type="button" variant="default" size="sm" onClick={onClearVersion}>
+              View latest version
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handlePublishVersion}
+              disabled={selectedVersionId === activeVersionId || isSubmitting}
+            >
+              {isSubmitting ? 'Publishing...' : 'Publish This Version'}
+            </Button>
+          </div>
+        </Notice>
       )}
       <form ref={formRef} className="h-full">
         <ScorerEditMain form={form} />
@@ -200,6 +241,10 @@ function CmsScorersEditPage() {
     },
     [setSearchParams],
   );
+
+  const handleClearVersion = useCallback(() => {
+    setSearchParams({});
+  }, [setSearchParams]);
 
   if (isLoading) {
     return (
@@ -267,7 +312,14 @@ function CmsScorersEditPage() {
           />
         </HeaderAction>
       </Header>
-      <CmsScorersEditForm scorer={scorer} scorerId={scorerId} selectedVersionId={selectedVersionId} />
+      <CmsScorersEditForm
+        scorer={scorer}
+        scorerId={scorerId}
+        selectedVersionId={selectedVersionId}
+        latestVersionId={latestVersion?.id}
+        activeVersionId={activeVersionId}
+        onClearVersion={handleClearVersion}
+      />
     </MainContentLayout>
   );
 }

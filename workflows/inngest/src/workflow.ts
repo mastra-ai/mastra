@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
@@ -279,6 +280,7 @@ export class InngestWorkflow<
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
+            entityName: this.id,
             input: inputData,
             metadata: {
               resourceId,
@@ -334,9 +336,15 @@ export class InngestWorkflow<
               }
             },
           });
-        } catch (error) {
-          // Re-throw - span will be ended in finalize if we reach it
-          throw error;
+        } catch (executionError) {
+          // Execution threw an exception (not just returned failed status)
+          // Create a failed result to pass to finalize
+          result = {
+            status: 'failed',
+            steps: {},
+            state: initialState ?? {},
+            error: executionError instanceof Error ? executionError : new Error(String(executionError)),
+          } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
         // Final step to invoke lifecycle callbacks and end workflow span.
@@ -345,6 +353,17 @@ export class InngestWorkflow<
         let finalizeErrored = false;
         try {
           await step.run(`workflow.${this.id}.finalize`, async () => {
+            // For durable agent workflows, emit error event on failure so the
+            // client's stream can receive the error and close properly.
+            if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
+              const error = result.error instanceof Error ? result.error : new Error(String(result.error));
+              try {
+                await emitErrorEvent(pubsub, inputData.runId, error);
+              } catch (e) {
+                this.logger.debug?.('Failed to emit error event:', e);
+              }
+            }
+
             if (result.status !== 'paused') {
               // Invoke lifecycle callbacks (onFinish and onError)
               await engine.invokeLifecycleCallbacksInternal({

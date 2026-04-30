@@ -4,9 +4,10 @@
  * Allows entering a key or cancelling to proceed without one.
  */
 
-import { Box, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable } from '@mariozechner/pi-tui';
 import { theme } from '../theme.js';
+import { MaskedInput } from './masked-input.js';
 
 export interface ApiKeyDialogOptions {
   /** Provider name shown in the title (e.g., "Google") */
@@ -20,7 +21,7 @@ export interface ApiKeyDialogOptions {
 }
 
 export class ApiKeyDialogComponent extends Box implements Focusable {
-  private input: Input;
+  private input: MaskedInput;
   private onSubmit: (key: string) => void;
   private onCancel: () => void;
 
@@ -51,7 +52,7 @@ export class ApiKeyDialogComponent extends Box implements Focusable {
     this.addChild(new Spacer(1));
 
     // Input
-    this.input = new Input();
+    this.input = new MaskedInput();
     this.input.onSubmit = (value: string) => {
       const trimmed = value.trim();
       if (trimmed) {

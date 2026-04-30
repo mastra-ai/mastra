@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Tabs } from './tabs-root';
-import { TabList } from './tabs-list';
-import { Tab } from './tabs-tab';
 import { TabContent } from './tabs-content';
+import { TabList } from './tabs-list';
+import { Tabs } from './tabs-root';
+import { Tab } from './tabs-tab';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -37,30 +37,9 @@ export const Default: Story = {
   ),
 };
 
-export const ButtonsVariant: Story = {
-  render: () => (
-    <Tabs defaultTab="code" className="w-[400px]">
-      <TabList variant="buttons">
-        <Tab value="code">Code</Tab>
-        <Tab value="preview">Preview</Tab>
-        <Tab value="output">Output</Tab>
-      </TabList>
-      <TabContent value="code">
-        <div className="p-4 text-neutral5 font-mono text-sm">const hello = world;</div>
-      </TabContent>
-      <TabContent value="preview">
-        <div className="p-4 text-neutral5">Preview content</div>
-      </TabContent>
-      <TabContent value="output">
-        <div className="p-4 text-neutral5">Output content</div>
-      </TabContent>
-    </Tabs>
-  ),
-};
-
 export const TwoTabs: Story = {
   render: () => (
-    <Tabs defaultTab="input" className="w-[300px]">
+    <Tabs defaultTab="input" className="w-dropdown-max-height">
       <TabList>
         <Tab value="input">Input</Tab>
         <Tab value="output">Output</Tab>
@@ -79,11 +58,11 @@ export const ManyTabs: Story = {
   render: () => (
     <Tabs defaultTab="tab1" className="w-[500px]">
       <TabList>
-        <Tab value="tab1">Tab 1</Tab>
-        <Tab value="tab2">Tab 2</Tab>
-        <Tab value="tab3">Tab 3</Tab>
-        <Tab value="tab4">Tab 4</Tab>
-        <Tab value="tab5">Tab 5</Tab>
+        <Tab value="tab1">Overview</Tab>
+        <Tab value="tab2">Usage Metrics</Tab>
+        <Tab value="tab3">Connected Tools</Tab>
+        <Tab value="tab4">Tracing Options</Tab>
+        <Tab value="tab5">Advanced Settings</Tab>
       </TabList>
       <TabContent value="tab1">
         <div className="p-4 text-neutral5">Content 1</div>

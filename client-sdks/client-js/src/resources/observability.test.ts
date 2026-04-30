@@ -55,6 +55,50 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('getTraceLight()', () => {
+    it('should fetch a lightweight trace by ID', async () => {
+      mockSuccessfulResponse();
+
+      await client.getTraceLight('trace-123');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/light`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getTraceLight('invalid-trace')).rejects.toThrow();
+    });
+  });
+
+  describe('getSpan()', () => {
+    it('should fetch a specific span by trace ID and span ID', async () => {
+      mockSuccessfulResponse();
+
+      await client.getSpan('trace-123', 'span-456');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/spans/span-456`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getSpan('trace-123', 'invalid-span')).rejects.toThrow();
+    });
+  });
+
   /**
    * Legacy getTraces() API tests
    * Uses the old parameter structure for backward compatibility:
@@ -855,6 +899,326 @@ describe('Observability Methods', () => {
             value: 1,
             comment: 'Great response',
           },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Scores OLAP
+  // ==========================================================================
+
+  describe('getScoreAggregate()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        scorerId: 'relevance',
+        scoreSource: 'manual',
+        aggregation: 'avg' as const,
+        filters: { entityType: EntityType.AGENT },
+      };
+
+      await client.getScoreAggregate(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores/aggregate`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getScoreAggregate({
+          scorerId: 'relevance',
+          aggregation: 'avg',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getScoreBreakdown()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        scorerId: 'relevance',
+        aggregation: 'avg' as const,
+        groupBy: ['experimentId'],
+      };
+
+      await client.getScoreBreakdown(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores/breakdown`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getScoreBreakdown({
+          scorerId: 'relevance',
+          aggregation: 'avg',
+          groupBy: ['experimentId'],
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getScoreTimeSeries()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        scorerId: 'relevance',
+        aggregation: 'avg' as const,
+        interval: '1h' as const,
+      };
+
+      await client.getScoreTimeSeries(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores/timeseries`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getScoreTimeSeries({
+          scorerId: 'relevance',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getScorePercentiles()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        scorerId: 'relevance',
+        percentiles: [0.5, 0.9, 0.99],
+        interval: '1h' as const,
+      };
+
+      await client.getScorePercentiles(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores/percentiles`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getScorePercentiles({
+          scorerId: 'relevance',
+          percentiles: [0.5, 0.9, 0.99],
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Feedback OLAP
+  // ==========================================================================
+
+  describe('getFeedbackAggregate()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg' as const,
+        filters: { entityType: EntityType.AGENT },
+      };
+
+      await client.getFeedbackAggregate(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback/aggregate`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getFeedbackAggregate({
+          feedbackType: 'rating',
+          aggregation: 'avg',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getFeedbackBreakdown()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        feedbackType: 'rating',
+        aggregation: 'avg' as const,
+        groupBy: ['experimentId'],
+      };
+
+      await client.getFeedbackBreakdown(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback/breakdown`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getFeedbackBreakdown({
+          feedbackType: 'rating',
+          aggregation: 'avg',
+          groupBy: ['experimentId'],
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getFeedbackTimeSeries()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        feedbackType: 'rating',
+        aggregation: 'avg' as const,
+        interval: '1h' as const,
+      };
+
+      await client.getFeedbackTimeSeries(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback/timeseries`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getFeedbackTimeSeries({
+          feedbackType: 'rating',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getFeedbackPercentiles()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        feedbackType: 'rating',
+        percentiles: [0.5, 0.9, 0.99],
+        interval: '1h' as const,
+      };
+
+      await client.getFeedbackPercentiles(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback/percentiles`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getFeedbackPercentiles({
+          feedbackType: 'rating',
+          percentiles: [0.5, 0.9, 0.99],
+          interval: '1h',
         }),
       ).rejects.toThrow();
     });
