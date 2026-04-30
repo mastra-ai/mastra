@@ -22,15 +22,7 @@ export async function initWorkOS(): Promise<AuthResult> {
       // Another admin-level role (should be filtered from preview list)
       superadmin: ['*'],
       // Read and execute across all resources, plus Agent Builder write access
-      member: [
-        '*:read',
-        '*:execute',
-        'agents:write',
-        'stored-agents:write',
-        'stored-skills:write',
-        'stored-workspaces:write',
-        'workspaces:write',
-      ],
+      member: ['stored-agents:*', 'agents:*', 'stored-skills:*'],
       // Can only view and run agents
       operator: ['agents:read', 'agents:execute', 'tools:read', 'workflows:read'],
       // Read-only access — no resources at all

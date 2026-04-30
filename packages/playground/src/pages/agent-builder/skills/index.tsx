@@ -21,22 +21,19 @@ import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/ski
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
-type Scope = 'mine' | 'all';
-
 export default function AgentBuilderSkillsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const isAdmin = currentUser?.permissions?.includes('*') ?? false;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
-  const [scope, setScope] = useState<Scope>('mine');
 
   const listParams = useMemo<ListStoredSkillsParams>(() => {
     const params: ListStoredSkillsParams = {};
-    if (scope === 'mine' && currentUser?.id) {
+    if (currentUser?.id) {
       params.authorId = currentUser.id;
     }
     return params;
-  }, [currentUser?.id, scope]);
+  }, [currentUser?.id]);
 
   const { data, isLoading, error } = useStoredSkills(listParams, { enabled: !isCurrentUserLoading });
   const [search, setSearch] = useState('');
@@ -48,7 +45,7 @@ export default function AgentBuilderSkillsPage() {
   };
 
   const body = (() => {
-    if (isLoading) {
+    if (isCurrentUserLoading || isLoading) {
       return <SkillBuilderListSkeleton />;
     }
 
@@ -79,18 +76,12 @@ export default function AgentBuilderSkillsPage() {
         <div className="flex items-center justify-center pt-16">
           <EmptyState
             iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
-            titleSlot={scope === 'mine' ? 'No skills yet' : 'No skills available'}
-            descriptionSlot={
-              scope === 'mine'
-                ? 'Create your first skill to give agents new capabilities.'
-                : 'No public skills are available yet.'
-            }
+            titleSlot="No skills yet"
+            descriptionSlot="Create your first skill to give agents new capabilities."
             actionSlot={
-              scope === 'mine' ? (
-                <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
-                  <PlusIcon /> New skill
-                </Button>
-              ) : undefined
+              <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+                <PlusIcon /> New skill
+              </Button>
             }
           />
         </div>
@@ -107,13 +98,11 @@ export default function AgentBuilderSkillsPage() {
           <div className="flex items-start justify-between gap-4">
             <PageHeader>
               <PageHeader.Title>
-                <SparklesIcon /> {scope === 'mine' ? 'My skills' : 'All skills'}
+                <SparklesIcon /> My skills
               </PageHeader.Title>
-              <PageHeader.Description>
-                {scope === 'mine' ? "Skills you've created in Agent Builder." : 'All skills you have access to.'}
-              </PageHeader.Description>
+              <PageHeader.Description>Skills you've created.</PageHeader.Description>
             </PageHeader>
-            {skills.length > 0 && scope === 'mine' && (
+            {skills.length > 0 && (
               <div className="shrink-0">
                 <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
                   <PlusIcon /> New skill
@@ -121,28 +110,8 @@ export default function AgentBuilderSkillsPage() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex rounded-lg border border-border1 overflow-hidden">
-              <button
-                onClick={() => setScope('mine')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  scope === 'mine' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
-                }`}
-              >
-                My skills
-              </button>
-              <button
-                onClick={() => setScope('all')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  scope === 'all' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
-                }`}
-              >
-                All skills
-              </button>
-            </div>
-            <div className="flex-1 max-w-120">
-              <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
-            </div>
+          <div className="max-w-120">
+            <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
           </div>
         </EntityListPageLayout.Top>
 

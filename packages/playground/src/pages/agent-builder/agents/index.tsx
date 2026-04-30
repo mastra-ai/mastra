@@ -1,4 +1,4 @@
-import type { ListStoredAgentsParams, StoredAgentResponse } from '@mastra/client-js';
+import type { ListStoredAgentsParams } from '@mastra/client-js';
 import {
   AgentIcon,
   Button,
@@ -9,10 +9,6 @@ import {
   PageHeader,
   PermissionDenied,
   SessionExpired,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
@@ -27,26 +23,23 @@ import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
-type Scope = 'mine' | 'all';
-
 export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
-  const [scope, setScope] = useState<Scope>('mine');
   const [search, setSearch] = useState('');
   const { Link: FrameworkLink } = useLinkComponent();
 
   const listParams = useMemo<ListStoredAgentsParams>(() => {
     const params: ListStoredAgentsParams = {};
-    if (scope === 'mine' && currentUser?.id) {
+    if (currentUser?.id) {
       params.authorId = currentUser.id;
     }
     return params;
-  }, [scope, currentUser?.id]);
+  }, [currentUser?.id]);
 
   const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isCurrentUserLoading });
   const agents = data?.agents ?? [];
 
-  function renderAgentList(agentList: StoredAgentResponse[]) {
+  const body = (() => {
     if (isCurrentUserLoading || isLoading) {
       return <AgentBuilderListSkeleton />;
     }
@@ -73,31 +66,25 @@ export default function AgentBuilderAgentsPage() {
       );
     }
 
-    if (agentList.length === 0) {
+    if (agents.length === 0) {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
             iconSlot={<AgentIcon className="h-8 w-8 text-neutral3" />}
-            titleSlot={scope === 'mine' ? 'No agents yet' : 'No agents available'}
-            descriptionSlot={
-              scope === 'mine'
-                ? 'Start building your first agent with the Agent Builder.'
-                : 'No public agents are available yet.'
-            }
+            titleSlot="No agents yet"
+            descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
-              scope === 'mine' ? (
-                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
-                  <PlusIcon /> Create an agent
-                </Button>
-              ) : undefined
+              <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
+                <PlusIcon /> Create an agent
+              </Button>
             }
           />
         </div>
       );
     }
 
-    return <AgentBuilderList agents={agentList} search={search} />;
-  }
+    return <AgentBuilderList agents={agents} search={search} />;
+  })();
 
   return (
     <EntityListPageLayout className="px-4 md:px-10">
@@ -105,11 +92,9 @@ export default function AgentBuilderAgentsPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>
             <PageHeader.Title>
-              <AgentIcon /> Agents
+              <AgentIcon /> My agents
             </PageHeader.Title>
-            <PageHeader.Description>
-              {scope === 'mine' ? "Agents you've created." : 'All agents available to you.'}
-            </PageHeader.Description>
+            <PageHeader.Description>Agents you've created.</PageHeader.Description>
           </PageHeader>
           {agents.length > 0 && (
             <div className="w-full shrink-0 md:w-auto">
@@ -129,14 +114,7 @@ export default function AgentBuilderAgentsPage() {
         </div>
       </EntityListPageLayout.Top>
 
-      <Tabs defaultTab="mine" value={scope} onValueChange={setScope}>
-        <TabList>
-          <Tab value="mine">My agents</Tab>
-          <Tab value="all">All agents</Tab>
-        </TabList>
-        <TabContent value="mine">{renderAgentList(agents)}</TabContent>
-        <TabContent value="all">{renderAgentList(agents)}</TabContent>
-      </Tabs>
+      {body}
     </EntityListPageLayout>
   );
 }
