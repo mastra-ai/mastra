@@ -306,6 +306,16 @@ describe('GoogleDriveFilesystem', () => {
       expect(await fs.readFile('/log.txt', { encoding: 'utf-8' })).toBe('ab');
     });
 
+    it('appendFile creates a new file when path does not exist', async () => {
+      await fs.appendFile('/new/log.txt', 'first');
+      expect(await fs.readFile('/new/log.txt', { encoding: 'utf-8' })).toBe('first');
+    });
+
+    it('appendFile throws IsDirectoryError when target is a folder', async () => {
+      await fs.mkdir('/folder');
+      await expect(fs.appendFile('/folder', 'data')).rejects.toBeInstanceOf(IsDirectoryError);
+    });
+
     it('throws FileExistsError when overwrite is false', async () => {
       await fs.writeFile('/doc.txt', 'x');
       await expect(fs.writeFile('/doc.txt', 'y', { overwrite: false })).rejects.toBeInstanceOf(FileExistsError);
@@ -367,6 +377,20 @@ describe('GoogleDriveFilesystem', () => {
       expect(await fs.exists('/a.txt')).toBe(true);
       expect(await fs.exists('/existing-dir')).toBe(true);
     });
+
+    it('sends Content-Type application/json for copy and folder-creation requests', async () => {
+      await fs.writeFile('/src.txt', 'data');
+      await fs.copyFile('/src.txt', '/copy.txt');
+
+      const fetchMock = vi.mocked(globalThis.fetch);
+      const copyCall = fetchMock.mock.calls.find(([input]) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        return url.includes('/copy');
+      });
+      expect(copyCall).toBeDefined();
+      const copyHeaders = copyCall![1]?.headers as Record<string, string>;
+      expect(copyHeaders['Content-Type']).toBe('application/json');
+    });
   });
 
   describe('directory operations', () => {
@@ -375,8 +399,14 @@ describe('GoogleDriveFilesystem', () => {
       expect(await fs.exists('/deep/nested/path/file.txt')).toBe(true);
     });
 
-    it('mkdir throws without recursive when parent is missing', async () => {
-      await expect(fs.mkdir('/missing/child')).rejects.toBeInstanceOf(DirectoryNotFoundError);
+    it('mkdir creates parent directories by default', async () => {
+      await fs.mkdir('/missing/child');
+      expect(await fs.exists('/missing/child')).toBe(true);
+      expect(await fs.exists('/missing')).toBe(true);
+    });
+
+    it('mkdir throws with recursive: false when parent is missing', async () => {
+      await expect(fs.mkdir('/missing/child', { recursive: false })).rejects.toBeInstanceOf(DirectoryNotFoundError);
     });
 
     it('mkdir is idempotent for existing directories', async () => {
