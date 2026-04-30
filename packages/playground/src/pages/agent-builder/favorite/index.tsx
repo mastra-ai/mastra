@@ -34,6 +34,7 @@ export default function AgentBuilderFavoritePage() {
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
   const { data: currentUser } = useCurrentUser();
+  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
 
   const agentListParams = useMemo<ListStoredAgentsParams>(
     () => ({
@@ -170,6 +171,7 @@ export default function AgentBuilderFavoritePage() {
         skill={selectedSkill ?? undefined}
         onSkillUpdated={() => setSelectedSkill(null)}
         currentUserId={currentUser?.id}
+        isAdmin={isAdmin}
       />
     </>
   );

@@ -34,6 +34,7 @@ export default function AgentBuilderLibraryPage() {
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
   const { data: currentUser } = useCurrentUser();
+  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
 
   const agentListParams = useMemo<ListStoredAgentsParams>(() => ({ visibility: 'public' }), []);
   const skillListParams = useMemo<ListStoredSkillsParams>(() => ({ visibility: 'public' }), []);
@@ -155,6 +156,7 @@ export default function AgentBuilderLibraryPage() {
         skill={selectedSkill ?? undefined}
         onSkillUpdated={() => setSelectedSkill(null)}
         currentUserId={currentUser?.id}
+        isAdmin={isAdmin}
       />
     </>
   );

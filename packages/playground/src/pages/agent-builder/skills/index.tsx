@@ -25,6 +25,7 @@ type Scope = 'mine' | 'all';
 
 export default function AgentBuilderSkillsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const [scope, setScope] = useState<Scope>('mine');
@@ -153,6 +154,7 @@ export default function AgentBuilderSkillsPage() {
         onClose={() => setIsCreateDialogOpen(false)}
         onSkillCreated={() => setIsCreateDialogOpen(false)}
         currentUserId={currentUser?.id}
+        isAdmin={isAdmin}
       />
 
       <SkillEditDialog
@@ -161,6 +163,7 @@ export default function AgentBuilderSkillsPage() {
         skill={selectedSkill ?? undefined}
         onSkillUpdated={() => setSelectedSkill(null)}
         currentUserId={currentUser?.id}
+        isAdmin={isAdmin}
       />
     </>
   );

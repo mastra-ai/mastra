@@ -1,11 +1,13 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, SideDialog } from '@mastra/playground-ui';
 import { AlertTriangle, ChevronRight, Pencil, Settings2 } from 'lucide-react';
+import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useCreateSkill } from '../../hooks/use-create-skill';
 import { useUpdateSkill } from '../../hooks/use-update-skill';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
+import { SkillChatComposer } from './skill-chat-composer';
 import { createInitialStructure, updateNodeContent, updateRootFolderName } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
@@ -25,6 +27,8 @@ export interface SkillEditDialogProps {
   skill?: StoredSkillResponse;
   /** Current user ID for ownership checks */
   currentUserId?: string;
+  /** Whether the current user is an admin (enables advanced file-tree mode) */
+  isAdmin?: boolean;
 }
 
 export function SkillEditDialog({
@@ -34,9 +38,11 @@ export function SkillEditDialog({
   onSkillUpdated,
   skill,
   currentUserId,
+  isAdmin,
 }: SkillEditDialogProps) {
   const [mode, setMode] = useState<DialogMode>('simple');
   const [isEditing, setIsEditing] = useState(false);
+  const [chatSessionKey, setChatSessionKey] = useState(() => nanoid());
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
@@ -97,6 +103,7 @@ export function SkillEditDialog({
         setMode('simple');
       }
       prevNameRef.current = '';
+      setChatSessionKey(nanoid());
     }
   }, [isOpen, skill, workspaceOptions, builderDefaultWorkspaceId]);
 
@@ -211,60 +218,88 @@ export function SkillEditDialog({
         </div>
       </SideDialog.Top>
 
-      <SideDialog.Content className="overflow-y-auto h-full grid-rows-[auto_1fr]">
+      <SideDialog.Content className="h-full grid-rows-[1fr_auto] overflow-hidden">
         {mode === 'simple' ? (
           <div className="flex flex-col h-full">
-            <SkillSimpleForm
-              name={name}
-              onNameChange={handleNameChange}
-              description={description}
-              onDescriptionChange={setDescription}
-              visibility={visibility}
-              onVisibilityChange={setVisibility}
-              instructions={instructions}
-              onInstructionsChange={handleInstructionsChange}
-              readOnly={isReadOnly}
-            />
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <SkillSimpleForm
+                name={name}
+                onNameChange={handleNameChange}
+                description={description}
+                onDescriptionChange={setDescription}
+                visibility={visibility}
+                onVisibilityChange={setVisibility}
+                instructions={instructions}
+                onInstructionsChange={handleInstructionsChange}
+                readOnly={isReadOnly}
+              />
 
-            {!isReadOnly && !hasFilesystem && workspaceId && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>The selected workspace has no filesystem configured. Skill files cannot be written.</span>
-              </div>
-            )}
+              {!isReadOnly && !hasFilesystem && workspaceId && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>The selected workspace has no filesystem configured. Skill files cannot be written.</span>
+                </div>
+              )}
+
+              {!isReadOnly && isAdmin && (
+                <button
+                  onClick={() => setMode('advanced')}
+                  className="mt-4 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Advanced mode
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              )}
+            </div>
 
             {!isReadOnly && (
-              <button
-                onClick={() => setMode('advanced')}
-                className="mt-4 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
-              >
-                <Settings2 className="h-3.5 w-3.5" />
-                Advanced mode
-                <ChevronRight className="h-3 w-3" />
-              </button>
+              <div className="shrink-0 pt-4 border-t border-border1">
+                <SkillChatComposer
+                  sessionKey={chatSessionKey}
+                  onNameChange={handleNameChange}
+                  onDescriptionChange={setDescription}
+                  onInstructionsChange={handleInstructionsChange}
+                  onVisibilityChange={setVisibility}
+                />
+              </div>
             )}
           </div>
         ) : (
           <div className="flex flex-col h-full">
-            {!isReadOnly && (
-              <button
-                onClick={() => setMode('simple')}
-                className="mb-4 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Simple mode
-                <ChevronRight className="h-3 w-3" />
-              </button>
-            )}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {!isReadOnly && isAdmin && (
+                <button
+                  onClick={() => setMode('simple')}
+                  className="mb-4 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Simple mode
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              )}
 
-            <SkillFolder
-              files={files}
-              onChange={setFiles}
-              readOnly={isReadOnly}
-              workspaceId={workspaceId}
-              setWorkspaceId={setWorkspaceId}
-              workspaceOptions={workspaceOptions}
-            />
+              <SkillFolder
+                files={files}
+                onChange={setFiles}
+                readOnly={isReadOnly}
+                workspaceId={workspaceId}
+                setWorkspaceId={setWorkspaceId}
+                workspaceOptions={workspaceOptions}
+              />
+            </div>
+
+            {!isReadOnly && (
+              <div className="shrink-0 pt-4 border-t border-border1">
+                <SkillChatComposer
+                  sessionKey={chatSessionKey}
+                  onNameChange={handleNameChange}
+                  onDescriptionChange={setDescription}
+                  onInstructionsChange={handleInstructionsChange}
+                  onVisibilityChange={setVisibility}
+                />
+              </div>
+            )}
           </div>
         )}
       </SideDialog.Content>
