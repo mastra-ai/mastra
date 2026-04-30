@@ -28,6 +28,7 @@ import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import type { CurrentUser } from '@/domains/auth/types';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
@@ -43,9 +44,11 @@ export default function AgentBuilderAgentView() {
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
   const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({ enabled: features.skills });
+  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const isReady =
     Boolean(id) &&
     !isStoredAgentLoading &&
+    !isCurrentUserLoading &&
     (!features.tools || !isToolsPending) &&
     (!features.skills || !isSkillsPending) &&
     (!features.agents || !isAgentsPending) &&
@@ -61,6 +64,7 @@ export default function AgentBuilderAgentView() {
       agentsData={agentsData}
       workflowsData={workflowsData}
       storedSkillsResponse={storedSkillsResponse}
+      currentUser={currentUser ?? null}
     />
   );
 }
@@ -72,6 +76,7 @@ interface PageProps {
   agentsData: AgentsData | undefined;
   workflowsData: WorkflowsData | undefined;
   storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
+  currentUser: CurrentUser;
 }
 
 const AgentBuilderAgentViewPage = ({
@@ -81,6 +86,7 @@ const AgentBuilderAgentViewPage = ({
   agentsData,
   workflowsData,
   storedSkillsResponse,
+  currentUser,
 }: PageProps) => {
   const defaultValues = useMemo(() => storedAgentToFormValues(storedAgent), [storedAgent]);
   const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
@@ -98,6 +104,7 @@ const AgentBuilderAgentViewPage = ({
         agentsData={agentsData ?? {}}
         workflowsData={workflowsData ?? {}}
         storedSkillsResponse={storedSkillsResponse}
+        currentUser={currentUser}
       />
     </FormProvider>
   );
@@ -116,6 +123,7 @@ interface AgentBuilderAgentViewReadyProps {
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
   storedSkillsResponse: ReturnType<typeof useStoredSkills>['data'];
+  currentUser: CurrentUser;
 }
 
 const AgentBuilderAgentViewReady = ({
@@ -125,6 +133,7 @@ const AgentBuilderAgentViewReady = ({
   agentsData,
   workflowsData,
   storedSkillsResponse,
+  currentUser,
 }: AgentBuilderAgentViewReadyProps) => {
   const navigate = useNavigate();
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
@@ -132,7 +141,6 @@ const AgentBuilderAgentViewReady = ({
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
-  const { data: currentUser } = useCurrentUser();
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
   const threadId = currentUser?.id ? `${currentUser.id}-${id}` : id;
 
