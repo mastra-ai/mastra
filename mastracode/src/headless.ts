@@ -575,7 +575,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
  * Headless mode main entry point: parse arguments, read stdin, initialize
  * MastraCode, and run headless mode.
  */
-export async function headlessMain(): Promise<never> {
+export async function headlessMain(predrainedInput?: string | null): Promise<never> {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHeadlessUsage();
     process.exit(0);
@@ -590,7 +590,10 @@ export async function headlessMain(): Promise<never> {
   }
 
   let prompt = args.prompt;
-  if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
+  if (predrainedInput) {
+    // Stdin was already drained by the caller (e.g. TTY reopen failed after pipe drain)
+    prompt = predrainedInput;
+  } else if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
     const chunks: Buffer[] = [];
     for await (const chunk of process.stdin) {
       chunks.push(chunk as Buffer);

@@ -177,9 +177,7 @@ describe('drainPipedStdin', () => {
 
     expect(result).not.toBeNull();
     expect(result!.length).toBeLessThanOrEqual(oneMB);
-    expect(process.stderr.write).toHaveBeenCalledWith(
-      expect.stringContaining('truncated'),
-    );
+    expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining('truncated'));
   });
 
   it('sanitizes ANSI codes and \\r overwrites in piped content', async () => {

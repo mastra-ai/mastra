@@ -162,7 +162,7 @@ function handleFatalError(error: unknown): never {
 }
 
 async function main() {
-  if (hasHeadlessFlag(process.argv)) {
+  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
     return headlessMain();
   }
 
@@ -178,7 +178,7 @@ async function main() {
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
     if (!reopenStdinFromTTY()) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
-      return headlessMain();
+      return headlessMain(pipedInput);
     }
   }
 

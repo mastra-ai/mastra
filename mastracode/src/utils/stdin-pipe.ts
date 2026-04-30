@@ -25,7 +25,6 @@ export function sanitizePipedOutput(raw: string): string {
   let text = raw.replace(ANSI_RE, '');
 
   // Strip binary control characters (everything below 0x20 except \t, \n, \r)
-  // eslint-disable-next-line no-control-regex
   text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
   // Simulate \r overwrites: for each line, the last \r-segment wins
@@ -66,11 +65,13 @@ export async function drainPipedStdin(): Promise<string | null> {
     const buf = chunk as Buffer;
 
     if (totalBytes + buf.length > MAX_PIPE_BYTES) {
-      // Take only what fits under the cap
+      // Take only what fits under the cap — copy so we don't retain the
+      // original backing buffer, then zero the source.
       const remaining = MAX_PIPE_BYTES - totalBytes;
       if (remaining > 0) {
-        chunks.push(buf.subarray(0, remaining));
+        chunks.push(Buffer.from(buf.subarray(0, remaining)));
       }
+      buf.fill(0);
       totalBytes = MAX_PIPE_BYTES;
       truncated = true;
       // Keep draining so we don't leave unread data in the pipe, but don't
@@ -83,9 +84,7 @@ export async function drainPipedStdin(): Promise<string | null> {
   }
 
   if (truncated) {
-    process.stderr.write(
-      `Warning: Piped input exceeded ${MAX_PIPE_BYTES / 1024 / 1024}MB and was truncated.\n`,
-    );
+    process.stderr.write(`Warning: Piped input exceeded ${MAX_PIPE_BYTES / 1024 / 1024}MB and was truncated.\n`);
   }
 
   const raw = Buffer.concat(chunks).toString('utf-8');
