@@ -38,6 +38,15 @@ function getChannelOrThrow(mastra: any, platform: string) {
   return channel;
 }
 
+function assertAgentExists(mastra: any, agentId: string) {
+  const agent = mastra.getAgent?.(agentId);
+  if (!agent) {
+    throw new HTTPException(404, {
+      message: `Agent "${agentId}" not found`,
+    });
+  }
+}
+
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -151,6 +160,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, platform, agentId }) => {
     assertChannelsAvailable();
     try {
+      assertAgentExists(mastra, agentId);
       const channel = getChannelOrThrow(mastra, platform);
 
       if (!channel.disconnect) {
