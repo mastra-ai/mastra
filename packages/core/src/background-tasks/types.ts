@@ -145,6 +145,11 @@ export interface BackgroundTaskManagerConfig {
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
   /**
+   * Minimum delay between chunk-based progress output events for each task, in ms.
+   * Default: undefined (publish every progress chunk).
+   */
+  progressThrottleMs?: number;
+  /**
    * How long the agentic loop waits for a background task to complete before
    * moving on (in ms). If a task hasn't finished within this time, the loop
    * proceeds without setting isContinued — allowing it to end naturally.

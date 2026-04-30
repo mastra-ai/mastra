@@ -42,7 +42,7 @@ export function createMountConfigTests(getContext: () => TestContext): void {
       const config = fs.getMountConfig();
 
       // Type should be a recognizable mount type
-      expect(['s3', 'gcs', 'local', 'r2']).toContain(config.type);
+      expect(['s3', 'gcs', 'local', 'r2', 'azure-blob']).toContain(config.type);
     });
 
     it('getMountConfig is undefined for non-mountable filesystems', () => {

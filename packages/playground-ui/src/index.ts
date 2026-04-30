@@ -4,7 +4,6 @@ import './index.css';
 export * from './ds/components/Threads';
 
 // DS Components - Existing
-export * from './ds/components/Alert';
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Breadcrumb/index';
@@ -51,6 +50,8 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/BrandLoader';
 export * from './ds/components/Switch';
+export * from './ds/components/ThemeProvider';
+export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
 
@@ -143,7 +144,7 @@ export * from './lib/file';
 export * from './lib/template';
 
 // Store
-export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store/playground-store';
+export { usePlaygroundStore } from './store/playground-store';
 
 // Domains
 export * from './domains/metrics';

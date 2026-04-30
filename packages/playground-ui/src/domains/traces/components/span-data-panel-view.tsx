@@ -5,10 +5,10 @@ import type { ReactNode } from 'react';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
-import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
@@ -46,6 +46,13 @@ export interface SpanDataPanelViewProps {
   scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   /** Optional count shown in the "Scoring" tab label (e.g. number of scores). */
   scoringTabBadge?: ReactNode;
+  /**
+   * When provided, a "Feedback" tab appears; the slot receives the loaded span and renders
+   * whatever feedback UI the consumer wants.
+   */
+  feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
+  /** Optional count shown in the "Feedback" tab label. */
+  feedbackTabBadge?: ReactNode;
 }
 
 export function SpanDataPanelView({
@@ -60,6 +67,8 @@ export function SpanDataPanelView({
   onTabChange,
   scoringTabSlot,
   scoringTabBadge,
+  feedbackTabSlot,
+  feedbackTabBadge,
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel>
@@ -91,6 +100,8 @@ export function SpanDataPanelView({
           onTabChange={onTabChange}
           scoringTabSlot={scoringTabSlot}
           scoringTabBadge={scoringTabBadge}
+          feedbackTabSlot={feedbackTabSlot}
+          feedbackTabBadge={feedbackTabBadge}
         />
       )}
     </DataPanel>
@@ -105,6 +116,8 @@ function SpanDataPanelContent({
   onTabChange,
   scoringTabSlot,
   scoringTabBadge,
+  feedbackTabSlot,
+  feedbackTabBadge,
 }: {
   span: SpanRecord;
   traceId: string;
@@ -113,6 +126,8 @@ function SpanDataPanelContent({
   onTabChange?: (tab: string) => void;
   scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   scoringTabBadge?: ReactNode;
+  feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
+  feedbackTabBadge?: ReactNode;
 }) {
   const durationMs =
     span.startedAt && span.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
@@ -121,10 +136,11 @@ function SpanDataPanelContent({
   const detailsBody = (
     <>
       {isTokenLimitExceeded(span) && (
-        <Alert variant="warning" className="mb-3">
-          <AlertTitle>Token Limit Exceeded</AlertTitle>
-          <AlertDescription as="p">{getTokenLimitMessage(span)}</AlertDescription>
-        </Alert>
+        <div className="mb-3">
+          <Notice variant="warning" title="Token Limit Exceeded">
+            <Notice.Message>{getTokenLimitMessage(span)}</Notice.Message>
+          </Notice>
+        </div>
       )}
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
@@ -293,8 +309,8 @@ function SpanDataPanelContent({
     </>
   );
 
-  // No scoring slot → render details directly without the Tabs/TabList wrapper.
-  if (!scoringTabSlot) {
+  // No extra tab slots → render details directly without the Tabs/TabList wrapper.
+  if (!scoringTabSlot && !feedbackTabSlot) {
     return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
   }
 
@@ -303,11 +319,15 @@ function SpanDataPanelContent({
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
         <TabList>
           <Tab value="details">Details</Tab>
-          <Tab value="scoring">Scoring {scoringTabBadge != null && <>({scoringTabBadge})</>}</Tab>
+          {scoringTabSlot && <Tab value="scoring">Scoring {scoringTabBadge != null && <>({scoringTabBadge})</>}</Tab>}
+          {feedbackTabSlot && (
+            <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
+          )}
         </TabList>
 
         <TabContent value="details">{detailsBody}</TabContent>
-        <TabContent value="scoring">{scoringTabSlot({ span, traceId, spanId })}</TabContent>
+        {scoringTabSlot && <TabContent value="scoring">{scoringTabSlot({ span, traceId, spanId })}</TabContent>}
+        {feedbackTabSlot && <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>}
       </Tabs>
     </DataPanel.Content>
   );

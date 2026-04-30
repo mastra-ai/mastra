@@ -86,7 +86,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats’ whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you’re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!"
+                  "text": "Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats\u2019 whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you\u2019re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!"
                 }
               ],
               "role": "assistant"
@@ -147,7 +147,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Tell me about catsMessage from previous conversation at 8:56 PM: Assistant: Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats’ whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you’re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Tell me about catsMessage from previous conversation at 8:56 PM: Assistant: Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats\u2019 whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you\u2019re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -666,7 +666,7 @@
       }
     },
     {
-      "hash": "04025992b8516944",
+      "hash": "9c25553eef542787",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1520,7 +1520,7 @@
       }
     },
     {
-      "hash": "d0631d83aae1d989",
+      "hash": "c9a528d55b665619",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1855,7 +1855,7 @@
       }
     },
     {
-      "hash": "a5c4540fc78bb110",
+      "hash": "c9a528d55b665619",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2902,7 +2902,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in London is sunny, with a temperature of 70°F and it feels like 65°F."
+                  "text": "The weather in London is sunny, with a temperature of 70\u00b0F and it feels like 65\u00b0F."
                 }
               ],
               "role": "assistant"
@@ -2985,7 +2985,7 @@
       }
     },
     {
-      "hash": "1c40148dd44a0d15",
+      "hash": "7be2e6493a6736cb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3320,7 +3320,7 @@
       }
     },
     {
-      "hash": "f75f9b9ff458930f",
+      "hash": "17497618c6e9059d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4009,7 +4009,7 @@
       }
     },
     {
-      "hash": "836bc7488ff6acc4",
+      "hash": "02ca91902ed2640e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4222,7 +4222,7 @@
       }
     },
     {
-      "hash": "0abf4ad4170bd7fb",
+      "hash": "8df8266cbe58b20a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4575,7 +4575,7 @@
       }
     },
     {
-      "hash": "ef3e214eb3ddfbbe",
+      "hash": "f8f322484cb0eb60",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -5639,7 +5639,7 @@
       }
     },
     {
-      "hash": "565f171b96a74611",
+      "hash": "5b13fe0609a4f570",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -5849,7 +5849,7 @@
       }
     },
     {
-      "hash": "ada8144b8160e694",
+      "hash": "05a667c8d8a9ca17",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -5989,7 +5989,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Message number 3 received. What’s next on your mind?"
+                  "text": "Message number 3 received. What\u2019s next on your mind?"
                 }
               ],
               "role": "assistant"
@@ -6269,7 +6269,7 @@
       }
     },
     {
-      "hash": "c185b41fcc9a2bb0",
+      "hash": "5ec6f3ed72844664",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -7066,6 +7066,1473 @@
               "reasoning_tokens": 0
             },
             "total_tokens": 249
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "04025992b8516944",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 2+2?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_08e7171d496fb01c0069e8f7942d508193b1c1ef047ecbe4a5"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Give me JSON"
+                }
+              ]
+            }
+          ],
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "strict": true,
+              "name": "response",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          },
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160960
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0603005a7923f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:13 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "887",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999622",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_ee1cefd600ab4a05bda83cc9fdbffab3"
+        },
+        "body": {
+          "id": "resp_08e7171d496fb01c0069e8f794973081938127826b20127fa3",
+          "object": "response",
+          "created_at": 1776875412,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875413,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_08e7171d496fb01c0069e8f79518e48193be92a3c773418273",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "{\"result\":\"{\\\"2 + 2\\\": 4}\"}"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "description": null,
+              "name": "response",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 161,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 18,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 179
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0abf4ad4170bd7fb",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in Tokyo?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0c5d50683908b44e0069e8f7a574208195aa29acc0bc261ab0"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_DmBsKzMiwuvQM6D0CYKvZAaZ",
+              "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0c5d50683908b44e0069e8f7a637b88195b64562ea26f71998"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in London?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0c5d50683908b44e0069e8f7a788f48195904431996ef593d4"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_x4eWf4PR8PmeZHTv71GHHcLQ",
+              "output": "The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176163820
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f060378b9d623f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:33 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1620",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999540",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_542e0d3c8b6040878677e052f40e0a68"
+        },
+        "body": {
+          "id": "resp_0c5d50683908b44e0069e8f7a7f9c08195804a2f7895aaa4b9",
+          "object": "response",
+          "created_at": 1776875432,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875433,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0c5d50683908b44e0069e8f7a8e3f48195b4fbc471909bbeb0",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The weather in London is sunny, with a temperature of 70 degrees Fahrenheit, feeling like 65 degrees."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 241,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 24,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 265
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "565f171b96a74611",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 1"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0c67c20ea97b28250069e8f7b1f3808193ac5a4895eead1849"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 2"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176162620
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0603bcfaa323f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:43 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "882",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999660",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_cf004a227543406ba675550f56e3af90"
+        },
+        "body": {
+          "id": "resp_0c67c20ea97b28250069e8f7b2c5d08193987c503a46e699b1",
+          "object": "response",
+          "created_at": 1776875442,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875443,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0c67c20ea97b28250069e8f7b3522c8193888ac7971771b0f8",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Message number 2 received. What would you like to do next?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 124,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 16,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 140
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "836bc7488ff6acc4",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in Tokyo?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0c5d50683908b44e0069e8f7a574208195aa29acc0bc261ab0"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_DmBsKzMiwuvQM6D0CYKvZAaZ",
+              "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0c5d50683908b44e0069e8f7a637b88195b64562ea26f71998"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in London?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176162880
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f060372a92b23f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:31 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "879",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999587",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_ade7078debf74c44a2144a5349d9da1b"
+        },
+        "body": {
+          "id": "resp_0c5d50683908b44e0069e8f7a6e3e8819592988aacf275ea66",
+          "object": "response",
+          "created_at": 1776875430,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875431,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "fc_0c5d50683908b44e0069e8f7a788f48195904431996ef593d4",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"city\":\"London\"}",
+              "call_id": "call_x4eWf4PR8PmeZHTv71GHHcLQ",
+              "name": "get_weather_city"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 196,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 16,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 212
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ada8144b8160e694",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 1"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0c67c20ea97b28250069e8f7b1f3808193ac5a4895eead1849"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 2"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0c67c20ea97b28250069e8f7b3522c8193888ac7971771b0f8"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 3"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176164600
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0603c3bb5823f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:44 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1071",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999632",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_9c9752870e9e44c68c1e542a7f6552b2"
+        },
+        "body": {
+          "id": "resp_0c67c20ea97b28250069e8f7b3de9c8193a40e4e1c2bcbab10",
+          "object": "response",
+          "created_at": 1776875443,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875444,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0c67c20ea97b28250069e8f7b480808193b0882d3ddf307568",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Message number 3 received. What\u2019s next on your mind?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 150,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 15,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 165
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ef3e214eb3ddfbbe",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "My name is Alice"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0c34673afc83b8d60069e8f7a9fbe0819486fcb3ddb8402f24"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is my name?"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773176160800
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0603886fb123f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:35 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "764",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999932",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_06e4efb51ed745ecaeb2eeeebc8102b9"
+        },
+        "body": {
+          "id": "resp_0c34673afc83b8d60069e8f7aa5ce08194a3b1f405029efd96",
+          "object": "response",
+          "created_at": 1776875434,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875434,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0c34673afc83b8d60069e8f7aac1bc819490004781356a46f8",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Your name is Alice. How can I help you today, Alice?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 47,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 15,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 62
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0ae8ebb295ddebdb",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: My favorite color is blue.Message from previous conversation at 8:56 PM: Assistant: That's great! Blue is often associated with calmness and tranquility. Do you have a particular shade of blue that you like the most?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "My favorite color is blue."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ce585ca3578943a0069e8f7b634d48197a8049b99a4a076de"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Actually, my favorite color is red."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176161640
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0603d87bbf23f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:30:48 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1119",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999535",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_e940735b000e49518ab4cf222885f846"
+        },
+        "body": {
+          "id": "resp_0ce585ca3578943a0069e8f7b72f248197a32a84955b9cb069",
+          "object": "response",
+          "created_at": 1776875447,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875448,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0ce585ca3578943a0069e8f7b7c39c8197a645396b1d8087d4",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Red is a vibrant and energetic color! It often symbolizes passion and excitement. What draws you to red?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 248,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 23,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 271
           },
           "user": null,
           "metadata": {}

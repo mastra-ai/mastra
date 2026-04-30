@@ -65,7 +65,7 @@ export function MCPClientList() {
     selectedTools: Record<string, { description?: string }>;
   }) => {
     const current = form.getValues('mcpClients') ?? [];
-    form.setValue('mcpClients', [...current, config]);
+    form.setValue('mcpClients', [...current, config], { shouldDirty: true });
 
     if (Object.keys(config.selectedTools).length > 0) {
       const currentTools = form.getValues('tools') ?? {};
@@ -73,7 +73,7 @@ export function MCPClientList() {
       for (const [name, toolConfig] of Object.entries(config.selectedTools)) {
         next[name] = { description: toolConfig.description };
       }
-      form.setValue('tools', next);
+      form.setValue('tools', next, { shouldDirty: true });
     }
 
     setIsCreateOpen(false);
@@ -100,11 +100,11 @@ export function MCPClientList() {
     for (const [name, toolConfig] of Object.entries(config.selectedTools)) {
       next[name] = { description: toolConfig.description };
     }
-    form.setValue('tools', next);
+    form.setValue('tools', next, { shouldDirty: true });
 
     const updated = [...current];
     updated[viewIndex] = { ...updated[viewIndex], ...config };
-    form.setValue('mcpClients', updated);
+    form.setValue('mcpClients', updated, { shouldDirty: true });
     setViewIndex(null);
   };
 
@@ -118,18 +118,19 @@ export function MCPClientList() {
       for (const name of Object.keys(removed.selectedTools)) {
         delete next[name];
       }
-      form.setValue('tools', next);
+      form.setValue('tools', next, { shouldDirty: true });
     }
 
     // Track persisted clients for deletion on save
     if (removed?.id) {
       const toDelete = form.getValues('mcpClientsToDelete') ?? [];
-      form.setValue('mcpClientsToDelete', [...toDelete, removed.id]);
+      form.setValue('mcpClientsToDelete', [...toDelete, removed.id], { shouldDirty: true });
     }
 
     form.setValue(
       'mcpClients',
       current.filter((_, i) => i !== index),
+      { shouldDirty: true },
     );
   };
 

@@ -121,7 +121,7 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
-        run: pnpm add -w --no-lockfile globby
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile globby
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
@@ -171,7 +171,7 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
-        run: pnpm add -w --no-lockfile semver
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile semver
 
       - name: bump versions
         run: npx changeset version

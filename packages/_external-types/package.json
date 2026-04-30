@@ -1,6 +1,6 @@
 {
   "name": "@internal/external-types",
-  "version": "0.0.36",
+  "version": "0.0.39",
   "description": "",
   "type": "module",
   "private": true,
@@ -32,7 +32,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/provider-utils": "^3.0.22",
+    "@ai-sdk/provider-utils": "^3.0.23",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.57.7",

@@ -23,6 +23,33 @@ import {
 const OM_TABLE = 'mastra_observational_memory' as const;
 
 /**
+ * Columns added to the OM table after its initial release.
+ * Used in `alterTable({ ifNotExists })` so that databases created on older
+ * versions get the new columns automatically.
+ *
+ * When you add a column to OBSERVATIONAL_MEMORY_SCHEMA in @mastra/core,
+ * you MUST also add it here — the unit test `om-migration-columns.test.ts`
+ * will fail otherwise.
+ */
+export const OM_MIGRATION_COLUMNS: string[] = [
+  'observedMessageIds',
+  'observedTimezone',
+  'bufferedObservations',
+  'bufferedObservationTokens',
+  'bufferedMessageIds',
+  'bufferedReflection',
+  'bufferedReflectionTokens',
+  'bufferedReflectionInputTokens',
+  'reflectedObservationLineCount',
+  'bufferedObservationChunks',
+  'isBufferingObservation',
+  'isBufferingReflection',
+  'lastBufferedAtTokens',
+  'lastBufferedAtTime',
+  'metadata',
+];
+
+/**
  * Try to import the OM schema statically. On older @mastra/core versions that
  * don't export OBSERVATIONAL_MEMORY_TABLE_SCHEMA this will be undefined,
  * and getExportDDL / init() will simply skip the OM table.
@@ -145,22 +172,7 @@ export class MemoryPG extends MemoryStorage {
       await this.#db.alterTable({
         tableName: OM_TABLE as any,
         schema: omSchema,
-        ifNotExists: [
-          'observedMessageIds',
-          'observedTimezone',
-          'bufferedObservations',
-          'bufferedObservationTokens',
-          'bufferedMessageIds',
-          'bufferedReflection',
-          'bufferedReflectionTokens',
-          'bufferedReflectionInputTokens',
-          'bufferedObservationChunks',
-          'isBufferingObservation',
-          'isBufferingReflection',
-          'lastBufferedAtTokens',
-          'lastBufferedAtTime',
-          'metadata',
-        ],
+        ifNotExists: OM_MIGRATION_COLUMNS,
       });
     }
     await this.#db.alterTable({

@@ -254,7 +254,7 @@ describe('BatchPartsProcessor', () => {
         payload: { text: 'Hello', id: 'text-1' },
       });
 
-      // Third and fourth chunks - should batch together
+      // Third chunk - should emit the deferred non-text part (object), buffer the text
       result = await processor.processOutputStream({
         part: chunks[2],
         streamParts: [chunks[2]],
@@ -263,8 +263,14 @@ describe('BatchPartsProcessor', () => {
           throw new Error('abort');
         },
       });
-      expect(result).toBeNull();
+      expect(result).toEqual({
+        type: 'object',
+        object: { key: 'value' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      });
 
+      // Fourth chunk - should not emit yet since batch size is 3 and we only have 2 chunks
       result = await processor.processOutputStream({
         part: chunks[3],
         streamParts: [chunks[3]],
@@ -273,7 +279,7 @@ describe('BatchPartsProcessor', () => {
           throw new Error('abort');
         },
       });
-      expect(result).toBeNull(); // Should not emit yet since batch size is 3 and we only have 2 chunks
+      expect(result).toBeNull();
     });
   });
 
