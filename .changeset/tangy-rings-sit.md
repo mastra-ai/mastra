@@ -1,5 +1,5 @@
 ---
-'@mastra/slack': minor
+'@mastra/slack': patch
 ---
 
 Added @mastra/slack channel integration for connecting AI agents to Slack workspaces. Provides automatic Slack app provisioning via OAuth, manifest management with drift detection, encrypted credential storage, slash command support, and threaded conversation handling. Usage:
