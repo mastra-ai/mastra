@@ -133,12 +133,20 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "all-shirts-know",
     "automated-provider-registry-20260430-010433",
+    "curvy-roses-smoke",
     "fair-birds-knock",
+    "fix-editor-mcp-client",
+    "fluffy-banks-bow",
     "frank-ghosts-work",
     "green-birds-knock",
+    "hungry-owls-mix",
+    "little-toes-check",
+    "observability-volume-controls",
     "rare-jokes-double",
     "sharp-ghosts-wave",
-    "spotty-states-ring"
+    "spotty-states-ring",
+    "twelve-signs-arrive"
   ]
 }

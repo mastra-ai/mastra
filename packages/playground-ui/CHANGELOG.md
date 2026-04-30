@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 24.0.2-alpha.1
+
+### Patch Changes
+
+- Updated the look and motion of `Dialog`. The surface is now lighter and translucent with a subtle backdrop blur, the typography is tighter, and the open/close animation feels snappier. `SideDialog` and `AlertDialog` pick up the refined ambient shadow as well, since they share the same shadow style. ([#15958](https://github.com/mastra-ai/mastra/pull/15958))
+
+- Polished DataList visuals: removed the trailing "No more data to load" message and dropped the bottom border on the last row for a cleaner end-of-list appearance. ([#15959](https://github.com/mastra-ai/mastra/pull/15959))
+
+- Refined the DataPanel loading state with a smaller spinner and tightened layout for a less prominent appearance. ([#15965](https://github.com/mastra-ai/mastra/pull/15965))
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/core@1.30.0-alpha.1
+  - @mastra/client-js@1.15.2-alpha.1
+  - @mastra/react@0.2.32-alpha.1
+
 ## 24.0.2-alpha.0
 
 ### Patch Changes

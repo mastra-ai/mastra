@@ -1,5 +1,17 @@
 # @mastra/editor
 
+## 0.7.22-alpha.1
+
+### Patch Changes
+
+- Fix MCP client support in the agent editor: ([#15945](https://github.com/mastra-ai/mastra/pull/15945))
+  - MCP client form dirty state: Save button now enables after adding/removing MCP clients
+  - MCP tool name matching: Both bare and namespaced tool names are matched correctly
+  - Auth token forwarding: Token from cookie or header is forwarded to auth-protected MCP servers
+  - String interpolation: Request context variables in system prompts now resolve correctly
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/core@1.30.0-alpha.1
+
 ## 0.7.22-alpha.0
 
 ### Patch Changes
