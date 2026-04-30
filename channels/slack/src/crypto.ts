@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes, createHash, hkdfSync } from 'crypto';
+import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'crypto';
 
 /**
  * Verify a Slack request signature.
@@ -43,75 +43,18 @@ export function parseSlackFormBody(body: string): Record<string, string> {
 }
 
 // ---------------------------------------------------------------------------
-// Encryption / Decryption
+// Encryption / Decryption — AES-256-GCM with HKDF-SHA256 key derivation
 // ---------------------------------------------------------------------------
 //
-// Ciphertext format:  <algo>:<payload>
+// Ciphertext format:  aes-256-gcm-hkdf:<salt>:<iv>:<authTag>:<ciphertext>
+// All components are base64-encoded.
 //
-// Supported algorithms:
-//   aes-256-gcm-hkdf  — AES-256-GCM with HKDF-SHA256 key derivation (current)
-//   aes-256-gcm-sha256 — AES-256-GCM with raw SHA-256 key hash (legacy)
-//
-// Adding a new algorithm:
-//   1. Add a decrypt branch in ALGO_REGISTRY
+// To add a new algorithm in the future:
+//   1. Add a new prefix constant and decrypt branch
 //   2. Update encrypt() to emit the new prefix
 // ---------------------------------------------------------------------------
 
-const CURRENT_ALGO = 'aes-256-gcm-hkdf';
-
-interface AlgoDecryptor {
-  decrypt(payload: string, key: string): string;
-}
-
-/**
- * AES-256-GCM with HKDF-SHA256 key derivation.
- * Payload: base64(salt):base64(iv):base64(authTag):base64(ciphertext)
- */
-const aes256gcmHkdf: AlgoDecryptor = {
-  decrypt(payload: string, key: string): string {
-    const [saltB64, ivB64, authTagB64, encryptedB64] = payload.split(':');
-    if (!saltB64 || !ivB64 || !authTagB64 || !encryptedB64) {
-      throw new Error('Invalid aes-256-gcm-hkdf payload');
-    }
-
-    const salt = Buffer.from(saltB64, 'base64');
-    const derived = Buffer.from(hkdfSync('sha256', key, salt, 'mastra-slack-encryption', 32));
-    const iv = Buffer.from(ivB64, 'base64');
-    const authTag = Buffer.from(authTagB64, 'base64');
-    const encrypted = Buffer.from(encryptedB64, 'base64');
-
-    const decipher = createDecipheriv('aes-256-gcm', derived, iv);
-    decipher.setAuthTag(authTag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
-  },
-};
-
-/**
- * Legacy: AES-256-GCM with a single SHA-256 hash of the key.
- * Payload: base64(iv):base64(authTag):base64(ciphertext)
- */
-const aes256gcmSha256: AlgoDecryptor = {
-  decrypt(payload: string, key: string): string {
-    const [ivB64, authTagB64, encryptedB64] = payload.split(':');
-    if (!ivB64 || !authTagB64 || !encryptedB64) {
-      throw new Error('Invalid aes-256-gcm-sha256 payload');
-    }
-
-    const keyHash = createHash('sha256').update(key).digest();
-    const iv = Buffer.from(ivB64, 'base64');
-    const authTag = Buffer.from(authTagB64, 'base64');
-    const encrypted = Buffer.from(encryptedB64, 'base64');
-
-    const decipher = createDecipheriv('aes-256-gcm', keyHash, iv);
-    decipher.setAuthTag(authTag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
-  },
-};
-
-const ALGO_REGISTRY: Record<string, AlgoDecryptor> = {
-  'aes-256-gcm-hkdf': aes256gcmHkdf,
-  'aes-256-gcm-sha256': aes256gcmSha256,
-};
+const ALGO_PREFIX = 'aes-256-gcm-hkdf';
 
 /**
  * Encrypt sensitive data using AES-256-GCM with HKDF-SHA256 key derivation.
@@ -126,13 +69,11 @@ export function encrypt(plaintext: string, key: string): string {
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
-  const payload = `${salt.toString('base64')}:${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`;
-  return `${CURRENT_ALGO}:${payload}`;
+  return `${ALGO_PREFIX}:${salt.toString('base64')}:${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`;
 }
 
 /**
- * Decrypt data produced by encrypt(). Routes to the correct algorithm
- * based on the prefix. Supports legacy unprefixed ciphertexts.
+ * Decrypt data produced by encrypt().
  */
 export function decrypt(ciphertext: string, key: string): string {
   const colonIdx = ciphertext.indexOf(':');
@@ -141,13 +82,23 @@ export function decrypt(ciphertext: string, key: string): string {
   }
 
   const prefix = ciphertext.slice(0, colonIdx);
-  const handler = ALGO_REGISTRY[prefix];
-
-  if (handler) {
-    // Prefixed format: algo:payload
-    return handler.decrypt(ciphertext.slice(colonIdx + 1), key);
+  if (prefix !== ALGO_PREFIX) {
+    throw new Error(`Unsupported encryption algorithm: ${prefix}`);
   }
 
-  // Legacy: no algo prefix, assume aes-256-gcm-sha256 (iv:tag:data)
-  return aes256gcmSha256.decrypt(ciphertext, key);
+  const payload = ciphertext.slice(colonIdx + 1);
+  const [saltB64, ivB64, authTagB64, encryptedB64] = payload.split(':');
+  if (!saltB64 || !ivB64 || !authTagB64 || !encryptedB64) {
+    throw new Error('Invalid ciphertext payload');
+  }
+
+  const salt = Buffer.from(saltB64, 'base64');
+  const derived = Buffer.from(hkdfSync('sha256', key, salt, 'mastra-slack-encryption', 32));
+  const iv = Buffer.from(ivB64, 'base64');
+  const authTag = Buffer.from(authTagB64, 'base64');
+  const encrypted = Buffer.from(encryptedB64, 'base64');
+
+  const decipher = createDecipheriv('aes-256-gcm', derived, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 }

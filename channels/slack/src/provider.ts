@@ -234,19 +234,11 @@ export class SlackProvider implements ChannelProvider {
     const key = this.#getEncryptionKey();
     if (!key) return pending;
 
-    // Check if already decrypted (no colons = not encrypted format)
-    if (!pending.clientSecret.includes(':')) return pending;
-
-    try {
-      return {
-        ...pending,
-        clientSecret: decrypt(pending.clientSecret, key),
-        signingSecret: decrypt(pending.signingSecret, key),
-      };
-    } catch {
-      console.warn('[Slack] Failed to decrypt pending installation - may be stored unencrypted');
-      return pending;
-    }
+    return {
+      ...pending,
+      clientSecret: decrypt(pending.clientSecret, key),
+      signingSecret: decrypt(pending.signingSecret, key),
+    };
   }
 
   /**
@@ -271,20 +263,12 @@ export class SlackProvider implements ChannelProvider {
     const key = this.#getEncryptionKey();
     if (!key) return installation;
 
-    // Check if already decrypted (no colons = not encrypted format)
-    if (!installation.botToken.includes(':')) return installation;
-
-    try {
-      return {
-        ...installation,
-        clientSecret: decrypt(installation.clientSecret, key),
-        signingSecret: decrypt(installation.signingSecret, key),
-        botToken: decrypt(installation.botToken, key),
-      };
-    } catch {
-      console.warn('[Slack] Failed to decrypt installation - may be stored unencrypted');
-      return installation;
-    }
+    return {
+      ...installation,
+      clientSecret: decrypt(installation.clientSecret, key),
+      signingSecret: decrypt(installation.signingSecret, key),
+      botToken: decrypt(installation.botToken, key),
+    };
   }
 
   /**
