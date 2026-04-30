@@ -274,6 +274,15 @@ export interface DelegationConfig {
   onDelegationComplete?: OnDelegationCompleteHandler;
 
   /**
+   * Include the full subagent result in the supervisor model context.
+   *
+   * By default, the supervisor model receives only the subagent's text response
+   * in later iterations. Set this to true to also include nested subagent tool
+   * results in the supervisor model context.
+   */
+  includeSubAgentToolResultsInModelContext?: boolean;
+
+  /**
    * Callback that controls which parent messages are passed to each subagent as conversation
    * context. Receives the full parent message history along with delegation metadata, and
    * returns the messages that should be forwarded.
