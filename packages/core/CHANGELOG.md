@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.31.0-alpha.2
+
+### Patch Changes
+
+- Fixed BatchPartsProcessor using a hardcoded id in batched text-delta chunks. The real message id and runId are now preserved from the original chunks, preventing AI SDK UIMessage stream from dropping batched deltas. ([#14974](https://github.com/mastra-ai/mastra/pull/14974))
+
 ## 1.31.0-alpha.1
 
 ### Patch Changes
