@@ -27,6 +27,11 @@ export function WorkflowHeader({
 }) {
   const { data: schedules } = useSchedules({ workflowId });
   const scheduleCount = schedules?.length ?? 0;
+  const schedulesHref =
+    scheduleCount === 1
+      ? `/workflows/schedules/${encodeURIComponent(schedules![0].id)}`
+      : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
+  const isLeafCombobox = !runId;
 
   return (
     <div className="shrink-0">
@@ -38,7 +43,7 @@ export function WorkflowHeader({
             </Icon>
             Workflows
           </Crumb>
-          <Crumb as="span" to="" isCurrent={!runId}>
+          <Crumb as="span" to="" isCurrent={isLeafCombobox}>
             <WorkflowCombobox value={workflowId} variant="ghost" />
           </Crumb>
           {runId && (
@@ -52,7 +57,7 @@ export function WorkflowHeader({
 
         <HeaderGroup>
           {scheduleCount > 0 && (
-            <Button as={Link} to={`/workflows/${workflowId}/schedules`}>
+            <Button as={Link} to={schedulesHref}>
               <Icon>
                 <CalendarClockIcon />
               </Icon>

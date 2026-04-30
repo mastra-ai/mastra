@@ -4,7 +4,13 @@ import { MockStore } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { GET_SCHEDULE_ROUTE, LIST_SCHEDULES_ROUTE, LIST_SCHEDULE_TRIGGERS_ROUTE } from './schedules';
+import {
+  GET_SCHEDULE_ROUTE,
+  LIST_SCHEDULES_ROUTE,
+  LIST_SCHEDULE_TRIGGERS_ROUTE,
+  PAUSE_SCHEDULE_ROUTE,
+  RESUME_SCHEDULE_ROUTE,
+} from './schedules';
 
 const makeSnapshot = (overrides: Partial<WorkflowRunState> = {}): WorkflowRunState => ({
   runId: overrides.runId ?? 'run-1',
@@ -311,6 +317,121 @@ describe('Schedules handlers', () => {
       } as any);
 
       expect(result.lastRun?.status).toBe('failed');
+    });
+  });
+
+  describe('PAUSE_SCHEDULE_ROUTE', () => {
+    it('flips an active schedule to paused', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a', status: 'active' }));
+
+      const result = await PAUSE_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.status).toBe('paused');
+      const persisted = await schedulesStore.getSchedule('wf_a');
+      expect(persisted?.status).toBe('paused');
+    });
+
+    it('is idempotent on an already-paused schedule', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a', status: 'paused', updatedAt: 100 }));
+
+      const result = await PAUSE_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.status).toBe('paused');
+      // updatedAt is unchanged because no write occurred.
+      const persisted = await schedulesStore.getSchedule('wf_a');
+      expect(persisted?.updatedAt).toBe(100);
+    });
+
+    it('returns 404 for missing scheduleId', async () => {
+      await expect(
+        PAUSE_SCHEDULE_ROUTE.handler({
+          mastra,
+          scheduleId: 'does-not-exist',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('after pause, listDueSchedules excludes the row even if nextFireAt <= now', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a', status: 'active', nextFireAt: 1 }));
+
+      await PAUSE_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      const due = await schedulesStore.listDueSchedules(Date.now());
+      expect(due.find(s => s.id === 'wf_a')).toBeUndefined();
+    });
+  });
+
+  describe('RESUME_SCHEDULE_ROUTE', () => {
+    it('flips a paused schedule to active and recomputes nextFireAt from now', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const oldNext = 1_000_000;
+      await schedulesStore.createSchedule(
+        makeSchedule({
+          id: 'wf_a',
+          status: 'paused',
+          // Cron that fires every minute — recomputed next must be > now and finite.
+          cron: '* * * * *',
+          nextFireAt: oldNext,
+        }),
+      );
+
+      const before = Date.now();
+      const result = await RESUME_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.status).toBe('active');
+      // Recomputed from "now" — must be in the future, not the stale value.
+      expect(result.nextFireAt).toBeGreaterThan(before);
+      expect(result.nextFireAt).not.toBe(oldNext);
+    });
+
+    it('is idempotent on an already-active schedule', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const oldNext = 1_000_000;
+      await schedulesStore.createSchedule(
+        makeSchedule({ id: 'wf_a', status: 'active', nextFireAt: oldNext, updatedAt: 100 }),
+      );
+
+      const result = await RESUME_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        ...baseCtx(),
+      } as any);
+
+      expect(result.status).toBe('active');
+      // No-op: nextFireAt is not recomputed.
+      expect(result.nextFireAt).toBe(oldNext);
+      const persisted = await schedulesStore.getSchedule('wf_a');
+      expect(persisted?.updatedAt).toBe(100);
+    });
+
+    it('returns 404 for missing scheduleId', async () => {
+      await expect(
+        RESUME_SCHEDULE_ROUTE.handler({
+          mastra,
+          scheduleId: 'does-not-exist',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toThrow(HTTPException);
     });
   });
 });

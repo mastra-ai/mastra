@@ -1,22 +1,49 @@
-import type { ListScheduleTriggersParams, ScheduleTriggerResponse } from '@mastra/client-js';
+import type { ScheduleTriggerResponse } from '@mastra/client-js';
+import { useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
-export const useScheduleTriggers = (scheduleId: string | undefined, params: ListScheduleTriggersParams = {}) => {
+const PER_PAGE = 25;
+
+export const useScheduleTriggers = (scheduleId: string | undefined) => {
   const client = useMastraClient();
+  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
-  return useQuery<ScheduleTriggerResponse[]>({
-    queryKey: ['schedule-triggers', scheduleId, params],
+  const query = useInfiniteQuery({
+    queryKey: ['schedule-triggers', scheduleId],
     enabled: !!scheduleId,
-    queryFn: async () => {
-      if (!scheduleId) return [];
-      const result = await client.listScheduleTriggers(scheduleId, params);
-      return result.triggers;
+    initialPageParam: undefined as number | undefined,
+    queryFn: async ({ pageParam }) => {
+      if (!scheduleId) return { triggers: [] as ScheduleTriggerResponse[] };
+      return client.listScheduleTriggers(scheduleId, {
+        limit: PER_PAGE,
+        toActualFireAt: pageParam,
+      });
+    },
+    getNextPageParam: lastPage => {
+      if (!lastPage?.triggers?.length || lastPage.triggers.length < PER_PAGE) {
+        return undefined;
+      }
+      // triggers come back ordered by actualFireAt desc; cursor for next page
+      // is the oldest timestamp on the current page (exclusive upper bound).
+      return lastPage.triggers[lastPage.triggers.length - 1]!.actualFireAt;
     },
     refetchInterval: query => {
-      const triggers = query.state.data ?? [];
+      const triggers = query.state.data?.pages.flatMap(p => p.triggers) ?? [];
       const hasActive = triggers.some(t => t.run?.status === 'running' || (!t.run && t.status === 'published'));
       return hasActive ? 5_000 : false;
     },
   });
+
+  const triggers = query.data?.pages.flatMap(page => page?.triggers ?? []) ?? [];
+
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  useEffect(() => {
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  return { ...query, data: triggers, setEndOfListElement };
 };

@@ -59,7 +59,7 @@ test('/workflows/schedules is deep-linkable and survives reload', async ({ page 
 });
 
 test('per-workflow schedules sub-route filters rows to that workflow', async ({ page }) => {
-  await page.goto('/workflows/multiScheduledWorkflow/schedules');
+  await page.goto('/workflows/schedules?workflowId=multiScheduledWorkflow');
 
   // The two schedules declared by multiScheduledWorkflow are shown.
   await expect(page.locator('text=morning').first()).toBeVisible();
@@ -67,6 +67,44 @@ test('per-workflow schedules sub-route filters rows to that workflow', async ({ 
 
   // The unrelated single-form schedule is filtered out.
   await expect(page.locator('text=scheduledWorkflow__default')).toHaveCount(0);
+});
+
+test('clicking a schedule row navigates to the dedicated schedule detail page', async ({ page }) => {
+  await page.goto('/workflows/schedules');
+
+  // Click the row for the single-form schedule (whose id contains scheduledWorkflow).
+  await page.locator('text=scheduledWorkflow').first().click();
+
+  await expect(page).toHaveURL(/\/workflows\/schedules\/[^/]+$/);
+
+  // Detail page renders trigger history panel + a back link to the schedules list.
+  await expect(page.getByTestId('schedule-triggers-panel')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Back to schedules/ })).toBeVisible();
+});
+
+test('pausing a schedule from the detail page persists across reload', async ({ page }) => {
+  await page.goto('/workflows/schedules');
+
+  // Open the detail page for the single-form schedule.
+  await page.locator('text=scheduledWorkflow').first().click();
+  await expect(page).toHaveURL(/\/workflows\/schedules\/[^/]+$/);
+
+  const toggle = page.getByTestId('schedule-toggle-button');
+  await expect(toggle).toContainText(/Pause/);
+
+  await toggle.click();
+
+  // After pausing the button label flips to Resume and stays that way after reload —
+  // proves the status was actually persisted to storage, not just toggled in UI state.
+  await expect(toggle).toContainText(/Resume/);
+  await page.reload();
+  await expect(page.getByTestId('schedule-toggle-button')).toContainText(/Resume/);
+
+  // Resume the schedule. Button label flips back, persists across reload.
+  await page.getByTestId('schedule-toggle-button').click();
+  await expect(page.getByTestId('schedule-toggle-button')).toContainText(/Pause/);
+  await page.reload();
+  await expect(page.getByTestId('schedule-toggle-button')).toContainText(/Pause/);
 });
 
 test('workflow header shows Schedules link only when the workflow has schedules', async ({ page }) => {

@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import { computeNextFireAt } from '@mastra/core/workflows';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import {
@@ -55,6 +56,17 @@ async function fetchRunSummary(mastra: Mastra, workflowName: string, runId: stri
   }
 }
 
+async function hydrateScheduleResponse<T extends { lastRunId?: string; target: { type: string; workflowId?: string } }>(
+  mastra: Mastra,
+  schedule: T,
+): Promise<T & { lastRun?: RunSummary }> {
+  if (!schedule.lastRunId || schedule.target.type !== 'workflow' || !schedule.target.workflowId) {
+    return schedule;
+  }
+  const lastRun = await fetchRunSummary(mastra, schedule.target.workflowId, schedule.lastRunId);
+  return lastRun ? { ...schedule, lastRun } : schedule;
+}
+
 export const LIST_SCHEDULES_ROUTE = createRoute({
   method: 'GET',
   path: '/schedules',
@@ -104,11 +116,7 @@ export const GET_SCHEDULE_ROUTE = createRoute({
     if (!schedule) {
       throw new HTTPException(404, { message: 'Schedule not found' });
     }
-    if (schedule.lastRunId && schedule.target.type === 'workflow') {
-      const lastRun = await fetchRunSummary(mastra, schedule.target.workflowId, schedule.lastRunId);
-      if (lastRun) return { ...schedule, lastRun };
-    }
-    return schedule;
+    return hydrateScheduleResponse(mastra, schedule);
   },
 });
 
@@ -142,5 +150,65 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
       }),
     );
     return { triggers: hydrated };
+  },
+});
+
+export const PAUSE_SCHEDULE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/schedules/:scheduleId/pause',
+  responseType: 'json' as const,
+  pathParamSchema: scheduleIdPathParams,
+  responseSchema: scheduleResponseSchema,
+  summary: 'Pause a workflow schedule',
+  description:
+    'Marks the schedule as paused. The scheduler tick loop will skip paused schedules. Idempotent — pausing an already-paused schedule returns the current state unchanged. Pause status survives redeploys.',
+  tags: ['Schedules'],
+  requiresAuth: true,
+  handler: async ({ mastra, scheduleId }) => {
+    const schedulesStore = await mastra.getStorage()?.getStore('schedules');
+    if (!schedulesStore) {
+      throw new HTTPException(404, { message: 'Schedule not found' });
+    }
+    const existing = await schedulesStore.getSchedule(scheduleId);
+    if (!existing) {
+      throw new HTTPException(404, { message: 'Schedule not found' });
+    }
+    if (existing.status === 'paused') {
+      return hydrateScheduleResponse(mastra, existing);
+    }
+    const updated = await schedulesStore.updateSchedule(scheduleId, { status: 'paused' });
+    return hydrateScheduleResponse(mastra, updated);
+  },
+});
+
+export const RESUME_SCHEDULE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/schedules/:scheduleId/resume',
+  responseType: 'json' as const,
+  pathParamSchema: scheduleIdPathParams,
+  responseSchema: scheduleResponseSchema,
+  summary: 'Resume a paused workflow schedule',
+  description:
+    'Marks the schedule as active and recomputes nextFireAt from "now" so a long-paused schedule does not fire a backlog. Idempotent — resuming an already-active schedule returns the current state unchanged.',
+  tags: ['Schedules'],
+  requiresAuth: true,
+  handler: async ({ mastra, scheduleId }) => {
+    const schedulesStore = await mastra.getStorage()?.getStore('schedules');
+    if (!schedulesStore) {
+      throw new HTTPException(404, { message: 'Schedule not found' });
+    }
+    const existing = await schedulesStore.getSchedule(scheduleId);
+    if (!existing) {
+      throw new HTTPException(404, { message: 'Schedule not found' });
+    }
+    if (existing.status === 'active') {
+      return hydrateScheduleResponse(mastra, existing);
+    }
+    const nextFireAt = computeNextFireAt(existing.cron, {
+      timezone: existing.timezone,
+      after: Date.now(),
+    });
+    const updated = await schedulesStore.updateSchedule(scheduleId, { status: 'active', nextFireAt });
+    return hydrateScheduleResponse(mastra, updated);
   },
 });

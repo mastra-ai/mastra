@@ -103,13 +103,37 @@ Every fire records a trigger row with the run id, scheduled time, actual fire ti
 
 The schedules table itself shows the most recent run's status next to the schedule, so the cross-workflow list answers "is my schedule healthy?" at a glance. Triggers actively running cause the panel to poll every five seconds until they reach a terminal state.
 
+## Pausing a schedule at runtime
+
+When a scheduled workflow misfires in production you don't have to redeploy or hand-edit the database. Pause it from the SDK:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+
+await client.pauseSchedule('daily-report')
+// ...investigate, ship a fix, then:
+await client.resumeSchedule('daily-report')
+```
+
+Or click **Pause** / **Resume** on the schedule's detail page in Studio.
+
+A few rules worth knowing:
+
+- **Pause is durable.** The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status.
+- **Resume recomputes `nextFireAt` from "now".** A schedule paused for a week will not fire seven backlogged runs the moment you resume it — only the next regular cron tick.
+- **To unpause permanently**, either call `resumeSchedule` or change the `cron` / `timezone` in code (which forces a recompute on the next deploy).
+- Pause and resume are both **idempotent** — calling pause on an already-paused schedule is a no-op.
+- This is an operational override, not a way to author schedules. Creating, deleting, and editing schedules still happens in code via the `schedule` field on `createWorkflow`.
+
 ## Redeploying with changes
 
 When you change the `schedule` config and redeploy, Mastra diffs the existing schedule row against the new config:
 
 - If `cron` or `timezone` changed, `nextFireAt` is recomputed.
 - If only `inputData`, `initialState`, or `metadata` changed, the row is patched in place and the next fire time is preserved.
-- User-set status (for example, paused via direct storage edit) and fire history are never overwritten.
+- User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten.
 
 Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
 

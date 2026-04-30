@@ -9,12 +9,14 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { ArrowLeftIcon, CalendarClockIcon } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { SchedulesPage as SchedulesPageContent } from '@/domains/schedules/components/schedules-page';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 
 export default function SchedulesPage() {
-  const { error } = useSchedules();
+  const [searchParams] = useSearchParams();
+  const workflowId = searchParams.get('workflowId') ?? undefined;
+  const { error } = useSchedules(workflowId ? { workflowId } : {});
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -32,6 +34,9 @@ export default function SchedulesPage() {
     );
   }
 
+  const backTo = workflowId ? `/workflows/${workflowId}` : '/workflows';
+  const backLabel = workflowId ? 'Back to workflow' : 'Back to workflows';
+
   return (
     <PageLayout>
       <PageLayout.TopArea>
@@ -39,20 +44,20 @@ export default function SchedulesPage() {
           <PageLayout.Column>
             <PageHeader>
               <PageHeader.Title>
-                <CalendarClockIcon /> Schedules
+                <CalendarClockIcon /> {workflowId ? `Schedules · ${workflowId}` : 'Schedules'}
               </PageHeader.Title>
             </PageHeader>
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
-            <Button as={Link} to="/workflows" variant="ghost">
+            <Button as={Link} to={backTo} variant="ghost">
               <ArrowLeftIcon />
-              Back to workflows
+              {backLabel}
             </Button>
           </PageLayout.Column>
         </PageLayout.Row>
       </PageLayout.TopArea>
 
-      <SchedulesPageContent />
+      <SchedulesPageContent workflowId={workflowId} />
     </PageLayout>
   );
 }

@@ -2,19 +2,21 @@ import type { ScheduleResponse } from '@mastra/client-js';
 import { EntityList, EntityListSkeleton } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
-import { ScheduleStatusBadge } from './schedule-status-badge';
-import { WorkflowRunStatusBadge } from '@/domains/workflows/components/workflow-run-status-badge';
+import { ScheduleStatusText } from './schedule-status-badge';
+import { WorkflowRunStatusInline } from './workflow-run-status-inline';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface SchedulesListProps {
   schedules: ScheduleResponse[];
   isLoading: boolean;
   search?: string;
-  onSelect?: (schedule: ScheduleResponse) => void;
 }
 
-const COLUMNS = 'auto auto auto auto auto auto';
+const COLUMNS = 'minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr) auto auto auto';
 
-export function SchedulesList({ schedules, isLoading, search = '', onSelect }: SchedulesListProps) {
+export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesListProps) {
+  const { paths, Link } = useLinkComponent();
+
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     if (!term) return schedules;
@@ -40,34 +42,46 @@ export function SchedulesList({ schedules, isLoading, search = '', onSelect }: S
       {filtered.length === 0 && !search ? <EntityList.NoMatch message="No schedules configured" /> : null}
 
       {filtered.map(s => (
-        <EntityList.Row key={s.id} onClick={onSelect ? () => onSelect(s) : undefined}>
-          <EntityList.NameCell>{s.target.workflowId}</EntityList.NameCell>
-          <EntityList.TextCell>{s.id}</EntityList.TextCell>
+        <EntityList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link}>
+          <EntityList.NameCell>
+            <span className="truncate">{s.target.workflowId}</span>
+          </EntityList.NameCell>
           <EntityList.TextCell>
-            <code className="font-mono text-ui-sm">{s.cron}</code>
-            {s.timezone ? <span className="text-neutral4 ml-2">({s.timezone})</span> : null}
+            <span className="truncate font-mono text-ui-sm" title={s.id}>
+              {s.id}
+            </span>
           </EntityList.TextCell>
           <EntityList.TextCell>
-            <ScheduleStatusBadge status={s.status} />
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <code className="font-mono text-ui-sm">{s.cron}</code>
+              {s.timezone ? <span className="text-neutral4 text-ui-xs">{s.timezone}</span> : null}
+            </span>
           </EntityList.TextCell>
           <EntityList.TextCell>
-            <span title={formatScheduleTimestamp(s.nextFireAt)}>{formatRelativeTime(s.nextFireAt)}</span>
+            <ScheduleStatusText status={s.status} />
+          </EntityList.TextCell>
+          <EntityList.TextCell>
+            <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.nextFireAt)}>
+              {formatRelativeTime(s.nextFireAt)}
+            </span>
           </EntityList.TextCell>
           <EntityList.TextCell>
             {s.lastRun ? (
-              <div className="flex items-center gap-2">
-                <WorkflowRunStatusBadge status={s.lastRun.status} />
+              <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                <WorkflowRunStatusInline status={s.lastRun.status} />
                 <span className="text-neutral4 text-ui-sm" title={formatScheduleTimestamp(s.lastFireAt)}>
                   {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : ''}
                 </span>
-              </div>
+              </span>
             ) : s.lastFireAt ? (
-              <span title={formatScheduleTimestamp(s.lastFireAt)}>{formatRelativeTime(s.lastFireAt)}</span>
+              <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.lastFireAt)}>
+                {formatRelativeTime(s.lastFireAt)}
+              </span>
             ) : (
               <span className="text-neutral4">Never</span>
             )}
           </EntityList.TextCell>
-        </EntityList.Row>
+        </EntityList.RowLink>
       ))}
     </EntityList>
   );

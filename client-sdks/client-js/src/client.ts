@@ -1970,4 +1970,22 @@ export class MastraClient extends BaseResource {
     const qs = searchParams.toString();
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}/triggers${qs ? `?${qs}` : ''}`);
   }
+
+  /**
+   * Pauses a schedule. The scheduler tick loop will skip paused schedules.
+   * Idempotent — pausing an already-paused schedule returns the current state unchanged.
+   * Pause status survives redeploys.
+   */
+  public pauseSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/pause`, { method: 'POST' });
+  }
+
+  /**
+   * Resumes a paused schedule. Recomputes nextFireAt from "now" so a long-paused schedule
+   * does not fire a backlog. Idempotent — resuming an already-active schedule returns
+   * the current state unchanged.
+   */
+  public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
+  }
 }
