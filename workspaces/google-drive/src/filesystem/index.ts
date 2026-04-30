@@ -212,6 +212,7 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     if (source.mimeType === FOLDER_MIME_TYPE) throw new IsDirectoryError(src);
     const existing = await this.findFile(dest);
     if (existing) {
+      if (existing.id === source.id) throw new FileExistsError(dest);
       if (existing.mimeType === FOLDER_MIME_TYPE || options?.overwrite === false) throw new FileExistsError(dest);
       await this.deleteAny(existing, dest, true);
     }

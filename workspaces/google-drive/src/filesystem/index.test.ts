@@ -345,6 +345,13 @@ describe('GoogleDriveFilesystem', () => {
       expect(await fs.exists('/existing-dir')).toBe(true);
     });
 
+    it('rejects copying a file onto itself', async () => {
+      await fs.writeFile('/a.txt', 'content');
+
+      await expect(fs.copyFile('/a.txt', '/a.txt', { overwrite: true })).rejects.toBeInstanceOf(FileExistsError);
+      expect(await fs.readFile('/a.txt', { encoding: 'utf-8' })).toBe('content');
+    });
+
     it('moves files across folders', async () => {
       await fs.writeFile('/src/file.txt', 'payload');
       await fs.moveFile('/src/file.txt', '/dest/file.txt');

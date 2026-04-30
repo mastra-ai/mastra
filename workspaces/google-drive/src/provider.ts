@@ -27,6 +27,22 @@ export const googleDriveFilesystemProvider: FilesystemProvider<GoogleDriveFilesy
         type: 'string',
         description: 'OAuth access token with the https://www.googleapis.com/auth/drive scope',
       },
+      serviceAccount: {
+        type: 'object',
+        required: ['clientEmail', 'privateKey'],
+        properties: {
+          clientEmail: { type: 'string', description: 'Google service account email' },
+          privateKey: { type: 'string', description: 'PEM-encoded private key' },
+          privateKeyId: { type: 'string', description: 'Optional private key ID' },
+          scopes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional OAuth scopes override',
+          },
+          subject: { type: 'string', description: 'Optional delegated user email' },
+        },
+        description: 'Service account credentials for server-to-server auth',
+      },
       readOnly: { type: 'boolean', description: 'Mount as read-only', default: false },
     },
   },
