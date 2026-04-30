@@ -24,7 +24,7 @@ export interface BrowserStreamConfig {
    * Function to retrieve the BrowserToolset for a given agent ID.
    * Returns undefined if no browser is available for this agent.
    */
-  getToolset: (agentId: string) => MastraBrowser | undefined;
+  getToolset: (agentId: string) => MastraBrowser | undefined | Promise<MastraBrowser | undefined>;
 }
 
 /**
