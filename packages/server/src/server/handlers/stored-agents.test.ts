@@ -777,6 +777,36 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(400);
       }
     });
+
+    it('should auto-publish by updating activeVersionId when a new version is created', async () => {
+      const newVersionId = 'v-autopub-2';
+      mockAgentsData.set('autopub-test', {
+        id: 'autopub-test',
+        name: 'Original Name',
+        instructions: 'Original instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-autopub-1',
+      });
+
+      // listVersions is called multiple times: once by enforceRetentionLimit
+      // inside handleAutoVersioning, then again by the auto-publish code.
+      // Return the new version each time so auto-publish can activate it.
+      mockAgentsStore.listVersions.mockResolvedValue({
+        versions: [{ id: newVersionId, versionNumber: 2 }],
+        total: 2,
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'autopub-test',
+        name: 'Updated Name',
+        instructions: 'Updated instructions',
+      });
+
+      // Verify activeVersionId was updated to the latest version
+      const stored = mockAgentsData.get('autopub-test');
+      expect(stored?.activeVersionId).toBe(newVersionId);
+    });
   });
 
   describe('DELETE_STORED_AGENT_ROUTE', () => {
