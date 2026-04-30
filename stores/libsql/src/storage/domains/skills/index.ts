@@ -41,6 +41,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -68,6 +69,12 @@ export class SkillsLibSQL extends SkillsStorage {
       tableName: TABLE_SKILLS,
       schema: SKILLS_SCHEMA,
       ifNotExists: ['visibility', 'starCount'],
+    });
+
+    await this.#db.alterTable({
+      tableName: TABLE_SKILL_VERSIONS,
+      schema: SKILL_VERSIONS_SCHEMA,
+      ifNotExists: ['files'],
     });
 
     // Unique constraint on (skillId, versionNumber) to prevent duplicate versions from concurrent updates
@@ -438,9 +445,9 @@ export class SkillsLibSQL extends SkillsStorage {
         sql: `INSERT INTO "${TABLE_SKILL_VERSIONS}" (
           id, "skillId", "versionNumber",
           name, description, instructions, license, compatibility,
-          source, "references", scripts, assets, metadata, tree,
+          source, "references", scripts, assets, files, metadata, tree,
           "changedFields", "changeMessage", "createdAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           input.id,
           input.skillId,
@@ -454,6 +461,7 @@ export class SkillsLibSQL extends SkillsStorage {
           input.references ? JSON.stringify(input.references) : null,
           input.scripts ? JSON.stringify(input.scripts) : null,
           input.assets ? JSON.stringify(input.assets) : null,
+          input.files ? JSON.stringify(input.files) : null,
           input.metadata ? JSON.stringify(input.metadata) : null,
           input.tree ? JSON.stringify(input.tree) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
@@ -697,6 +705,7 @@ export class SkillsLibSQL extends SkillsStorage {
       references: safeParseJSON(row.references) as SkillVersion['references'],
       scripts: safeParseJSON(row.scripts) as SkillVersion['scripts'],
       assets: safeParseJSON(row.assets) as SkillVersion['assets'],
+      files: safeParseJSON(row.files) as SkillVersion['files'],
       metadata: safeParseJSON(row.metadata) as Record<string, unknown> | undefined,
       tree: safeParseJSON(row.tree) as SkillVersion['tree'],
       changedFields: safeParseJSON(row.changedFields) as string[] | undefined,

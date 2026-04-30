@@ -37,6 +37,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -96,6 +97,11 @@ export class SkillsPG extends SkillsStorage {
       tableName: TABLE_SKILLS,
       schema: TABLE_SCHEMAS[TABLE_SKILLS],
       ifNotExists: ['visibility', 'starCount'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_SKILL_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_SKILL_VERSIONS],
+      ifNotExists: ['files'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -537,10 +543,10 @@ export class SkillsPG extends SkillsStorage {
         `INSERT INTO ${tableName} (
           id, "skillId", "versionNumber",
           name, description, instructions, license, compatibility,
-          source, "references", scripts, assets, metadata, tree,
+          source, "references", scripts, assets, files, metadata, tree,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [
           input.id,
           input.skillId,
@@ -554,6 +560,7 @@ export class SkillsPG extends SkillsStorage {
           input.references ? JSON.stringify(input.references) : null,
           input.scripts ? JSON.stringify(input.scripts) : null,
           input.assets ? JSON.stringify(input.assets) : null,
+          input.files ? JSON.stringify(input.files) : null,
           input.metadata ? JSON.stringify(input.metadata) : null,
           input.tree ? JSON.stringify(input.tree) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
@@ -862,6 +869,7 @@ export class SkillsPG extends SkillsStorage {
       references: this.parseJson(row.references, 'references'),
       scripts: this.parseJson(row.scripts, 'scripts'),
       assets: this.parseJson(row.assets, 'assets'),
+      files: this.parseJson(row.files, 'files'),
       metadata: this.parseJson(row.metadata, 'metadata'),
       tree: this.parseJson(row.tree, 'tree'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),

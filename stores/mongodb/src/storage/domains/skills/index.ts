@@ -39,6 +39,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
