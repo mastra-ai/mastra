@@ -213,6 +213,18 @@ export class MastraClient extends BaseResource {
     return this.request(`/agents${queryString ? `?${queryString}` : ''}`);
   }
 
+  /**
+   * Retrieves a lean summary { id, name, description } for every agent.
+   *
+   * Unlike {@link listAgents}, this does not invoke any per-request dynamic
+   * getters (instructions, llm, tools, default options, etc.), so it cannot
+   * fail when a user-supplied dynamic-config callback throws under the
+   * active request context.
+   */
+  public listAgentsSummary(): Promise<Record<string, { id: string; name: string; description?: string }>> {
+    return this.request(`/agents/summary`);
+  }
+
   public listAgentsModelProviders(): Promise<ListAgentsModelProvidersResponse> {
     return this.request(`/agents/providers`);
   }

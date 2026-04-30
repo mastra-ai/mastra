@@ -12,6 +12,7 @@ import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   LIST_AGENTS_ROUTE,
+  LIST_AGENTS_SUMMARY_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
   GENERATE_AGENT_ROUTE,
   getSerializedAgentTools,
@@ -503,6 +504,75 @@ describe('Agent Handlers', () => {
       expect(result['agent-b']).toBeDefined();
       expect(result['agent-b'].provider).toBe('openai.chat');
       expect(result['agent-b'].modelId).toBe('gpt-4o');
+    });
+  });
+
+  describe('listAgentsSummaryHandler', () => {
+    it('returns id/name/description for healthy agents and nothing else', async () => {
+      const result = await LIST_AGENTS_SUMMARY_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      });
+
+      expect(Object.keys(result).sort()).toEqual(['test-agent', 'test-multi-model-agent']);
+      expect(result['test-agent']).toEqual({
+        id: 'test-agent',
+        name: 'test-agent',
+        description: 'A test agent for unit testing',
+      });
+      expect(result['test-multi-model-agent']).toEqual({
+        id: 'test-multi-model-agent',
+        name: 'test-multi-model-agent',
+        description: 'A test agent with multiple model configurations',
+      });
+    });
+
+    it('does not invoke any dynamic getters even when they would throw', async () => {
+      // An agent whose every dynamic getter throws — the summary endpoint must
+      // not call any of them, so the response is unaffected.
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: () => {
+          throw new Error('boom from instructions');
+        },
+      });
+      const getInstructionsSpy = vi.spyOn(throwingAgent, 'getInstructions');
+      const getLLMSpy = vi.spyOn(throwingAgent, 'getLLM').mockImplementation(async () => {
+        throw new Error('boom from getLLM');
+      });
+      const listToolsSpy = vi.spyOn(throwingAgent, 'listTools').mockImplementation(async () => {
+        throw new Error('boom from listTools');
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({ agents: { 'agent-a': throwingAgent } });
+
+      const result = await LIST_AGENTS_SUMMARY_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+      });
+
+      expect(result['agent-a']).toEqual({
+        id: 'agent-a',
+        name: 'agent-a',
+        description: 'Throwing agent',
+      });
+      expect(getInstructionsSpy).not.toHaveBeenCalled();
+      expect(getLLMSpy).not.toHaveBeenCalled();
+      expect(listToolsSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not require a requestContext', async () => {
+      // Drop `requestContext` from the test context entirely — the summary
+      // endpoint must not depend on it. Cast through unknown because the
+      // route's handler context type still includes the field.
+      const ctx = createTestServerContext({ mastra: mockMastra }) as Record<string, unknown>;
+      delete ctx.requestContext;
+
+      const result = await LIST_AGENTS_SUMMARY_ROUTE.handler(
+        ctx as Parameters<typeof LIST_AGENTS_SUMMARY_ROUTE.handler>[0],
+      );
+
+      expect(result['test-agent']).toBeDefined();
+      expect(result['test-agent'].name).toBe('test-agent');
     });
   });
 

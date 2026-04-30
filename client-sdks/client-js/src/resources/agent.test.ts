@@ -471,6 +471,22 @@ describe('Agent Client Methods', () => {
     );
   });
 
+  it('should get agents summary', async () => {
+    const mockResponse = {
+      agent1: { id: 'agent1', name: 'Agent 1', description: 'first' },
+      agent2: { id: 'agent2', name: 'Agent 2' },
+    };
+    mockFetchResponse(mockResponse);
+    const result = await client.listAgentsSummary();
+    expect(result).toEqual(mockResponse);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${clientOptions.baseUrl}/api/agents/summary`,
+      expect.objectContaining({
+        headers: expect.objectContaining(clientOptions.headers),
+      }),
+    );
+  });
+
   it('should get agent details', async () => {
     const mockResponse = { id: 'test-agent', name: 'Test Agent', instructions: 'Be helpful' };
     mockFetchResponse(mockResponse);

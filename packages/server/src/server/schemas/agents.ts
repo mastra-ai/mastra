@@ -166,6 +166,25 @@ export const providersResponseSchema = z.object({
 export const listAgentsResponseSchema = z.record(z.string(), serializedAgentSchema);
 
 /**
+ * Schema for a lean agent summary, returned by `GET /agents/summary`.
+ *
+ * The summary is built from synchronous, static instance fields only — no
+ * dynamic getters that depend on `requestContext` are invoked, so this
+ * payload cannot fail when a user-supplied dynamic-config callback throws.
+ */
+export const agentSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+});
+
+/**
+ * Schema for the `GET /agents/summary` response.
+ * Returns a record of agent ID to a lean `{ id, name, description }`.
+ */
+export const listAgentsSummaryResponseSchema = z.record(z.string(), agentSummarySchema);
+
+/**
  * Schema for list tools endpoint response
  * Returns a record of tool ID to serialized tool
  */

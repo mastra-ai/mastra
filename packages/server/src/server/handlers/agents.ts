@@ -29,6 +29,7 @@ import {
   agentSkillPathParams,
   agentVersionQuerySchema,
   listAgentsResponseSchema,
+  listAgentsSummaryResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
   agentExecutionLegacyBodySchema,
@@ -1023,6 +1024,90 @@ export const LIST_AGENTS_ROUTE = createRoute({
       return serializedAgents;
     } catch (error) {
       return handleError(error, 'Error getting agents');
+    }
+  },
+});
+
+/**
+ * Build a lean `{ id, name, description }` summary for an agent without
+ * invoking any per-request dynamic getter (`getInstructions`, `getLLM`,
+ * `listTools`, `getDefaultOptions`, etc.). `getDescription()` is a
+ * synchronous instance accessor and never touches `requestContext`, so
+ * this cannot fail because of a misconfigured request context.
+ */
+function toAgentSummary(id: string, agent: Agent): { id: string; name: string; description?: string } {
+  const description = agent.getDescription?.() || undefined;
+  return { id, name: agent.name, description };
+}
+
+export const LIST_AGENTS_SUMMARY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/summary',
+  responseType: 'json',
+  responseSchema: listAgentsSummaryResponseSchema,
+  summary: 'List all agents (summary)',
+  description:
+    'Returns a lean summary { id, name, description } for each agent. Unlike GET /agents, this endpoint does not invoke any dynamic getters (instructions, llm, tools, etc.), so it cannot fail when a user-supplied dynamic-config callback throws under the active requestContext.',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: 'agents:read',
+  handler: async ({ mastra }) => {
+    try {
+      const logger = mastra.getLogger();
+      const codeAgents = mastra.listAgents();
+      const editor = mastra.getEditor?.();
+
+      const summaries: Record<string, { id: string; name: string; description?: string }> = {};
+      for (const [id, agent] of Object.entries(codeAgents)) {
+        try {
+          // Apply stored overrides so summaries reflect studio-edited
+          // name/description. This mirrors the LIST_AGENTS_ROUTE handler.
+          // `applyStoredOverrides` merges static fields only — it does not
+          // invoke any per-request dynamic getter — so it preserves the
+          // request-context-independent guarantee of this endpoint.
+          let mergedAgent = agent;
+          if (editor) {
+            try {
+              mergedAgent = await editor.agent.applyStoredOverrides(agent);
+            } catch (error) {
+              logger.debug('Failed to apply stored overrides for agent summary', { agentId: id, error });
+            }
+          }
+          summaries[id] = toAgentSummary(id, mergedAgent);
+        } catch (error) {
+          logger.warn('Failed to summarize agent', { agentId: id, error });
+        }
+      }
+
+      // Include stored agents (mirroring LIST_AGENTS_ROUTE), but only read static fields.
+      try {
+        let storedAgentsResult;
+        try {
+          storedAgentsResult = await editor?.agent.list();
+        } catch (error) {
+          logger.debug('Could not list stored agents for summary', { error });
+          storedAgentsResult = null;
+        }
+        if (storedAgentsResult?.agents) {
+          for (const stored of storedAgentsResult.agents) {
+            // Code-defined agents take precedence — do not overwrite.
+            if (summaries[stored.id]) continue;
+            try {
+              const agent = await editor?.agent.getById(stored.id, { status: 'draft' });
+              if (!agent) continue;
+              summaries[agent.id] = toAgentSummary(agent.id, agent);
+            } catch (error) {
+              logger.warn('Failed to summarize stored agent', { agentId: stored.id, error });
+            }
+          }
+        }
+      } catch (storageError) {
+        logger.debug('Could not fetch stored agents for summary', { error: storageError });
+      }
+
+      return summaries;
+    } catch (error) {
+      return handleError(error, 'Error getting agent summaries');
     }
   },
 });
