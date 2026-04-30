@@ -308,6 +308,13 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Register a named observability instance, optionally marking it as default. */
   registerInstance(name: string, instance: ObservabilityInstance, isDefault = false): void {
     this.#registry.register(name, instance, isDefault);
+
+    // If Mastra context has already been set, propagate the environment to
+    // this late-registered instance so it auto-tags spans like instances
+    // registered before setMastraContext.
+    if (this.#mastra) {
+      instance.__setMastraEnvironment?.(this.#mastra.getEnvironment?.());
+    }
   }
 
   /** Get a registered instance by name. */
