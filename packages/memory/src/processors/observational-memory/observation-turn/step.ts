@@ -109,7 +109,11 @@ export class ObservationStep {
     // while the agent loop continues. We must not observe/buffer until they complete.
     const allMsgsForToolCheck = messageList.get.all.db();
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
-    const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
+    const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
+    const latestStepParts = [
+      ...getLatestStepParts(lastMessage?.content?.parts ?? []),
+      ...pendingStepMessages.flatMap(msg => getLatestStepParts(msg.content?.parts ?? [])),
+    ];
     const hasIncompleteToolCalls = latestStepParts.some(
       part => part?.type === 'tool-invocation' && (part as any).toolInvocation?.state === 'call',
     );
@@ -361,6 +365,36 @@ export class ObservationStep {
       writer: this.turn.writer,
       observabilityContext: this.turn.observabilityContext,
     });
+
+    if (obsResult.observed) {
+      const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
+      const liveMessages = messageList.get.all.db();
+      let latestObservedIndex = -1;
+
+      for (let i = liveMessages.length - 1; i >= 0; i--) {
+        const message = liveMessages[i];
+        if (message && observedMessageIds.has(message.id)) {
+          latestObservedIndex = i;
+          break;
+        }
+      }
+
+      const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      om.sealMessagesForBuffering(messagesToSeal);
+
+      try {
+        await this.turn.hooks?.onSyncObservationComplete?.();
+      } catch (error) {
+        omDebug(
+          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (messagesToSeal.length > 0) {
+        await om.persistMessages(messagesToSeal, threadId, resourceId);
+      }
+    }
 
     return {
       succeeded: obsResult.observed,

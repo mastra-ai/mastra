@@ -122,7 +122,7 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     return rows.length > 0 ? rowToTask(rows[0]!) : null;
   }
 
-  async listTasks(filter: TaskFilter): Promise<TaskListResult> {
+  private buildFilterClause(filter: TaskFilter): { where: string; params: Record<string, any> } {
     const conditions: string[] = [];
     const params: Record<string, any> = {};
 
@@ -166,6 +166,11 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    return { where, params };
+  }
+
+  async listTasks(filter: TaskFilter): Promise<TaskListResult> {
+    const { where, params } = this.buildFilterClause(filter);
 
     // Count total matching rows (before pagination)
     const countResult = await this.client.query({
@@ -202,20 +207,23 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
   }
 
   async deleteTask(taskId: string): Promise<void> {
-    await this.client.query({
-      query: `ALTER TABLE ${TABLE_BACKGROUND_TASKS} DELETE WHERE id = {var_id:String}`,
+    await this.client.command({
+      query: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE id = {var_id:String}`,
       query_params: { var_id: taskId },
     });
   }
 
   async deleteTasks(filter: TaskFilter): Promise<void> {
-    const { tasks } = await this.listTasks(filter);
-    for (const task of tasks) {
-      await this.client.query({
-        query: `ALTER TABLE ${TABLE_BACKGROUND_TASKS} DELETE WHERE id = {var_id:String}`,
-        query_params: { var_id: task.id },
-      });
-    }
+    const { where, params } = this.buildFilterClause(filter);
+
+    // Require at least one filter to avoid an unintentional table-wide delete.
+    // Use `dangerouslyClearAll` for that case.
+    if (!where) return;
+
+    await this.client.command({
+      query: `DELETE FROM ${TABLE_BACKGROUND_TASKS} ${where}`,
+      query_params: params,
+    });
   }
 
   async getRunningCount(): Promise<number> {

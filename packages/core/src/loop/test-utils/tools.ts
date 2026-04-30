@@ -1049,7 +1049,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       );
       expect(assistantMsg).toBeDefined();
       expect(assistantMsg?.content.metadata).toEqual({
-        modelId: 'claude-code-model',
+        modelId: 'mock-model-id',
         provider: 'mock-provider',
       });
 

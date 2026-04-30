@@ -4,7 +4,15 @@ import { resetStorage } from '../../__utils__/reset-storage';
 const FAKE_TRACE_ID = 'trace-does-not-exist';
 
 async function mockTraceResponse(page: Page, status: number, body: unknown = { error: 'mock' }) {
-  // Match the single-segment trace-by-id endpoint; leaves sibling endpoints (scores, etc.) untouched.
+  // Match the lightweight trace endpoint (traces/:traceId/light) used by the trace detail page,
+  // and the legacy single-segment trace-by-id endpoint. Leaves sibling endpoints (scores, etc.) untouched.
+  await page.route('**/api/observability/traces/*/light', async route => {
+    await route.fulfill({
+      status,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
   await page.route('**/api/observability/traces/*', async route => {
     await route.fulfill({
       status,

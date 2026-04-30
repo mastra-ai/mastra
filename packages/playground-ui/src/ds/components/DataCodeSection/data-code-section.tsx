@@ -23,8 +23,8 @@ import {
   DialogDescription,
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { useTheme } from '@/ds/components/ThemeProvider';
 import { cn } from '@/lib/utils';
-import { useIsDarkMode } from '@/store/playground-store';
 
 // -- Search highlight extension -----------------------------------------------
 
@@ -129,7 +129,7 @@ function buildLightTheme(): Extension {
 }
 
 const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 

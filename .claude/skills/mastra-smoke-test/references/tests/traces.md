@@ -87,6 +87,43 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 - Persist across sessions
 - Note if both Studio and Server traces appear
 
+## Curl / API (for `--skip-browser`, local)
+
+The same `/api/observability/traces` endpoint works locally (no auth needed):
+
+```bash
+# List recent spans (response shape: { pagination, spans })
+curl -s "http://localhost:4111/api/observability/traces?page=0&perPage=20" | jq '.'
+
+# Get a specific trace by id (captured from a prior agent/workflow response)
+curl -s "http://localhost:4111/api/observability/traces/<traceId>" | jq '.'
+```
+
+**Response shape:** `GET /api/observability/traces` returns
+`{ pagination: { total, page, perPage, hasMore }, spans: [...] }` — **not**
+a bare array and **not** a `traces` key. Each entry in `spans` has
+`spanType` (`agent_run`, `tool_call`, `workflow_run`, `scorer_run`),
+`traceId`, timestamps, and payload.
+
+Quick pass check:
+
+```bash
+curl -s "http://localhost:4111/api/observability/traces?page=0&perPage=100" | \
+  jq '{total: .pagination.total, byType: ([.spans[].spanType] | group_by(.) | map({t: .[0], n: length}))}'
+```
+
+**Pass criteria (local):**
+
+- After running agent / tool / workflow tests, `.pagination.total > 0`
+- `.spans` contains the expected `spanType`s: `agent_run`, `workflow_run`,
+  `scorer_run` (and `tool_call` if the agent invoked a tool)
+- `traceId` values returned in earlier generate/workflow responses resolve
+  via `/observability/traces/:traceId`
+
+**Note:** local traces are in-memory only (DefaultExporter). They disappear
+on dev server restart. Run the agent/tool/workflow tests in the same dev
+server session as the traces test.
+
 ## Direct Trace API (Cloud Only)
 
 If UI traces aren't appearing but you need to verify the trace pipeline:

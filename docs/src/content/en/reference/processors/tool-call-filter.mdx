@@ -21,6 +21,11 @@ const filterAll = new ToolCallFilter()
 const filterSpecific = new ToolCallFilter({
   exclude: ['searchDatabase', 'sendEmail'],
 })
+
+// Enable filtering during agent loops and keep the two most recent tool-producing steps
+const filterAfterRecentTools = new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
 ```
 
 ## Constructor parameters
@@ -41,6 +46,13 @@ const filterSpecific = new ToolCallFilter({
             type: 'string[]',
             description:
               'List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded',
+            isOptional: true,
+          },
+          {
+            name: 'filterAfterToolSteps',
+            type: 'number',
+            description:
+              'Enables filtering during agent loops and preserves tool calls and results from this many recent tool-producing steps. If undefined, step filtering is disabled',
             isOptional: true,
           },
         ],
@@ -72,8 +84,29 @@ const filterSpecific = new ToolCallFilter({
     description: 'Processes input messages to filter out tool calls and their results based on configuration',
     isOptional: false,
   },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+    description:
+      'Processes agent loop step input when filterAfterToolSteps is configured. Returns no changes when step filtering is disabled',
+    isOptional: false,
+  },
 ]}
 />
+
+## Step filtering
+
+By default, `ToolCallFilter` filters only the initial input before the agent loop starts. Set `filterAfterToolSteps` to also filter during each loop step.
+
+`filterAfterToolSteps` counts tool-producing steps. For example, `filterAfterToolSteps: 2` keeps tool calls and results from the two most recent tool-producing steps and filters older tool calls and results. Non-tool text remains in context.
+
+Set `filterAfterToolSteps: 0` to filter all previous tool calls and results on each step.
+
+```typescript
+const filter = new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+```
 
 ## Extended usage example
 

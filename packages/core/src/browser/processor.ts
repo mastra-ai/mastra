@@ -33,6 +33,9 @@ export interface BrowserContext {
   /** Browser provider name (e.g., "agent-browser", "stagehand") */
   provider: string;
 
+  /** Provider type: 'sdk' for direct API, 'cli' for command-line tools */
+  providerType?: 'sdk' | 'cli';
+
   /** Session ID for tracking */
   sessionId?: string;
 
@@ -44,6 +47,13 @@ export interface BrowserContext {
 
   /** Current page title (updated per-request) */
   pageTitle?: string;
+
+  /**
+   * CDP WebSocket URL for CLI providers.
+   * When present, the agent should pass this URL to CLI commands
+   * to connect them to the browser managed by Mastra.
+   */
+  cdpUrl?: string;
 }
 
 /**
@@ -64,6 +74,11 @@ export class BrowserContextProcessor {
 
     if (ctx.sessionId) {
       lines.push(`Session ID: ${ctx.sessionId}`);
+    }
+
+    // For CLI providers, include CDP URL for context (injection handles the mechanics)
+    if (ctx.providerType === 'cli' && ctx.cdpUrl) {
+      lines.push(`CDP WebSocket URL: ${ctx.cdpUrl}`);
     }
 
     const systemMessages = [...args.systemMessages, { role: 'system' as const, content: lines.join(' ') }];

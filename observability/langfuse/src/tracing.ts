@@ -52,7 +52,7 @@ export class LangfuseExporter extends BaseExporter {
 
     const publicKey = config.publicKey ?? process.env.LANGFUSE_PUBLIC_KEY;
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
-    const baseUrl = (config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL).replace(/\/+$/, '');
+    const baseUrl = stripTrailingSlashes(config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL);
     this.#realtime = config.realtime ?? false;
 
     if (!publicKey || !secretKey) {
@@ -306,4 +306,17 @@ function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environm
       }
     }
   }
+}
+
+/**
+ * Remove trailing "/" characters procedurally. Avoids polynomial
+ * backtracking that a greedy regex like `/\/+$/` can exhibit when the
+ * input is attacker-controlled.
+ */
+function stripTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) {
+    end--;
+  }
+  return end === s.length ? s : s.slice(0, end);
 }

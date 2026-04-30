@@ -192,6 +192,7 @@ const deployCommand = studioCommand
   .option('--project <id>', 'Project ID')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(deployAction));
@@ -269,6 +270,7 @@ serverCommand
   .option('--project <id>', 'Project ID')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and deploy the existing .mastra/output directory')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));

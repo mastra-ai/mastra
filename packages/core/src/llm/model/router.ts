@@ -244,6 +244,26 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return this.#lastStreamTransport;
   }
 
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Excludes `config` (holds apiKey, headers, url) and `gateway`
+   * (may hold proxy credentials or cached tokens) so they cannot leak
+   * into telemetry backends.
+   */
+  serializeForSpan(): {
+    specificationVersion: 'v2';
+    modelId: string;
+    provider: string;
+    gatewayId: string;
+  } {
+    return {
+      specificationVersion: this.specificationVersion,
+      modelId: this.modelId,
+      provider: this.provider,
+      gatewayId: this.gatewayId,
+    };
+  }
+
   private setStreamTransport({
     resolvedTransport,
     key,

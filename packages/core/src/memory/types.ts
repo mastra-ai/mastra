@@ -758,6 +758,15 @@ export interface ObservationalMemoryOptions {
   shareTokenBudget?: boolean;
 
   /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity. These markers are persisted in memory and also emitted
+   * as inline reminder events for clients that want to render them specially.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
+
+  /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
@@ -931,6 +940,25 @@ type BaseMemoryConfig = {
          */
         instructions?: DynamicArgument<string>;
       };
+
+  /**
+   * Whether to filter out incomplete (suspended) tool calls when sending messages to the LLM.
+   * When true, tool calls in `input-available` state are stripped from the prompt,
+   * preventing the agent from seeing its own suspended tool calls in thread history.
+   *
+   * Set to false to allow the agent to see suspended tool calls in context.
+   * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
+   *
+   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
+   * Anthropic handles incomplete tool calls without issues.
+   *
+   * @default true
+   * @example
+   * ```typescript
+   * filterIncompleteToolCalls: false // Keep suspended tool calls visible in context
+   * ```
+   */
+  filterIncompleteToolCalls?: boolean;
 
   /**
    * Thread management configuration.
@@ -1187,6 +1215,9 @@ export type SerializedObservationalMemoryConfig = {
 
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
+
+  /** Persist inline temporal gap markers for long pauses between messages */
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.

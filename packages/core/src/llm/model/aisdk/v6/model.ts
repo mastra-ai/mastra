@@ -79,4 +79,19 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   async doStream(options: LanguageModelV3CallOptions) {
     return await this.#model.doStream(remapToolsToV3(options));
   }
+
+  /**
+   * Custom serialization for tracing/observability spans.
+   * `#model` is already a true JS private field and not enumerable, so
+   * the wrapped provider SDK client can't leak. This method makes the
+   * safe shape explicit and avoids walking `supportedUrls` (a
+   * PromiseLike / regex map that isn't useful in spans).
+   */
+  serializeForSpan(): { specificationVersion: 'v3'; modelId: string; provider: string } {
+    return {
+      specificationVersion: this.specificationVersion,
+      modelId: this.modelId,
+      provider: this.provider,
+    };
+  }
 }

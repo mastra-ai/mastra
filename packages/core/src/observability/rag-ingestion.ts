@@ -37,11 +37,11 @@
  */
 
 import { createObservabilityContext } from './context-factory';
-import { SpanType } from './types';
+import { EntityType, SpanType } from './types';
 import type { GetOrCreateSpanOptions, ObservabilityContext, RagIngestionAttributes, Span } from './types';
 import { getOrCreateSpan } from './utils';
 
-export type StartRagIngestionOptions = Omit<GetOrCreateSpanOptions<SpanType.RAG_INGESTION>, 'type'>;
+export type StartRagIngestionOptions = Omit<GetOrCreateSpanOptions<SpanType.RAG_INGESTION>, 'type' | 'entityType'>;
 
 export interface StartRagIngestionResult {
   /**
@@ -82,6 +82,7 @@ export interface StartRagIngestionResult {
 export function startRagIngestion(options: StartRagIngestionOptions): StartRagIngestionResult {
   const span = getOrCreateSpan<SpanType.RAG_INGESTION>({
     ...options,
+    entityType: EntityType.RAG_INGESTION,
     type: SpanType.RAG_INGESTION,
   });
 

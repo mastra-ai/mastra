@@ -56,6 +56,12 @@ export class MessageMerger {
       return false;
     }
 
+    const latestParts = latestMessage.content?.parts ?? [];
+    const latestOnlyHasDataParts = latestParts.length > 0 && latestParts.every(part => part.type.startsWith('data-'));
+    if (latestOnlyHasDataParts && latestMessage.id !== incomingMessage.id) {
+      return false;
+    }
+
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =
       latestMessage.role === 'assistant' &&

@@ -115,10 +115,10 @@ If you prefer to work from the command line, or need to script the export, you c
   <StepItem>
     Export the database to a SQL dump.
 
-    Set the credentials provided by support (or use the dashboard values if you already copied them earlier) as environment variables, then dump the database to a local file:
+    Set the credentials provided by support (or use the dashboard values if you already copied them earlier) as environment variables, then dump the database to a local file. If you copied the URL from the dashboard, swap the `libsql://` scheme for `https://` — the Turso CLI expects the HTTPS form when passing the URL with an auth token.
 
     ```bash
-    export MASTRA_STORAGE_URL="libsql://<db-name>-<org>.turso.io"
+    export MASTRA_STORAGE_URL="https://<db-name>-<org>.turso.io"
     export MASTRA_STORAGE_AUTH_TOKEN="<token-from-dashboard-or-support>"
 
     turso db shell "$MASTRA_STORAGE_URL?authToken=$MASTRA_STORAGE_AUTH_TOKEN" ".dump" > mastra-cloud-dump.sql

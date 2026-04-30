@@ -1,7 +1,7 @@
 'use client';
 
 import type { SpanRecord } from '@mastra/core/storage';
-import { TextAndIcon, getShortId } from '@mastra/playground-ui';
+import { TextAndIcon, getShortId, useSpanDetail } from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +9,10 @@ import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 
 type TraceAsItemDialogProps = {
+  /** Full span record — if provided, used directly (no fetch). */
   traceDetails?: SpanRecord;
+  /** Root span ID for lazy-loading when traceDetails is not available. */
+  rootSpanId?: string | null;
   traceId?: string;
   isOpen: boolean;
   onClose: () => void;
@@ -32,8 +35,23 @@ function getInitialInput(traceDetails?: SpanRecord): string {
   return JSON.stringify(rawInput, null, 2);
 }
 
-export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose, level = 2 }: TraceAsItemDialogProps) {
+export function TraceAsItemDialog({
+  traceDetails: externalTraceDetails,
+  rootSpanId,
+  traceId,
+  isOpen,
+  onClose,
+  level = 2,
+}: TraceAsItemDialogProps) {
   const client = useMastraClient();
+
+  // Lazy-load the root span details when dialog opens and no traceDetails provided
+  const { data: lazySpanDetail } = useSpanDetail(
+    !externalTraceDetails && isOpen ? traceId : null,
+    !externalTraceDetails && isOpen ? rootSpanId : null,
+  );
+
+  const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
 
   const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],

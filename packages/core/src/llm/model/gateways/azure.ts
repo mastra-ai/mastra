@@ -34,11 +34,25 @@ interface CachedToken {
   expiresAt: number;
 }
 
+export interface AzureAccessToken {
+  token: string;
+  expiresOnTimestamp?: number;
+}
+
+export interface AzureTokenCredential {
+  getToken(scopes: string | string[], options?: unknown): Promise<AzureAccessToken | null>;
+}
+
 export interface AzureOpenAIGatewayConfig {
   resourceName: string;
-  apiKey: string;
+  apiKey?: string;
   apiVersion?: string;
   deployments?: string[];
+  authentication?: {
+    type: 'entraId';
+    credential: AzureTokenCredential;
+    scope?: string;
+  };
   management?: {
     tenantId: string;
     clientId: string;
@@ -52,6 +66,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   readonly id = 'azure-openai';
   readonly name = 'azure-openai';
   private tokenCache = new InMemoryServerCache();
+  private entraIdTokenRequests = new Map<string, Promise<CachedToken>>();
 
   constructor(private config: AzureOpenAIGatewayConfig) {
     super();
@@ -68,13 +83,28 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       });
     }
 
-    if (!this.config.apiKey) {
+    if (!this.config.apiKey && this.config.authentication?.type !== 'entraId') {
       throw new MastraError({
         id: 'AZURE_GATEWAY_INVALID_CONFIG',
         domain: 'LLM',
         category: 'UNKNOWN',
-        text: 'apiKey is required for Azure OpenAI gateway',
+        text: 'apiKey or Entra ID authentication is required for Azure OpenAI gateway',
       });
+    }
+
+    if (this.config.authentication?.type === 'entraId' && !this.config.authentication.credential) {
+      throw new MastraError({
+        id: 'AZURE_GATEWAY_INVALID_CONFIG',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'credential is required for Azure OpenAI Entra ID authentication',
+      });
+    }
+
+    if (this.config.apiKey && this.config.authentication?.type === 'entraId') {
+      console.warn(
+        '[AzureOpenAIGateway] Both apiKey and Entra ID authentication provided. Using Entra ID authentication and ignoring apiKey.',
+      );
     }
 
     const hasDeployments = this.config.deployments && this.config.deployments.length > 0;
@@ -294,7 +324,85 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   }
 
   async getApiKey(_modelId: string): Promise<string> {
-    return this.config.apiKey;
+    return this.config.authentication?.type === 'entraId' ? '' : (this.config.apiKey ?? '');
+  }
+
+  private async getEntraIdToken(): Promise<string> {
+    if (this.config.authentication?.type !== 'entraId') {
+      throw new MastraError({
+        id: 'AZURE_ENTRA_ID_AUTH_NOT_CONFIGURED',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'Entra ID authentication is not configured for Azure OpenAI gateway',
+      });
+    }
+
+    const scope = this.config.authentication.scope ?? 'https://cognitiveservices.azure.com/.default';
+    const cacheKey = `azure-openai-token:${scope}`;
+    const cached = (await this.tokenCache.get(cacheKey)) as CachedToken | undefined;
+    if (cached && cached.expiresAt > Date.now() / 1000 + 60) {
+      return cached.token;
+    }
+
+    let tokenRequest = this.entraIdTokenRequests.get(cacheKey);
+
+    if (!tokenRequest) {
+      tokenRequest = this.fetchEntraIdToken(scope, cacheKey);
+      this.entraIdTokenRequests.set(cacheKey, tokenRequest);
+    }
+
+    try {
+      const token = await tokenRequest;
+      return token.token;
+    } finally {
+      this.entraIdTokenRequests.delete(cacheKey);
+    }
+  }
+
+  private async fetchEntraIdToken(scope: string, cacheKey: string): Promise<CachedToken> {
+    if (this.config.authentication?.type !== 'entraId') {
+      throw new MastraError({
+        id: 'AZURE_ENTRA_ID_AUTH_NOT_CONFIGURED',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'Entra ID authentication is not configured for Azure OpenAI gateway',
+      });
+    }
+
+    const accessToken = await this.config.authentication.credential.getToken(scope);
+    if (!accessToken?.token) {
+      throw new MastraError({
+        id: 'AZURE_ENTRA_ID_TOKEN_ERROR',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'Failed to get Entra ID token for Azure OpenAI gateway',
+      });
+    }
+
+    const token = {
+      token: accessToken.token,
+      expiresAt: accessToken.expiresOnTimestamp
+        ? Math.floor(accessToken.expiresOnTimestamp / 1000)
+        : Math.floor(Date.now() / 1000) + 300,
+    };
+
+    await this.tokenCache.set(cacheKey, token);
+
+    return token;
+  }
+
+  private createEntraIdFetch(): typeof globalThis.fetch {
+    return async (input, init) => {
+      const token = await this.getEntraIdToken();
+      const headers = new Headers(init?.headers);
+      headers.delete('api-key');
+      headers.set('Authorization', `Bearer ${token}`);
+
+      return fetch(input, {
+        ...init,
+        headers,
+      });
+    };
   }
 
   async resolveLanguageModel({
@@ -308,13 +416,22 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const apiVersion = this.config.apiVersion || '2024-04-01-preview';
-
-    return createAzure({
+    const useEntraId = this.config.authentication?.type === 'entraId';
+    const azureConfig = {
       resourceName: this.config.resourceName,
-      apiKey,
+      apiKey: useEntraId ? '' : apiKey,
       apiVersion,
       useDeploymentBasedUrls: true,
       headers: { 'User-Agent': MASTRA_USER_AGENT, ...headers },
-    })(modelId);
+    };
+
+    if (useEntraId) {
+      return createAzure({
+        ...azureConfig,
+        fetch: this.createEntraIdFetch(),
+      })(modelId);
+    }
+
+    return createAzure(azureConfig)(modelId);
   }
 }

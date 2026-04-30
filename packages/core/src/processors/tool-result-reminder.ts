@@ -207,10 +207,10 @@ function truncateToTokenLimit(content: string, maxTokens: number): string {
 
 type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
 
-function getCompletedToolCalls(messageList: MessageList): CompletedToolCall[] {
+function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[] {
   const completed: CompletedToolCall[] = [];
 
-  for (const message of messageList.get.all.db()) {
+  for (const message of messages) {
     const parts = isRecord(message.content) ? message.content.parts : undefined;
     if (!Array.isArray(parts)) {
       continue;
@@ -234,6 +234,10 @@ function getCompletedToolCalls(messageList: MessageList): CompletedToolCall[] {
   }
 
   return completed;
+}
+
+function getCurrentStepResponseMessages(messageList: MessageList): MastraDBMessage[] {
+  return messageList.get.response.db();
 }
 
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
@@ -290,7 +294,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, rotateResponseMessageId } = args;
     const messages = messageList.get.all.db();
-    const completedToolCalls = getCompletedToolCalls(messageList);
+    const currentStepResponseMessages = getCurrentStepResponseMessages(messageList);
+    const completedToolCalls = getCompletedToolCalls(currentStepResponseMessages);
     const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {

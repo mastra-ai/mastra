@@ -362,6 +362,8 @@ export async function analyzeBundle(
 
   // Track external dependencies with their version info
   const allUsedExternals = new Map<string, ExternalDependencyInfo>();
+  // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
+  const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -370,6 +372,7 @@ export async function analyzeBundle(
       workspaceMap,
       projectRoot,
       shouldCheckTransitiveDependencies: isDev || externalsPreset,
+      analyzeCache,
     });
 
     // Detect pino transports in the bundled output

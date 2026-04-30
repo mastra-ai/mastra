@@ -8,6 +8,7 @@ import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -28,6 +29,7 @@ import type {
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
@@ -88,6 +90,13 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * When true and `model` is also provided, reuse the parent agent for the separate
+   * structuring pass. If a thread is available, Mastra attaches read-only memory so
+   * the structuring model has full conversation context.
+   */
+  useAgent?: boolean;
 
   /**
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
@@ -414,7 +423,7 @@ export interface AgentConfig<
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
-  resource: string;
+  resource?: string;
   options?: MemoryConfigInternal;
 };
 
@@ -450,6 +459,15 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -541,6 +559,15 @@ export type AgentStreamOptions<
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
   /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
+  /**
    * Whether to save messages incrementally on step finish
    * @default false
    */
@@ -598,3 +625,71 @@ export type AgentExecuteOnFinishOptions = {
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+
+// =============================================================================
+// Durable Agent Types
+// =============================================================================
+
+/**
+ * Interface for durable agent wrappers (e.g., InngestAgent).
+ *
+ * Durable agents wrap a regular Agent with execution engine-specific
+ * capabilities (like Inngest's durable execution). They expose the
+ * underlying agent and any workflows that need to be registered with Mastra.
+ *
+ * The `stream()` method must return a MastraModelOutput (same as Agent.stream())
+ * to maintain compatibility with the server handlers.
+ */
+export interface DurableAgentLike {
+  /** Agent ID */
+  readonly id: string;
+  /** Agent name */
+  readonly name: string;
+  /** The underlying Mastra Agent */
+  readonly agent: Agent<any, any, any>;
+  /**
+   * Stream a response using durable execution.
+   * Must return MastraModelOutput to be compatible with Agent.stream().
+   */
+  stream(messages: any, options?: any): Promise<any>;
+  /**
+   * The PubSub instance used by this durable agent for streaming events.
+   * Used by server handlers to subscribe to the correct event bus when
+   * observing/reconnecting to agent streams.
+   */
+  readonly pubsub?: PubSub;
+  /**
+   * Get workflows that need to be registered with Mastra.
+   * Called during agent registration to auto-register durable execution workflows.
+   */
+  getDurableWorkflows?(): Workflow<any, any, any, any, any, any, any>[];
+  /**
+   * Set the Mastra instance for observability and other services.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  __setMastra?(mastra: any): void;
+
+  /**
+   * Implementations may proxy all Agent methods to the underlying agent.
+   * For example, InngestAgent uses a Proxy that forwards generate(), listTools(),
+   * getMemory(), etc. to the wrapped Agent instance.
+   */
+  [key: string]: any;
+}
+
+/**
+ * Type guard to check if an object is a DurableAgentLike wrapper.
+ */
+export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
+  if (!obj) return false;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    'agent' in obj &&
+    obj.agent !== null &&
+    typeof obj.agent === 'object' &&
+    typeof obj.agent.id === 'string' &&
+    typeof obj.stream === 'function'
+  );
+}

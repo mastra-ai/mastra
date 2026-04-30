@@ -432,6 +432,26 @@ describe('Observability Registry', () => {
       expect(observability.getSelectedInstance(workflowOptions)).toBe(observability.getInstance('datadog'));
       expect(observability.getSelectedInstance(genericOptions)).toBe(observability.getDefaultInstance()); // Falls back to default (console)
     });
+
+    it('propagates the Mastra environment to instances registered after setMastraContext', () => {
+      observability = new Observability({});
+
+      // Simulate Mastra construction: setMastraContext fires before any instance
+      // is in the registry (this is the path Mastra.registerExporter takes when
+      // bootstrapping observability from a NoOp).
+      const fakeMastra = { getEnvironment: () => 'production' } as any;
+      observability.setMastraContext({ mastra: fakeMastra });
+
+      // Late registration — must still pick up the environment.
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'late-registered',
+        name: 'late',
+        exporters: [new TestExporter()],
+      });
+      observability.registerInstance('late', instance, true);
+
+      expect(instance.getMastraEnvironment()).toBe('production');
+    });
   });
 
   describe('observability = new Observability edge cases', () => {

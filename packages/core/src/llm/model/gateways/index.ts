@@ -1,7 +1,12 @@
 import { MastraError } from '../../../error/index.js';
 import type { MastraModelGateway } from './base.js';
 export { MastraModelGateway, type ProviderConfig, type GatewayLanguageModel } from './base.js';
-export { AzureOpenAIGateway, type AzureOpenAIGatewayConfig } from './azure.js';
+export {
+  AzureOpenAIGateway,
+  type AzureAccessToken,
+  type AzureOpenAIGatewayConfig,
+  type AzureTokenCredential,
+} from './azure.js';
 export { ModelsDevGateway } from './models-dev.js';
 export { MastraGateway, type MastraGatewayConfig } from './mastra.js';
 export { NetlifyGateway } from './netlify.js';

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { KeyValueList } from './key-value-list';
 import { BrainIcon, WorkflowIcon, UserIcon, TagIcon } from 'lucide-react';
+import { KeyValueList } from './key-value-list';
 
 const meta: Meta<typeof KeyValueList> = {
   title: 'Elements/KeyValueList',

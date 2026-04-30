@@ -1479,6 +1479,7 @@ describe('Tracing', () => {
         serviceName: 'test-service',
         name: 'test',
         exporters: [testExporter],
+        logging: { level: 'info' },
       });
 
       const rootSpan = observability.startSpan({
@@ -2425,6 +2426,207 @@ describe('Tracing', () => {
       const updateEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_UPDATED);
       expect(updateEvent?.exportedSpan.input).toBeUndefined();
       expect(updateEvent?.exportedSpan.output).toBeUndefined();
+
+      span.end();
+    });
+  });
+
+  describe('Mastra environment fallback', () => {
+    it('injects the Mastra-pushed environment into root-span metadata so it persists on the SpanRecord', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      expect(span.metadata).toMatchObject({ environment: 'production' });
+      expect(span.getCorrelationContext().environment).toBe('production');
+
+      span.end();
+
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.metadata).toMatchObject({ environment: 'production' });
+    });
+
+    it('lets per-span metadata.environment override the Mastra-pushed environment', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          metadata: { environment: 'staging' },
+        },
+      });
+
+      expect(span.metadata).toMatchObject({ environment: 'staging' });
+      expect(span.getCorrelationContext().environment).toBe('staging');
+
+      span.end();
+    });
+
+    it('leaves environment undefined when neither metadata nor Mastra environment is set', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      expect(span.metadata?.environment).toBeUndefined();
+      expect(span.getCorrelationContext().environment).toBeUndefined();
+
+      span.end();
+    });
+
+    it('child spans inherit the Mastra environment through parent metadata propagation', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('staging');
+
+      const parent = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'parent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const child = parent.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child',
+        attributes: { toolId: 'tool-1', toolType: 'function' },
+      });
+
+      expect(child.metadata).toMatchObject({ environment: 'staging' });
+      expect(child.getCorrelationContext().environment).toBe('staging');
+
+      child.end();
+      parent.end();
+    });
+
+    it('attaches environment to log events emitted via getLoggerContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      observability.getLoggerContext(span).info('hello');
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log.correlationContext?.environment).toBe('production');
+
+      span.end();
+    });
+
+    it('attaches environment to metric events emitted via getMetricsContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      observability.getMetricsContext(span).emit('user_metric', 1, { status: 'ok' });
+
+      expect(testExporter.metricEvents.length).toBeGreaterThanOrEqual(1);
+      const userMetric = testExporter.metricEvents.find(e => e.metric.name === 'user_metric');
+      expect(userMetric?.metric.correlationContext?.environment).toBe('production');
+
+      span.end();
+    });
+
+    it('attaches environment to score events when correlationContext comes from a live span', async () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const { buildScoreEvent } = await import('./recorded');
+      const event = buildScoreEvent({
+        traceId: span.traceId,
+        spanId: span.id,
+        correlationContext: span.getCorrelationContext(),
+        score: { scorerId: 'test-scorer', score: 1 },
+      });
+
+      expect(event.score.correlationContext?.environment).toBe('production');
+
+      span.end();
+    });
+
+    it('attaches environment to feedback events when correlationContext comes from a live span', async () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const { buildFeedbackEvent } = await import('./recorded');
+      const event = buildFeedbackEvent({
+        traceId: span.traceId,
+        spanId: span.id,
+        correlationContext: span.getCorrelationContext(),
+        feedback: { feedbackType: 'thumbs', value: 'up' },
+      });
+
+      expect(event.feedback.correlationContext?.environment).toBe('production');
 
       span.end();
     });

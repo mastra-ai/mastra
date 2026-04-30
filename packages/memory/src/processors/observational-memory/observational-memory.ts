@@ -2067,18 +2067,21 @@ ${formattedMessages}
     const startedAt = new Date().toISOString();
     const tokensToBuffer = await this.tokenCounter.countMessagesAsync(messagesToBuffer);
 
-    // Emit buffering start marker
+    const startMarker = createBufferingStartMarker({
+      cycleId,
+      operationType: 'observation',
+      tokensToBuffer,
+      recordId: freshRecord.id,
+      threadId,
+      threadIds: [threadId],
+      config: this.getObservationMarkerConfig(),
+    });
+    await this.persistMarkerToStorage(startMarker, threadId, freshRecord.resourceId ?? undefined);
+
+    // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
     if (writer) {
-      const startMarker = createBufferingStartMarker({
-        cycleId,
-        operationType: 'observation',
-        tokensToBuffer,
-        recordId: freshRecord.id,
-        threadId,
-        threadIds: [threadId],
-        config: this.getObservationMarkerConfig(),
-      });
-      void writer.custom(startMarker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void writer.custom({ ...startMarker, transient: true }).catch(() => {});
     }
 
     omDebug(
@@ -2477,11 +2480,16 @@ ${formattedMessages}
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
+    // Fetch the OM record once so we can fall back to its lastObservedAt
+    // for threads whose metadata was never stamped.  See #15265.
+    const record = await this.getRecord(currentThreadId, resourceId);
+    const recordLastObservedAt = record?.lastObservedAt;
+
     for (const thread of allThreads) {
       if (thread.id === currentThreadId) continue;
 
       const omMetadata = getThreadOMMetadata(thread.metadata);
-      const threadLastObservedAt = omMetadata?.lastObservedAt;
+      const threadLastObservedAt = omMetadata?.lastObservedAt ?? recordLastObservedAt;
       const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
 
       const result = await this.storage.listMessages({
@@ -2980,19 +2988,22 @@ ${formattedMessages}
       const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       const startedAt = new Date().toISOString();
 
-      // Emit buffering start marker
+      const startMarker = createBufferingStartMarker({
+        cycleId,
+        operationType: 'observation',
+        tokensToBuffer: newTokens,
+        recordId: record.id,
+        threadId,
+        threadIds: [threadId],
+        config: this.getObservationMarkerConfig(),
+      });
+      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
+
+      // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
       const writer = opts.writer;
       if (writer) {
-        const startMarker = createBufferingStartMarker({
-          cycleId,
-          operationType: 'observation',
-          tokensToBuffer: newTokens,
-          recordId: record.id,
-          threadId,
-          threadIds: [threadId],
-          config: this.getObservationMarkerConfig(),
-        });
-        void writer.custom(startMarker).catch(() => {});
+        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+        void writer.custom({ ...startMarker, transient: true }).catch(() => {});
       }
 
       // Call the observer via strategy pattern
@@ -3247,7 +3258,8 @@ ${formattedMessages}
           currentModel,
           config: this.getObservationMarkerConfig(),
         });
-        void opts.writer.custom(activationMarker).catch(() => {});
+        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+        void opts.writer.custom({ ...activationMarker, transient: true }).catch(() => {});
         await this.persistMarkerToMessage(
           activationMarker,
           opts.messageList,

@@ -258,6 +258,22 @@ export interface ObservabilityInstance {
    * @param exporter - The exporter to register
    */
   registerExporter?(exporter: ObservabilityExporter): void;
+
+  /**
+   * Returns the deployment environment propagated from the parent Mastra
+   * instance (resolved from `Mastra` config `environment` or `process.env.NODE_ENV`).
+   * Used by spans as a fallback when `metadata.environment` isn't set on a
+   * specific span.
+   */
+  getMastraEnvironment?(): string | undefined;
+
+  /**
+   * Internal hook used by the parent `Observability` entrypoint to push the
+   * resolved Mastra-level environment into this instance during
+   * `setMastraContext`. Implementations should store the value for later reads
+   * via `getMastraEnvironment()`.
+   */
+  __setMastraEnvironment?(environment: string | undefined): void;
 }
 
 // ============================================================================

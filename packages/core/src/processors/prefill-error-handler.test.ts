@@ -40,6 +40,40 @@ function createOtherError() {
   });
 }
 
+function createQwenThinkingPrefillError() {
+  return new APICallError({
+    message: 'Assistant response prefill is incompatible with enable_thinking.',
+    url: 'http://localhost:8080/v1/chat/completions',
+    requestBodyValues: {},
+    statusCode: 400,
+    responseBody: JSON.stringify({
+      error: {
+        code: 400,
+        message: 'Assistant response prefill is incompatible with enable_thinking.',
+        type: 'invalid_request_error',
+      },
+    }),
+    isRetryable: false,
+  });
+}
+
+function createQwenThinkingPrefillErrorInBodyOnly() {
+  return new APICallError({
+    message: 'Bad request',
+    url: 'http://localhost:8080/v1/chat/completions',
+    requestBodyValues: {},
+    statusCode: 400,
+    responseBody: JSON.stringify({
+      error: {
+        code: 400,
+        message: 'Assistant response prefill is incompatible with enable-thinking.',
+        type: 'invalid_request_error',
+      },
+    }),
+    isRetryable: false,
+  });
+}
+
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
   const messageList = new MessageList({ threadId: 'test-thread' });
   messageList.add([createMessage('hello', 'user')], 'input');
@@ -120,6 +154,26 @@ describe('PrefillErrorHandler', () => {
     const result = await handler.processAPIError(args);
 
     expect(result).toBeUndefined();
+  });
+
+  it('should return { retry: true } for qwen enable_thinking prefill errors', async () => {
+    const handler = new PrefillErrorHandler();
+    const args = makeArgs({ error: createQwenThinkingPrefillError() });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    const lastMessage = args.messageList.get.all.db().at(-1);
+    expect(lastMessage?.role).toBe('user');
+  });
+
+  it('should return { retry: true } when qwen prefill string is only present in responseBody', async () => {
+    const handler = new PrefillErrorHandler();
+    const args = makeArgs({ error: createQwenThinkingPrefillErrorInBodyOnly() });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
   });
 
   it('should still retry even when last message is not from assistant', async () => {

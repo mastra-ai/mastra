@@ -968,6 +968,7 @@ https://mastra.ai/en/docs/memory/overview`,
       activateAfterIdle: om.activateAfterIdle,
       activateOnProviderChange: om.activateOnProviderChange,
       shareTokenBudget: om.shareTokenBudget,
+      temporalMarkers: om.temporalMarkers,
       retrieval: om.retrieval,
     };
 

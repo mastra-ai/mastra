@@ -16,6 +16,16 @@ import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
 /**
+ * Options forwarded alongside a custom chunk emitted via ProcessorStreamWriter.
+ * Mirrors the options accepted by the underlying `OutputWriter` so processors can
+ * pass them through type-safely. The runtime may override fields it owns (for
+ * example, `messageId` is overridden with the step-owned response id).
+ */
+export type ProcessorStreamWriterOptions = {
+  messageId?: string;
+};
+
+/**
  * Writer interface for processors to emit custom data chunks to the stream.
  * This enables real-time streaming of processor-specific data (e.g., observation markers).
  */
@@ -24,8 +34,13 @@ export interface ProcessorStreamWriter {
    * Emit a custom data chunk to the stream.
    * The chunk type must start with 'data-' prefix.
    * @param data - The data chunk to emit
+   * @param options - Optional options forwarded to the underlying output writer
+   *   (e.g. `messageId`). Fields the runtime owns may be overridden.
    */
-  custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T): Promise<void>;
+  custom<T extends { type: string }>(
+    data: T extends { type: `data-${string}` } ? DataChunkType : T,
+    options?: ProcessorStreamWriterOptions,
+  ): Promise<void>;
 }
 
 /**
@@ -301,6 +316,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   readonly id: TId;
   readonly name?: string;
   readonly description?: string;
+  /**
+   * Declares that this processor owns skill discovery and instruction loading.
+   * Agents use this to avoid adding eager skill context and overlapping skill tools.
+   */
+  readonly providesSkillDiscovery?: 'on-demand';
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -513,6 +533,14 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export {
+  isRetryableOpenAIResponsesStreamError,
+  StreamErrorRetryProcessor,
+  type StreamErrorRetryMatcher,
+  type StreamErrorRetryProcessorOptions,
+} from './stream-error-retry-processor';
+export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
+export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';

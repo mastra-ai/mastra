@@ -100,6 +100,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       options: {
         observationalMemory: {
           enabled: true,
+          temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
           scope: omScope,
           activateAfterIdle: '5m',

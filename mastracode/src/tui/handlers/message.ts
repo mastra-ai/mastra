@@ -8,7 +8,10 @@ import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
+import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import { UserMessageComponent } from '../components/user-message.js';
+import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -42,6 +45,8 @@ type StreamedSystemReminderPart = {
   message?: string;
   reminderType?: string;
   path?: string;
+  precedesMessageId?: string;
+  gapText?: string;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -63,20 +68,48 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     message: typeof reminder.message === 'string' ? reminder.message : undefined,
     reminderType: reminder.reminderType,
     path: reminder.path,
+    precedesMessageId: typeof reminder.precedesMessageId === 'string' ? reminder.precedesMessageId : undefined,
+    gapText: typeof reminder.gapText === 'string' ? reminder.gapText : undefined,
   };
 }
 
-function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
-  const { state } = ctx;
-  const component = new SystemReminderComponent({
+function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
+  if (reminder.reminderType === 'temporal-gap') {
+    return new TemporalGapComponent({
+      message: reminder.message,
+      gapText: reminder.gapText,
+    });
+  }
+
+  return new SystemReminderComponent({
     message: reminder.message,
     reminderType: reminder.reminderType,
     path: reminder.path,
   });
+}
+
+function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
+  const { state } = ctx;
+  const component = createReminderComponent(reminder);
   component.setExpanded(state.toolOutputExpanded);
   state.allSystemReminderComponents.push(component);
 
-  if (state.streamingComponent) {
+  if (reminder.precedesMessageId && !state.messageComponentsById.has(reminder.precedesMessageId)) {
+    const latestUserComponent = [...state.chatContainer.children]
+      .reverse()
+      .find(child => child instanceof UserMessageComponent);
+
+    if (latestUserComponent) {
+      const idx = state.chatContainer.children.indexOf(latestUserComponent as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, component);
+        state.chatContainer.invalidate();
+        return;
+      }
+    }
+  }
+
+  if (state.streamingComponent && !reminder.precedesMessageId) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 0, component);
@@ -85,7 +118,7 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
     }
   }
 
-  ctx.addChildBeforeFollowUps(component);
+  addChildBeforeMessageOrFollowUps(state, component, reminder.precedesMessageId);
 }
 
 function getContentBeforeToolCall(

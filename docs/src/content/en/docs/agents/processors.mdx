@@ -90,9 +90,64 @@ Your processors run first, then memory persists messages.
 
 This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/memory/memory-processors#processor-execution-order) for details.
 
+## Attach processors to an agent
+
+Processors are configured on the agent through three arrays:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  name: 'support-agent',
+  model: 'openai/gpt-5',
+  instructions: '...',
+  inputProcessors: [
+    new TokenLimiter(4000),
+    new ModerationProcessor({ model: 'openai/gpt-4.1-nano' }),
+  ],
+  outputProcessors: [new ModerationProcessor({ model: 'openai/gpt-4.1-nano' })],
+  errorProcessors: [new PrefillErrorHandler()],
+})
+```
+
+- `inputProcessors` run before the LLM.
+- `outputProcessors` run during and after the LLM response.
+- `errorProcessors` run when the LLM API call throws, so they can recover from provider errors.
+
+Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
+
+```typescript
+new Agent({
+  // ...
+  inputProcessors: ({ requestContext }) => {
+    const limit = requestContext.get('tokenLimit') ?? 4000
+    return [new TokenLimiter(limit)]
+  },
+})
+```
+
+### Override processors per call
+
+`agent.generate()` and `agent.stream()` accept the same three arrays. When you pass one, it **replaces** the matching array on the agent for that call only. Memory, workspace, and other framework-managed processors still run around your array.
+
+```typescript
+await agent.stream('Summarize this', {
+  inputProcessors: [new TokenLimiter(2000)],
+  maxProcessorRetries: 5,
+})
+```
+
 ## Create custom processors
 
-Custom processors implement the `Processor` interface:
+Custom processors implement the `Processor` interface.
+
+Processor methods receive two arguments for accessing the conversation:
+
+- `messages`: A snapshot array of `MastraDBMessage` objects for the current stage.
+- `messageList`: The live `MessageList` instance. Use it to read other stages, or to add, remove, or replace messages in place.
+
+Text lives in `message.content.parts`, not on `message.content` itself. Iterate `parts` and filter by `part.type === 'text'` to read user or assistant text. A flattened `message.content.content` string exists for legacy compatibility and can be used as a fallback. See [Message arguments](/reference/processors/processor-interface#message-arguments) in the `Processor` reference for full details.
 
 ### Transform input messages
 
@@ -104,12 +159,15 @@ export class CustomInputProcessor implements Processor {
   id = 'custom-input'
 
   async processInput({ messages }: ProcessInputArgs): Promise<MastraDBMessage[]> {
-    // Transform messages before they reach the LLM
+    // Transform messages before they reach the LLM.
+    // Text lives in content.parts — iterate parts and rewrite text parts only.
     return messages.map(msg => ({
       ...msg,
       content: {
         ...msg.content,
-        content: msg.content.content.toLowerCase(),
+        parts: msg.content.parts?.map(part =>
+          part.type === 'text' ? { ...part, text: part.text.toLowerCase() } : part,
+        ),
       },
     }))
   }
@@ -221,11 +279,22 @@ export class StreamFilter implements Processor {
   id = 'stream-filter'
 
   async processOutputStream({ part }): Promise<ChunkType | null> {
-    // Transform or filter streaming chunks
+    // Drop text-delta chunks that contain the word "secret"
+    if (part.type === 'text-delta' && part.payload.text.includes('secret')) {
+      return null
+    }
+
+    // Return the (possibly modified) chunk to emit it
     return part
   }
 }
 ```
+
+Return values:
+
+- A `ChunkType` emits that chunk. Return the original `part` to pass it through unchanged.
+- `null` or `undefined` drops the chunk. Both behave the same way, so a method that falls through without returning also drops the chunk.
+- Dropping only affects one chunk. To stop the stream entirely, call `abort()`.
 
 To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, set `processDataParts = true` on your processor. This lets you inspect, modify, or block tool-emitted data chunks before they reach the client.
 
@@ -252,6 +321,31 @@ export class ResponseValidator implements Processor {
 ```
 
 For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced patterns.
+
+### Persist data across chunks and steps
+
+Output methods receive a `state` object that persists for the lifetime of one request. State is keyed by the processor's `id`, so each processor sees only its own data, and it is shared between `processOutputStream`, `processOutputStep`, and `processOutputResult`. A new state object is created for every new `agent.generate()` or `agent.stream()` call.
+
+```typescript title="src/mastra/processors/word-counter.ts"
+import type { Processor } from '@mastra/core/processors'
+
+export class WordCounter implements Processor {
+  id = 'word-counter'
+
+  async processOutputStream({ part, state }) {
+    state.wordCount ??= 0
+    if (part.type === 'text-delta') {
+      state.wordCount += part.payload.text.split(/\s+/).filter(Boolean).length
+    }
+    return part
+  }
+
+  async processOutputResult({ messages, state }) {
+    console.log(`Total words: ${state.wordCount}`)
+    return messages
+  }
+}
+```
 
 ## Built-in utility processors
 
@@ -280,6 +374,14 @@ See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-
 ### `ToolCallFilter`
 
 Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.
+
+By default, `ToolCallFilter` filters the initial input before the agent loop starts. Use `filterAfterToolSteps` to also filter during each loop step while preserving recent tool-producing steps.
+
+```typescript
+new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+```
 
 See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
 
@@ -399,6 +501,23 @@ for await (const chunk of stream.fullStream) {
 ```
 
 Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
+
+By default, `processOutputStream()` skips `data-*` chunks so it does not accidentally operate on tool telemetry or other processors' output. To inspect, modify, or block these chunks in a processor, set `processDataParts = true` on that processor:
+
+```typescript
+class ModerationCollector implements Processor {
+  id = 'moderation-collector'
+  processDataParts = true
+
+  async processOutputStream({ part, state }) {
+    if (part.type === 'data-moderation-update') {
+      state.warnings ??= []
+      state.warnings.push(part.data)
+    }
+    return part
+  }
+}
+```
 
 ### Add metadata to messages
 
@@ -535,7 +654,7 @@ const agent = new Agent({
   name: 'Quality Agent',
   model: 'openai/gpt-5.4',
   outputProcessors: [new QualityChecker()],
-  maxProcessorRetries: 3, // Maximum retry attempts (default: 3)
+  maxProcessorRetries: 3, // Maximum retry attempts. If unset, retries are disabled (unless errorProcessors are configured, in which case it defaults to 10).
 })
 ```
 
@@ -545,6 +664,26 @@ The retry mechanism:
 - Replays the step with the abort reason added as context for the LLM
 - Tracks retry count via the `retryCount` parameter
 - Respects `maxProcessorRetries` limit on the agent
+
+### Abort and tripwire chunks
+
+Calling `abort(reason, options)` throws a `TripWire` error that ends processing. On streams, Mastra emits a `tripwire` chunk clients can detect:
+
+```typescript
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tripwire') {
+    console.log('Blocked by', chunk.payload.processorId, '-', chunk.payload.reason)
+    break
+  }
+}
+```
+
+For `agent.generate()`, the result exposes the same information as `result.tripwire` with `result.finishReason === 'other'`.
+
+`abort` accepts a second options argument:
+
+- `retry: true` asks the agent to retry instead of ending. Retries require `maxProcessorRetries` to be set on the agent or call.
+- `metadata` attaches structured data to the `tripwire` chunk so downstream consumers can branch on categories like `pii`, `quality`, or `moderation`.
 
 ## API error handling
 

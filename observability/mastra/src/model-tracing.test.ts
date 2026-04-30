@@ -150,13 +150,13 @@ describe('ModelSpanTracker', () => {
       const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
       expect(toolOutputSpans).toHaveLength(0);
 
-      // The span should be an event span with the result
+      // The span should be an event span keyed by metadata only
       const span = toolResultSpans[0]!;
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata (tool-result specific fields)
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ text: 'Hello world!' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
     });
 
     it('should pass through tool-output chunks without creating spans', async () => {
@@ -288,8 +288,8 @@ describe('ModelSpanTracker', () => {
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ output: 'Workflow result', status: 'success' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
     });
   });
 
@@ -350,18 +350,18 @@ describe('ModelSpanTracker', () => {
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(1);
 
-      // The span should be an event span with the result (args stripped)
+      // The span should be an event span keyed by metadata only
       const span = toolResultSpans[0]!;
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ text: 'Streamed content' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
     });
   });
 
-  describe('tool-result args removal', () => {
-    it('should remove args from tool-result output for non-streaming tools', async () => {
+  describe('tool-result payload policy', () => {
+    it('should omit tool-result output for locally executed tools', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -396,13 +396,53 @@ describe('ModelSpanTracker', () => {
       expect(toolResultSpans).toHaveLength(1);
 
       const span = toolResultSpans[0]!;
-      // args should not be in the output or metadata
-      expect(span.output).not.toHaveProperty('args');
+      // args should not be in metadata and output is omitted entirely
       expect(span.metadata).not.toHaveProperty('args');
       // toolCallId and toolName should be in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ output: 'tool result' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
+    });
+
+    it('should keep tool-result output for provider-executed tools', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const toolCallId = 'call_provider123';
+      const toolName = 'web_search';
+      const result = { output: 'provider result' };
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'tool-result',
+          payload: {
+            args: { query: 'mastra' },
+            toolCallId,
+            toolName,
+            providerExecuted: true,
+            result,
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
+      expect(toolResultSpans).toHaveLength(1);
+
+      const span = toolResultSpans[0]!;
+      expect(span.metadata).not.toHaveProperty('args');
+      expect(span.metadata).toMatchObject({ toolCallId, toolName, providerExecuted: true });
+      expect(span.output).toEqual(result);
     });
   });
 
@@ -488,15 +528,15 @@ describe('ModelSpanTracker', () => {
         toolCallId: 'call_agent1',
         toolName: 'agent-first',
       });
-      // output contains only the result
-      expect(agent1Span!.output).toEqual({ text: 'Agent1: Hello' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(agent1Span!.output).toBeUndefined();
 
       expect(agent2Span).toBeDefined();
       expect(agent2Span!.metadata).toMatchObject({
         toolCallId: 'call_agent2',
         toolName: 'agent-second',
       });
-      expect(agent2Span!.output).toEqual({ text: 'Agent2: World' });
+      expect(agent2Span!.output).toBeUndefined();
     });
   });
 

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { FieldBlocksLayout } from './field-blocks-layout';
-import { TextFieldBlock } from '../fields/text-field-block';
-import { SelectFieldBlock } from '../fields/select-field-block';
 import { SearchFieldBlock } from '../fields/search-field-block';
+import { SelectFieldBlock } from '../fields/select-field-block';
+import { TextFieldBlock } from '../fields/text-field-block';
+import { FieldBlocksLayout } from './field-blocks-layout';
 
 const roleOptions = [
   { value: 'admin', label: 'Admin' },

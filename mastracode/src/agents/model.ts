@@ -84,28 +84,31 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
 }
 
 /**
- * Resolve the Anthropic API key from stored credentials.
- * Returns the key if available, undefined otherwise.
+ * Resolve the Anthropic API key.
+ * Main slot → dedicated apikey: slot → env var.
  */
 export function getAnthropicApiKey(): string | undefined {
-  // Check stored API key credential (set via /apikey or UI prompt)
   const storedCred = authStorage.get('anthropic');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return undefined;
+  const dedicatedKey = authStorage.getStoredApiKey('anthropic')?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
 }
 
 /**
- * Resolve the OpenAI API key from stored credentials.
- * Returns the key if available, undefined otherwise.
+ * Resolve the OpenAI API key.
+ * Main slot → dedicated apikey: slot → env var.
  */
 export function getOpenAIApiKey(): string | undefined {
   const storedCred = authStorage.get('openai-codex');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return undefined;
+  const dedicatedKey = authStorage.getStoredApiKey('openai-codex')?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  return process.env.OPENAI_API_KEY?.trim() || undefined;
 }
 
 /**
