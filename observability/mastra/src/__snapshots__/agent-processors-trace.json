@@ -31,7 +31,8 @@
           "instructions": "You are a helpful assistant"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "  Hello! How are you?  ",
         "output": {
@@ -57,7 +58,8 @@
               "processorIndex": 0
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -105,7 +107,8 @@
                   "instructions": "You validate input messages"
                 },
                 "metadata": {
-                  "runId": "<runId-2>"
+                  "runId": "<runId-2>",
+                  "environment": "test"
                 },
                 "input": "Validate:   Hello! How are you?  ",
                 "output": {
@@ -147,7 +150,8 @@
                       }
                     },
                     "metadata": {
-                      "runId": "<runId-2>"
+                      "runId": "<runId-2>",
+                      "environment": "test"
                     },
                     "input": {
                       "messages": [
@@ -210,7 +214,8 @@
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
                         "input": {},
                         "output": {
@@ -236,7 +241,8 @@
                               "sequenceNumber": 0
                             },
                             "metadata": {
-                              "runId": "<runId-2>"
+                              "runId": "<runId-2>",
+                              "environment": "test"
                             },
                             "output": {
                               "text": "Mock V2 generate response"
@@ -284,7 +290,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -346,7 +353,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -372,7 +380,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Mock V2 stream response"
@@ -400,7 +409,8 @@
               "processorIndex": 0
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -451,7 +461,8 @@
                   "instructions": "You summarize text concisely"
                 },
                 "metadata": {
-                  "runId": "<runId-3>"
+                  "runId": "<runId-3>",
+                  "environment": "test"
                 },
                 "input": "Summarize: Mock V2 stream response",
                 "output": {
@@ -493,7 +504,8 @@
                       }
                     },
                     "metadata": {
-                      "runId": "<runId-3>"
+                      "runId": "<runId-3>",
+                      "environment": "test"
                     },
                     "input": {
                       "messages": [
@@ -556,7 +568,8 @@
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
                         "input": {},
                         "output": {
@@ -582,7 +595,8 @@
                               "sequenceNumber": 0
                             },
                             "metadata": {
-                              "runId": "<runId-3>"
+                              "runId": "<runId-3>",
+                              "environment": "test"
                             },
                             "output": {
                               "text": "Mock V2 generate response"

@@ -363,7 +363,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       sessionId: getMetadataString('sessionId'),
       threadId: getMetadataString('threadId'),
       requestId: getMetadataString('requestId'),
-      environment: getMetadataString('environment'),
+      environment: getMetadataString('environment') ?? this.observabilityInstance.getMastraEnvironment?.(),
       source: getMetadataString('source'),
       serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
       experimentId: getMetadataString('experimentId'),
