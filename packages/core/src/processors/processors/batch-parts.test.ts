@@ -120,6 +120,60 @@ describe('BatchPartsProcessor', () => {
         payload: { text: 'ABCDE', id: 'text-1' },
       });
     });
+
+    it('should preserve id and runId from the first chunk when batching (regression #14890)', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 3 });
+
+      const chunks: ChunkType[] = [
+        {
+          type: 'text-delta',
+          payload: { text: 'Hello', id: 'msg_abc123' },
+          runId: 'run_xyz789',
+          from: ChunkFrom.AGENT,
+        },
+        {
+          type: 'text-delta',
+          payload: { text: ' ', id: 'msg_abc123' },
+          runId: 'run_xyz789',
+          from: ChunkFrom.AGENT,
+        },
+        {
+          type: 'text-delta',
+          payload: { text: 'world', id: 'msg_abc123' },
+          runId: 'run_xyz789',
+          from: ChunkFrom.AGENT,
+        },
+      ];
+
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      for (let i = 0; i < 2; i++) {
+        await processor.processOutputStream({
+          part: chunks[i]!,
+          streamParts: chunks.slice(0, i),
+          state,
+          abort: () => {
+            throw new Error('abort');
+          },
+        });
+      }
+
+      const result = await processor.processOutputStream({
+        part: chunks[2]!,
+        streamParts: chunks.slice(0, 2),
+        state,
+        abort: () => {
+          throw new Error('abort');
+        },
+      });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: 'run_xyz789',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: 'msg_abc123' },
+      });
+    });
   });
 
   describe('non-text chunks', () => {
