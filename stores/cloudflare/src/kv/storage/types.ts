@@ -31,6 +31,8 @@ import type {
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
   TABLE_SKILL_BLOBS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -162,6 +164,8 @@ export type RecordTypes = {
   [TABLE_SKILL_VERSIONS]: SkillVersion;
   [TABLE_SKILL_BLOBS]: StorageBlobEntry;
   mastra_background_tasks: Record<string, any>;
+  [TABLE_CHANNEL_INSTALLATIONS]: Record<string, any>;
+  [TABLE_CHANNEL_CONFIG]: Record<string, any>;
 };
 
 export type ListOptions = {
