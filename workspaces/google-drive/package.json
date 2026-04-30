@@ -24,6 +24,7 @@
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run",
     "test": "vitest run",
+    "test:cloud": "vitest run --passWithNoTests ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "lint": "eslint ."
   },
