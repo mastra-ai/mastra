@@ -507,13 +507,16 @@ export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
       Processor<string, TTripwireMetadata>);
 
-// OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
+// OutputProcessor requires processOutputStream OR processOutputResult OR processOutputStep
+// OR processToolResult (or any combination)
 export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStream'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputResult'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolResult'> &
       Processor<string, TTripwireMetadata>);
 
 // ErrorProcessor requires processAPIError

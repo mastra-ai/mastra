@@ -307,24 +307,13 @@ async function processOutputStream<OUTPUT = undefined>({
           const resultToolDef =
             tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
           const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef);
-          messageList.updateToolInvocation({
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: chunk.payload.toolCallId,
-              toolName: chunk.payload.toolName,
-              args: chunk.payload.args,
-              result: chunk.payload.result,
-            },
-            providerMetadata: chunk.payload.providerMetadata,
-            providerExecuted: inferredProviderExecuted,
-          });
 
-          // Run processToolResult processors after the result is in messageList,
-          // before the chunk is enqueued to streaming clients. Symmetric with
-          // processOutputStep (which fires before tool execution); this hook fires
-          // after tool.execute() returns and lets processors scan the result for
-          // prompt injection / sensitive data, redact fields, or abort the run.
+          // Run processToolResult BEFORE the raw result is persisted to messageList.
+          // This honors the "scan before history / next LLM call" guarantee — if a
+          // processor aborts via TripWire, the raw value never makes it into the
+          // assembled messageList. A processor that wants to redact can still call
+          // messageList.updateToolInvocation itself; the runtime then reads the
+          // post-processor result back and uses that for the deferred outer write.
           //
           // This case path covers provider-executed deferred tools (e.g. Anthropic
           // web_search) whose results arrive in a later LLM stream. Client-executed
@@ -365,6 +354,8 @@ async function processOutputStream<OUTPUT = undefined>({
                 });
                 // Stop processing further chunks; the outer LLM execution step
                 // joins this tripwire with the existing processOutputStep tripwire path.
+                // The raw tool result was never persisted to messageList — the abort
+                // honors the "scan before history" guarantee.
                 runState.setState({ hasErrored: true });
                 break;
               }
@@ -372,6 +363,23 @@ async function processOutputStream<OUTPUT = undefined>({
               throw error;
             }
           }
+
+          // Patch the deferred tool-call to state:'result' with the (possibly
+          // post-processor-mutated) value. For same-stream results no matching
+          // part exists yet — updateToolInvocation returns false and
+          // buildMessagesFromChunks handles the merge.
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
+              result: chunk.payload.result,
+            },
+            providerMetadata: chunk.payload.providerMetadata,
+            providerExecuted: inferredProviderExecuted,
+          });
         }
         safeEnqueue(controller, chunk);
         break;
