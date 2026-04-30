@@ -89,6 +89,13 @@ export async function drainPipedStdin(): Promise<string | null> {
   }
 
   const raw = Buffer.concat(chunks).toString('utf-8');
+
+  // Zero out raw buffers so piped secrets don't linger in memory
+  for (const buf of chunks) {
+    buf.fill(0);
+  }
+  chunks.length = 0;
+
   const content = sanitizePipedOutput(raw);
   return content.length > 0 ? content : null;
 }
