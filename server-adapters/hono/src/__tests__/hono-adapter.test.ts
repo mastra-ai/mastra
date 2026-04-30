@@ -755,7 +755,7 @@ describe('Hono Server Adapter', () => {
           path: '/mastra/agents/bot/channels/slack/webhook',
           method: 'POST' as const,
           requiresAuth: false,
-          _internal: true,
+          _mastraInternal: true,
           handler: async (c: any) => c.json({ ok: true }),
         },
       ];

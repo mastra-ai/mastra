@@ -17,8 +17,8 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
-      /** Framework-generated route. Bypasses the apiPrefix collision check. */
-      _internal?: boolean;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     }
   | {
       path: string;
@@ -27,8 +27,8 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
-      /** Framework-generated route. Bypasses the apiPrefix collision check. */
-      _internal?: boolean;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };

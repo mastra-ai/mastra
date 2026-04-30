@@ -529,7 +529,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const prefix = this.prefix ?? '';
     if (!prefix) return;
     for (const route of routes) {
-      if (route._internal) continue;
+      if (route._mastraInternal) continue;
       if (route.path.startsWith(`${prefix}/`) || route.path === prefix) {
         throw new Error(
           `Custom API route "${route.path}" must not start with "${prefix}" — ` +
