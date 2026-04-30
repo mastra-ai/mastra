@@ -686,10 +686,12 @@ export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
+  requestContext,
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+  requestContext?: RequestContext;
 }) {
   const logger = mastra.getLogger();
 
@@ -729,7 +731,11 @@ export async function getAgentFromSystem({
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent, versionOptions ?? { status: 'published' });
+        agent = await editorAgent.applyStoredOverrides(
+          agent,
+          versionOptions ?? { status: 'published' },
+          requestContext,
+        );
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -946,7 +952,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
           let mergedAgent = agent;
           if (editor) {
             try {
-              mergedAgent = await editor.agent.applyStoredOverrides(agent);
+              mergedAgent = await editor.agent.applyStoredOverrides(agent, undefined, requestContext);
             } catch {
               // If overrides fail, use the original code agent
             }
@@ -1034,7 +1040,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
       const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,
@@ -1127,6 +1133,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
           serverRequestContext,
           bodyRequestContext as Record<string, unknown> | undefined,
         ),
+        requestContext: serverRequestContext,
       });
 
       // Merge body's requestContext values into the server's RequestContext instance
@@ -1206,6 +1213,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -1266,6 +1274,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -1425,6 +1434,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
           serverRequestContext,
           bodyRequestContext as Record<string, unknown> | undefined,
         ),
+        requestContext: serverRequestContext,
       });
 
       // Merge body's requestContext values into the server's RequestContext instance
@@ -1516,6 +1526,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
           serverRequestContext,
           bodyRequestContext as Record<string, unknown> | undefined,
         ),
+        requestContext: serverRequestContext,
       });
 
       // Merge body's requestContext values into the server's RequestContext instance

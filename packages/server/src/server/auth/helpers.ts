@@ -4,7 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
-import { MASTRA_RESOURCE_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -370,6 +370,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set('user', user);
+
+    // Store the raw auth token so downstream code (e.g., editor MCP client
+    // resolution) can forward it when connecting to auth-protected MCP servers.
+    if (token) {
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, token);
+    }
 
     if (typeof authConfig.mapUserToResourceId === 'function') {
       try {
