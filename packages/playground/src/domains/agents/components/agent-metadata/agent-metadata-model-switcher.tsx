@@ -184,7 +184,7 @@ export const AgentMetadataModelSwitcher = ({
         </div>
 
         <Button
-          variant="light"
+          variant="default"
           size="md"
           onClick={handleReset}
           disabled={loading}

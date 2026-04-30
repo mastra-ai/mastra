@@ -385,7 +385,7 @@ export function AddSkillDialog({
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
                     return mount ? <span className="text-xs text-icon4">Installed at {mount.path}</span> : null;
                   })()}
-                <Button variant="light" onClick={() => handleOpenChange(false)}>
+                <Button variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button

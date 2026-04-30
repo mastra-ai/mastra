@@ -29,7 +29,7 @@ export function PromptBlockVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
   activeVersionId,
 }: PromptBlockVersionComboboxProps) {
   const { data, isLoading } = usePromptBlockVersions({

@@ -65,12 +65,12 @@ function EditFormContent({
     <Notice variant="info" title="This is a previous version" className="mb-4">
       <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
       <div className="flex items-center gap-2">
-        <Button type="button" variant="light" size="sm" onClick={() => setSearchParams({})}>
+        <Button type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
         <Button
           type="button"
-          variant="light"
+          variant="default"
           size="sm"
           onClick={() => void handlePublish(selectedVersionId ?? undefined)}
           disabled={selectedVersionId === activeVersionId}
