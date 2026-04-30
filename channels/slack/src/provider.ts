@@ -319,12 +319,28 @@ export class SlackProvider implements ChannelProvider {
    * Get storage, resolving to Mastra's channels storage if available.
    * This is called lazily to ensure we use persistent storage when Mastra is attached.
    */
+  #storagePromise: Promise<ChannelsStorage> | null = null;
+
   async #getStorage(): Promise<ChannelsStorage> {
     // Already resolved
     if (this.#storageResolved) {
       return this.#storage;
     }
 
+    // Deduplicate concurrent resolution attempts
+    if (this.#storagePromise) {
+      return this.#storagePromise;
+    }
+
+    this.#storagePromise = this.#resolveStorage();
+    try {
+      return await this.#storagePromise;
+    } finally {
+      this.#storagePromise = null;
+    }
+  }
+
+  async #resolveStorage(): Promise<ChannelsStorage> {
     // Try to get Mastra's channels storage
     if (this.#mastra) {
       try {
@@ -898,6 +914,9 @@ export class SlackProvider implements ChannelProvider {
         const iconResponse = await fetch(config.iconUrl, {
           signal: AbortSignal.timeout(30_000),
         });
+        if (!iconResponse.ok) {
+          throw new Error(`Icon fetch failed: ${iconResponse.status} ${iconResponse.statusText}`);
+        }
         const iconData = await iconResponse.arrayBuffer();
         await client.setAppIcon(appCredentials.appId, iconData);
       } catch (error) {
@@ -1162,6 +1181,10 @@ export class SlackProvider implements ChannelProvider {
         signal: AbortSignal.timeout(30_000),
       });
 
+      if (!tokenResponse.ok) {
+        throw new Error(`Slack OAuth HTTP error: ${tokenResponse.status} ${tokenResponse.statusText}`);
+      }
+
       const tokenData = (await tokenResponse.json()) as {
         ok: boolean;
         error?: string;
@@ -1174,6 +1197,10 @@ export class SlackProvider implements ChannelProvider {
         throw new Error(`OAuth failed: ${tokenData.error}`);
       }
 
+      if (!tokenData.access_token || !tokenData.bot_user_id || !tokenData.team?.id) {
+        throw new Error('Slack OAuth response missing required fields (access_token, bot_user_id, or team)');
+      }
+
       // Save completed installation (encrypted)
       const installation: SlackInstallation = {
         id: pending.id,
@@ -1183,10 +1210,10 @@ export class SlackProvider implements ChannelProvider {
         clientId: pending.clientId,
         clientSecret: pending.clientSecret,
         signingSecret: pending.signingSecret,
-        botToken: tokenData.access_token!,
-        botUserId: tokenData.bot_user_id!,
-        teamId: tokenData.team!.id,
-        teamName: tokenData.team!.name,
+        botToken: tokenData.access_token,
+        botUserId: tokenData.bot_user_id,
+        teamId: tokenData.team.id,
+        teamName: tokenData.team.name ?? '',
         name: pending.name,
         description: pending.description,
         slashCommands: pending.slashCommands,
