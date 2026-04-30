@@ -19,6 +19,7 @@ import {
   dynamicToolsAgent,
   schemaValidatedAgent,
   requestContextDemoAgent,
+  mcpAppsAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -109,6 +110,7 @@ const config = {
     evalAgent,
     schemaValidatedAgent,
     requestContextDemoAgent,
+    mcpAppsAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,

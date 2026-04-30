@@ -7,6 +7,7 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { calculatorWithUI, greetUserWithUI } from '../mcp/app-tools';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { requestContextDemoAgent } from './request-context-demo-agent';
@@ -244,3 +245,20 @@ export const evalAgent = new Agent({
 });
 
 export { requestContextDemoAgent };
+
+// MCP Apps Demo Agent — uses tools that have interactive MCP App UIs
+export const mcpAppsAgent = new Agent({
+  id: 'mcp-apps-agent',
+  name: 'MCP Apps Agent',
+  description: 'An agent that demonstrates MCP Apps — tools with interactive HTML UIs rendered in chat.',
+  instructions: `You are a helpful assistant that can perform calculations and greet users.
+You have access to two tools with interactive UIs:
+- calculatorWithUI: performs arithmetic (add/subtract). Always use this when asked to calculate.
+- greetUserWithUI: generates a personalized greeting. Always use this when asked to greet someone.
+When asked to do math, use the calculatorWithUI tool. When asked to greet someone, use the greetUserWithUI tool.`,
+  model: openai('gpt-4o-mini'),
+  tools: {
+    calculatorWithUI,
+    greetUserWithUI,
+  },
+});
