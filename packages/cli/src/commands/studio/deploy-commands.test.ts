@@ -1,3 +1,5 @@
+import process from 'node:process';
+
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 /* ------------------------------------------------------------------ */
@@ -15,10 +17,19 @@ vi.mock('../auth/credentials.js', () => ({
 
 const mockFetchProjects = vi.fn();
 const mockFetchDeployStatus = vi.fn();
+const mockFetchDeployDiagnosis = vi.fn();
+const mockStartDeployDiagnosis = vi.fn();
+const mockLoadProjectConfig = vi.fn();
 
 vi.mock('./platform-api.js', () => ({
   fetchProjects: mockFetchProjects,
   fetchDeployStatus: mockFetchDeployStatus,
+  fetchDeployDiagnosis: mockFetchDeployDiagnosis,
+  startDeployDiagnosis: mockStartDeployDiagnosis,
+}));
+
+vi.mock('./project-config.js', () => ({
+  loadProjectConfig: mockLoadProjectConfig,
 }));
 
 vi.mock('../auth/client.js', () => ({
@@ -37,6 +48,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockGetToken.mockResolvedValue('test-token');
   mockGetCurrentOrgId.mockResolvedValue('org-1');
+  mockLoadProjectConfig.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -168,22 +180,209 @@ describe('statusAction', () => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/*  deploy logs                                                        */
-/* ------------------------------------------------------------------ */
+describe('suggestionsAction', () => {
+  it('prints diagnosis summary and recommendations', async () => {
+    mockFetchDeployDiagnosis.mockResolvedValue({
+      state: 'ready',
+      diagnosis: {
+        id: 'diag-1',
+        deployId: 'd1',
+        status: 'COMPLETE',
+        summary: 'Missing environment variables caused startup failure.',
+        recommendations: [
+          {
+            title: 'Add OPENAI_API_KEY',
+            description: 'The deployment could not find OPENAI_API_KEY.',
+            action: 'Set OPENAI_API_KEY in your deploy environment and redeploy.',
+            docsUrl: 'https://mastra.ai/docs/env',
+          },
+        ],
+        error: null,
+        createdAt: '2025-06-01T00:00:00Z',
+        completedAt: '2025-06-01T00:00:05Z',
+      },
+    });
 
-describe('logsAction', () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await suggestionsAction('d1');
+
+    const output = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('Deploy suggestions for d1');
+    expect(output).toContain('Missing environment variables');
+    expect(output).toContain('Add OPENAI_API_KEY');
+    expect(output).toContain('https://mastra.ai/docs/env');
+    spy.mockRestore();
+  });
+
+  it('reports when a deploy is already running', async () => {
+    mockFetchDeployDiagnosis.mockResolvedValue({ state: 'healthy' });
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await suggestionsAction('d1');
+
+    expect(spy).toHaveBeenCalledWith('Deploy is running successfully. No suggestions required.');
+    spy.mockRestore();
+  });
+
+  it('starts a diagnosis when none exists and then prints suggestions', async () => {
+    mockFetchDeployDiagnosis.mockResolvedValueOnce({ state: 'missing' }).mockResolvedValueOnce({
+      state: 'ready',
+      diagnosis: {
+        id: 'diag-2',
+        deployId: 'd1',
+        status: 'COMPLETE',
+        summary: 'Missing environment variables caused startup failure.',
+        recommendations: [],
+        error: null,
+        createdAt: '2025-06-01T00:00:00Z',
+        completedAt: '2025-06-01T00:00:05Z',
+      },
+    });
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await suggestionsAction('d1');
+
+    expect(mockStartDeployDiagnosis).toHaveBeenCalledWith('d1', 'test-token', 'org-1');
+    expect(mockFetchDeployDiagnosis).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls.map(c => c[0]).join('\n')).toContain(
+      'No suggested changes are available for this failed deploy.',
+    );
+    spy.mockRestore();
+  });
+
+  it('defaults to the linked project latest deploy when deploy id is omitted', async () => {
+    mockLoadProjectConfig.mockResolvedValue({ projectId: 'p2', organizationId: 'org-1' });
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'App 1',
+        slug: 'app-1',
+        organizationId: 'org-1',
+        latestDeployId: 'd1',
+        latestDeployStatus: 'failed',
+        latestDeployCreatedAt: '2025-06-01T00:00:00Z',
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+      {
+        id: 'p2',
+        name: 'App 2',
+        slug: 'app-2',
+        organizationId: 'org-1',
+        latestDeployId: 'd2',
+        latestDeployStatus: 'failed',
+        latestDeployCreatedAt: '2025-06-01T00:00:01Z',
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+    mockFetchDeployDiagnosis.mockResolvedValue({
+      state: 'ready',
+      diagnosis: {
+        id: 'diag-1',
+        deployId: 'd2',
+        status: 'COMPLETE',
+        summary: 'Missing environment variables caused startup failure.',
+        recommendations: [],
+        error: null,
+        createdAt: '2025-06-01T00:00:00Z',
+        completedAt: '2025-06-01T00:00:05Z',
+      },
+    });
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await suggestionsAction();
+
+    const output = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(mockFetchDeployDiagnosis).toHaveBeenCalledWith('d2', 'test-token', 'org-1');
+    expect(output).toContain('Using latest deploy: d2 (App 2)');
+    expect(output).toContain('No suggested changes are available for this failed deploy.');
+    spy.mockRestore();
+  });
+
+  it('tells the user how to deploy and rerun suggestions when the linked studio project has no deploys', async () => {
+    mockLoadProjectConfig.mockResolvedValue({ projectId: 'p2', organizationId: 'org-1' });
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'App 1',
+        slug: 'app-1',
+        organizationId: 'org-1',
+        latestDeployId: 'd1',
+        latestDeployStatus: 'failed',
+        latestDeployCreatedAt: '2025-06-01T00:00:00Z',
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+      {
+        id: 'p2',
+        name: 'App 2',
+        slug: 'app-2',
+        organizationId: 'org-1',
+        latestDeployId: null,
+        latestDeployStatus: null,
+        latestDeployCreatedAt: null,
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await expect(suggestionsAction()).rejects.toThrow(
+      'No deploys found for linked Studio project App 2. Run a failed deployment first with `mastra studio deploy`. The suggestions command helps debug failed deployments, and you can run it afterward with `mastra studio deploy suggestions <deploy-id>` or `mastra studio deploy suggestions`.',
+    );
+    expect(mockFetchDeployDiagnosis).not.toHaveBeenCalled();
+  });
+
+  it('exits when diagnosis failed', async () => {
+    mockFetchDeployDiagnosis.mockResolvedValue({
+      state: 'ready',
+      diagnosis: {
+        id: 'diag-1',
+        deployId: 'd1',
+        status: 'FAILED',
+        summary: null,
+        recommendations: null,
+        error: 'doctor timeout',
+        createdAt: '2025-06-01T00:00:00Z',
+        completedAt: '2025-06-01T00:00:05Z',
+      },
+    });
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit');
+    });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await expect(suggestionsAction('d1')).rejects.toThrow('process.exit');
+
+    expect(spy).toHaveBeenCalledWith('Diagnosis failed: doctor timeout');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    spy.mockRestore();
+    mockExit.mockRestore();
+  });
+
   it('exits when no org selected', async () => {
     mockGetCurrentOrgId.mockResolvedValue(null);
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit');
     });
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const { logsAction } = await import('./deploy-logs.js');
-    await expect(logsAction('d1', {})).rejects.toThrow('process.exit');
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await expect(suggestionsAction('d1')).rejects.toThrow('process.exit');
 
+    expect(errorSpy).toHaveBeenCalledWith('No organization selected. Run: mastra auth login');
     expect(mockExit).toHaveBeenCalledWith(1);
+    errorSpy.mockRestore();
     mockExit.mockRestore();
   });
 });
