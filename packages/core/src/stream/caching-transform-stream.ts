@@ -150,7 +150,7 @@ export function createReplayStream<T>(options: {
       // First, emit all history chunks
       if (!historyComplete) {
         if (historyIndex < history.length) {
-          controller.enqueue(history[historyIndex]);
+          controller.enqueue(history[historyIndex]!);
           historyIndex++;
           return;
         }
