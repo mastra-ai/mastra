@@ -517,6 +517,26 @@ describe('AzureOpenAIGateway', () => {
       const apiKey = await gateway.getApiKey('gpt-4');
       expect(apiKey).toBe('my-test-key');
     });
+
+    it('should return empty API key when Entra ID authentication is configured', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'my-test-key',
+        authentication: {
+          type: 'entraId',
+          credential: {
+            getToken: vi.fn(),
+          },
+        },
+        deployments: ['gpt-4'],
+      });
+
+      const apiKey = await gateway.getApiKey('gpt-4');
+      expect(apiKey).toBe('');
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('resolveLanguageModel', () => {
@@ -584,6 +604,8 @@ describe('AzureOpenAIGateway', () => {
         apiKey: await gateway.getApiKey('gpt-4'),
       })) as any;
 
+      expect(model.options.apiKey).toBe('');
+
       mockFetch.mockResolvedValueOnce(new Response('{}'));
 
       await model.options.fetch('https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions', {
@@ -639,6 +661,57 @@ describe('AzureOpenAIGateway', () => {
       });
 
       expect(credential.getToken).toHaveBeenCalledTimes(1);
+    });
+
+    it('should dedupe concurrent Entra ID token requests', async () => {
+      let resolveToken: (value: { token: string; expiresOnTimestamp: number }) => void = () => {};
+      const tokenPromise = new Promise<{ token: string; expiresOnTimestamp: number }>(resolve => {
+        resolveToken = resolve;
+      });
+      const credential = {
+        getToken: vi.fn().mockReturnValue(tokenPromise),
+      };
+
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        authentication: {
+          type: 'entraId',
+          credential,
+        },
+        deployments: ['gpt-4'],
+      });
+
+      const model = (await gateway.resolveLanguageModel({
+        modelId: 'gpt-4',
+        providerId: 'azure-openai',
+        apiKey: await gateway.getApiKey('gpt-4'),
+      })) as any;
+
+      mockFetch.mockResolvedValue(new Response('{}'));
+
+      const requests = [
+        model.options.fetch('https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions', {
+          headers: { 'api-key': '' },
+        }),
+        model.options.fetch('https://test-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions', {
+          headers: { 'api-key': '' },
+        }),
+      ];
+
+      await Promise.resolve();
+
+      expect(credential.getToken).toHaveBeenCalledTimes(1);
+
+      resolveToken({
+        token: 'deduped-token',
+        expiresOnTimestamp: Date.now() + 3600_000,
+      });
+
+      await Promise.all(requests);
+
+      expect(credential.getToken).toHaveBeenCalledTimes(1);
+      const headers = mockFetch.mock.calls.at(-1)?.[1].headers as Headers;
+      expect(headers.get('Authorization')).toBe('Bearer deduped-token');
     });
   });
 });

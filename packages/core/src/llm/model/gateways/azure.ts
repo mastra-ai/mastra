@@ -66,6 +66,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   readonly id = 'azure-openai';
   readonly name = 'azure-openai';
   private tokenCache = new InMemoryServerCache();
+  private entraIdTokenRequests = new Map<string, Promise<CachedToken>>();
 
   constructor(private config: AzureOpenAIGatewayConfig) {
     super();
@@ -323,7 +324,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   }
 
   async getApiKey(_modelId: string): Promise<string> {
-    return this.config.apiKey ?? '';
+    return this.config.authentication?.type === 'entraId' ? '' : (this.config.apiKey ?? '');
   }
 
   private async getEntraIdToken(): Promise<string> {
@@ -343,6 +344,31 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       return cached.token;
     }
 
+    let tokenRequest = this.entraIdTokenRequests.get(cacheKey);
+
+    if (!tokenRequest) {
+      tokenRequest = this.fetchEntraIdToken(scope, cacheKey);
+      this.entraIdTokenRequests.set(cacheKey, tokenRequest);
+    }
+
+    try {
+      const token = await tokenRequest;
+      return token.token;
+    } finally {
+      this.entraIdTokenRequests.delete(cacheKey);
+    }
+  }
+
+  private async fetchEntraIdToken(scope: string, cacheKey: string): Promise<CachedToken> {
+    if (this.config.authentication?.type !== 'entraId') {
+      throw new MastraError({
+        id: 'AZURE_ENTRA_ID_AUTH_NOT_CONFIGURED',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'Entra ID authentication is not configured for Azure OpenAI gateway',
+      });
+    }
+
     const accessToken = await this.config.authentication.credential.getToken(scope);
     if (!accessToken?.token) {
       throw new MastraError({
@@ -353,14 +379,16 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       });
     }
 
-    await this.tokenCache.set(cacheKey, {
+    const token = {
       token: accessToken.token,
       expiresAt: accessToken.expiresOnTimestamp
         ? Math.floor(accessToken.expiresOnTimestamp / 1000)
         : Math.floor(Date.now() / 1000) + 300,
-    });
+    };
 
-    return accessToken.token;
+    await this.tokenCache.set(cacheKey, token);
+
+    return token;
   }
 
   private createEntraIdFetch(): typeof globalThis.fetch {
@@ -391,7 +419,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     const useEntraId = this.config.authentication?.type === 'entraId';
     const azureConfig = {
       resourceName: this.config.resourceName,
-      apiKey,
+      apiKey: useEntraId ? '' : apiKey,
       apiVersion,
       useDeploymentBasedUrls: true,
       headers: { 'User-Agent': MASTRA_USER_AGENT, ...headers },
