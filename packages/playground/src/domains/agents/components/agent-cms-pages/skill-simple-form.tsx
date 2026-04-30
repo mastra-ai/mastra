@@ -38,7 +38,8 @@ export function SkillSimpleForm({
   onInstructionsChange,
   readOnly,
 }: SkillSimpleFormProps) {
-  const [previewMode, setPreviewMode] = useState(false);
+  // Default to preview when there's content, edit when empty
+  const [previewMode, setPreviewMode] = useState(!!instructions);
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -95,7 +96,8 @@ export function SkillSimpleForm({
           <Txt as="label" variant="ui-sm" className="text-neutral3">
             Instructions
           </Txt>
-          {(instructions || readOnly) && (
+          {/* In read-only mode, always show rendered markdown — no toggle needed */}
+          {!readOnly && instructions && (
             <Button
               variant="ghost"
               size="xs"
@@ -130,7 +132,7 @@ export function SkillSimpleForm({
             value={instructions}
             onChange={e => onInstructionsChange(e.target.value)}
             placeholder="Write skill instructions in Markdown...&#10;&#10;Describe what the skill does, how it should behave, and any rules or constraints."
-            className="flex-1 min-h-[200px] resize-none font-mono text-sm"
+            className="flex-1 min-h-[300px] resize-none font-mono text-sm"
           />
         )}
       </div>

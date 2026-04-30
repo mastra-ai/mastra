@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button, SideDialog } from '@mastra/playground-ui';
-import { AlertTriangle, ChevronRight, Pencil, Settings2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Pencil, Settings2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -8,7 +8,12 @@ import { useCreateSkill } from '../../hooks/use-create-skill';
 import { useUpdateSkill } from '../../hooks/use-update-skill';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import { SkillChatComposer } from './skill-chat-composer';
-import { createInitialStructure, updateNodeContent, updateRootFolderName } from './skill-file-tree';
+import {
+  createInitialStructure,
+  extractSkillInstructions,
+  updateNodeContent,
+  updateRootFolderName,
+} from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
@@ -49,6 +54,8 @@ export function SkillEditDialog({
   const [instructions, setInstructions] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
   const [files, setFiles] = useState<InMemoryFileNode[]>([]);
+  // In create mode, form is hidden until agent populates fields or user expands it
+  const [showForm, setShowForm] = useState(false);
   const prevNameRef = useRef('');
   const createSkill = useCreateSkill();
   const updateSkill = useUpdateSkill();
@@ -72,6 +79,7 @@ export function SkillEditDialog({
   const isOwner = !skill || (!!currentUserId && skill.authorId === currentUserId);
   const isViewMode = isExistingSkill && !isEditing;
   const isReadOnly = isViewMode || !isOwner;
+  const hasFields = !!(name.trim() || description.trim() || instructions.trim());
 
   // Reset state when dialog opens/closes or skill changes
   useEffect(() => {
@@ -84,6 +92,7 @@ export function SkillEditDialog({
         setInstructions(skill.instructions ?? '');
         setIsEditing(false);
         setMode('simple');
+        setShowForm(true); // Always show form for existing skills
         if (skill.files?.length) {
           setFiles(skill.files as InMemoryFileNode[]);
         } else {
@@ -92,7 +101,7 @@ export function SkillEditDialog({
         }
         setWorkspaceId(builderDefaultWorkspaceId ?? (workspaceOptions.length === 1 ? workspaceOptions[0].value : ''));
       } else {
-        // Create mode
+        // Create mode — start chat-first
         setName('');
         setDescription('');
         setVisibility('private');
@@ -101,40 +110,46 @@ export function SkillEditDialog({
         setFiles([]);
         setIsEditing(false);
         setMode('simple');
+        setShowForm(false); // Hide form until agent fills or user expands
       }
       prevNameRef.current = '';
       setChatSessionKey(nanoid());
     }
   }, [isOpen, skill, workspaceOptions, builderDefaultWorkspaceId]);
 
-  const handleNameChange = useCallback(
-    (newName: string) => {
-      setName(newName);
+  const handleNameChange = useCallback((newName: string) => {
+    setName(newName);
+    setInstructions(currentInstructions => {
+      // Read latest instructions via functional updater (no-op on the value)
+      setFiles(prev => {
+        const hasStructure = prev.some(n => n.id === 'root');
+        if (!hasStructure && newName.trim()) {
+          const initial = createInitialStructure(newName);
+          return currentInstructions ? updateNodeContent(initial, 'skill-md', currentInstructions) : initial;
+        } else if (hasStructure) {
+          return updateRootFolderName(prev, newName);
+        }
+        return prev;
+      });
+      return currentInstructions; // don't change instructions
+    });
+    prevNameRef.current = newName;
+  }, []);
 
-      const hasStructure = files.some(n => n.id === 'root');
-
-      if (!hasStructure && newName.trim()) {
-        const initial = createInitialStructure(newName);
-        setFiles(instructions ? updateNodeContent(initial, 'skill-md', instructions) : initial);
-      } else if (hasStructure) {
-        setFiles(prev => updateRootFolderName(prev, newName));
-      }
-
-      prevNameRef.current = newName;
-    },
-    [files, instructions],
-  );
-
-  const handleInstructionsChange = useCallback(
-    (newInstructions: string) => {
-      setInstructions(newInstructions);
-      const hasStructure = files.some(n => n.id === 'root');
+  const handleInstructionsChange = useCallback((newInstructions: string) => {
+    setInstructions(newInstructions);
+    setFiles(prev => {
+      const hasStructure = prev.some(n => n.id === 'root');
       if (hasStructure) {
-        setFiles(prev => updateNodeContent(prev, 'skill-md', newInstructions));
+        return updateNodeContent(prev, 'skill-md', newInstructions);
       }
-    },
-    [files],
-  );
+      return prev;
+    });
+  }, []);
+
+  const handleFieldsPopulated = useCallback(() => {
+    setShowForm(true);
+  }, []);
 
   const handleSave = useCallback(async () => {
     let filesToSave = files;
@@ -150,8 +165,6 @@ export function SkillEditDialog({
         description,
         visibility,
         instructions,
-        files: filesToSave,
-        workspaceId,
       });
       onSkillUpdated?.(result);
       onClose();
@@ -189,7 +202,7 @@ export function SkillEditDialog({
   return (
     <SideDialog
       dialogTitle={dialogTitle}
-      dialogDescription={isExistingSkill ? 'View or edit skill details' : 'Configure skill details'}
+      dialogDescription={isExistingSkill ? 'View or edit skill details' : 'Describe what your skill should do'}
       isOpen={isOpen}
       onClose={onClose}
       className="h-full"
@@ -218,87 +231,131 @@ export function SkillEditDialog({
         </div>
       </SideDialog.Top>
 
-      <SideDialog.Content className="h-full grid-rows-[1fr_auto] overflow-hidden">
-        {mode === 'simple' ? (
-          <div className="flex flex-col h-full">
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <SkillSimpleForm
-                name={name}
-                onNameChange={handleNameChange}
-                description={description}
-                onDescriptionChange={setDescription}
-                visibility={visibility}
-                onVisibilityChange={setVisibility}
-                instructions={instructions}
-                onInstructionsChange={handleInstructionsChange}
-                readOnly={isReadOnly}
-              />
-
-              {!isReadOnly && !hasFilesystem && workspaceId && (
-                <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>The selected workspace has no filesystem configured. Skill files cannot be written.</span>
-                </div>
-              )}
-
-              {!isReadOnly && isAdmin && (
-                <button
-                  onClick={() => setMode('advanced')}
-                  className="mt-4 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  Advanced mode
-                  <ChevronRight className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
-            {!isReadOnly && (
-              <div className="shrink-0 pt-4 border-t border-border1">
-                <SkillChatComposer
-                  sessionKey={chatSessionKey}
-                  onNameChange={handleNameChange}
-                  onDescriptionChange={setDescription}
-                  onInstructionsChange={handleInstructionsChange}
-                  onVisibilityChange={setVisibility}
-                />
-              </div>
-            )}
-          </div>
+      <SideDialog.Content className="h-full overflow-y-auto">
+        {isReadOnly ? (
+          /* View mode — just show the form */
+          <SkillSimpleForm
+            name={name}
+            onNameChange={handleNameChange}
+            description={description}
+            onDescriptionChange={setDescription}
+            visibility={visibility}
+            onVisibilityChange={setVisibility}
+            instructions={instructions}
+            onInstructionsChange={handleInstructionsChange}
+            readOnly
+          />
         ) : (
-          <div className="flex flex-col h-full">
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {!isReadOnly && isAdmin && (
+          /* Create/Edit mode — single scrollable column: chat on top, form below */
+          <div className="flex flex-col gap-4">
+            {/* Chat section — always on top */}
+            <SkillChatComposer
+              sessionKey={chatSessionKey}
+              hasFields={hasFields}
+              onFieldsPopulated={handleFieldsPopulated}
+              formState={{ name, description, instructions, visibility }}
+              onNameChange={handleNameChange}
+              onDescriptionChange={setDescription}
+              onInstructionsChange={handleInstructionsChange}
+              onVisibilityChange={setVisibility}
+            />
+
+            {/* Form section — revealed after agent populates or user expands */}
+            {showForm ? (
+              <div className="border-t border-border1 pt-4">
                 <button
-                  onClick={() => setMode('simple')}
-                  className="mb-4 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                  onClick={() => setShowForm(false)}
+                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors mb-3"
                 >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Simple mode
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronDown className="h-3 w-3" />
+                  Hide skill details
                 </button>
-              )}
+                {mode === 'simple' ? (
+                  <>
+                    <SkillSimpleForm
+                      name={name}
+                      onNameChange={handleNameChange}
+                      description={description}
+                      onDescriptionChange={setDescription}
+                      visibility={visibility}
+                      onVisibilityChange={setVisibility}
+                      instructions={instructions}
+                      onInstructionsChange={handleInstructionsChange}
+                    />
 
-              <SkillFolder
-                files={files}
-                onChange={setFiles}
-                readOnly={isReadOnly}
-                workspaceId={workspaceId}
-                setWorkspaceId={setWorkspaceId}
-                workspaceOptions={workspaceOptions}
-              />
-            </div>
+                    {!hasFilesystem && workspaceId && (
+                      <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>The selected workspace has no filesystem configured. Skill files cannot be written.</span>
+                      </div>
+                    )}
 
-            {!isReadOnly && (
-              <div className="shrink-0 pt-4 border-t border-border1">
-                <SkillChatComposer
-                  sessionKey={chatSessionKey}
-                  onNameChange={handleNameChange}
-                  onDescriptionChange={setDescription}
-                  onInstructionsChange={handleInstructionsChange}
-                  onVisibilityChange={setVisibility}
-                />
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          // Ensure file tree has latest instructions before switching
+                          const hasStructure = files.some(n => n.id === 'root');
+                          if (!hasStructure && name.trim()) {
+                            setFiles(
+                              instructions
+                                ? updateNodeContent(createInitialStructure(name), 'skill-md', instructions)
+                                : createInitialStructure(name),
+                            );
+                          } else if (hasStructure && instructions) {
+                            setFiles(prev => updateNodeContent(prev, 'skill-md', instructions));
+                          }
+                          setMode('advanced');
+                        }}
+                        className="mt-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Advanced mode
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          // Pull SKILL.md edits back into the simple form
+                          const extracted = extractSkillInstructions(files);
+                          if (extracted) {
+                            setInstructions(extracted);
+                          }
+                          setMode('simple');
+                        }}
+                        className="mb-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Simple mode
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    )}
+                    <SkillFolder
+                      files={files}
+                      onChange={setFiles}
+                      readOnly={false}
+                      workspaceId={workspaceId}
+                      setWorkspaceId={setWorkspaceId}
+                      workspaceOptions={workspaceOptions}
+                    />
+                  </>
+                )}
               </div>
+            ) : (
+              hasFields && (
+                <div className="border-t border-border1 pt-3">
+                  <button
+                    onClick={() => setShowForm(true)}
+                    className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                    Show skill details
+                  </button>
+                </div>
+              )
             )}
           </div>
         )}

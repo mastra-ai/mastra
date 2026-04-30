@@ -3,6 +3,7 @@ import { useMemo, useRef } from 'react';
 import { z } from 'zod-v4';
 
 export const SKILL_BUILDER_TOOL_NAME = 'skillBuilderTool';
+export const SKILL_READER_TOOL_NAME = 'readSkillForm';
 
 export const SKILL_BUILDER_INSTRUCTIONS = `# Role
 You help a user build a skill: a focused set of instructions that gives an agent expertise in a specific area.
@@ -19,7 +20,10 @@ A good skill has:
 
 # How you work
 A form on the screen describes the skill being built.
-Use your client tool to update that form.
+You have two client tools:
+1. **readSkillForm** — read the current form values. Always call this before making changes so you know what's already there.
+2. **skillBuilderTool** — update one or more form fields.
+
 Do the work instead of explaining the work.
 
 Do not show:
@@ -28,6 +32,13 @@ Do not show:
 - tool inputs or outputs
 - hidden reasoning
 - long explanations
+
+# Important workflow
+When the user asks you to change, refine, or improve the skill:
+1. First call readSkillForm to see the current state.
+2. Then call skillBuilderTool with only the fields you want to change.
+
+When creating a brand new skill from scratch, you can skip the read and go straight to skillBuilderTool.
 
 # Skill design checklist
 When creating or improving a skill, define:
@@ -67,11 +78,18 @@ export interface SkillBuilderCallbacks {
   onVisibilityChange: (visibility: 'private' | 'public') => void;
 }
 
-export function useSkillBuilderTool(callbacks: SkillBuilderCallbacks) {
+export interface SkillFormState {
+  name: string;
+  description: string;
+  instructions: string;
+  visibility: 'private' | 'public';
+}
+
+export function useSkillBuilderTools(callbacks: SkillBuilderCallbacks, formStateRef: React.RefObject<SkillFormState>) {
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
 
-  return useMemo(
+  const writerTool = useMemo(
     () =>
       createTool({
         id: SKILL_BUILDER_TOOL_NAME,
@@ -101,4 +119,33 @@ export function useSkillBuilderTool(callbacks: SkillBuilderCallbacks) {
       }),
     [], // callbacks accessed via ref, stable tool identity
   );
+
+  const readerTool = useMemo(
+    () =>
+      createTool({
+        id: SKILL_READER_TOOL_NAME,
+        description:
+          'Read the current skill form values. Call this before making changes so you know what the user has on screen. ' +
+          'Returns the current name, description, instructions (markdown), and visibility.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          name: z.string(),
+          description: z.string(),
+          instructions: z.string(),
+          visibility: z.string(),
+        }),
+        execute: async () => {
+          const state = formStateRef.current;
+          return {
+            name: state.name || '',
+            description: state.description || '',
+            instructions: state.instructions || '',
+            visibility: state.visibility || 'private',
+          };
+        },
+      }),
+    [formStateRef],
+  );
+
+  return { writerTool, readerTool };
 }

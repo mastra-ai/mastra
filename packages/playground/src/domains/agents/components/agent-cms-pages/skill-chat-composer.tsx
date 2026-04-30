@@ -1,30 +1,70 @@
 import { Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { useChat } from '@mastra/react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 
 import {
   SKILL_BUILDER_INSTRUCTIONS,
   SKILL_BUILDER_TOOL_NAME,
-  useSkillBuilderTool,
+  SKILL_READER_TOOL_NAME,
+  useSkillBuilderTools,
 } from '../../hooks/use-skill-builder-tool';
-import type { SkillBuilderCallbacks } from '../../hooks/use-skill-builder-tool';
+import type { SkillBuilderCallbacks, SkillFormState } from '../../hooks/use-skill-builder-tool';
 import { ChatComposer } from '@/domains/agent-builder/components/chat-primitives/chat-composer';
 
 const BUILDER_AGENT_ID = 'builder-agent';
 
-interface SkillChatComposerProps extends SkillBuilderCallbacks {
+export interface SkillChatComposerProps extends SkillBuilderCallbacks {
   /** Reset key — when this changes the chat resets (e.g. dialog open/close) */
   sessionKey: string;
+  /** Whether the form fields have been populated at least once */
+  hasFields: boolean;
+  /** Callback when the agent populates fields for the first time */
+  onFieldsPopulated?: () => void;
+  /** Current form state — exposed to the agent via a read tool */
+  formState: SkillFormState;
 }
 
-export function SkillChatComposer({ sessionKey, ...callbacks }: SkillChatComposerProps) {
-  const skillBuilderTool = useSkillBuilderTool(callbacks);
+export function SkillChatComposer({
+  sessionKey,
+  hasFields,
+  onFieldsPopulated,
+  formState,
+  ...callbacks
+}: SkillChatComposerProps) {
+  const populatedRef = useRef(false);
 
-  const clientTools = useMemo(() => ({ [SKILL_BUILDER_TOOL_NAME]: skillBuilderTool }), [skillBuilderTool]);
+  // Keep form state in a ref so the reader tool always gets the latest values
+  const formStateRef = useRef(formState);
+  formStateRef.current = formState;
 
+  // Wrap callbacks to detect first population
+  const wrappedCallbacks = useMemo<SkillBuilderCallbacks>(
+    () => ({
+      onNameChange: (name: string) => {
+        callbacks.onNameChange(name);
+        if (!populatedRef.current) {
+          populatedRef.current = true;
+          onFieldsPopulated?.();
+        }
+      },
+      onDescriptionChange: callbacks.onDescriptionChange,
+      onInstructionsChange: callbacks.onInstructionsChange,
+      onVisibilityChange: callbacks.onVisibilityChange,
+    }),
+    [callbacks, onFieldsPopulated],
+  );
+
+  const { writerTool, readerTool } = useSkillBuilderTools(wrappedCallbacks, formStateRef);
+  const clientTools = useMemo(
+    () => ({
+      [SKILL_BUILDER_TOOL_NAME]: writerTool,
+      [SKILL_READER_TOOL_NAME]: readerTool,
+    }),
+    [writerTool, readerTool],
+  );
   const threadId = useMemo(() => `skill-builder-${sessionKey}`, [sessionKey]);
 
   const { messages, sendMessage, isRunning, setMessages } = useChat({ agentId: BUILDER_AGENT_ID });
@@ -34,6 +74,7 @@ export function SkillChatComposer({ sessionKey, ...callbacks }: SkillChatCompose
   useEffect(() => {
     if (prevSessionRef.current !== sessionKey) {
       prevSessionRef.current = sessionKey;
+      populatedRef.current = false;
       setMessages([]);
     }
   }, [sessionKey, setMessages]);
@@ -64,10 +105,31 @@ export function SkillChatComposer({ sessionKey, ...callbacks }: SkillChatCompose
     }
   }, []);
 
+  const hasMessages = messages.length > 0;
+
   return (
     <div className="flex flex-col gap-3">
-      {/* Minimal message display */}
-      {messages.length > 0 && <SkillMessages messages={messages} isRunning={isRunning} />}
+      {/* Empty state — only when no messages yet */}
+      {!hasMessages && (
+        <div className="flex flex-col items-center justify-center gap-3 text-center px-6 py-8">
+          <div className="rounded-full bg-accent5/10 p-3">
+            <Sparkles className="h-6 w-6 text-accent5" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Txt variant="ui-md" className="text-neutral5 font-medium" as="p">
+              {hasFields ? 'Refine your skill' : 'Describe your skill'}
+            </Txt>
+            <Txt variant="ui-sm" className="text-neutral3" as="p">
+              {hasFields
+                ? 'Ask the agent to adjust the name, description, instructions, or visibility.'
+                : 'Tell the agent what this skill should do and it will fill in the details for you.'}
+            </Txt>
+          </div>
+        </div>
+      )}
+
+      {/* Messages */}
+      {hasMessages && <SkillMessages messages={messages} isRunning={isRunning} />}
 
       {/* Composer */}
       <ChatComposer
@@ -78,71 +140,73 @@ export function SkillChatComposer({ sessionKey, ...callbacks }: SkillChatCompose
         disabled={isRunning}
         canSubmit={!!trimmed && !isRunning}
         isRunning={isRunning}
-        placeholder="Describe your skill…"
+        placeholder={hasFields ? 'Ask the agent to refine…' : 'Describe your skill…'}
         tone="info"
       />
     </div>
   );
 }
 
-/** Compact message list — shows only user prompts + assistant text responses */
+/** Compact message list — renders inline, no flex-1 stretching */
 function SkillMessages({ messages, isRunning }: { messages: MastraUIMessage[]; isRunning: boolean }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [messages, isRunning]);
 
+  // Check if the assistant has any visible text content yet
   const lastMessage = messages[messages.length - 1];
-  const isStreaming =
-    lastMessage?.role === 'assistant' &&
-    lastMessage.parts.some(p => (p.type === 'text' || p.type === 'reasoning') && (p as any).state === 'streaming');
-  const showPending = isRunning && !isStreaming && lastMessage?.role !== 'assistant';
+  const hasAssistantText =
+    lastMessage?.role === 'assistant' && lastMessage.parts.some(p => p.type === 'text' && p.text?.trim());
 
   return (
-    <div ref={scrollRef} className="max-h-[200px] overflow-y-auto flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       {messages.map(msg => (
         <SkillMessageRow key={msg.id} message={msg} />
       ))}
-      {showPending && (
-        <Txt variant="ui-sm" className="text-neutral3 flex items-center gap-1.5" as="div">
-          <Loader2 className="animate-spin size-3" />
-          Thinking…
-        </Txt>
-      )}
+      {isRunning && !hasAssistantText && <ThinkingIndicator />}
+      <div ref={endRef} />
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-2 text-neutral3 px-1">
+      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      <Txt variant="ui-sm" className="text-neutral3">
+        Building your skill…
+      </Txt>
     </div>
   );
 }
 
 function SkillMessageRow({ message }: { message: MastraUIMessage }) {
+  const textParts = message.parts.filter(p => p.type === 'text' && p.text?.trim());
+
+  if (textParts.length === 0) return null;
+
+  const isUser = message.role === 'user';
+
   return (
-    <>
-      {message.parts.map((part, i) => {
-        const key = `${message.id}-${i}`;
-        if (part.type === 'text' && part.text) {
-          if (message.role === 'user') {
-            return (
-              <div key={key} className="flex justify-end">
-                <Txt
-                  variant="ui-sm"
-                  className="whitespace-pre-wrap bg-white text-black rounded-xl px-3 py-1.5 max-w-[85%]"
-                  as="div"
-                >
-                  {part.text}
-                </Txt>
-              </div>
-            );
-          }
-          return (
-            <Txt key={key} variant="ui-sm" className="whitespace-pre-wrap text-neutral4 max-w-[85%]" as="div">
-              <Markdown>{part.text}</Markdown>
-            </Txt>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+          isUser ? 'bg-accent5/15 text-neutral5' : 'bg-surface3 text-neutral4'
+        }`}
+      >
+        {textParts.map((part, i) => {
+          const text = 'text' in part ? (part.text as string) : '';
+          return isUser ? (
+            <span key={i}>{text}</span>
+          ) : (
+            <Markdown key={i} components={{ p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p> }}>
+              {text}
+            </Markdown>
           );
-        }
-        // Hide tool call/result parts — they're just the form updates
-        return null;
-      })}
-    </>
+        })}
+      </div>
+    </div>
   );
 }
