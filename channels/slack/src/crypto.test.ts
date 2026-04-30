@@ -82,9 +82,7 @@ describe('verifySlackRequest', () => {
 
   function makeSignature(secret: string, ts: string, b: string): string {
     const { createHmac } = require('crypto');
-    const sig = createHmac('sha256', secret)
-      .update(`v0:${ts}:${b}`)
-      .digest('hex');
+    const sig = createHmac('sha256', secret).update(`v0:${ts}:${b}`).digest('hex');
     return `v0=${sig}`;
   }
 

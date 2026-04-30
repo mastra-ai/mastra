@@ -81,9 +81,7 @@ describe('SlackManifestClient', () => {
     });
 
     it('deduplicates concurrent rotations (shared promise)', async () => {
-      mockFetch.mockResolvedValue(
-        jsonResponse({ ok: true, token: 'rotated-token', refresh_token: 'rotated-refresh' }),
-      );
+      mockFetch.mockResolvedValue(jsonResponse({ ok: true, token: 'rotated-token', refresh_token: 'rotated-refresh' }));
 
       // Fire 3 concurrent rotations
       const results = await Promise.all([client.rotateToken(), client.rotateToken(), client.rotateToken()]);
@@ -204,7 +202,9 @@ describe('SlackManifestClient', () => {
         .mockResolvedValueOnce(jsonResponse({ ok: true, token: 'rt', refresh_token: 'rrt' }))
         .mockResolvedValueOnce(jsonResponse({ ok: true }));
 
-      await expect(client.updateApp('A123', { display_information: { name: 'Updated' } } as any)).resolves.toBeUndefined();
+      await expect(
+        client.updateApp('A123', { display_information: { name: 'Updated' } } as any),
+      ).resolves.toBeUndefined();
 
       expect(mockFetch.mock.calls[1]?.[0]).toContain('apps.manifest.update');
     });
