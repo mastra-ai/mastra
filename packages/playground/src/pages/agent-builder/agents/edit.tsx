@@ -11,6 +11,7 @@ import {
   ConversationPanelChat,
   ConversationPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
+import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
 import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
@@ -224,12 +225,13 @@ const AgentBuilderAgentEditReady = ({
         detailOpen={activeDetail !== null}
         showConfigure={isOwner}
         modeAction={
-          <div className="flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             <VisibilitySelectConnected />
             {isOwner && <PublishToSlackButton />}
           </div>
         }
         primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} onCancel={handleCancel} />}
+        mobileExtra={<AgentBuilderMobileMenuConnected showPublishToSlack={isOwner} />}
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected
@@ -250,6 +252,11 @@ const VisibilitySelectConnected = () => {
   return <VisibilitySelect disabled={isRunning} />;
 };
 
+const AgentBuilderMobileMenuConnected = ({ showPublishToSlack }: { showPublishToSlack: boolean }) => {
+  const isRunning = useStreamRunning();
+  return <AgentBuilderMobileMenu showSetVisibility showPublishToSlack={showPublishToSlack} disabled={isRunning} />;
+};
+
 interface HeaderActionsProps {
   mode: 'create' | 'edit';
   isSaving: boolean;
@@ -261,7 +268,7 @@ const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps)
   const isRunning = useStreamRunning();
   const disabled = isSaving || isRunning;
   return (
-    <>
+    <div className="flex items-center gap-2">
       {mode === 'edit' && (
         <Button
           size="sm"
@@ -269,6 +276,7 @@ const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps)
           onClick={onCancel}
           disabled={disabled}
           data-testid="agent-builder-edit-cancel"
+          className="hidden lg:inline-flex"
         >
           Cancel
         </Button>
@@ -276,6 +284,6 @@ const HeaderActions = ({ mode, isSaving, onSave, onCancel }: HeaderActionsProps)
       <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
         <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
       </Button>
-    </>
+    </div>
   );
 };

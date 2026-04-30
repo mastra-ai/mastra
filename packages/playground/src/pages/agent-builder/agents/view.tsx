@@ -10,6 +10,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
+import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
 import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
@@ -168,7 +169,7 @@ const AgentBuilderAgentViewReady = ({
         detailOpen={activeDetail !== null}
         showConfigure={isOwner}
         modeAction={
-          <div className="flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             <VisibilitySelect disabled />
             {isOwner && <PublishToSlackButton />}
           </div>
@@ -178,6 +179,7 @@ const AgentBuilderAgentViewReady = ({
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
           ) : undefined
         }
+        mobileExtra={isOwner ? <AgentBuilderMobileMenu showPublishToSlack /> : undefined}
         chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
         configure={
           <ConfigurePanelConnected

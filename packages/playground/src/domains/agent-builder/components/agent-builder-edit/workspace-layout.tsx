@@ -15,6 +15,8 @@ interface WorkspaceLayoutProps {
   creating?: boolean;
   modeAction?: ReactNode;
   primaryAction?: ReactNode;
+  /** Optional slot rendered AFTER primaryAction (e.g. mobile-only 3-dot menu). */
+  mobileExtra?: ReactNode;
   chat: ReactNode;
   configure: ReactNode;
   defaultExpanded?: boolean;
@@ -31,6 +33,7 @@ export const WorkspaceLayout = ({
   creating = false,
   modeAction,
   primaryAction,
+  mobileExtra,
   chat,
   configure,
   defaultExpanded = false,
@@ -50,7 +53,7 @@ export const WorkspaceLayout = ({
 
   return (
     <div className="flex flex-1 min-w-0 flex-col h-full">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4 md:px-10">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4 md:px-10">
         <div className="justify-self-start">
           <IconButton
             variant="ghost"
@@ -60,10 +63,16 @@ export const WorkspaceLayout = ({
             <ArrowLeftIcon />
           </IconButton>
         </div>
-        <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} mode={mode} creating={creating} />
+        <AgentBuilderBreadcrumb
+          className="min-w-0 lg:justify-self-center"
+          isLoading={isLoading}
+          mode={mode}
+          creating={creating}
+        />
         <div className="justify-self-end flex items-center gap-2 shrink-0">
           {modeAction && <div className="shrink-0">{modeAction}</div>}
-          {primaryAction && <div className="shrink-0 hidden lg:flex">{primaryAction}</div>}
+          {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
+          {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
           {showConfigure && (
             <div className="shrink-0 hidden lg:inline-flex">
               <IconButton
