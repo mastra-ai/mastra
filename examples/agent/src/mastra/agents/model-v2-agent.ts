@@ -594,7 +594,7 @@ export const subscriptionOrchestratorAgent = new Agent({
   backgroundTasks: {
     tools: {
       cryptoResearchAgent: true,
-    }
+    },
   },
   memory: new Memory(),
   defaultOptions: {

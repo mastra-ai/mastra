@@ -250,7 +250,7 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
               Add Skill from skills.sh
             </Button>
           )}
-          <Button size="lg" variant="light" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
+          <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
             <Icon>
               <BookOpen className="h-4 w-4" />
             </Icon>

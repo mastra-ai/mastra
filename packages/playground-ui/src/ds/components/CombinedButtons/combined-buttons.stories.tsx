@@ -69,8 +69,8 @@ export const IconOnly: Story = {
 export const SplitButton: Story = {
   render: () => (
     <CombinedButtons>
-      <Button variant="light">Save draft</Button>
-      <Button variant="light">
+      <Button variant="default">Save draft</Button>
+      <Button variant="default">
         <ChevronDown className="h-4 w-4" />
       </Button>
     </CombinedButtons>

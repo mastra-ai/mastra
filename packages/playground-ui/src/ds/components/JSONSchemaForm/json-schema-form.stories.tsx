@@ -251,7 +251,7 @@ export const CustomStyling: Story = {
                     <JSONSchemaForm.FieldOptional label="Optional field" labelClassName="text-neutral4" />
                     <JSONSchemaForm.FieldNullable label="Allow null" labelClassName="text-neutral4" />
                   </div>
-                  <JSONSchemaForm.FieldRemove variant="outline" size="md" tooltip="Remove this field" />
+                  <JSONSchemaForm.FieldRemove variant="outline" tooltip="Remove this field" />
                 </div>
               </JSONSchemaForm.Field>
             )}

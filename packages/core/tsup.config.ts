@@ -62,6 +62,7 @@ export default defineConfig({
     'src/zod-to-json.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
+    'src/agent/durable/index.ts',
     'src/auth/ee/index.ts',
     'src/storage/domains/agents/index.ts',
     'src/storage/domains/mcp-clients/index.ts',

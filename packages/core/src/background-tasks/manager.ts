@@ -558,7 +558,20 @@ export class BackgroundTaskManager {
     try {
       void this.runLocalExecutionHook(runningTask!);
       // Build onProgress callback that forwards to the task context hook
+      const progressThrottleMs = this.config.progressThrottleMs;
+      const shouldThrottleProgress =
+        typeof progressThrottleMs === 'number' && Number.isFinite(progressThrottleMs) && progressThrottleMs > 0;
+      let lastProgressEmitMs: number | undefined;
+
       const onProgress = async (chunk: any) => {
+        if (shouldThrottleProgress) {
+          const now = Date.now();
+          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) {
+            return;
+          }
+          lastProgressEmitMs = now;
+        }
+
         await this.publishLifecycleEvent('task.output', {
           ...task,
           chunk,

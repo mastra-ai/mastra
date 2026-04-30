@@ -288,6 +288,55 @@ describe('EditorMCPNamespace', () => {
       expect(result.servers['stdio-server']!.args).toEqual(['-y', '@example/tool']);
       expect(result.servers['stdio-server']!.env).toEqual({ KEY: 'value' });
     });
+
+    it('should forward requestInit to HTTP servers when provided', () => {
+      const requestInit = { headers: { Authorization: 'Bearer test-token' } };
+      const result = EditorMCPNamespace.toMCPClientOptions(
+        {
+          id: 'mcp-auth',
+          name: 'Auth Client',
+          status: 'published' as const,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          servers: {
+            'http-server': {
+              type: 'http',
+              url: 'https://api.example.com/mcp',
+            },
+            'stdio-server': {
+              type: 'stdio',
+              command: 'npx',
+              args: ['-y', '@example/tool'],
+            },
+          },
+        },
+        requestInit,
+      );
+
+      // HTTP server should have requestInit
+      expect(result.servers['http-server']!.requestInit).toEqual(requestInit);
+
+      // Stdio server should NOT have requestInit
+      expect(result.servers['stdio-server']!.requestInit).toBeUndefined();
+    });
+
+    it('should not include requestInit when not provided', () => {
+      const result = EditorMCPNamespace.toMCPClientOptions({
+        id: 'mcp-no-auth',
+        name: 'No Auth Client',
+        status: 'published' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        servers: {
+          'http-server': {
+            type: 'http',
+            url: 'https://api.example.com/mcp',
+          },
+        },
+      });
+
+      expect(result.servers['http-server']!.requestInit).toBeUndefined();
+    });
   });
 });
 
@@ -422,6 +471,54 @@ describe('Agent MCP tool resolution', () => {
     expect(tools['allowed-tool']).toBeDefined();
     expect(tools['blocked-tool']).toBeUndefined();
     expect(tools['another-blocked']).toBeUndefined();
+  });
+
+  it('should match tools by bare name when agent config uses non-namespaced names', async () => {
+    const mcpStore = await storage.getStore('mcpClients');
+    const agentsStore = await storage.getStore('agents');
+
+    await mcpStore?.create({
+      mcpClient: {
+        id: 'bare-name-mcp',
+        name: 'Bare Name MCP',
+        servers: {
+          support: { type: 'http', url: 'https://mcp.example.com' },
+        },
+      },
+    });
+
+    // The UI stores tools under bare names (e.g., "searchKnowledgeBase")
+    // while MCPClient returns them namespaced (e.g., "support_searchKnowledgeBase")
+    await agentsStore?.create({
+      agent: {
+        id: 'agent-bare-name',
+        name: 'Bare Name Agent',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4' },
+        mcpClients: {
+          'bare-name-mcp': {
+            tools: {
+              searchKnowledgeBase: { description: 'Search the KB' },
+            },
+          },
+        },
+      },
+    });
+
+    mockListTools.mockResolvedValue({
+      support_searchKnowledgeBase: { description: 'Original desc', execute: vi.fn() },
+      support_otherTool: { description: 'Other tool', execute: vi.fn() },
+    });
+
+    const agent = await editor.agent.getById('agent-bare-name');
+    const tools = await agent!.listTools();
+
+    // Tool should be matched by bare name and included
+    expect(tools['support_searchKnowledgeBase']).toBeDefined();
+    // Description override from agent config (bare name) should be applied
+    expect(tools['support_searchKnowledgeBase']!.description).toBe('Search the KB');
+    // Unselected tool should be excluded
+    expect(tools['support_otherTool']).toBeUndefined();
   });
 
   it('should apply tool description overrides from mcpClients config', async () => {

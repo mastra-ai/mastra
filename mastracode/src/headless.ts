@@ -257,7 +257,9 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
       process.stderr.write(event.output);
       break;
     case 'subagent_start':
-      process.stderr.write(`[subagent:${event.agentType}] ${truncate(event.task, 100)}\n`);
+      process.stderr.write(
+        `[subagent:${event.forked ? 'forked:' : ''}${event.agentType}] ${truncate(event.task, 100)}\n`,
+      );
       break;
     case 'subagent_end':
       if (event.isError) process.stderr.write(`[subagent error] ${truncate(event.result, 200)}\n`);
@@ -336,8 +338,8 @@ function finalizeSummary<TState extends Record<string, unknown>>(
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
-async function resolveThread(
-  harness: Harness,
+async function resolveThread<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
   const threads = await harness.listThreads();

@@ -1171,6 +1171,393 @@ Contains output from workflow step execution, used primarily for usage tracking 
 ]}
 />
 
+## Background task chunks
+
+Emitted when a tool call is dispatched as a [background task](/docs/agents/background-tasks) and `streamUntilIdle()` is used.
+
+### background-task-started
+
+Emitted when a tool call is enqueued as a background task and assigned a `taskId`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-started"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskStartedPayload',
+    description: 'Identifies the newly enqueued task',
+    properties: [
+      {
+        type: 'BackgroundTaskStartedPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool being executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-running
+
+Emitted when a worker picks up the task and execution begins.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-running"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskRunningPayload',
+    description: 'Details about the running task',
+    properties: [
+      {
+        type: 'BackgroundTaskRunningPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool being executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'startedAt',
+            type: 'Date',
+            description: 'Timestamp at which execution started',
+          },
+          {
+            name: 'args',
+            type: 'Record<string, unknown>',
+            description: "Arguments passed to the tool's execute function",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-progress
+
+Periodic snapshot of how many background tasks are currently running across the agent.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-progress"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskProgressPayload',
+    description: 'Aggregate progress for all running tasks',
+    properties: [
+      {
+        type: 'BackgroundTaskProgressPayload',
+        parameters: [
+          {
+            name: 'taskIds',
+            type: 'string[]',
+            description: 'IDs of all currently running background tasks',
+          },
+          {
+            name: 'runningCount',
+            type: 'number',
+            description: 'Number of background tasks currently running',
+          },
+          {
+            name: 'elapsedMs',
+            type: 'number',
+            description: 'Milliseconds elapsed since the agent run started',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-output
+
+A streamed output chunk emitted by the task's `execute` function. Wraps an inner [`tool-output`](#tool-output) chunk.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-output"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskOutputPayload',
+    description: 'Streamed output from the running task',
+    properties: [
+      {
+        type: 'BackgroundTaskOutputPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool being executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'payload',
+            type: 'ToolOutputChunk',
+            description: 'Inner tool-output chunk produced by the task',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-completed
+
+Emitted when the task finishes successfully. Triggers a continuation turn when consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle).
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-completed"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskResultPayload',
+    description: "The completed task's result",
+    properties: [
+      {
+        type: 'BackgroundTaskResultPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool that was executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'result',
+            type: 'unknown',
+            description: "The tool's resolved return value",
+          },
+          {
+            name: 'completedAt',
+            type: 'Date',
+            description: 'Timestamp at which the task completed',
+          },
+          {
+            name: 'isError',
+            type: 'boolean',
+            isOptional: true,
+            description: 'True when the tool returned an error result rather than throwing',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-failed
+
+Emitted when the task throws or times out. Triggers a continuation turn when consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle).
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-failed"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskFailedPayload',
+    description: 'Failure details for the task',
+    properties: [
+      {
+        type: 'BackgroundTaskFailedPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool that was executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'error',
+            type: '{ message: string }',
+            description: 'Error details thrown by the task',
+          },
+          {
+            name: 'completedAt',
+            type: 'Date',
+            description: 'Timestamp at which the task failed',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-cancelled
+
+Emitted when the task is cancelled before completing. Triggers a continuation turn when consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle).
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-cancelled"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskCancelledPayload',
+    description: 'Cancellation details for the task',
+    properties: [
+      {
+        type: 'BackgroundTaskCancelledPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool that was executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'completedAt',
+            type: 'Date',
+            description: 'Timestamp at which the task was cancelled',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
 ## Metadata and special chunks
 
 ### response-metadata

@@ -15,4 +15,6 @@ export const contentModules: Record<string, () => Promise<{ default: ComponentTy
   'how-memory-works': () => import('./content/how-memory-works.mdx'),
   'observational-memory': () => import('./content/observational-memory.mdx'),
   'guardrails-with-processors': () => import('./content/guardrails-with-processors.mdx'),
+  'deploy-to-mastra-platform': () => import('./content/deploy-to-mastra-platform.mdx'),
+  'chat-with-agent-in-slack': () => import('./content/chat-with-agent-in-slack.mdx'),
 }
