@@ -4,7 +4,8 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
-import { MessageList } from '../../agent/message-list';
+import { MessageList, messagesAreEqual } from '../../agent/message-list';
+import type { MessageInput } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
 import { RequestContext } from '../../di';
@@ -17,12 +18,19 @@ import type { ObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
 import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import {
+  summarizeActiveToolsForSpan,
+  summarizeProcessorModelForSpan,
+  summarizeProcessorResultForSpan,
+  summarizeProcessorToolsForSpan,
+  summarizeToolChoiceForSpan,
+} from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, LanguageModelUsage } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
@@ -147,6 +155,21 @@ function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
       typeof (obj as any).processOutputStep === 'function')
+  );
+}
+
+function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: unknown[] | undefined): boolean {
+  if (before === after) {
+    return true;
+  }
+
+  if (!before || !after) {
+    return before === after;
+  }
+
+  return (
+    before.length === after.length &&
+    before.every((message, index) => messagesAreEqual(message as MessageInput, after[index] as MessageInput))
   );
 }
 
@@ -285,7 +308,11 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    return createStepFromProcessor(params);
+    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
+      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+    };
+    step.providesSkillDiscovery = params.providesSkillDiscovery;
+    return step;
   }
 
   if (isStepParams(params)) {
@@ -751,6 +778,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
         messageId,
         rotateResponseMessageId,
         // Shared processor states map for accessing persisted state
@@ -763,6 +791,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
+      const initialMessageId = messageId;
       let currentMessageId = messageId;
       const rotateCurrentResponseMessageId = rotateResponseMessageId
         ? () => {
@@ -770,6 +799,152 @@ function createStepFromProcessor<TProcessorId extends string>(
             return currentMessageId;
           }
         : undefined;
+      const defaultOutputResult: OutputResult = {
+        text: '',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: 'unknown',
+        steps: [],
+      };
+
+      const buildProcessorSpanInput = () => {
+        switch (phase) {
+          case 'input':
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(systemMessages ? { systemMessages } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          case 'inputStep': {
+            const summarizedModel = summarizeProcessorModelForSpan(model);
+            const summarizedTools = summarizeProcessorToolsForSpan(tools);
+            const summarizedToolChoice = summarizeToolChoiceForSpan(toolChoice, tools);
+            const summarizedActiveTools = summarizeActiveToolsForSpan(activeTools, tools);
+
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(systemMessages ? { systemMessages } : {}),
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(currentMessageId ? { messageId: currentMessageId } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+              ...(summarizedModel ? { model: summarizedModel } : {}),
+              ...(summarizedTools ? { tools: summarizedTools } : {}),
+              ...(summarizedToolChoice ? { toolChoice: summarizedToolChoice } : {}),
+              ...(summarizedActiveTools ? { activeTools: summarizedActiveTools } : {}),
+            };
+          }
+          case 'outputResult': {
+            const summarizedResult = summarizeProcessorResultForSpan(outputResult ?? defaultOutputResult);
+
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(summarizedResult ? { result: summarizedResult } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          }
+          case 'outputStep':
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(systemMessages ? { systemMessages } : {}),
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(finishReason !== undefined ? { finishReason } : {}),
+              ...(text !== undefined ? { text } : {}),
+              ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          default:
+            return undefined;
+        }
+      };
+
+      const buildProcessorSpanOutput = (result: unknown) => {
+        if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+          return result;
+        }
+
+        const payload = result as Record<string, unknown>;
+        switch (phase) {
+          case 'input':
+            return {
+              ...(Array.isArray(payload.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+                ? { messages: payload.messages }
+                : {}),
+              ...(Array.isArray(payload.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+                ? { systemMessages: payload.systemMessages }
+                : {}),
+            };
+          case 'inputStep': {
+            const output: Record<string, unknown> = {};
+
+            if (
+              Array.isArray(payload.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+            ) {
+              output.messages = payload.messages;
+            }
+
+            if (
+              Array.isArray(payload.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+            ) {
+              output.systemMessages = payload.systemMessages;
+            }
+
+            if (payload.messageId !== undefined && payload.messageId !== initialMessageId) {
+              output.messageId = payload.messageId;
+            }
+
+            if (payload.model !== undefined && payload.model !== model) {
+              const summarizedModel = summarizeProcessorModelForSpan(payload.model);
+              if (summarizedModel) {
+                output.model = summarizedModel;
+              }
+            }
+
+            if (payload.tools !== undefined && payload.tools !== tools) {
+              const summarizedTools = summarizeProcessorToolsForSpan(payload.tools);
+              if (summarizedTools) {
+                output.tools = summarizedTools;
+              }
+            }
+
+            if (payload.toolChoice !== undefined && payload.toolChoice !== toolChoice) {
+              const summarizedToolChoice = summarizeToolChoiceForSpan(payload.toolChoice, payload.tools ?? tools);
+              if (summarizedToolChoice) {
+                output.toolChoice = summarizedToolChoice;
+              }
+            }
+
+            if (payload.activeTools !== undefined && payload.activeTools !== activeTools) {
+              const summarizedActiveTools = summarizeActiveToolsForSpan(payload.activeTools, payload.tools ?? tools);
+              if (summarizedActiveTools) {
+                output.activeTools = summarizedActiveTools;
+              }
+            }
+
+            if (payload.retryCount !== undefined && payload.retryCount !== retryCount) {
+              output.retryCount = payload.retryCount;
+            }
+
+            return output;
+          }
+          case 'outputResult':
+          case 'outputStep':
+            return {
+              ...(Array.isArray(payload.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+                ? { messages: payload.messages }
+                : {}),
+              ...(Array.isArray(payload.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+                ? { systemMessages: payload.systemMessages }
+                : {}),
+            };
+          default:
+            return undefined;
+        }
+      };
 
       // Early return if processor doesn't implement this phase - no span created
       // This prevents empty spans for phases the processor doesn't handle
@@ -798,7 +973,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityType: getProcessorEntityType(phase),
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
-              input: { phase, messageCount: messages?.length },
+              input: buildProcessorSpanInput(),
               attributes: {
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
@@ -857,7 +1032,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         stepNumber,
         systemMessages,
         streamParts,
-        state,
+        state: processorState,
+        processorStates,
         result: outputResult,
         finishReason,
         toolCalls,
@@ -872,6 +1048,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
@@ -882,7 +1059,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
           const result = await executeWithContext({ span: processorSpan, fn });
-          processorSpan?.end({ output: result });
+          processorSpan?.end({ output: buildProcessorSpanOutput(result) });
           return result;
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
@@ -1052,22 +1229,12 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
-                  input: { phase, streamParts: [] },
                   attributes: {
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
                   },
                 });
                 mutableState[spanKey] = processorSpan;
-              }
-
-              // Update span with current chunk data
-              if (processorSpan) {
-                processorSpan.input = {
-                  phase,
-                  streamParts: streamParts ?? [],
-                  totalChunks: (streamParts ?? []).length,
-                };
               }
 
               // Create observability context with processor span for internal agent calls
@@ -1090,7 +1257,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
-                  processorSpan?.end({ output: result });
+                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
                   delete mutableState[spanKey];
                 }
               } catch (error) {
@@ -1200,6 +1367,11 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultUsage: LanguageModelUsage = {
+                inputTokens: undefined,
+                outputTokens: undefined,
+                totalTokens: undefined,
+              };
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -1208,6 +1380,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 finishReason,
                 toolCalls: toolCalls as any,
                 text,
+                usage: (usage as LanguageModelUsage) ?? defaultUsage,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
               });

@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export type TabsRootProps<T extends string> = {
   children: React.ReactNode;

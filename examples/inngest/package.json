@@ -13,7 +13,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc",
+  "packageManager": "pnpm@10.18.2",
   "dependencies": {
     "@hono/node-server": "^1.19.8",
     "@inngest/realtime": "^0.4.5",
@@ -23,9 +23,9 @@
     "@mastra/libsql": "1.0.0-beta.11",
     "@mastra/loggers": "1.0.0-beta.4",
     "@mastra/observability": "1.0.0-beta.10",
-    "inngest": "^3.49.0",
+    "inngest": "^3.50.0",
     "mastra": "1.0.0-beta.13",
-    "zod": "^4.3.6"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {

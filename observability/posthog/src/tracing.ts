@@ -483,6 +483,14 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   private formatMessages(data: SpanData, defaultRole: 'user' | 'assistant' = 'user'): PostHogMessage[] {
+    // Unwrap {messages: [...]} wrapper produced by generation span inputs
+    if (typeof data === 'object' && data !== null && !Array.isArray(data) && 'messages' in data) {
+      const wrapped = (data as Record<string, unknown>).messages;
+      if (this.isMessageArray(wrapped)) {
+        return wrapped.map(msg => this.normalizeMessage(msg));
+      }
+    }
+
     if (this.isMessageArray(data)) {
       return data.map(msg => this.normalizeMessage(msg));
     }
@@ -506,6 +514,14 @@ export class PosthogExporter extends TrackingExporter<
       return [{ role: 'assistant', content }];
     }
 
+    // Extract text from output objects (e.g. generation outputs with text but no tool calls)
+    if (typeof data === 'object' && data !== null && !Array.isArray(data) && 'text' in data) {
+      const text = (data as Record<string, unknown>).text;
+      if (typeof text === 'string') {
+        return [{ role: defaultRole, content: [{ type: 'text', text }] }];
+      }
+    }
+
     return [{ role: defaultRole, content: [{ type: 'text', text: this.safeStringify(data) }] }];
   }
 
@@ -518,7 +534,7 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   private isMessageArray(data: unknown): data is MastraMessage[] {
-    if (!Array.isArray(data) || data.length === 0) {
+    if (!Array.isArray(data)) {
       return false;
     }
 

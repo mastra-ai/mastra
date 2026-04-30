@@ -13,78 +13,67 @@
 import type {
   ObservabilityExporter,
   ObservabilityBridge,
-  TracingEvent,
   ObservabilityEvent,
-  ExportedMetric,
-  MetricEvent,
+  SerializationOptions,
 } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
 
-import { AutoExtractedMetrics } from '../metrics/auto-extract';
-import { CardinalityFilter } from '../metrics/cardinality';
+import type { DeepCleanOptions } from '../spans/serialization';
+import { deepClean, mergeSerializationOptions } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
+
+/**
+ * Apply deepClean() to non-tracing observability events. Tracing events are
+ * already deep-cleaned at span construction time (see spans/base.ts and
+ * spans/default.ts), so they pass through unchanged.
+ *
+ * For log/metric/score/feedback we clean the entire exported payload object
+ * (not just the freeform sub-fields) so every user-supplied field — top-level
+ * strings like `message`/`reason`/`comment`, arrays like `tags`, nested
+ * `metadata`/`data`/`costMetadata`, and any future fields — is bounded,
+ * stripped of circular refs/functions/symbols, and safe for JSON.stringify
+ * before exporters or bridges see it.
+ *
+ * Identity scalars (timestamps, numeric score/value, IDs) are passed through
+ * by deepClean unchanged, so the cleaned object is structurally identical to
+ * the input for well-formed events.
+ */
+function cleanEvent(event: ObservabilityEvent, options: DeepCleanOptions): ObservabilityEvent {
+  switch (event.type) {
+    case 'log':
+      return { type: 'log', log: deepClean(event.log, options) };
+    case 'metric':
+      return { type: 'metric', metric: deepClean(event.metric, options) };
+    case 'score':
+      return { type: 'score', score: deepClean(event.score, options) };
+    case 'feedback':
+      return { type: 'feedback', feedback: deepClean(event.feedback, options) };
+    default:
+      // Tracing events are already cleaned at span construction.
+      return event;
+  }
+}
 
 /** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
 const MAX_FLUSH_ITERATIONS = 3;
 
-/** Type guard that narrows an ObservabilityEvent to a TracingEvent. */
-function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
-  return (
-    event.type === TracingEventType.SPAN_STARTED ||
-    event.type === TracingEventType.SPAN_UPDATED ||
-    event.type === TracingEventType.SPAN_ENDED
-  );
-}
-
-/** Configuration for the ObservabilityBus. */
-export interface ObservabilityBusConfig {
-  /** Cardinality filter applied to all metric labels. When omitted, a default filter is used. */
-  cardinalityFilter?: CardinalityFilter;
-  /** Whether to auto-extract metrics from tracing spans (duration, token usage). Defaults to true. */
-  autoExtractMetrics?: boolean;
-}
-
 /**
  * Unified event bus for all observability signals (tracing, logs, metrics, scores, feedback).
- * Routes events to registered exporters and an optional bridge, with support for
- * auto-extracted metrics from tracing spans.
+ * Routes events to registered exporters and an optional bridge.
  */
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
   private bridge?: ObservabilityBridge;
-  private autoExtractor?: AutoExtractedMetrics;
-  private cardinalityFilter: CardinalityFilter;
 
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
 
-  constructor(config?: ObservabilityBusConfig) {
+  /** Resolved deepClean options applied to non-tracing events before fan-out. */
+  private deepCleanOptions: DeepCleanOptions;
+
+  constructor(opts?: { serializationOptions?: SerializationOptions }) {
     super({ name: 'ObservabilityBus' });
-    this.cardinalityFilter = config?.cardinalityFilter ?? new CardinalityFilter();
-    if (config?.autoExtractMetrics !== false) {
-      this.autoExtractor = new AutoExtractedMetrics(this);
-    }
-  }
-
-  /**
-   * Emit a metric event with validation and cardinality filtering.
-   * Non-finite or negative values are silently dropped.
-   * This is the single entry point for all metric emission (auto-extracted and user-defined).
-   */
-  emitMetric(name: string, value: number, labels: Record<string, string>): void {
-    if (!Number.isFinite(value) || value < 0) return;
-
-    const filteredLabels = this.cardinalityFilter.filterLabels(labels);
-    const exportedMetric: ExportedMetric = {
-      timestamp: new Date(),
-      name,
-      value,
-      labels: filteredLabels,
-    };
-
-    const event: MetricEvent = { type: 'metric', metric: exportedMetric };
-    this.emit(event);
+    this.deepCleanOptions = mergeSerializationOptions(opts?.serializationOptions);
   }
 
   /**
@@ -157,35 +146,30 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Emit an event: route to exporter/bridge handlers, run auto-extraction,
-   * then forward to base class for subscriber delivery.
+   * Emit an event: route to exporter/bridge handlers, then forward to base
+   * class for subscriber delivery.
    *
    * emit() is synchronous — async handler promises are tracked internally
    * and can be drained via flush().
    */
   emit(event: ObservabilityEvent): void {
+    // Sanitize free-form payload fields on non-tracing signals before
+    // fanning out. Tracing events are already deep-cleaned at span
+    // construction, so cleanEvent() returns them unchanged.
+    const cleaned = cleanEvent(event, this.deepCleanOptions);
+
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      this.trackPromise(routeToHandler(exporter, event, this.logger));
+      this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
     }
 
     // Route to bridge (same routing logic as exporters)
     if (this.bridge) {
-      this.trackPromise(routeToHandler(this.bridge, event, this.logger));
-    }
-
-    // Auto-extract metrics from tracing events (duration, token usage).
-    // Wrapped in try-catch so a failing extractor never prevents subscriber delivery.
-    if (this.autoExtractor && isTracingEvent(event)) {
-      try {
-        this.autoExtractor.processTracingEvent(event);
-      } catch (err) {
-        this.logger.error('[ObservabilityBus] Auto-extraction error:', err);
-      }
+      this.trackPromise(routeToHandler(this.bridge, cleaned, this.logger));
     }
 
     // Deliver to subscribers (base class tracks its own pending promises)
-    super.emit(event);
+    super.emit(cleaned);
   }
 
   /**

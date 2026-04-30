@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { emitWorkspaceMetadata, requireWorkspace } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const searchInputSchema = z.object({
   query: z.string().describe('The search query string'),
@@ -22,31 +23,44 @@ export const searchTool = createTool({
     const workspace = requireWorkspace(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SEARCH.SEARCH);
 
-    // Resolve effective mode before searching — fall back gracefully if requested
-    // mode isn't supported (e.g. 'hybrid' requested but only BM25 configured)
-    const effectiveMode =
-      mode === 'hybrid' && !workspace.canHybrid
-        ? workspace.canVector
-          ? 'vector'
-          : 'bm25'
-        : mode === 'vector' && !workspace.canVector
-          ? 'bm25'
-          : (mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25'));
-
-    const results = await workspace.search(query, {
-      topK,
-      mode: effectiveMode as 'bm25' | 'vector' | 'hybrid' | undefined,
-      minScore,
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'search',
+      operation: 'search',
+      input: { query, topK, mode, minScore },
+      attributes: {},
     });
 
-    const lines = results.map(r => {
-      const lineInfo = r.lineRange ? `:${r.lineRange.start}-${r.lineRange.end}` : '';
-      return `${r.id}${lineInfo}: ${r.content}`;
-    });
+    try {
+      // Resolve effective mode before searching — fall back gracefully if requested
+      // mode isn't supported (e.g. 'hybrid' requested but only BM25 configured)
+      const effectiveMode =
+        mode === 'hybrid' && !workspace.canHybrid
+          ? workspace.canVector
+            ? 'vector'
+            : 'bm25'
+          : mode === 'vector' && !workspace.canVector
+            ? 'bm25'
+            : (mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25'));
 
-    lines.push('---');
-    lines.push(`${results.length} result${results.length !== 1 ? 's' : ''} (${effectiveMode} search)`);
+      const results = await workspace.search(query, {
+        topK,
+        mode: effectiveMode as 'bm25' | 'vector' | 'hybrid' | undefined,
+        minScore,
+      });
 
-    return lines.join('\n');
+      const lines = results.map(r => {
+        const lineInfo = r.lineRange ? `:${r.lineRange.start}-${r.lineRange.end}` : '';
+        return `${r.id}${lineInfo}: ${r.content}`;
+      });
+
+      lines.push('---');
+      lines.push(`${results.length} result${results.length !== 1 ? 's' : ''} (${effectiveMode} search)`);
+
+      span.end({ success: true }, { resultCount: results.length });
+      return lines.join('\n');
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });

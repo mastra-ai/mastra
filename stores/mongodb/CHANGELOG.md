@@ -1,5 +1,301 @@
 # @mastra/mongodb
 
+## 1.7.4-alpha.0
+
+### Patch Changes
+
+- Removed unsupported `minScore` query option from MongoDB vector store docs and README. Exported `MongoDBQueryVectorParams` so callers can type `documentFilter` for `MongoDBVector.query()`. ([#15936](https://github.com/mastra-ai/mastra/pull/15936))
+
+  Fixes #15715
+
+- Updated dependencies [[`1723e09`](https://github.com/mastra-ai/mastra/commit/1723e099829892419ddbfe49287acfeac2522724), [`629f9e9`](https://github.com/mastra-ai/mastra/commit/629f9e9a7e56aa8f129515a3923c5813298790c7), [`25168fb`](https://github.com/mastra-ai/mastra/commit/25168fb9c1de9db7f8171df4f58ceb842c53aa29), [`ab34b5a`](https://github.com/mastra-ai/mastra/commit/ab34b5a2191b8e4353df1dbf7b9155e7d6628d79), [`5fb6c2a`](https://github.com/mastra-ai/mastra/commit/5fb6c2a95c1843cc231704b91354311fc1f34a71), [`394f0cf`](https://github.com/mastra-ai/mastra/commit/394f0cfc31e6b4d801219fdef2e9cc69e5bc8682), [`3d7f709`](https://github.com/mastra-ai/mastra/commit/3d7f709b615e588050bb6283c4ee5cfe2978cbde), [`48a42f1`](https://github.com/mastra-ai/mastra/commit/48a42f114a4006a95e0b7a1b5ad1a24815a175c2), [`2c83efc`](https://github.com/mastra-ai/mastra/commit/2c83efc4482b3efe50830e3b8b4ba9a8d219edff), [`282a10c`](https://github.com/mastra-ai/mastra/commit/282a10c9446e9922afe80e10e3770481c8ac8a28)]:
+  - @mastra/core@1.31.0-alpha.0
+
+## 1.7.3
+
+### Patch Changes
+
+- Replace `uuid` with `@lukeed/uuid` and `node:crypto` ([#15691](https://github.com/mastra-ai/mastra/pull/15691))
+
+- Updated dependencies [[`733bf53`](https://github.com/mastra-ai/mastra/commit/733bf53d9352aedd3ef38c3d501edb275b65b43c), [`5405b3b`](https://github.com/mastra-ai/mastra/commit/5405b3b35325c5b8fb34fc7ac109bd2feb7bb6fe), [`45e29cb`](https://github.com/mastra-ai/mastra/commit/45e29cb5b5737f3083eb3852db02b944b9cf37ed), [`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9), [`c321127`](https://github.com/mastra-ai/mastra/commit/c3211275fc195de9ad1ead2746b354beb8eae6e8), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1), [`696694e`](https://github.com/mastra-ai/mastra/commit/696694e00f29241a25dd1a1b749afa06c3a626b4), [`b084a80`](https://github.com/mastra-ai/mastra/commit/b084a800db0f82d62e1fc3d6e3e3480da1ba5a53), [`82b7a96`](https://github.com/mastra-ai/mastra/commit/82b7a964169636c1d1e0c694fc892a213b0179d5), [`df97812`](https://github.com/mastra-ai/mastra/commit/df97812bd949dcafeb074b80ecab501724b49c3b), [`8bbe360`](https://github.com/mastra-ai/mastra/commit/8bbe36042af7fc4be0244dffd8913f6795179421), [`f6b8ba8`](https://github.com/mastra-ai/mastra/commit/f6b8ba8dbf533b7a8db90c72b6805ddc804a3a72), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1)]:
+  - @mastra/core@1.28.0
+
+## 1.7.2
+
+### Patch Changes
+
+- Add `BackgroundTasksStorage` domain implementation so `@mastra/core` background task execution works with any storage adapter. ([#15307](https://github.com/mastra-ai/mastra/pull/15307))
+
+- Added `getTraceLight` method to the observability storage, returning only lightweight span fields needed for timeline rendering. This avoids transferring heavy fields like `input`, `output`, `attributes`, and `metadata` when they are not needed. ([#15574](https://github.com/mastra-ai/mastra/pull/15574))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`aba393e`](https://github.com/mastra-ai/mastra/commit/aba393e2da7390c69b80e516a4f153cda6f09376), [`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`a371ac5`](https://github.com/mastra-ai/mastra/commit/a371ac534aa1bb368a1acf9d8b313378dfdc787e), [`0474c2b`](https://github.com/mastra-ai/mastra/commit/0474c2b2e7c7e1ad8691dca031284841391ff1ef), [`0a5fa1d`](https://github.com/mastra-ai/mastra/commit/0a5fa1d3cb0583889d06687155f26fd7d2edc76c), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`ea43e64`](https://github.com/mastra-ai/mastra/commit/ea43e646dd95d507694b6112b0bf1df22ad552b2), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69), [`00d1b16`](https://github.com/mastra-ai/mastra/commit/00d1b16b401199cb294fa23f43336547db4dca9b), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e), [`62919a6`](https://github.com/mastra-ai/mastra/commit/62919a6ee0fbf3779ad21a97b1ec6696515d5104), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`16e34ca`](https://github.com/mastra-ai/mastra/commit/16e34caa98b9a114b17a6125e4e3fd87f169d0d0), [`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e), [`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1), [`c80dc16`](https://github.com/mastra-ai/mastra/commit/c80dc16e113e6cc159f510ffde501ad4711b2189), [`af8a57e`](https://github.com/mastra-ai/mastra/commit/af8a57ed9ba9685ad8601d5b71ae3706da6222f9), [`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e), [`1bd5104`](https://github.com/mastra-ai/mastra/commit/1bd51048b6da93507276d6623e3fd96a9e1a8944), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`92dcf02`](https://github.com/mastra-ai/mastra/commit/92dcf029294210ac91b090900c1a0555a425c57a), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0
+
+## 1.7.2-alpha.1
+
+### Patch Changes
+
+- Added `getTraceLight` method to the observability storage, returning only lightweight span fields needed for timeline rendering. This avoids transferring heavy fields like `input`, `output`, `attributes`, and `metadata` when they are not needed. ([#15574](https://github.com/mastra-ai/mastra/pull/15574))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
+## 1.7.2-alpha.0
+
+### Patch Changes
+
+- Add `BackgroundTasksStorage` domain implementation so `@mastra/core` background task execution works with any storage adapter. ([#15307](https://github.com/mastra-ai/mastra/pull/15307))
+
+- Updated dependencies [[`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c)]:
+  - @mastra/core@1.25.1-alpha.0
+
+## 1.7.1
+
+### Patch Changes
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` columns to observability storage tables (spans, metrics, scores, feedback, logs) for filtering and grouping traces by entity version. Added ALTER TABLE migrations for existing databases. Added `targetType`, `targetId`, `agentVersion`, and `status` filters to `listExperiments`, and `traceId` and `status` filters to `listExperimentResults`. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+
+## 1.7.1-alpha.0
+
+### Patch Changes
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` columns to observability storage tables (spans, metrics, scores, feedback, logs) for filtering and grouping traces by entity version. Added ALTER TABLE migrations for existing databases. Added `targetType`, `targetId`, `agentVersion`, and `status` filters to `listExperiments`, and `traceId` and `status` filters to `listExperimentResults`. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+
+## 1.7.0
+
+### Minor Changes
+
+- Implemented `updateObservationalMemoryConfig()` in Postgres, LibSQL, and MongoDB storage adapters. This enables per-record config overrides for observational memory thresholds, supporting the new `memory.updateObservationalMemoryConfig()` API in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+### Patch Changes
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Implemented `updateObservationalMemoryConfig()` in Postgres, LibSQL, and MongoDB storage adapters. This enables per-record config overrides for observational memory thresholds, supporting the new `memory.updateObservationalMemoryConfig()` API in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+### Patch Changes
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+
+## 1.6.2
+
+### Patch Changes
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`2b4ea10`](https://github.com/mastra-ai/mastra/commit/2b4ea10b053e4ea1ab232d536933a4a3c4cba999), [`a0544f0`](https://github.com/mastra-ai/mastra/commit/a0544f0a1e6bd52ac12676228967c1938e43648d), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6)]:
+  - @mastra/core@1.22.0
+
+## 1.6.2-alpha.0
+
+### Patch Changes
+
+- Added expectedTrajectory support to dataset items across all storage backends and API layer. Dataset items can now store trajectory expectations that define expected agent execution steps, ordering, and constraints for trajectory-based evaluation scoring. ([#14902](https://github.com/mastra-ai/mastra/pull/14902))
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054)]:
+  - @mastra/core@1.22.0-alpha.2
+
+## 1.6.1
+
+### Patch Changes
+
+- dependencies updates: ([#10188](https://github.com/mastra-ai/mastra/pull/10188))
+  - Updated dependency [`cloudflare@^5.2.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/5.2.0) (from `^4.5.0`, in `dependencies`)
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Added `scorerIds` persistence for datasets. The `scorerIds` field is now stored and retrieved correctly when creating or updating datasets. ([#14783](https://github.com/mastra-ai/mastra/pull/14783))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`fbf22a7`](https://github.com/mastra-ai/mastra/commit/fbf22a7ad86bcb50dcf30459f0d075e51ddeb468), [`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a), [`04160ee`](https://github.com/mastra-ai/mastra/commit/04160eedf3130003cf842ad08428c8ff69af4cc1), [`2c27503`](https://github.com/mastra-ai/mastra/commit/2c275032510d131d2cde47f99953abf0fe02c081), [`424a1df`](https://github.com/mastra-ai/mastra/commit/424a1df7bee59abb5c83717a54807fdd674a6224), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`12c88a6`](https://github.com/mastra-ai/mastra/commit/12c88a6e32bf982c2fe0c6af62e65a3414519a75), [`43595bf`](https://github.com/mastra-ai/mastra/commit/43595bf7b8df1a6edce7a23b445b5124d2a0b473), [`78670e9`](https://github.com/mastra-ai/mastra/commit/78670e97e76d7422cf7025faf371b2aeafed860d), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`d400e7c`](https://github.com/mastra-ai/mastra/commit/d400e7c8b8d7afa6ba2c71769eace4048e3cef8e), [`f58d1a7`](https://github.com/mastra-ai/mastra/commit/f58d1a7a457588a996c3ecb53201a68f3d28c432), [`a49a929`](https://github.com/mastra-ai/mastra/commit/a49a92904968b4fc67e01effee8c7c8d0464ba85), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0
+
+## 1.6.1-alpha.3
+
+### Patch Changes
+
+- Added `scorerIds` persistence for datasets. The `scorerIds` field is now stored and retrieved correctly when creating or updating datasets. ([#14783](https://github.com/mastra-ai/mastra/pull/14783))
+
+- Updated dependencies [[`fbf22a7`](https://github.com/mastra-ai/mastra/commit/fbf22a7ad86bcb50dcf30459f0d075e51ddeb468), [`04160ee`](https://github.com/mastra-ai/mastra/commit/04160eedf3130003cf842ad08428c8ff69af4cc1), [`2c27503`](https://github.com/mastra-ai/mastra/commit/2c275032510d131d2cde47f99953abf0fe02c081), [`424a1df`](https://github.com/mastra-ai/mastra/commit/424a1df7bee59abb5c83717a54807fdd674a6224), [`12c88a6`](https://github.com/mastra-ai/mastra/commit/12c88a6e32bf982c2fe0c6af62e65a3414519a75), [`43595bf`](https://github.com/mastra-ai/mastra/commit/43595bf7b8df1a6edce7a23b445b5124d2a0b473), [`78670e9`](https://github.com/mastra-ai/mastra/commit/78670e97e76d7422cf7025faf371b2aeafed860d), [`d400e7c`](https://github.com/mastra-ai/mastra/commit/d400e7c8b8d7afa6ba2c71769eace4048e3cef8e), [`f58d1a7`](https://github.com/mastra-ai/mastra/commit/f58d1a7a457588a996c3ecb53201a68f3d28c432), [`a49a929`](https://github.com/mastra-ai/mastra/commit/a49a92904968b4fc67e01effee8c7c8d0464ba85)]:
+  - @mastra/core@1.18.0-alpha.4
+
+## 1.6.1-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#10188](https://github.com/mastra-ai/mastra/pull/10188))
+  - Updated dependency [`cloudflare@^5.2.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/5.2.0) (from `^4.5.0`, in `dependencies`)
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0-alpha.3
+
+## 1.6.1-alpha.1
+
+### Patch Changes
+
+- The internal architecture of observational memory has been refactored. The public API and behavior remain unchanged. ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
+## 1.6.1-alpha.0
+
+### Patch Changes
+
+- **Refactored Observational Memory into modular architecture** ([#14453](https://github.com/mastra-ai/mastra/pull/14453))
+
+  Restructured the Observational Memory (OM) engine from a single ~3,800-line monolithic class into a modular, strategy-based architecture. The public API and behavior are unchanged — this is a purely internal refactor that improves maintainability, testability, and separation of concerns.
+
+  **Why** — The original `ObservationalMemory` class handled everything: orchestration, LLM calling, observation logic for three different scopes, reflection, buffering coordination, turn lifecycle, and message processing. This made it difficult to reason about individual behaviors, test them in isolation, or extend the system. The refactor separates these responsibilities into focused modules.
+
+  **Observation strategies** — Extracted three duplicated observation code paths (~650 lines of conditionals) into pluggable strategy classes sharing a common `prepare → process → persist` lifecycle via an abstract base class. The correct strategy is selected automatically based on scope and buffering configuration.
+
+  ```
+  observation-strategies/
+    base.ts            — abstract ObservationStrategy + StrategyDeps interface
+    sync.ts            — SyncObservationStrategy (thread-scoped synchronous)
+    async-buffer.ts    — AsyncBufferObservationStrategy (background buffered)
+    resource-scoped.ts — ResourceScopedObservationStrategy (multi-thread)
+    index.ts           — static factory: ObservationStrategy.create(om, opts)
+  ```
+
+  ```ts
+  // Internal usage — strategies are selected and run automatically:
+  const strategy = ObservationStrategy.create(om, {
+    record,
+    threadId,
+    resourceId,
+    messages,
+    cycleId,
+    startedAt,
+  });
+  const result = await strategy.run();
+  ```
+
+  **Turn/Step abstraction** — Introduced `ObservationTurn` and `StepContext` to model the lifecycle of a single agent interaction. A Turn manages message loading, system message injection, record caching, and cleanup. A Step handles per-generation observation, activation, and reflection decisions. This replaced ~580 lines of inline orchestration in the processor with ~170 lines of structured calls.
+
+  ```ts
+  // Internal lifecycle managed by the processor:
+  const turn = new ObservationTurn(om, memory, { threadId, resourceId });
+  await turn.start(messageList, writer); // loads history, injects OM system message
+
+  const step = turn.step(0);
+  await step.prepare(messageList, writer); // activate buffered, maybe reflect
+  // ... agent generates response ...
+  await step.complete(messageList, writer); // observe new messages, buffer if needed
+
+  await turn.end(messageList, writer); // persist, cleanup
+  ```
+
+  **Dedicated runners** — Moved observer and reflector LLM-calling logic into `ObserverRunner` (194 lines) and `ReflectorRunner` (710 lines), separating prompt construction, degenerate output detection, retry logic, and compression level escalation from orchestration. `BufferingCoordinator` (175 lines) extracts the static buffering state machine and async operation tracking.
+
+  **Processor** — Added `ObservationalMemoryProcessor` implementing the `Processor` interface, bridging the OM engine with the AI SDK message pipeline. It owns the decision of _when_ to buffer, activate, observe, and reflect — while the OM engine owns _how_ to do each operation.
+
+  ```ts
+  // The processor is created automatically by Memory when OM is enabled.
+  // It plugs into the AI SDK message pipeline:
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model, messageTokens: 500 },
+        reflection: { model, observationTokens: 10_000 },
+      },
+    },
+  });
+
+  // For direct access to the OM engine (e.g. for manual observe/buffer/activate):
+  const om = await memory.omEngine;
+  ```
+
+  **Unified OM engine instantiation** — Replaced the duplicated `getOMEngine()` singleton and per-call `createOMProcessor()` engine creation with a single lazy `omEngine` property on the `Memory` class. This eliminates config drift between the legacy `getContext()` API and the processor pipeline — both now share the same `ObservationalMemory` instance with the full configuration.
+
+  ```ts
+  // Before (casting required, config could drift):
+  const om = (await (memory as any).getOMEngine()) as ObservationalMemory;
+
+  // After (typed, single shared engine):
+  const om = await memory.omEngine;
+  ```
+
+  **Improved observation activation atomicity** — Added conditional WHERE clauses to `activateBufferedObservations` in all storage adapters (pg, libsql, mongodb) to prevent duplicate chunk swaps when concurrent processes attempt activation simultaneously. If chunks have already been cleared by another process, the operation returns early with zero counts instead of corrupting state.
+
+  **Compression start level from model context** — Integrated model-aware compression start levels into the `ReflectorRunner`. Models like `gemini-2.5-flash` that struggle with light compression now start at compression level 2 instead of 1, reducing wasted reflection retries.
+
+  **Pure function extraction** — Moved reusable helpers into `message-utils.ts`: `filterObservedMessages`, `getBufferedChunks`, `sortThreadsByOldestMessage`, `stripThreadTags`. Eliminated dead code including `isObserving` DB flag, `countMessageTokens`, `acquireObservingLock`/`releaseObservingLock`, and ~10 cascading dead private methods.
+
+  **Cleanup** — Dropped `threadIdCache` (pointless memoization), removed `as any` casts for private method access (made methods properly public with `@internal` tsdoc), replaced sealed-ID-based tracking with message-level `metadata.mastra.sealed` flag checks.
+
+- Updated dependencies [[`7302e5c`](https://github.com/mastra-ai/mastra/commit/7302e5ce0f52d769d3d63fb0faa8a7d4089cda6d)]:
+  - @mastra/core@1.16.1-alpha.1
+
+## 1.6.0
+
+### Minor Changes
+
+- Added datasets and experiments storage support to the MongoDB store. ([#14556](https://github.com/mastra-ai/mastra/pull/14556))
+
+  **Datasets** — Full dataset management with versioned items. Create, update, and delete datasets and their items with automatic version tracking. Supports batch insert/delete operations, time-travel queries to retrieve items at any past version, and item history tracking.
+
+  **Experiments** — Run and track experiments against datasets. Full CRUD for experiments and per-item experiment results, with pagination, filtering, and cascade deletion.
+
+  Both domains are automatically available when using `MongoDBStore` — no additional configuration needed.
+
+  ```ts
+  const store = new MongoDBStore({ uri: 'mongodb://localhost:27017', dbName: 'my-app' });
+
+  // Datasets
+  const dataset = await store.getStorage('datasets').createDataset({ name: 'my-dataset' });
+  await store.getStorage('datasets').addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+
+  // Experiments
+  const experiment = await store.getStorage('experiments').createExperiment({ name: 'run-1', datasetId: dataset.id });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`f14604c`](https://github.com/mastra-ai/mastra/commit/f14604c7ef01ba794e1a8d5c7bae5415852aacec), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`423aa6f`](https://github.com/mastra-ai/mastra/commit/423aa6fd12406de6a1cc6b68e463d30af1d790fb), [`f21c626`](https://github.com/mastra-ai/mastra/commit/f21c6263789903ab9720b4d11373093298e97f15), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4bb5adc`](https://github.com/mastra-ai/mastra/commit/4bb5adc05c88e3a83fe1ea5ecb9eae6e17313124), [`4bb5adc`](https://github.com/mastra-ai/mastra/commit/4bb5adc05c88e3a83fe1ea5ecb9eae6e17313124), [`e06b520`](https://github.com/mastra-ai/mastra/commit/e06b520bdd5fdef844760c5e692c7852cbc5c240), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777), [`dd9c4e0`](https://github.com/mastra-ai/mastra/commit/dd9c4e0a47962f1413e9b72114fcad912e19a0a6)]:
+  - @mastra/core@1.16.0
+
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added datasets and experiments storage support to the MongoDB store. ([#14556](https://github.com/mastra-ai/mastra/pull/14556))
+
+  **Datasets** — Full dataset management with versioned items. Create, update, and delete datasets and their items with automatic version tracking. Supports batch insert/delete operations, time-travel queries to retrieve items at any past version, and item history tracking.
+
+  **Experiments** — Run and track experiments against datasets. Full CRUD for experiments and per-item experiment results, with pagination, filtering, and cascade deletion.
+
+  Both domains are automatically available when using `MongoDBStore` — no additional configuration needed.
+
+  ```ts
+  const store = new MongoDBStore({ uri: 'mongodb://localhost:27017', dbName: 'my-app' });
+
+  // Datasets
+  const dataset = await store.getStorage('datasets').createDataset({ name: 'my-dataset' });
+  await store.getStorage('datasets').addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+
+  // Experiments
+  const experiment = await store.getStorage('experiments').createExperiment({ name: 'run-1', datasetId: dataset.id });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/core@1.16.0-alpha.2
+
 ## 1.5.6
 
 ### Patch Changes

@@ -55,6 +55,38 @@ export const NEW_ROUTE_DEFS = {
     description: 'Creates a single score record in the observability store',
   },
 
+  GET_SCORE_AGGREGATE: {
+    method: 'POST',
+    path: '/observability/scores/aggregate',
+    summary: 'Get score aggregate',
+    description: 'Returns an aggregated score value with optional period-over-period comparison',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_SCORE_BREAKDOWN: {
+    method: 'POST',
+    path: '/observability/scores/breakdown',
+    summary: 'Get score breakdown',
+    description: 'Returns score values grouped by specified dimensions',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_SCORE_TIME_SERIES: {
+    method: 'POST',
+    path: '/observability/scores/timeseries',
+    summary: 'Get score time series',
+    description: 'Returns score values bucketed by time interval with optional grouping',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_SCORE_PERCENTILES: {
+    method: 'POST',
+    path: '/observability/scores/percentiles',
+    summary: 'Get score percentiles',
+    description: 'Returns percentile values for a score bucketed by time interval',
+    requiresPermission: 'observability:read',
+  },
+
   LIST_FEEDBACK: {
     method: 'GET',
     path: '/observability/feedback',
@@ -67,6 +99,38 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'Create feedback',
     description: 'Creates a single feedback record in the observability store',
+  },
+
+  GET_FEEDBACK_AGGREGATE: {
+    method: 'POST',
+    path: '/observability/feedback/aggregate',
+    summary: 'Get feedback aggregate',
+    description: 'Returns an aggregated numeric feedback value with optional period-over-period comparison',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_FEEDBACK_BREAKDOWN: {
+    method: 'POST',
+    path: '/observability/feedback/breakdown',
+    summary: 'Get feedback breakdown',
+    description: 'Returns numeric feedback values grouped by specified dimensions',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_FEEDBACK_TIME_SERIES: {
+    method: 'POST',
+    path: '/observability/feedback/timeseries',
+    summary: 'Get feedback time series',
+    description: 'Returns numeric feedback values bucketed by time interval with optional grouping',
+    requiresPermission: 'observability:read',
+  },
+
+  GET_FEEDBACK_PERCENTILES: {
+    method: 'POST',
+    path: '/observability/feedback/percentiles',
+    summary: 'Get feedback percentiles',
+    description: 'Returns percentile values for numeric feedback bucketed by time interval',
+    requiresPermission: 'observability:read',
   },
 
   GET_METRIC_AGGREGATE: {

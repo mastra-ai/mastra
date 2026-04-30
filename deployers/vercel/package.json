@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "1.1.7-alpha.0",
+  "version": "1.1.24-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -44,7 +44,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

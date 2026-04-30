@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
 import { Bot, Workflow, Database, Settings } from 'lucide-react';
+import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
 
 const meta: Meta<typeof Entity> = {
   title: 'Composite/Entity',
@@ -16,7 +16,7 @@ type Story = StoryObj<typeof Entity>;
 
 export const Default: Story = {
   render: () => (
-    <Entity className="w-[300px]">
+    <Entity className="w-dropdown-max-height">
       <EntityIcon>
         <Bot />
       </EntityIcon>
@@ -30,7 +30,7 @@ export const Default: Story = {
 
 export const Clickable: Story = {
   render: () => (
-    <Entity className="w-[300px]" onClick={() => console.log('Entity clicked')}>
+    <Entity className="w-dropdown-max-height" onClick={() => console.log('Entity clicked')}>
       <EntityIcon>
         <Workflow />
       </EntityIcon>
@@ -62,7 +62,7 @@ export const WithCustomContent: Story = {
 
 export const EntityList: Story = {
   render: () => (
-    <div className="flex flex-col gap-2 w-[300px]">
+    <div className="flex flex-col gap-2 w-dropdown-max-height">
       <Entity onClick={() => console.log('Agent 1 clicked')}>
         <EntityIcon>
           <Bot />

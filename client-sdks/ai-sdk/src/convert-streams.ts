@@ -10,7 +10,7 @@ import type {
 } from '@internal/ai-v6';
 import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRunOutput } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
-import type { ZodObject, ZodType } from 'zod';
+import type { ZodObject, ZodType } from 'zod/v4';
 import type { V6UIMessageStream } from './public-types';
 import {
   AgentNetworkToAISDKTransformer,

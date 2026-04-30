@@ -13,6 +13,8 @@ export interface SSOLoginConfig {
   text: string;
   /** Optional icon URL */
   icon?: string;
+  /** Optional description explaining the auth requirement and what credentials to use */
+  description?: string;
 }
 
 /**

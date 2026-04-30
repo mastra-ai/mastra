@@ -8,7 +8,7 @@ import type {
   StreamEvent,
 } from '@internal/workflow-test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
@@ -616,6 +616,61 @@ describe('Workflow (Default Engine Specifics)', () => {
       // The tracingContext should exist in the snapshot (may be undefined if no observability was configured)
       // The key is that the field structure is preserved in the snapshot
       expect('tracingContext' in (snapshot ?? {})).toBe(true);
+    });
+  });
+
+  describe('Nested workflow resourceId propagation (issue #15246)', () => {
+    it('persists the parent run resourceId on nested child workflow snapshots', async () => {
+      const storage = new MockStore();
+      const mastra = new Mastra({ logger: false, storage });
+
+      const childStep = createStep({
+        id: 'child-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        execute: async ({ inputData }) => ({ echoed: inputData.value }),
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'nested-resource-id-child',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        steps: [childStep],
+      })
+        .then(childStep)
+        .commit();
+
+      const parentWorkflow = createWorkflow({
+        id: 'nested-resource-id-parent',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        steps: [childWorkflow],
+      })
+        .then(childWorkflow)
+        .commit();
+
+      parentWorkflow.__registerMastra(mastra);
+
+      const run = await parentWorkflow.createRun({ resourceId: 'workspace-1' });
+      const result = await run.start({ inputData: { value: 'hello' } });
+
+      expect(result.status).toBe('success');
+
+      const workflowsStore = await storage.getStore('workflows');
+
+      const parentRuns = await workflowsStore?.listWorkflowRuns({
+        workflowName: 'nested-resource-id-parent',
+        resourceId: 'workspace-1',
+      });
+      expect(parentRuns?.runs.length).toBe(1);
+      expect(parentRuns?.runs[0]?.resourceId).toBe('workspace-1');
+
+      const childRuns = await workflowsStore?.listWorkflowRuns({
+        workflowName: 'nested-resource-id-child',
+      });
+      expect(childRuns?.runs.length).toBe(1);
+      // Regression guard for #15246: child workflow snapshots must inherit the parent's resourceId.
+      expect(childRuns?.runs[0]?.resourceId).toBe('workspace-1');
     });
   });
 });

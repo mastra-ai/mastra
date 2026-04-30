@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { RequestContext } from '../request-context';
 import { createTool, Tool } from './tool';
@@ -164,5 +164,121 @@ describe('createTool with providerOptions', () => {
         cacheControl: { type: 'ephemeral' },
       },
     });
+  });
+});
+
+describe('createTool with strict mode', () => {
+  it('should preserve strict when creating a tool', () => {
+    const strictTool = createTool({
+      id: 'strict-tool',
+      description: 'A tool with strict input generation',
+      strict: true,
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      execute: async ({ city }) => ({ result: city }),
+    });
+
+    expect(strictTool.strict).toBe(true);
+  });
+
+  it('should preserve strict through Tool class constructor', () => {
+    const tool = new Tool({
+      id: 'strict-direct-tool',
+      description: 'Tool created directly with strict mode',
+      strict: true,
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    expect(tool.strict).toBe(true);
+  });
+});
+
+describe('AgentToolExecutionContext', () => {
+  it('should include agentId in context.agent when flat agent context is reorganized', async () => {
+    let capturedContext: any;
+
+    const tool = createTool({
+      id: 'agent-id-test',
+      description: 'Test tool for agentId propagation',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async (_input, context) => {
+        capturedContext = context;
+        return { success: true };
+      },
+    });
+
+    await tool.execute(
+      { message: 'hello' },
+      {
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+        toolCallId: 'call-123',
+        messages: [],
+        suspend: async () => {},
+      },
+    );
+
+    expect(capturedContext.agent).toBeDefined();
+    expect(capturedContext.agent.agentId).toBe('test-agent');
+    expect(capturedContext.agent.toolCallId).toBe('call-123');
+  });
+
+  it('should include agentId when context.agent is already structured', async () => {
+    let capturedContext: any;
+
+    const tool = createTool({
+      id: 'agent-id-structured-test',
+      description: 'Test tool for pre-structured agentId',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async (_input, context) => {
+        capturedContext = context;
+        return { success: true };
+      },
+    });
+
+    await tool.execute(
+      { message: 'hello' },
+      {
+        requestContext: new RequestContext(),
+        agent: {
+          agentId: 'structured-agent',
+          toolCallId: 'call-456',
+          messages: [],
+          suspend: async () => {},
+        },
+      },
+    );
+
+    expect(capturedContext.agent).toBeDefined();
+    expect(capturedContext.agent.agentId).toBe('structured-agent');
+  });
+
+  it('should default agentId to empty string when not provided in flat context', async () => {
+    let capturedContext: any;
+
+    const tool = createTool({
+      id: 'agent-id-default-test',
+      description: 'Test tool for agentId default',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async (_input, context) => {
+        capturedContext = context;
+        return { success: true };
+      },
+    });
+
+    await tool.execute(
+      { message: 'hello' },
+      {
+        requestContext: new RequestContext(),
+        toolCallId: 'call-789',
+        messages: [],
+        suspend: async () => {},
+      },
+    );
+
+    expect(capturedContext.agent).toBeDefined();
+    expect(capturedContext.agent.agentId).toBe('');
   });
 });

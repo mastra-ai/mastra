@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
-import z3 from 'zod/v3';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
@@ -98,9 +97,9 @@ describe('Agent Type Tests', () => {
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
-        requestContextSchema: z3.object({
-          userId: z3.string(),
-          tenantId: z3.string(),
+        requestContextSchema: z.object({
+          userId: z.string(),
+          tenantId: z.string(),
         }),
         instructions: ({ requestContext }) => {
           // Verify requestContext is typed
@@ -131,9 +130,9 @@ describe('Agent Type Tests', () => {
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
-        requestContextSchema: z3.object({
-          featureFlags: z3.object({
-            enableSearch: z3.boolean(),
+        requestContextSchema: z.object({
+          featureFlags: z.object({
+            enableSearch: z.boolean(),
           }),
         }),
         instructions: 'You are a helpful assistant',

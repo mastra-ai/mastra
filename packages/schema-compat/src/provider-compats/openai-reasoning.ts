@@ -1,11 +1,8 @@
-import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { isAllOfSchema, isArraySchema, isNumberSchema, isObjectSchema, isStringSchema } from '../json-schema/utils';
 import type { ZodType } from '../schema.types';
-import { ensureAllPropertiesRequired } from '../zod-to-json';
 import {
   isOptional,
   isObj,
@@ -24,6 +21,14 @@ import { OpenAISchemaCompatLayer } from './openai';
 export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `openApi3`;
+  }
+
+  isReasoningModel(): boolean {
+    // there isn't a good way to automatically detect reasoning models besides doing this.
+    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
+    const modelId = this.getModel().modelId;
+    if (!modelId) return false;
+    return modelId.includes(`o3`) || modelId.includes(`o4`) || modelId.includes(`o1`);
   }
 
   shouldApply(): boolean {
@@ -121,36 +126,5 @@ export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
-  }
-
-  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
-    const jsonSchema = super.processToJSONSchema(zodSchema);
-    return ensureAllPropertiesRequired(jsonSchema);
-  }
-
-  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
-    if (isAllOfSchema(schema)) {
-      this.defaultAllOfHandler(schema);
-    }
-
-    // Process based on schema type
-    if (isObjectSchema(schema)) {
-      this.defaultObjectHandler(schema);
-    } else if (isArraySchema(schema)) {
-      this.defaultArrayHandler(schema);
-    } else if (isNumberSchema(schema)) {
-      this.defaultNumberHandler(schema);
-    } else if (isStringSchema(schema)) {
-      this.defaultStringHandler(schema);
-    }
-  }
-
-  postProcessJSONNode(schema: JSONSchema7): void {
-    super.postProcessJSONNode(schema);
-
-    // force additionalProperties to be false for object schemas
-    if (schema.type === 'object' && schema.properties !== undefined) {
-      schema.additionalProperties = false;
-    }
   }
 }

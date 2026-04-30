@@ -22,7 +22,7 @@ describe('workspace_file_stat', () => {
   it('should return stat string for existing file', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: 'test.txt' }, { workspace });
 
@@ -35,7 +35,7 @@ describe('workspace_file_stat', () => {
 
   it('should return not found for non-existing path', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: 'nonexistent' }, { workspace });
 
@@ -46,7 +46,7 @@ describe('workspace_file_stat', () => {
   it('should return type=directory for directories', async () => {
     await fs.mkdir(path.join(tempDir, 'subdir'));
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: 'subdir' }, { workspace });
 

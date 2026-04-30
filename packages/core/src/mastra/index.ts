@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import type { DurableAgentLike } from '../agent/types';
+import { isDurableAgentLike } from '../agent/types';
+import { BackgroundTaskManager } from '../background-tasks';
+import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import type { AgentChannels } from '../channels/agent-channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -13,12 +18,21 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
-import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
+import { defaultGateways } from '../llm/model/router';
+import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint, LoggerContext, MetricsContext } from '../observability';
+import type {
+  DefinitionSource,
+  ObservabilityEntrypoint,
+  ObservabilityExporter,
+  ObservabilityInstance,
+  LoggerContext,
+  MetricsContext,
+} from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -35,6 +49,7 @@ import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import type { VersionOverrides, VersionSelector } from './types';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -115,10 +130,11 @@ export interface Config<
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
-   * Accepts both Mastra Agent instances and AI SDK v6 ToolLoopAgent instances.
-   * ToolLoopAgent instances are automatically converted to Mastra Agents.
+   * Accepts Mastra Agent instances, AI SDK v6 ToolLoopAgent instances,
+   * and durable agent wrappers (e.g., InngestAgent from createInngestAgent).
+   * ToolLoopAgent and durable agents are automatically handled during registration.
    */
-  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike };
+  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike | DurableAgentLike };
 
   /**
    * Storage provider for persisting data, conversation history, and workflow state.
@@ -207,6 +223,18 @@ export interface Config<
   pubsub?: PubSub;
 
   /**
+   * Server cache for storing stream events and other temporary data.
+   * Used by durable agents for resumable streams - clients can disconnect
+   * and reconnect without missing events.
+   *
+   * When provided, durable agents created without their own cache will
+   * inherit this cache instance.
+   *
+   * @default InMemoryServerCache
+   */
+  cache?: MastraServerCache;
+
+  /**
    * Scorers help assess the quality of agent responses and workflow outputs.
    */
   scorers?: TScorers;
@@ -256,6 +284,53 @@ export interface Config<
    * The editor handles complex instantiation logic including memory resolution.
    */
   editor?: IMastraEditor;
+
+  /**
+   * Global version overrides for primitives.
+   * When set, sub-agent delegation (and future primitive resolution) will
+   * resolve the specified version instead of the code-defined default.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   versions: {
+   *     agents: {
+   *       'researcher-agent': { versionId: '123' },
+   *       'writer-agent': { status: 'published' },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  versions?: VersionOverrides;
+
+  /**
+   * Background task configuration for running tool calls asynchronously.
+   * When configured, agents can dispatch tool executions to run in the background
+   * while the conversation continues.
+   */
+  backgroundTasks?: BackgroundTaskManagerConfig;
+
+  /**
+   * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
+   * When set, the value is automatically attached to all observability signals
+   * so they can be filtered by environment without passing
+   * `tracingOptions.metadata.environment` on every call.
+   *
+   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
+   * is left undefined rather than guessed.
+   *
+   * Per-call `tracingOptions.metadata.environment` always takes precedence.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   environment: 'production',
+   *   observability: new Observability({ ... }),
+   * })
+   * ```
+   */
+  environment?: string;
 }
 
 /**
@@ -333,12 +408,16 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #backgroundTaskConfig?: BackgroundTaskManagerConfig;
+  #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
+  #environment?: string;
+
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #internalMastraWorkflows: Record<string, Workflow> = {};
-  // This is only used internally for server handlers that require temporary persistence
+  // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
@@ -349,9 +428,15 @@ export class Mastra<
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
   #datasets?: DatasetsManager;
+  // Global version overrides for primitives (agents, etc.)
+  #versions?: VersionOverrides;
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get backgroundTaskManager() {
+    return this.#backgroundTaskManager;
   }
 
   get datasets(): DatasetsManager {
@@ -394,6 +479,27 @@ export class Mastra<
    */
   public getEditor() {
     return this.#editor;
+  }
+
+  /**
+   * Returns the global version overrides configured on this Mastra instance.
+   * These are used as defaults when resolving sub-agent versions during delegation.
+   */
+  public getVersionOverrides(): VersionOverrides | undefined {
+    return this.#versions;
+  }
+
+  /**
+   * Returns the deployment environment name configured on this Mastra instance,
+   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
+   * is provided.
+   *
+   * Observability automatically reads this and attaches it to all signals so
+   * consumers can filter by environment without passing
+   * `tracingOptions.metadata.environment` on each call.
+   */
+  public getEnvironment(): string | undefined {
+    return this.#environment;
   }
 
   /**
@@ -495,6 +601,36 @@ export class Mastra<
   }
 
   /**
+   * Registers an exporter on the default observability instance.
+   *
+   * If the current observability is a no-op (user didn't configure any), it is
+   * first replaced with the provided entrypoint and the instance is registered
+   * as default. If a real observability entrypoint already exists, the exporter
+   * is added directly to the existing default instance.
+   *
+   * @param exporter - The exporter to register (e.g. a CloudExporter)
+   * @param instance - An ObservabilityInstance pre-configured with the exporter, used as default when bootstrapping
+   * @param entrypoint - A real ObservabilityEntrypoint to bootstrap if the current one is a no-op
+   */
+  public registerExporter(
+    exporter: ObservabilityExporter,
+    instance: ObservabilityInstance,
+    entrypoint: ObservabilityEntrypoint,
+  ): void {
+    if (this.#observability instanceof NoOpObservability) {
+      this.#observability = entrypoint;
+      this.#observability.setLogger({ logger: this.#logger });
+      this.#observability.setMastraContext({ mastra: this });
+      this.#observability.registerInstance('default', instance, true);
+    }
+
+    const defaultInstance = this.#observability.getDefaultInstance();
+    if (defaultInstance?.registerExporter) {
+      defaultInstance.registerExporter(exporter);
+    }
+  }
+
+  /**
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
@@ -524,14 +660,25 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
-    // This is only used internally for server handlers that require temporary persistence
-    this.#serverCache = new InMemoryServerCache();
+    // Register AsyncLocalStorage-backed context resolvers so that DualLogger
+    // can correlate logs to the active span. Must happen before any agent runs.
+    initContextStorage();
+
+    // Server cache for temporary persistence and durable agent resumable streams
+    this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
     // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
     if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
       this.#editor.registerWithMastra(this);
     }
+
+    // Store global version overrides
+    this.#versions = config?.versions;
+
+    // Resolve deployment environment: explicit config wins, else fall back to
+    // NODE_ENV. Leave undefined if neither is set rather than guessing.
+    this.#environment = config?.environment ?? process.env.NODE_ENV;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -603,7 +750,18 @@ export class Mastra<
       this.#observability = new NoOpObservability();
     }
 
+    // Wrap the logger in a DualLogger so all existing this.logger.info(...) calls
+    // also forward to loggerVNext (observability structured logging).
+    // This is transparent — no call sites need to change.
+    // Uses a lazy getter so loggerVNext is always resolved at call time
+    // (observability may not be fully initialized yet at this point).
+    const dualLogger = new DualLogger(this.#logger, () => this.loggerVNext);
+    this.#logger = dualLogger as unknown as TLogger;
+
     this.#storage = storage;
+
+    this.#backgroundTaskConfig = config?.backgroundTasks;
+    this.#ensureBackgroundTaskManager();
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -662,7 +820,7 @@ export class Mastra<
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
         if (scorer != null) {
-          this.addScorer(scorer, key);
+          this.addScorer(scorer, key, { source: 'code' });
         }
       });
     }
@@ -683,19 +841,22 @@ export class Mastra<
       });
     }
 
+    // Auto-register default gateways (MastraGateway, NetlifyGateway, ModelsDevGateway)
+    // so they're available via listGateways() without explicit config.
+    // Skip duplicates so user-provided gateways above take precedence.
+    // Added directly to #gateways to avoid triggering #syncGatewayRegistry for built-ins.
+    for (const gateway of defaultGateways) {
+      const key = gateway.getId();
+      if (!(this.#gateways as Record<string, MastraModelGateway>)[key]) {
+        (this.#gateways as Record<string, MastraModelGateway>)[key] = gateway;
+      }
+    }
+
     // Add MCP servers and agents last since they might reference other primitives
     if (config?.mcpServers) {
       Object.entries(config.mcpServers).forEach(([key, server]) => {
         if (server != null) {
           this.addMCPServer(server, key);
-        }
-      });
-    }
-
-    if (config?.agents) {
-      Object.entries(config.agents).forEach(([key, agent]) => {
-        if (agent != null) {
-          this.addAgent(agent, key);
         }
       });
     }
@@ -712,6 +873,16 @@ export class Mastra<
       this.#server = config.server;
     }
 
+    // Agents must be added after server config so that channel webhook routes
+    // are appended to (not replaced by) the server config.
+    if (config?.agents) {
+      Object.entries(config.agents).forEach(([key, agent]) => {
+        if (agent != null) {
+          this.addAgent(agent, key);
+        }
+      });
+    }
+
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
@@ -720,6 +891,44 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+  }
+
+  #ensureBackgroundTaskManager(): void {
+    if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
+      return;
+    }
+
+    const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
+    bgManager.__registerMastra(this);
+    this.#backgroundTaskManager = bgManager;
+    void bgManager.init(this.#pubsub).catch(error => {
+      this.#logger?.error('Failed to initialize background task manager', error);
+    });
+  }
+
+  /**
+   * Auto-enables the background task manager when an agent with sub-agents is
+   * registered. Sub-agent delegation runs in the background by default so the
+   * parent stream stays responsive; that requires the manager to be available.
+   * No-op when the user explicitly opted out via `backgroundTasks.enabled: false`.
+   *
+   * Eligible agents: any agent whose `agents` field is either a static record
+   * with at least one entry OR a dynamic (function-based) resolver. Function
+   * resolvers are evaluated per request, so we can't inspect their contents
+   * here — but if the caller bothered to wire one up, we enable defensively
+   * so those resolved sub-agents also dispatch in the background.
+   */
+  #maybeEnableBackgroundTasksForAgent(agent: Agent<any>): void {
+    // Already running — nothing to do
+    if (this.#backgroundTaskManager) return;
+
+    // Explicit opt-out
+    if (this.#backgroundTaskConfig?.enabled === false) return;
+
+    if (!agent.__hasSubAgentsConfigured?.()) return;
+
+    this.#backgroundTaskConfig = { ...(this.#backgroundTaskConfig ?? {}), enabled: true };
+    this.#ensureBackgroundTaskManager();
   }
 
   /**
@@ -744,7 +953,15 @@ export class Mastra<
    * const response = await agent.generate('What is the weather?');
    * ```
    */
-  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
+  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName];
+  public getAgent<TAgentName extends keyof TAgents>(
+    name: TAgentName,
+    version: { versionId: string } | { status?: 'draft' | 'published' },
+  ): Promise<TAgents[TAgentName]>;
+  public getAgent<TAgentName extends keyof TAgents>(
+    name: TAgentName,
+    version?: { versionId: string } | { status?: 'draft' | 'published' },
+  ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     const agent = this.#agents?.[name];
     if (!agent) {
       const error = new MastraError({
@@ -761,7 +978,27 @@ export class Mastra<
       this.#logger?.trackException(error);
       throw error;
     }
-    return this.#agents[name];
+
+    if (!version) {
+      return this.#agents[name];
+    }
+
+    return this.resolveVersionedAgent(agent, version);
+  }
+
+  /**
+   * Returns the `AgentChannels` instances for all registered agents.
+   * Keys are agent IDs.
+   */
+  public getChannels(): Record<string, AgentChannels> {
+    const result: Record<string, AgentChannels> = {};
+    for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
+      const agentChannels = agent.getChannels();
+      if (agentChannels) {
+        result[agentKey] = agentChannels;
+      }
+    }
+    return result;
   }
 
   /**
@@ -790,12 +1027,20 @@ export class Mastra<
    * const sameAgent = mastra.getAgentById(assistant.id);
    * ```
    */
-  public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName] {
+  public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName];
+  public getAgentById<TAgentName extends keyof TAgents>(
+    id: TAgents[TAgentName]['id'],
+    version: { versionId: string } | { status?: 'draft' | 'published' },
+  ): Promise<TAgents[TAgentName]>;
+  public getAgentById<TAgentName extends keyof TAgents>(
+    id: TAgents[TAgentName]['id'],
+    version?: { versionId: string } | { status?: 'draft' | 'published' },
+  ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
       try {
-        agent = this.getAgent(id);
+        agent = this.getAgent(id as keyof TAgents) as TAgents[TAgentName];
       } catch {
         // do nothing
       }
@@ -817,7 +1062,50 @@ export class Mastra<
       throw error;
     }
 
-    return agent as TAgents[TAgentName];
+    if (!version) {
+      return agent as TAgents[TAgentName];
+    }
+
+    return this.resolveVersionedAgent(agent as TAgents[TAgentName], version);
+  }
+
+  /**
+   * Resolve a versioned variant of an agent by applying stored overrides from the editor.
+   *
+   * Requires the editor package to be configured — throws
+   * `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if it is not.
+   *
+   * @param agent - The code-defined agent to resolve a version for.
+   * @param version - Selects a version by ID or publication status.
+   * @returns A forked agent instance with the stored overrides applied.
+   */
+  public async resolveVersionedAgent<TAgent extends Agent>(
+    agent: TAgent,
+    version: VersionSelector | { status?: 'draft' | 'published' },
+  ): Promise<TAgent> {
+    const editor = this.getEditor();
+
+    if (!editor) {
+      const error = new MastraError({
+        id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Versioned agent lookup requires the editor package to be configured',
+        details: {
+          status: 400,
+          agentId: agent.id,
+          ...(version && 'versionId' in version ? { versionId: version.versionId } : {}),
+          ...(version && 'status' in version && version.status ? { versionStatus: version.status } : {}),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return editor.agent.applyStoredOverrides(
+      agent,
+      'versionId' in version ? version : { status: version.status ?? 'published' },
+    ) as Promise<TAgent>;
   }
 
   /**
@@ -862,28 +1150,75 @@ export class Mastra<
    * mastra.addAgent(newAgent); // Uses agent.id as key
    * // or
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
+   *
+   * // Durable agents (e.g., InngestAgent) are also supported:
+   * const durableAgent = createInngestAgent({ agent: newAgent, inngest });
+   * mastra.addAgent(durableAgent); // Auto-registers required workflows
    * ```
    */
-  public addAgent<A extends Agent | ToolLoopAgentLike>(
+  public addAgent<A extends Agent | ToolLoopAgentLike | DurableAgentLike>(
     agent: A,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
+
+    // Handle durable agent wrappers (e.g., InngestAgent)
+    // These wrap a regular Agent with execution engine-specific capabilities
+    if (isDurableAgentLike(agent)) {
+      const durableAgent = agent as DurableAgentLike;
+      const underlyingAgent = durableAgent.agent;
+      const agentKey = key || durableAgent.id;
+
+      // Check if already registered
+      const agents = this.#agents as Record<string, Agent<any>>;
+      if (agents[agentKey]) {
+        const logger = this.getLogger();
+        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
+        return;
+      }
+
+      // Set the Mastra instance on the durable agent for observability
+      durableAgent.__setMastra?.(this);
+
+      // Initialize the underlying agent (needed for tools, memory, etc.)
+      underlyingAgent.__setLogger(this.#logger);
+      underlyingAgent.__registerMastra(this);
+      underlyingAgent.__registerPrimitives({
+        logger: this.getLogger(),
+        storage: this.getStorage(),
+        agents: agents,
+        tts: this.#tts,
+        vectors: this.#vectors,
+      });
+
+      // Store the durable wrapper in #agents (not the underlying agent)
+      // This ensures getAgentById returns the wrapper so .stream() uses durable execution.
+      // The cast is safe because DurableAgent extends Agent directly, and InngestAgent uses
+      // a Proxy that forwards all Agent method calls to the underlying agent.
+      agents[agentKey] = durableAgent as unknown as Agent<any>;
+
+      // Register durable workflows if the wrapper provides them
+      const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];
+      for (const workflow of durableWorkflows) {
+        this.addWorkflow(workflow, workflow.id);
+      }
+
+      return;
+    }
+
     let mastraAgent: Agent<any, any, any>;
     if (isToolLoopAgentLike(agent)) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
       mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
     } else {
-      mastraAgent = agent;
+      mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -944,12 +1279,26 @@ export class Mastra<
       .listScorers()
       .then(scorers => {
         for (const [, entry] of Object.entries(scorers || {})) {
-          this.addScorer(entry.scorer);
+          this.addScorer(entry.scorer, undefined, { source: 'code' });
         }
       })
       .catch(err => {
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
+
+    // Register webhook routes and initialize channels
+    const agentChannels = mastraAgent.getChannels();
+    if (agentChannels) {
+      agentChannels.__setLogger(this.#logger);
+      const channelRoutes = agentChannels.getWebhookRoutes();
+      if (channelRoutes.length > 0) {
+        this.#server = {
+          ...this.#server,
+          apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+        };
+      }
+      void agentChannels.initialize(this);
+    }
   }
 
   /**
@@ -1155,8 +1504,6 @@ export class Mastra<
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Vector with key ${vectorKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1297,8 +1644,6 @@ export class Mastra<
     }
     const workspaceKey = key || workspace.id;
     if (this.#workspaces[workspaceKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Workspace with key ${workspaceKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1496,9 +1841,13 @@ export class Mastra<
       try {
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
-        this.#logger.debug(`Restarted ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}`);
+        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
       } catch (error) {
-        this.#logger.error(`Failed to restart ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}: ${error}`);
+        this.#logger.error('Failed to restart workflow run', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+          error,
+        });
       }
     }
   }
@@ -1554,7 +1903,7 @@ export class Mastra<
   public addScorer<S extends MastraScorer<any, any, any, any>>(
     scorer: S,
     key?: string,
-    options?: { source?: 'code' | 'stored' },
+    options?: { source?: DefinitionSource },
   ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);
@@ -1562,8 +1911,6 @@ export class Mastra<
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Scorer with key ${scorerKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -1729,8 +2076,6 @@ export class Mastra<
   public addPromptBlock(promptBlock: StorageResolvedPromptBlockType, key?: string): void {
     const blockKey = key || promptBlock.id;
     if (this.#promptBlocks[blockKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Prompt block with key ${blockKey} already exists. Skipping addition.`);
       return;
     }
     this.#promptBlocks[blockKey] = promptBlock;
@@ -1935,8 +2280,6 @@ export class Mastra<
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Tool with key ${toolKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2086,8 +2429,6 @@ export class Mastra<
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2270,8 +2611,6 @@ export class Mastra<
     const memoryKey = key || memory.id;
     const memoryRegistry = this.#memory as Record<string, MastraMemory>;
     if (memoryRegistry[memoryKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Memory with key ${memoryKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2340,8 +2679,6 @@ export class Mastra<
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -2379,10 +2716,13 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#ensureBackgroundTaskManager();
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
-    this.#logger = logger;
+    // Wrap the new logger in a DualLogger to maintain dual-write to loggerVNext
+    const dualLogger = new DualLogger(logger, () => this.loggerVNext);
+    this.#logger = dualLogger as unknown as TLogger;
 
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
@@ -2436,7 +2776,8 @@ export class Mastra<
       });
     }
 
-    this.#observability.setLogger({ logger: this.#logger });
+    // Pass the raw logger (not the DualLogger) to observability to avoid circular forwarding
+    this.#observability.setLogger({ logger });
   }
 
   /**
@@ -2525,7 +2866,7 @@ export class Mastra<
 
   /**
    * Direct metrics API for use outside trace context.
-   * Metrics emitted via this API will not have auto-labels from spans.
+   * Metrics emitted via this API will not have auto correlation or cost context from spans.
    * Use for background jobs, startup metrics, or other non-traced scenarios.
    */
   get metrics(): MetricsContext {
@@ -2828,8 +3169,6 @@ export class Mastra<
     const serverKey = key ?? resolvedId;
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
-      const logger = this.getLogger();
-      logger.debug(`MCP server with key ${serverKey} already exists. Skipping addition.`);
       return;
     }
 
@@ -3155,8 +3494,6 @@ export class Mastra<
     const gatewayKey = key || gateway.getId();
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {
-      const logger = this.getLogger();
-      logger.debug(`Gateway with key ${gatewayKey} already exists. Skipping addition.`);
       return;
     }
 

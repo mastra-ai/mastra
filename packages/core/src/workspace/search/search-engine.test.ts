@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { SearchEngine } from './search-engine';
+import { SearchEngine, splitIntoChunks } from './search-engine';
 import type { Embedder } from './search-engine';
 
 describe('SearchEngine', () => {
@@ -169,6 +169,75 @@ Line 3`;
         metadata: [{ id: 'doc1', text: 'Hello world' }],
         ids: ['doc1'],
       });
+    });
+
+    it('should call createIndex once before the first upsert with the embedding dimension', async () => {
+      const mockCreateIndex = vi.fn(async () => {});
+      const store: any = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: mockCreateIndex,
+      };
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await localEngine.index({ id: 'doc1', content: 'Hello world' });
+      await localEngine.index({ id: 'doc2', content: 'Another doc' });
+
+      expect(mockCreateIndex).toHaveBeenCalledTimes(1);
+      expect(mockCreateIndex).toHaveBeenCalledWith({ indexName: 'test-index', dimension: 3 });
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('should still upsert when createIndex throws (index already exists)', async () => {
+      const store: any = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {
+          throw new Error('index already exists');
+        }),
+      };
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await expect(localEngine.index({ id: 'doc1', content: 'Hello world' })).resolves.toBeUndefined();
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry createIndex on next write if previous createIndex/upsert path failed', async () => {
+      let createAttempts = 0;
+      let indexCreated = false;
+
+      const store: any = {
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {
+          createAttempts += 1;
+          if (createAttempts === 1) {
+            throw new Error('temporary create failure');
+          }
+          indexCreated = true;
+        }),
+        upsert: vi.fn(async () => {
+          if (!indexCreated) {
+            throw new Error('no such table');
+          }
+        }),
+      };
+
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await expect(localEngine.index({ id: 'doc1', content: 'Hello world' })).rejects.toThrow('no such table');
+      await expect(localEngine.index({ id: 'doc2', content: 'Another doc' })).resolves.toBeUndefined();
+
+      expect(store.createIndex).toHaveBeenCalledTimes(2);
+      expect(store.upsert).toHaveBeenCalledTimes(2);
     });
 
     it('should search vector store', async () => {
@@ -541,5 +610,176 @@ Third line has learning too`;
       expect(chunk1Result?.lineRange).toEqual({ start: 1, end: 1 });
       expect(chunk2Result?.lineRange).toEqual({ start: 50, end: 50 });
     });
+  });
+
+  describe('removeByPrefix', () => {
+    it('should remove all BM25 documents matching a prefix', async () => {
+      const engine = new SearchEngine({ bm25: {} });
+
+      await engine.index({ id: 'file.txt#chunk-0', content: 'first chunk content' });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'second chunk content' });
+      await engine.index({ id: 'other.txt', content: 'other content' });
+
+      await engine.removeByPrefix('file.txt#');
+
+      const results = await engine.search('content');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.id).toBe('other.txt');
+    });
+
+    it('should not remove documents that do not match the prefix', async () => {
+      const engine = new SearchEngine({ bm25: {} });
+
+      await engine.index({ id: 'a.txt#chunk-0', content: 'alpha' });
+      await engine.index({ id: 'b.txt#chunk-0', content: 'beta' });
+
+      await engine.removeByPrefix('a.txt#');
+
+      const results = await engine.search('alpha');
+      expect(results).toHaveLength(0);
+
+      const remaining = await engine.search('beta');
+      expect(remaining).toHaveLength(1);
+    });
+
+    it('should delete matching vectors from the vector store', async () => {
+      const mockDeleteVector = vi.fn(async () => {});
+      const engine = new SearchEngine({
+        vector: {
+          vectorStore: {
+            upsert: vi.fn(async () => {}),
+            query: vi.fn(async () => []),
+            deleteVector: mockDeleteVector,
+            deleteVectors: vi.fn(async () => {}),
+          } as any,
+          embedder: vi.fn(async () => [1, 2, 3]),
+          indexName: 'test-index',
+        },
+      });
+
+      await engine.index({ id: 'file.txt#chunk-0', content: 'chunk zero' });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'chunk one' });
+      await engine.index({ id: 'other.txt', content: 'other' });
+
+      await engine.removeByPrefix('file.txt#');
+
+      expect(mockDeleteVector).toHaveBeenCalledTimes(2);
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+    });
+  });
+
+  describe('removeSource', () => {
+    it('should remove source doc, chunks, and sourceFile vectors', async () => {
+      const mockDeleteVector = vi.fn(async () => {});
+      const mockDeleteVectors = vi.fn(async () => {});
+      const engine = new SearchEngine({
+        vector: {
+          vectorStore: {
+            upsert: vi.fn(async () => {}),
+            query: vi.fn(async () => []),
+            deleteVector: mockDeleteVector,
+            deleteVectors: mockDeleteVectors,
+          } as any,
+          embedder: vi.fn(async () => [1, 2, 3]),
+          indexName: 'test-index',
+        },
+      });
+
+      await engine.index({ id: 'file.txt', content: 'full file content' });
+      await engine.index({ id: 'file.txt#chunk-0', content: 'chunk zero', metadata: { sourceFile: 'file.txt' } });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'chunk one', metadata: { sourceFile: 'file.txt' } });
+
+      await engine.removeSource('file.txt');
+
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+      expect(mockDeleteVectors).toHaveBeenCalledWith({
+        indexName: 'test-index',
+        filter: { sourceFile: 'file.txt' },
+      });
+    });
+  });
+});
+
+describe('splitIntoChunks', () => {
+  it('should return a single chunk for short text', () => {
+    const chunks = splitIntoChunks('hello world');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('hello world');
+    expect(chunks[0]?.startLine).toBe(1);
+  });
+
+  it('should split text that exceeds maxChunkChars', () => {
+    const line = 'a'.repeat(50);
+    const lines = Array.from({ length: 20 }, () => line);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 200, overlapLines: 0 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    const reassembled = chunks.map(c => c.content).join('\n');
+    expect(reassembled).toBe(text);
+  });
+
+  it('should produce overlapping chunks when overlapLines > 0', () => {
+    const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 60, overlapLines: 2 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    for (let i = 1; i < chunks.length; i++) {
+      const prevLines = chunks[i - 1]!.content.split('\n');
+      const currLines = chunks[i]!.content.split('\n');
+      const prevTail = prevLines.slice(-2);
+      const currHead = currLines.slice(0, 2);
+      expect(currHead).toEqual(prevTail);
+    }
+  });
+
+  it('should set correct startLine for each chunk', () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 40, overlapLines: 0 });
+
+    expect(chunks[0]?.startLine).toBe(1);
+
+    for (const chunk of chunks) {
+      const expectedLine = text.split('\n').indexOf(chunk.content.split('\n')[0]!) + 1;
+      expect(chunk.startLine).toBe(expectedLine);
+    }
+  });
+
+  it('should split a single very long line by character boundaries', () => {
+    const text = 'x'.repeat(10000);
+    const chunks = splitIntoChunks(text, { maxChunkChars: 4000 });
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0]?.content).toBe('x'.repeat(4000));
+    expect(chunks[1]?.content).toBe('x'.repeat(4000));
+    expect(chunks[2]?.content).toBe('x'.repeat(2000));
+    expect(chunks.every(c => c.startLine === 1)).toBe(true);
+  });
+
+  it('should handle empty text', () => {
+    const chunks = splitIntoChunks('');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('');
+  });
+
+  it('should not produce empty chunks', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line ${i}`);
+    const text = lines.join('\n');
+
+    const chunks = splitIntoChunks(text, { maxChunkChars: 100, overlapLines: 2 });
+
+    for (const chunk of chunks) {
+      expect(chunk.content.length).toBeGreaterThan(0);
+    }
   });
 });

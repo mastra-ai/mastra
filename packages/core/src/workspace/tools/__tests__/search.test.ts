@@ -24,7 +24,7 @@ describe('workspace_search', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     await workspace.index('/doc.txt', 'The quick brown fox');
 
@@ -41,7 +41,7 @@ describe('workspace_search', () => {
       bm25: true,
       // No vector config — canHybrid is false
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     await workspace.index('/doc.txt', 'The quick brown fox');
 
     // Should not throw "Hybrid search requires both vector and BM25 configuration."
@@ -54,13 +54,13 @@ describe('workspace_search', () => {
     expect(result).not.toContain('0 results');
   });
 
-  it('should restrict mode enum in tool input schema to supported modes (#14531)', () => {
+  it('should restrict mode enum in tool input schema to supported modes (#14531)', async () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
       // No vector config — only bm25 should appear in the enum
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const tool = tools[WORKSPACE_TOOLS.SEARCH.SEARCH];
 
     // The dynamic input schema should reject 'hybrid' / 'vector' so the LLM
@@ -77,7 +77,7 @@ describe('workspace_search', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     await workspace.index('/doc.txt', 'The quick brown fox');
 

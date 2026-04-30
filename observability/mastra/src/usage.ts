@@ -23,9 +23,24 @@ interface GoogleMetadata {
   usageMetadata?: GoogleUsageMetadata;
 }
 
+interface V3InputUsage {
+  total?: number;
+  noCache?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+interface V3RawUsage {
+  inputTokens?: V3InputUsage;
+}
+
+function isV3RawUsage(raw: unknown): raw is V3RawUsage {
+  return typeof raw === 'object' && raw !== null && 'inputTokens' in raw;
+}
+
 /**
  * AI SDK aggregated input token details.
- * Available on totalUsage in multi-step runs — properly summed across all steps.
+ * Available on totalUsage in multi-step runs - properly summed across all steps.
  */
 interface AISdkInputTokenDetails {
   cacheReadTokens?: number;
@@ -45,8 +60,9 @@ function isDefined(value: unknown): value is number {
  *
  * Cache token extraction priority (highest to lowest):
  * 1. AI SDK aggregated inputTokenDetails (properly summed across all steps in multi-step runs)
- * 2. Provider-specific providerMetadata (accurate for single-step, last step only in multi-step)
- * 3. usage.cachedInputTokens (OpenAI/OpenRouter direct field)
+ * 2. Mastra-aggregated top-level usage fields (usage.cachedInputTokens, usage.cacheCreationInputTokens) -
+ *    summed across steps by RunOutput, so they are correct for multi-step runs.
+ * 3. Provider-specific providerMetadata (accurate for single-step, LAST STEP ONLY in multi-step).
  *
  * Handles:
  * - OpenAI: cachedInputTokens in usage object
@@ -82,11 +98,12 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     inputDetails.cacheWrite = aiSdkDetails.cacheWriteTokens;
   }
 
-  // ===== OpenAI / OpenRouter =====
-  // cachedInputTokens is already in the usage object
-  // inputTokens INCLUDES cached tokens (no adjustment needed)
+  // Mastra-aggregated fields — summed across steps by RunOutput; prefer over per-step providerMetadata.
   if (!isDefined(inputDetails.cacheRead) && isDefined(usage.cachedInputTokens)) {
     inputDetails.cacheRead = usage.cachedInputTokens;
+  }
+  if (!isDefined(inputDetails.cacheWrite) && isDefined(usage.cacheCreationInputTokens)) {
+    inputDetails.cacheWrite = usage.cacheCreationInputTokens;
   }
 
   // reasoningTokens from usage (OpenAI o1 models)
@@ -100,6 +117,11 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
 
   if (anthropic) {
+    const rawV3InputUsage = isV3RawUsage(usage.raw) ? usage.raw.inputTokens : undefined;
+    const hasV3CachedTotals =
+      rawV3InputUsage?.total !== undefined &&
+      (rawV3InputUsage.cacheRead !== undefined || rawV3InputUsage.cacheWrite !== undefined);
+
     if (!isDefined(inputDetails.cacheRead) && isDefined(anthropic.cacheReadInputTokens)) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
@@ -107,11 +129,13 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
-    // For Anthropic, adjust inputTokens to include cache tokens
-    // Per Anthropic docs: "Total input tokens is the summation of input_tokens,
-    // cache_creation_input_tokens, and cache_read_input_tokens"
-    if (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite)) {
-      inputDetails.text = usage.inputTokens;
+    // Skip adjustment when inputTokens already includes cache tokens (V3 raw or any positive Mastra-aggregated cache field).
+    const inputAlreadyIncludesCache =
+      hasV3CachedTotals ||
+      (isDefined(usage.cachedInputTokens) && usage.cachedInputTokens > 0) ||
+      (isDefined(usage.cacheCreationInputTokens) && usage.cacheCreationInputTokens > 0);
+
+    if (!inputAlreadyIncludesCache && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
       inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }
@@ -130,6 +154,17 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     }
   }
 
+  if (isDefined(inputTokens)) {
+    inputDetails.text = Math.max(
+      0,
+      inputTokens - sumDefinedValues(inputDetails, ['cacheRead', 'cacheWrite', 'audio', 'image']),
+    );
+  }
+
+  if (isDefined(outputTokens)) {
+    outputDetails.text = Math.max(0, outputTokens - sumDefinedValues(outputDetails, ['reasoning', 'audio', 'image']));
+  }
+
   // Build the final UsageStats object
   const result: UsageStats = {
     inputTokens,
@@ -145,4 +180,8 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   }
 
   return result;
+}
+
+function sumDefinedValues<T extends object, K extends keyof T>(obj: T, keys: K[]): number {
+  return keys.reduce((sum, key) => sum + ((obj[key] as number | undefined) ?? 0), 0);
 }

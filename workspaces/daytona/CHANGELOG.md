@@ -1,5 +1,119 @@
 # @mastra/daytona
 
+## 0.4.0
+
+### Minor Changes
+
+- Added Azure Blob sandbox mount support via blobfuse2 in @mastra/e2b and @mastra/daytona. `sandbox.mount(azureBlobFilesystem, '/data')` now works for Azure containers, matching the existing s3fs (S3) and gcsfuse (GCS) integration. Supports authentication via accountKey, sasToken, connectionString, or managed identity/default credentials, and preserves AzureBlobFilesystem prefixes when mounting. ([#15874](https://github.com/mastra-ai/mastra/pull/15874))
+
+  ```ts
+  import { E2BSandbox } from '@mastra/e2b';
+  import { AzureBlobFilesystem } from '@mastra/azure/blob';
+
+  const azureFs = new AzureBlobFilesystem({ container: 'my-data', connectionString: '...' });
+  const sandbox = new E2BSandbox();
+  await sandbox.mount(azureFs, '/data');
+  // Sandbox processes can now read/write /data/* directly against the Azure container.
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Added Azure Blob sandbox mount support via blobfuse2 in @mastra/e2b and @mastra/daytona. `sandbox.mount(azureBlobFilesystem, '/data')` now works for Azure containers, matching the existing s3fs (S3) and gcsfuse (GCS) integration. Supports authentication via accountKey, sasToken, connectionString, or managed identity/default credentials, and preserves AzureBlobFilesystem prefixes when mounting. ([#15874](https://github.com/mastra-ai/mastra/pull/15874))
+
+  ```ts
+  import { E2BSandbox } from '@mastra/e2b';
+  import { AzureBlobFilesystem } from '@mastra/azure/blob';
+
+  const azureFs = new AzureBlobFilesystem({ container: 'my-data', connectionString: '...' });
+  const sandbox = new E2BSandbox();
+  await sandbox.mount(azureFs, '/data');
+  // Sandbox processes can now read/write /data/* directly against the Azure container.
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
+## 0.3.0
+
+### Minor Changes
+
+- Added S3 prefix (subdirectory) mount support. You can now mount a specific folder within an S3 bucket instead of the entire bucket by setting the `prefix` option on your S3 filesystem. ([#15171](https://github.com/mastra-ai/mastra/pull/15171))
+
+  **Example:**
+
+  ```typescript
+  const fs = new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    prefix: 'workspace/data',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  });
+  ```
+
+  When mounted in a sandbox, only the contents under `workspace/data/` in the bucket will be visible at the mount path. This uses the s3fs `bucket:/path` syntax under the hood.
+
+  Closes #15147.
+
+### Patch Changes
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5), [`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added S3 prefix (subdirectory) mount support. You can now mount a specific folder within an S3 bucket instead of the entire bucket by setting the `prefix` option on your S3 filesystem. ([#15171](https://github.com/mastra-ai/mastra/pull/15171))
+
+  **Example:**
+
+  ```typescript
+  const fs = new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    prefix: 'workspace/data',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  });
+  ```
+
+  When mounted in a sandbox, only the contents under `workspace/data/` in the bucket will be visible at the mount path. This uses the s3fs `bucket:/path` syntax under the hood.
+
+  Closes #15147.
+
+### Patch Changes
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5)]:
+  - @mastra/core@1.26.1-alpha.0
+
+## 0.2.1
+
+### Patch Changes
+
+- Fixed Daytona sandbox reconnection with newer Daytona SDK releases. Existing sandboxes now reconnect more reliably across stop/start cycles and process restarts. ([#14667](https://github.com/mastra-ai/mastra/pull/14667))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`fbf22a7`](https://github.com/mastra-ai/mastra/commit/fbf22a7ad86bcb50dcf30459f0d075e51ddeb468), [`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a), [`04160ee`](https://github.com/mastra-ai/mastra/commit/04160eedf3130003cf842ad08428c8ff69af4cc1), [`2c27503`](https://github.com/mastra-ai/mastra/commit/2c275032510d131d2cde47f99953abf0fe02c081), [`424a1df`](https://github.com/mastra-ai/mastra/commit/424a1df7bee59abb5c83717a54807fdd674a6224), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`12c88a6`](https://github.com/mastra-ai/mastra/commit/12c88a6e32bf982c2fe0c6af62e65a3414519a75), [`43595bf`](https://github.com/mastra-ai/mastra/commit/43595bf7b8df1a6edce7a23b445b5124d2a0b473), [`78670e9`](https://github.com/mastra-ai/mastra/commit/78670e97e76d7422cf7025faf371b2aeafed860d), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`d400e7c`](https://github.com/mastra-ai/mastra/commit/d400e7c8b8d7afa6ba2c71769eace4048e3cef8e), [`f58d1a7`](https://github.com/mastra-ai/mastra/commit/f58d1a7a457588a996c3ecb53201a68f3d28c432), [`a49a929`](https://github.com/mastra-ai/mastra/commit/a49a92904968b4fc67e01effee8c7c8d0464ba85), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed Daytona sandbox reconnection with newer Daytona SDK releases. Existing sandboxes now reconnect more reliably across stop/start cycles and process restarts. ([#14667](https://github.com/mastra-ai/mastra/pull/14667))
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778)]:
+  - @mastra/core@1.18.0-alpha.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 
 /**
  * Shared memory configuration schemas for agent storage

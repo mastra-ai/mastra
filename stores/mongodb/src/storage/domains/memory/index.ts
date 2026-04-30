@@ -32,6 +32,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -41,6 +42,7 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -1412,11 +1414,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(OM_TABLE);
-      const docs = await collection.find({ lookupKey }).sort({ generationCount: -1 }).limit(limit).toArray();
+
+      const filter: Record<string, unknown> = { lookupKey };
+      if (options?.from || options?.to) {
+        const createdAtFilter: Record<string, unknown> = {};
+        if (options.from) createdAtFilter['$gte'] = options.from;
+        if (options.to) createdAtFilter['$lte'] = options.to;
+        filter['createdAt'] = createdAtFilter;
+      }
+
+      let cursor = collection.find(filter).sort({ generationCount: -1 });
+      if (options?.offset != null) {
+        cursor = cursor.skip(options.offset);
+      }
+      const docs = await cursor.limit(limit).toArray();
       return docs.map((doc: any) => this.parseOMDocument(doc));
     } catch (error) {
       throw new MastraError(
@@ -1873,6 +1889,43 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Read current config
+      const doc = await collection.findOne({ id: input.id }, { projection: { config: 1 } });
+
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const existing: Record<string, unknown> = (doc.config as Record<string, unknown>) ?? {};
+      const merged = this.deepMergeConfig(existing, input.config);
+
+      await collection.updateOne({ id: input.id }, { $set: { config: merged, updatedAt: new Date() } });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Async Buffering Methods
   // ============================================
@@ -1893,6 +1946,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically
@@ -2064,8 +2118,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existingPending = Number(doc.pendingMessageTokens || 0);
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await collection.updateOne(
-        { id: input.id },
+      // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
+      const updateResult = await collection.updateOne(
+        {
+          id: input.id,
+          bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
+        },
         {
           $set: {
             activeObservations: newActive,
@@ -2077,6 +2135,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           },
         },
       );
+
+      if (updateResult.modifiedCount === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

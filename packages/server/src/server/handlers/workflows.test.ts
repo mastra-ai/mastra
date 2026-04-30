@@ -3,7 +3,7 @@ import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
 import { createTestServerContext } from './test-utils';
@@ -991,6 +991,36 @@ describe('vNext Workflow Handlers', () => {
       // Verify requestContext was passed through
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-async-value');
+    });
+
+    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass forEachIndex to run.resume()', async () => {
+      // Create and start a run that will suspend
+      const run = await reusableWorkflow.createRun({ runId: 'test-run-foreach-index' });
+      await run.start({ inputData: {} });
+
+      // Wait for it to suspend
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Spy on the resume method to capture options
+      let capturedOptions: any;
+      const originalResume = run.resume.bind(run);
+      vi.spyOn(run, 'resume').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalResume(options);
+      });
+
+      vi.spyOn(reusableWorkflow, 'createRun').mockResolvedValue(run);
+
+      await RESUME_ASYNC_WORKFLOW_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'reusable-workflow',
+        runId: 'test-run-foreach-index',
+        step: 'test-step',
+        resumeData: {},
+        forEachIndex: 2,
+      } as any);
+
+      expect(capturedOptions.forEachIndex).toBe(2);
     });
   });
 });
