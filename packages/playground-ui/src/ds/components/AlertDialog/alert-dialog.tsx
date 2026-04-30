@@ -4,7 +4,7 @@ import * as React from 'react';
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 
-import './alert-dialog.css';
+import '@/ds/components/Dialog/dialog.css';
 
 const AlertDialogRoot = AlertDialogPrimitive.Root;
 
@@ -34,7 +34,7 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     ref={ref}
-    className={cn('alert-dialog-overlay-anim fixed inset-0 z-50 bg-overlay backdrop-blur-xs', className)}
+    className={cn('dialog-overlay-anim fixed inset-0 z-50 bg-overlay backdrop-blur-xs', className)}
     {...props}
   />
 ));
@@ -49,7 +49,7 @@ const AlertDialogContent = React.forwardRef<
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        'alert-dialog-content-anim',
+        'dialog-content-anim',
         'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
         'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
