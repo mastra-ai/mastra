@@ -120,12 +120,12 @@ html.light {
   --negative1: var(--accent2);
 
   /* Notice admonition colors — bg keeps saturation, fg flips to deep tint for contrast on light surface */
-  --notice-success: oklch(0.55 0.20 140);
-  --notice-success-fg: oklch(0.32 0.10 145);
+  --notice-success: oklch(0.55 0.2 140);
+  --notice-success-fg: oklch(0.32 0.1 145);
   --notice-destructive: oklch(0.55 0.22 22);
   --notice-destructive-fg: oklch(0.36 0.18 22);
   --notice-warning: oklch(0.65 0.16 95);
-  --notice-warning-fg: oklch(0.36 0.10 95);
+  --notice-warning-fg: oklch(0.36 0.1 95);
   --notice-info: oklch(0.55 0.15 230);
   --notice-info-fg: oklch(0.36 0.13 225);
   --notice-note: oklch(0.97 0 0);
