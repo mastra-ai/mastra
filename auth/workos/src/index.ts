@@ -41,7 +41,7 @@ export { MastraAuthWorkos } from './auth-provider';
 export { MastraRBACWorkos } from './rbac-provider';
 
 // FGA provider for fine-grained authorization
-export { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
+export { MastraFGAWorkos, WorkOSFGAMembershipResolutionError, WorkOSFGAResourceNotFoundError } from './fga-provider';
 
 // Directory Sync (SCIM) webhook handler
 export { WorkOSDirectorySync } from './directory-sync';
