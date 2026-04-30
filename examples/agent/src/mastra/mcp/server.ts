@@ -1,8 +1,135 @@
 import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPServerResources } from '@mastra/mcp';
+import type { AppResources } from '@mastra/mcp';
 import { z } from 'zod';
 import { chefAgent } from '../agents';
 import { myWorkflow } from '../workflows';
+
+// ============================================================================
+// MCP Apps extension example — interactive HTML UIs served via ui:// resources
+// ============================================================================
+
+const calculatorAppHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #fafafa; color: #1a1a1a; }
+    h2 { font-size: 18px; margin-bottom: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    input, select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    input[type="number"] { width: 120px; }
+    button { padding: 8px 20px; background: #4f46e5; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #4338ca; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .result { margin-top: 12px; padding: 12px; background: #e8f5e9; border-radius: 6px; font-size: 15px; }
+    .error { background: #ffebee; color: #c62828; }
+  </style>
+</head>
+<body>
+  <h2>Interactive Calculator</h2>
+  <p style="color:#666; margin-bottom:16px; font-size:13px;">
+    This UI is served as a <code>ui://</code> MCP App resource and calls the calculator tool via the bridge.
+  </p>
+  <div class="row">
+    <input id="n1" type="number" placeholder="Number 1" value="42" />
+    <select id="op">
+      <option value="add">+</option>
+      <option value="subtract">&minus;</option>
+    </select>
+    <input id="n2" type="number" placeholder="Number 2" value="8" />
+    <button id="btn" onclick="calc()">Calculate</button>
+  </div>
+  <div id="result" class="result" style="display:none;"></div>
+  <script>
+    async function calc() {
+      var btn = document.getElementById('btn');
+      var resultDiv = document.getElementById('result');
+      btn.disabled = true;
+      btn.textContent = 'Calculating…';
+      try {
+        var result = await window.__mcpBridge.callTool('calculatorWithUI', {
+          num1: Number(document.getElementById('n1').value),
+          num2: Number(document.getElementById('n2').value),
+          operation: document.getElementById('op').value,
+        });
+        resultDiv.className = 'result';
+        resultDiv.textContent = 'Result: ' + JSON.stringify(result);
+        resultDiv.style.display = 'block';
+      } catch (err) {
+        resultDiv.className = 'result error';
+        resultDiv.textContent = 'Error: ' + err.message;
+        resultDiv.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Calculate';
+      }
+    }
+  </script>
+</body>
+</html>`;
+
+const greetingAppHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #f0f4ff; color: #1a1a1a; }
+    h2 { font-size: 18px; margin-bottom: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; flex: 1; }
+    button { padding: 8px 20px; background: #059669; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #047857; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .result { margin-top: 12px; padding: 12px; background: #ecfdf5; border-radius: 6px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <h2>Greeting App</h2>
+  <p style="color:#666; margin-bottom:16px; font-size:13px;">
+    Enter a name and the tool will generate a personalized greeting.
+  </p>
+  <div class="row">
+    <input id="name" type="text" placeholder="Your name" value="World" />
+    <button id="btn" onclick="greet()">Greet</button>
+  </div>
+  <div id="result" class="result" style="display:none;"></div>
+  <script>
+    async function greet() {
+      var btn = document.getElementById('btn');
+      var resultDiv = document.getElementById('result');
+      btn.disabled = true;
+      try {
+        var result = await window.__mcpBridge.callTool('greetUserWithUI', {
+          name: document.getElementById('name').value,
+        });
+        resultDiv.textContent = result;
+        resultDiv.style.display = 'block';
+      } catch (err) {
+        resultDiv.textContent = 'Error: ' + err.message;
+        resultDiv.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>`;
+
+const mcpAppResources: AppResources = {
+  'ui://calculator/app': {
+    name: 'Interactive Calculator',
+    description: 'A calculator UI that calls the calculatorWithUI tool via MCP Apps bridge',
+    html: calculatorAppHtml,
+  },
+  'ui://greeting/app': {
+    name: 'Greeting App',
+    description: 'A greeting UI that calls the greetUserWithUI tool via MCP Apps bridge',
+    html: greetingAppHtml,
+  },
+};
 
 // Resources implementation
 const weatherResources: MCPServerResources = {
@@ -128,6 +255,49 @@ export const myMcpServer = new MCPServer({
         };
         const temp = temperatures[city.toLowerCase() as keyof typeof temperatures] || '20°C';
         return `The weather in ${city} is ${temp} and sunny.`;
+      },
+    }),
+  },
+});
+
+// ============================================================================
+// MCP Apps Server — demonstrates interactive HTML UIs via the MCP Apps extension
+// ============================================================================
+
+export const mcpAppsServer = new MCPServer({
+  id: 'mcp-apps-demo-server',
+  name: 'MCP Apps Demo Server',
+  version: '1.0.0',
+  appResources: mcpAppResources,
+  tools: {
+    calculatorWithUI: createTool({
+      id: 'calculatorWithUI',
+      description: 'Calculator with an interactive MCP App UI. Performs add or subtract.',
+      inputSchema: z.object({
+        num1: z.number().describe('First operand'),
+        num2: z.number().describe('Second operand'),
+        operation: z.enum(['add', 'subtract']).describe('Operation to perform'),
+      }),
+      mcp: {
+        _meta: { ui: { resourceUri: 'ui://calculator/app' } },
+      },
+      execute: async ({ num1, num2, operation }) => {
+        if (operation === 'add') return num1 + num2;
+        if (operation === 'subtract') return num1 - num2;
+        throw new Error('Invalid operation');
+      },
+    }),
+    greetUserWithUI: createTool({
+      id: 'greetUserWithUI',
+      description: 'Generates a personalized greeting with an interactive MCP App UI.',
+      inputSchema: z.object({
+        name: z.string().describe('Name of the person to greet'),
+      }),
+      mcp: {
+        _meta: { ui: { resourceUri: 'ui://greeting/app' } },
+      },
+      execute: async ({ name }) => {
+        return `Hello, ${name}! Welcome to MCP Apps.`;
       },
     }),
   },
