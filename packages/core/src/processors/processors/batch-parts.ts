@@ -61,6 +61,15 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       state.timeoutTriggered = false;
     }
 
+    // Emit any pending non-text part that was deferred from the previous call
+    if (state.pendingNonText) {
+      const pending = state.pendingNonText;
+      state.pendingNonText = undefined;
+      // Buffer the current part for later emission
+      state.batch.push(part);
+      return pending;
+    }
+
     // Check if a timeout has triggered a flush
     if (state.timeoutTriggered && state.batch.length > 0) {
       state.timeoutTriggered = false;
@@ -73,9 +82,9 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     // If it's a non-text part and we should emit immediately, flush the batch first
     if (this.options.emitOnNonText && part.type !== 'text-delta') {
       const batchedChunk = this.flushBatch(state as BatchPartsState);
-      // Return the batched part if there was one, otherwise return the current part
-      // Don't add the current non-text part to the batch - emit it immediately
       if (batchedChunk) {
+        // Queue the non-text part for next emission so it isn't lost
+        state.pendingNonText = part;
         return batchedChunk;
       }
       return part;

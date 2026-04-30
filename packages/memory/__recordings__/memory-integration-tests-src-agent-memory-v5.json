@@ -666,7 +666,7 @@
       }
     },
     {
-      "hash": "04025992b8516944",
+      "hash": "9c25553eef542787",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -682,13 +682,22 @@
               "content": [
                 {
                   "type": "input_text",
-                  "text": "What is 2+2?"
+                  "text": "."
                 }
               ]
             },
             {
               "type": "item_reference",
               "id": "msg_0ba5053298cdedbd0069e8f74f48048196a6f80f8c29a40912"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 2+2?"
+                }
+              ]
             },
             {
               "role": "user",
@@ -1373,7 +1382,7 @@
               "native_finish_reason": "stop",
               "message": {
                 "role": "assistant",
-                "content": "Let’s work it out step by step:\n\n1. **Identify the numbers** – The problem says “2 + 2”, which tells us we have two numbers: the first 2 and the second 2.\n\n2. **Understand the operation** – The + sign means addition, which combines the values of the two numbers.\n\n3. **Perform the addition** –  \n   - Start with the first number: 2  \n   - Add the second number: 2 → \\(2 + 2\\)\n\n4. **Compute the result** –  \n   - \\(2 + 2 = 4\\)\n\nSo, \\(2 + 2\\) equals **4**.",
+                "content": "Let\u2019s work it out step by step:\n\n1. **Identify the numbers** \u2013 The problem says \u201c2 + 2\u201d, which tells us we have two numbers: the first 2 and the second 2.\n\n2. **Understand the operation** \u2013 The + sign means addition, which combines the values of the two numbers.\n\n3. **Perform the addition** \u2013  \n   - Start with the first number: 2  \n   - Add the second number: 2 \u2192 \\(2 + 2\\)\n\n4. **Compute the result** \u2013  \n   - \\(2 + 2 = 4\\)\n\nSo, \\(2 + 2\\) equals **4**.",
                 "refusal": null,
                 "reasoning": "The user asks \"What is 2+2? Think through this carefully.\" They want a careful reasoning. The assistant should show the reasoning: adding 2 and 2 gives 4. Probably not more. The user is instructing to think through carefully, so we should show steps. It's straightforward. They might want a reasoning demonstration. Let's give reasoned answer.\n",
                 "reasoning_details": [
@@ -1391,7 +1400,7 @@
             "prompt_tokens": 96,
             "completion_tokens": 214,
             "total_tokens": 310,
-            "cost": 0.00004236,
+            "cost": 4.236e-5,
             "is_byok": false,
             "prompt_tokens_details": {
               "cached_tokens": 0,
@@ -1400,9 +1409,9 @@
               "video_tokens": 0
             },
             "cost_details": {
-              "upstream_inference_cost": 0.00004236,
-              "upstream_inference_prompt_cost": 0.00000384,
-              "upstream_inference_completions_cost": 0.00003852
+              "upstream_inference_cost": 4.236e-5,
+              "upstream_inference_prompt_cost": 3.84e-6,
+              "upstream_inference_completions_cost": 3.852e-5
             },
             "completion_tokens_details": {
               "reasoning_tokens": 75,
@@ -1612,7 +1621,7 @@
       }
     },
     {
-      "hash": "d0631d83aae1d989",
+      "hash": "c9a528d55b665619",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1947,7 +1956,7 @@
       }
     },
     {
-      "hash": "aadcfc17c9b20800",
+      "hash": "4c531163c39fa896",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2148,7 +2157,7 @@
       }
     },
     {
-      "hash": "0a9a2755f7319533",
+      "hash": "c9a528d55b665619",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3077,7 +3086,7 @@
       }
     },
     {
-      "hash": "1c40148dd44a0d15",
+      "hash": "7be2e6493a6736cb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3412,7 +3421,7 @@
       }
     },
     {
-      "hash": "7740fd652cb4344c",
+      "hash": "17497618c6e9059d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4018,7 +4027,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in Tokyo is sunny, with a current temperature of 70°F, and it feels like 65°F."
+                  "text": "The weather in Tokyo is sunny, with a current temperature of 70\u00b0F, and it feels like 65\u00b0F."
                 }
               ],
               "role": "assistant"
@@ -4101,7 +4110,7 @@
       }
     },
     {
-      "hash": "836bc7488ff6acc4",
+      "hash": "02ca91902ed2640e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4314,7 +4323,7 @@
       }
     },
     {
-      "hash": "0abf4ad4170bd7fb",
+      "hash": "8df8266cbe58b20a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4459,7 +4468,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in London is sunny, with a current temperature of 70°F, and it feels like 65°F."
+                  "text": "The weather in London is sunny, with a current temperature of 70\u00b0F, and it feels like 65\u00b0F."
                 }
               ],
               "role": "assistant"
@@ -4667,7 +4676,7 @@
       }
     },
     {
-      "hash": "ef3e214eb3ddfbbe",
+      "hash": "f8f322484cb0eb60",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -5731,7 +5740,7 @@
       }
     },
     {
-      "hash": "565f171b96a74611",
+      "hash": "5b13fe0609a4f570",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -5941,7 +5950,7 @@
       }
     },
     {
-      "hash": "ada8144b8160e694",
+      "hash": "05a667c8d8a9ca17",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -6361,7 +6370,7 @@
       }
     },
     {
-      "hash": "6bf98755e9037400",
+      "hash": "ef792d26b79fa83f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -7158,6 +7167,1683 @@
               "reasoning_tokens": 0
             },
             "total_tokens": 222
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "04025992b8516944",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ba5053298cdedbd0069e8f74f48048196a6f80f8c29a40912"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 2+2?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Give me JSON"
+                }
+              ]
+            }
+          ],
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "strict": true,
+              "name": "response",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          },
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160880
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601513c9658f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:04 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "934",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999622",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b5d77b772b7349ceb797cd170a68ed5c"
+        },
+        "body": {
+          "id": "resp_0ba5053298cdedbd0069e8f74fa1c48196b5a2ea67f1ccfd3a",
+          "object": "response",
+          "created_at": 1776875343,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875344,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0ba5053298cdedbd0069e8f7503b2c819692ee5d5186ba142a",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "{\"result\":\"{\\\"2 + 2\\\": 4}\"}"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "description": null,
+              "name": "response",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 161,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 18,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 179
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0abf4ad4170bd7fb",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in Tokyo?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_03b475c4551737550069e8f7663b9c8197ab88096849e452c2"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_XoUDU63TDzgzz3UXgDs92zhN",
+              "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_03b475c4551737550069e8f7676c008197a6d08128bf7396ae"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in London?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_03b475c4551737550069e8f7684fb481979a648047129f7b49"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_7mk9o68WjUjKPimuN1D2lCxi",
+              "output": "The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176163760
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601ed685e23f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:29 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1005",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999540",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_032aeb6de6f544d1a91d9cd9b9ffd3ca"
+        },
+        "body": {
+          "id": "resp_03b475c4551737550069e8f7689b888197954f1e4fbbed531c",
+          "object": "response",
+          "created_at": 1776875368,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875369,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_03b475c4551737550069e8f7692630819798903bbc8dff027e",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The weather in London is sunny, with a current temperature of 70\u00b0F, and it feels like 65\u00b0F."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 243,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 26,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 269
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "565f171b96a74611",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 1"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_07dd36418d82374b0069e8f772a2dc8195a540f84f66d84d49"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 2"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176161800
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06022f9a7123f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:39 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "732",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999660",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_254f5b1f8ba2453abfc106fb430cafdf"
+        },
+        "body": {
+          "id": "resp_07dd36418d82374b0069e8f773329c8195acfbb5bab7d0be3b",
+          "object": "response",
+          "created_at": 1776875379,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875379,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_07dd36418d82374b0069e8f773975081958bac19b13733a1fa",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Message number 2 received! What would you like to do next?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 124,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 16,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 140
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "836bc7488ff6acc4",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in Tokyo?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_03b475c4551737550069e8f7663b9c8197ab88096849e452c2"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_XoUDU63TDzgzz3UXgDs92zhN",
+              "output": "The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_03b475c4551737550069e8f7676c008197a6d08128bf7396ae"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What's the weather in London?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176162980
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601e8394823f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:28 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "737",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999585",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_d8ab1bd0e69f47e0a4ad248235d2e104"
+        },
+        "body": {
+          "id": "resp_03b475c4551737550069e8f767c6d4819792d1d6af368d9e3a",
+          "object": "response",
+          "created_at": 1776875367,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875368,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "fc_03b475c4551737550069e8f7684fb481979a648047129f7b49",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"city\":\"London\"}",
+              "call_id": "call_7mk9o68WjUjKPimuN1D2lCxi",
+              "name": "get_weather_city"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 198,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 16,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 214
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "aadcfc17c9b20800",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Test agent with generateTitle on."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Hello, world!Message from previous conversation at 8:56 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 8:56 PM: User: Hello, world!Message from previous conversation at 8:56 PM: Assistant: Hello again! What would you like to talk about today?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Hello, world!"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601a8db63bdba-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:18 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "901",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999560",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_dc1b390a97a1487f8af88987d06fe9c9"
+        },
+        "body": {
+          "id": "resp_0323aefff76ebf720069e8f75da5908195a21a27fb726bbc6c",
+          "object": "response",
+          "created_at": 1776875357,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875358,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0323aefff76ebf720069e8f75e48248195a3583ce3ae4734d7",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello! How can I assist you today?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 223,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 11,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 234
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ada8144b8160e694",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 1"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_07dd36418d82374b0069e8f772a2dc8195a540f84f66d84d49"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 2"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_07dd36418d82374b0069e8f773975081958bac19b13733a1fa"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Message number 3"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176163640
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0602357ac623f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:40 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "751",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999632",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_e805bc9dafae9a90bbd2d1d02c414eee"
+        },
+        "body": {
+          "id": "resp_07dd36418d82374b0069e8f77423948195b97824153096fb23",
+          "object": "response",
+          "created_at": 1776875380,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875380,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_07dd36418d82374b0069e8f7748224819598feaf6516d9471d",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Message number 3 received! Please let me know what you need next."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 150,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 17,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 167
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ef3e214eb3ddfbbe",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "My name is Alice"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0246142330798f770069e8f76a6d988196be1192d1c79a6728"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is my name?"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773176161260
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601fbfbc823f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:31 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "832",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999932",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_3a382614998741b08581fb29da2fbcd0"
+        },
+        "body": {
+          "id": "resp_0246142330798f770069e8f76aed548196a6d4d58042e04e52",
+          "object": "response",
+          "created_at": 1776875370,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875371,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0246142330798f770069e8f76b594c81968634f5d117e5ba1b",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Your name is Alice. How can I help you today, Alice?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 47,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 15,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 62
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "7ee1b9371121c5eb",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: My favorite color is blue.Message from previous conversation at 8:56 PM: Assistant: That's great! Blue is often associated with calmness and serenity. Do you have a specific shade of blue that you like?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "My favorite color is blue."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_030bf7b52e0723f30069e8f775b3fc81958714c1d3491a3bdd"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Actually, my favorite color is red."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "get_weather_city",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176161120
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f060244bcb923f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:43 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1004",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999540",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f23cbbf04ed2471ea438f1326888a91b"
+        },
+        "body": {
+          "id": "resp_030bf7b52e0723f30069e8f77693648195bac0ed03096102d8",
+          "object": "response",
+          "created_at": 1776875382,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875383,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_030bf7b52e0723f30069e8f7770dd88195a55b7787d5c234b6",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Red is such a vibrant and energetic color! It often symbolizes passion and excitement. What do you like most about red?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather_city",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 244,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 26,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 270
           },
           "user": null,
           "metadata": {}

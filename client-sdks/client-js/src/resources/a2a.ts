@@ -177,7 +177,6 @@ export class A2A extends BaseResource {
   }
 
   /**
-   * @deprecated
    * Get the status and result of a task.
    * @param params - Parameters for querying the task
    * @returns Promise containing the JSON-RPC response envelope
@@ -195,7 +194,6 @@ export class A2A extends BaseResource {
   }
 
   /**
-   * @deprecated
    * Cancel a running task.
    * @param params - Parameters identifying the task to cancel
    * @returns Promise containing the task response
