@@ -3,6 +3,27 @@ import type { AppRendererHandle, SandboxConfig } from '@mcp-ui/client';
 import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+const SANDBOX_PROXY_HTML = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>html,body{margin:0;padding:0;width:100%;height:100%}</style></head>
+<body><script>
+window.addEventListener('message',function(e){
+  var d=e.data;if(!d||typeof d!=='object')return;
+  if(d.method==='ui/notifications/sandbox-resource-ready'){
+    var h=(d.params||{}).html;if(h){document.open();document.write(h);document.close()}
+  }
+});
+window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/sandbox-ready',params:{}},'*');
+<\/script></body></html>`;
+
+let _blobUrl: URL | null = null;
+function getSandboxBlobUrl(): URL {
+  if (!_blobUrl) {
+    const blob = new Blob([SANDBOX_PROXY_HTML], { type: 'text/html' });
+    _blobUrl = new URL(URL.createObjectURL(blob));
+  }
+  return _blobUrl;
+}
+
 export interface McpAppViewerProps {
   /** The HTML content to render in the sandboxed iframe */
   html: string;
@@ -18,8 +39,8 @@ export interface McpAppViewerProps {
   onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Callback when the app sends a message via sendMessage (drives new chat turns) */
   onSendMessage?: (content: string) => void;
-  /** Sandbox configuration — URL to the sandbox proxy HTML */
-  sandboxUrl: URL;
+  /** Sandbox configuration — URL to the sandbox proxy HTML. If omitted, a blob URL is generated automatically. */
+  sandboxUrl?: URL;
   /** Optional className for the container */
   className?: string;
 }
@@ -47,11 +68,7 @@ export function McpAppViewer({
 
   const normalizedToolResult: CallToolResult | undefined = useMemo(() => {
     if (toolResult === undefined) return undefined;
-    if (
-      toolResult &&
-      typeof toolResult === 'object' &&
-      Array.isArray((toolResult as CallToolResult).content)
-    ) {
+    if (toolResult && typeof toolResult === 'object' && Array.isArray((toolResult as CallToolResult).content)) {
       return toolResult as CallToolResult;
     }
     return {
@@ -61,7 +78,8 @@ export function McpAppViewer({
     };
   }, [toolResult]);
 
-  const sandbox: SandboxConfig = useMemo(() => ({ url: sandboxUrl }), [sandboxUrl]);
+  const resolvedSandboxUrl = useMemo(() => sandboxUrl ?? getSandboxBlobUrl(), [sandboxUrl]);
+  const sandbox: SandboxConfig = useMemo(() => ({ url: resolvedSandboxUrl }), [resolvedSandboxUrl]);
 
   const handleCallTool = useCallback(
     async (params: CallToolRequest['params']): Promise<CallToolResult> => {
@@ -97,8 +115,8 @@ export function McpAppViewer({
     async (params: { role: string; content: Array<{ type: string; text?: string }> }) => {
       if (!onSendMessage) return {};
       const text = params.content
-        ?.filter((block) => block.type === 'text')
-        .map((block) => block.text)
+        ?.filter(block => block.type === 'text')
+        .map(block => block.text)
         .join('\n');
       if (text) {
         onSendMessage(text);
@@ -144,7 +162,7 @@ export function McpAppViewer({
         onMessage={handleMessage}
         onOpenLink={handleOpenLink}
         onSizeChanged={handleSizeChanged}
-        onError={(error) => console.error('[McpAppViewer]', error)}
+        onError={error => console.error('[McpAppViewer]', error)}
       />
     </div>
   );

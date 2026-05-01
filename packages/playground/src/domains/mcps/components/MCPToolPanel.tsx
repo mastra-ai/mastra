@@ -3,7 +3,7 @@ import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
@@ -34,7 +34,6 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
 
-  const sandboxUrl = useMemo(() => new URL('/sandbox_proxy.html', window.location.origin), []);
   const appResourceUri = tool ? getAppResourceUri(tool._meta) : undefined;
 
   // Fetch the app resource HTML when the tool has a ui:// resource
@@ -112,12 +111,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     <div className="flex flex-col gap-4">
       {appHtml && (
         <div className="border-b border-border1 p-4">
-          <McpAppViewer
-            html={appHtml}
-            toolName={tool.name ?? tool.id}
-            onToolCall={handleToolCall}
-            sandboxUrl={sandboxUrl}
-          />
+          <McpAppViewer html={appHtml} toolName={tool.name ?? tool.id} onToolCall={handleToolCall} />
         </div>
       )}
       <ToolExecutor

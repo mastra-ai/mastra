@@ -1,7 +1,7 @@
 import { McpAppViewer } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import type { McpAppToolInfo } from '../hooks/use-mcp-app-tools';
 
 interface McpAppToolResultProps {
@@ -41,8 +41,6 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage 
     [client, appInfo.serverId],
   );
 
-  const sandboxUrl = useMemo(() => new URL('/sandbox_proxy.html', window.location.origin), []);
-
   if (isLoading || !html) {
     return (
       <div className="rounded-md border border-border1 bg-surface2 p-4 text-text2 text-sm">Loading MCP App UI…</div>
@@ -57,7 +55,6 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage 
       toolResult={toolResult}
       onToolCall={handleToolCall}
       onSendMessage={onSendMessage}
-      sandboxUrl={sandboxUrl}
       className="rounded-md border border-border1"
     />
   );
