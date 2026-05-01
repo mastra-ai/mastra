@@ -11,4 +11,12 @@ export interface AuthResult {
   auth?: unknown; // Better Auth instance (only for better-auth provider)
 }
 
-export type AuthProviderType = 'simple' | 'better-auth' | 'workos' | 'cloud' | 'composite' | 'auth0-okta' | 'okta';
+export type AuthProviderType =
+  | 'simple'
+  | 'better-auth'
+  | 'workos'
+  | 'cloud'
+  | 'composite'
+  | 'auth0-okta'
+  | 'okta'
+  | 'studio';

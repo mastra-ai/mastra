@@ -2206,3 +2206,80 @@ describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => 
     });
   });
 });
+
+describe('prompt alias normalization (GitHub #14154)', () => {
+  const promptSchema = z.object({
+    prompt: z.string(),
+    threadId: z.string().optional(),
+  });
+
+  it('should normalize "query" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { query: 'give me insights into target USA' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'give me insights into target USA' });
+  });
+
+  it('should normalize "message" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { message: 'hello sub-agent' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hello sub-agent' });
+  });
+
+  it('should normalize "input" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { input: 'process this' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'process this' });
+  });
+
+  it('should prefer "prompt" over alias fields when both are present', () => {
+    const result = validateToolInput(promptSchema, { prompt: 'correct prompt', query: 'should be ignored' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'correct prompt' });
+  });
+
+  it('should still reject input with no prompt or alias fields', () => {
+    const result = validateToolInput(promptSchema, { threadId: 'some-thread' });
+    expect(result.error).toBeDefined();
+  });
+
+  it('should preserve other fields when normalizing alias to prompt', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 'give me insights',
+      threadId: 'thread-123',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      prompt: 'give me insights',
+      threadId: 'thread-123',
+    });
+  });
+
+  it('should prefer "query" over "message" and "input" as alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 'from query',
+      message: 'from message',
+      input: 'from input',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from query' });
+  });
+
+  it('should not normalize aliases for schemas without a "prompt" field', () => {
+    const otherSchema = z
+      .object({
+        name: z.string(),
+      })
+      .strict();
+    const result = validateToolInput(otherSchema, { name: 'ok', query: 'give me insights' });
+    expect(result.error).toBeDefined();
+  });
+
+  it('should skip non-string aliases and fall back to the next string alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 123,
+      message: 'from message',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from message' });
+  });
+});

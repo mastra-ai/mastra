@@ -1,7 +1,9 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
 import type {
   TraceRecord,
+  GetTraceLightResponse,
+  GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
   SpanIds,
@@ -18,11 +20,27 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
@@ -114,6 +132,39 @@ export class Observability extends BaseResource {
    */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.request(`/observability/traces/${traceId}`);
+  }
+
+  /**
+   * Retrieves a lightweight trace by ID (timeline fields only).
+   * Excludes heavy fields (input, output, attributes, metadata, tags, links)
+   * for ~97% payload reduction compared to getTrace.
+   *
+   * @param traceId - ID of the trace to retrieve
+   * @returns Promise containing the trace with lightweight spans
+   */
+  getTraceLight(traceId: string): Promise<GetTraceLightResponse> {
+    return this.request(`/observability/traces/${traceId}/light`);
+  }
+
+  /**
+   * Retrieves a single span with full details by trace ID and span ID.
+   *
+   * @param traceId - ID of the trace containing the span
+   * @param spanId - ID of the span to retrieve
+   * @returns Promise containing the full span record
+   */
+  getSpan(traceId: string, spanId: string): Promise<GetSpanResponse> {
+    return this.request(`/observability/traces/${traceId}/spans/${spanId}`);
+  }
+
+  /**
+   * Extracts a structured trajectory from a trace's spans.
+   *
+   * @param traceId - ID of the trace to extract trajectory from
+   * @returns Promise containing the trajectory with ordered steps
+   */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.request(`/observability/traces/${traceId}/trajectory`);
   }
 
   /**
@@ -231,6 +282,46 @@ export class Observability extends BaseResource {
     });
   }
 
+  /**
+   * Returns an aggregated score value with optional period-over-period comparison.
+   */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.request(`/observability/scores/aggregate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns score values grouped by specified dimensions.
+   */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.request(`/observability/scores/breakdown`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns score values bucketed by time interval with optional grouping.
+   */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.request(`/observability/scores/timeseries`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns percentile values for scores bucketed by time interval.
+   */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.request(`/observability/scores/percentiles`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
@@ -249,6 +340,46 @@ export class Observability extends BaseResource {
    */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.request(`/observability/feedback`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns an aggregated feedback value with optional period-over-period comparison.
+   */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.request(`/observability/feedback/aggregate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns feedback values grouped by specified dimensions.
+   */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.request(`/observability/feedback/breakdown`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns feedback values bucketed by time interval with optional grouping.
+   */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.request(`/observability/feedback/timeseries`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns percentile values for feedback bucketed by time interval.
+   */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.request(`/observability/feedback/percentiles`, {
       method: 'POST',
       body: params,
     });

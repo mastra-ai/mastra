@@ -1,8 +1,10 @@
+import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { MastraAuthConfig } from '@mastra/core/server';
+import type { MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -236,7 +238,9 @@ export interface AuthMiddlewareContext {
   buildAuthorizeContext: () => unknown;
 }
 
-export type AuthResult = { action: 'next' } | { action: 'error'; status: number; body: Record<string, unknown> };
+export type AuthResult =
+  | { action: 'next'; headers?: Record<string, string> }
+  | { action: 'error'; status: number; body: Record<string, unknown>; headers?: Record<string, string> };
 
 const pass: AuthResult = { action: 'next' };
 
@@ -263,6 +267,21 @@ export const getAuthenticatedUser = async <TUser = unknown>({
 
   return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
 };
+
+/**
+ * Check if an auth config object supports transparent session refresh.
+ * Returns true if the auth provider implements the necessary ISessionProvider methods.
+ */
+export function supportsSessionRefresh(
+  authConfig: MastraAuthConfig | MastraAuthProvider,
+): authConfig is (MastraAuthConfig | MastraAuthProvider) &
+  Pick<ISessionProvider, 'refreshSession' | 'getSessionIdFromRequest' | 'getSessionHeaders'> {
+  return (
+    typeof (authConfig as any).getSessionIdFromRequest === 'function' &&
+    typeof (authConfig as any).refreshSession === 'function' &&
+    typeof (authConfig as any).getSessionHeaders === 'function'
+  );
+}
 
 /**
  * Single auth middleware: authenticate → authorize.
@@ -292,6 +311,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   // ── Authentication ──
 
   let user: unknown;
+  let refreshHeaders: Record<string, string> | undefined;
 
   try {
     if (typeof authConfig.authenticateToken === 'function') {
@@ -300,11 +320,92 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       throw new Error('No token verification method configured');
     }
 
+    // If authentication failed, attempt transparent session refresh before returning 401.
+    // This handles expired access tokens without requiring client-side refresh logic.
+    if (!user && supportsSessionRefresh(authConfig) && rawRequest instanceof Request) {
+      try {
+        const sessionId = authConfig.getSessionIdFromRequest(rawRequest);
+        if (sessionId) {
+          const newSession = await authConfig.refreshSession(sessionId);
+          if (newSession) {
+            // Refresh succeeded — build updated session headers and re-authenticate.
+            // We create a synthetic request with the new session cookie so
+            // authenticateToken (which reads cookies from the request) picks up
+            // the refreshed session instead of the expired one.
+            refreshHeaders = authConfig.getSessionHeaders(newSession);
+            const refreshedCookie = Object.entries(refreshHeaders)
+              .filter(([k]) => k.toLowerCase() === 'set-cookie')
+              .map(([, v]) => v.split(';')[0]) // Extract name=value before attributes
+              .join('; ');
+            if (refreshedCookie) {
+              const refreshedRequest = new Request(rawRequest.url, {
+                method: rawRequest.method,
+                headers: new Headers(rawRequest.headers),
+              });
+              refreshedRequest.headers.set('Cookie', refreshedCookie);
+              // Pass the refreshed cookie value as the token so authenticateToken
+              // picks up the new session instead of the stale original.
+              // Auth providers typically read cookies from the request object, but
+              // some may also inspect the token parameter directly.
+              const cookieValue = refreshedCookie.includes('=')
+                ? refreshedCookie.split('=').slice(1).join('=')
+                : refreshedCookie;
+              user = await authConfig.authenticateToken(cookieValue, refreshedRequest as any);
+            }
+            if (!user) {
+              refreshHeaders = undefined;
+            }
+          }
+        }
+      } catch (refreshErr) {
+        refreshHeaders = undefined;
+        mastra.getLogger()?.debug('Session refresh failed, falling back to 401', {
+          error: refreshErr instanceof Error ? { message: refreshErr.message } : refreshErr,
+        });
+      }
+    }
+
     if (!user) {
-      return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+      return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
     }
 
     requestContext.set('user', user);
+
+    // Store the raw auth token so downstream code (e.g., editor MCP client
+    // resolution) can forward it when connecting to auth-protected MCP servers.
+    // The token may arrive via Authorization header, apiKey query param, or
+    // cookie (SimpleAuth sets `mastra-token`). Check all sources so the
+    // forwarded value is available regardless of how the user authenticated.
+    let effectiveToken = token;
+    if (!effectiveToken && rawRequest instanceof Request) {
+      const cookieHeader = rawRequest.headers.get('cookie');
+      if (cookieHeader) {
+        const match = cookieHeader.match(/mastra-token=([^;]+)/);
+        if (match?.[1]) effectiveToken = match[1];
+      }
+    }
+    if (effectiveToken) {
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, effectiveToken);
+    }
+
+    if (typeof authConfig.mapUserToResourceId === 'function') {
+      try {
+        const resourceId = authConfig.mapUserToResourceId(user);
+        if (resourceId) {
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+        }
+      } catch (mapError) {
+        mastra.getLogger()?.error('mapUserToResourceId failed', {
+          error: mapError instanceof Error ? { message: mapError.message, stack: mapError.stack } : mapError,
+        });
+        return {
+          action: 'error',
+          status: 500,
+          body: { error: 'Failed to map authenticated user to a resource ID' },
+          headers: refreshHeaders,
+        };
+      }
+    }
 
     try {
       const serverConfig = mastra.getServer();
@@ -330,7 +431,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     mastra.getLogger()?.error('Authentication error', {
       error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
     });
-    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
   }
 
   // ── Authorization ──
@@ -340,13 +441,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const isAuthorized = await authConfig.authorizeUser(user, rawRequest as any);
 
       if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
       }
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorizeUser', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' } };
+      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
     }
   } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
     try {
@@ -354,7 +455,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
 
       if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
       }
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorize', {
@@ -362,13 +463,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         path,
         method,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' } };
+      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
     }
   } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
     const isAuthorized = await checkRules(authConfig.rules, path, method, user);
 
     if (!isAuthorized) {
-      return { action: 'error', status: 403, body: { error: 'Access denied' } };
+      return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
     }
   } else {
     // No explicit authorization configured (authorizeUser, authorize, or rules)
@@ -380,15 +481,15 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
 
         if (!isAuthorized) {
-          return { action: 'error', status: 403, body: { error: 'Access denied' } };
+          return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
         }
       } else {
-        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
       }
     }
   }
 
-  return pass;
+  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
 };
 
 // Check authorization rules

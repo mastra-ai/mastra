@@ -1,9 +1,14 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { AgentBackgroundConfig } from '../background-tasks';
+import type { MastraBrowser } from '../browser';
+import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -24,10 +29,15 @@ import type {
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
@@ -49,6 +59,9 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { MastraBrowser } from '../browser/browser';
+// Screencast types now on MastraBrowser directly
+export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
@@ -77,6 +90,13 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * When true and `model` is also provided, reuse the parent agent for the separate
+   * structuring pass. If a thread is available, Mastra attaches read-only memory so
+   * the structuring model has full conversation context.
+   */
+  useAgent?: boolean;
 
   /**
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
@@ -124,11 +144,16 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+
 export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
   maxRetries?: number; // defaults to agent-level maxRetries
   enabled?: boolean; // defaults to true
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 };
 
 export interface AgentConfig<
@@ -176,6 +201,24 @@ export interface AgentConfig<
    * model: [
    *   { model: 'openai/gpt-4', maxRetries: 2 },
    *   { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   * ]
+   * ```
+   *
+   * @example Static fallback array with per-entry settings
+   * ```typescript
+   * model: [
+   *   {
+   *     model: 'google/gemini-2.5-flash',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.3 },
+   *     providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+   *   },
+   *   {
+   *     model: 'openai/gpt-5-mini',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.7 },
+   *     providerOptions: { openai: { reasoningEffort: 'low' } },
+   *   },
    * ]
    * ```
    *
@@ -292,9 +335,40 @@ export interface AgentConfig<
    */
   skillsFormat?: SkillFormat;
   /**
+   * Browser for web automation capabilities.
+   * When configured, browser tools are automatically injected into the agent.
+   * Accessible via agent.browser for server-side features like screencast.
+   */
+  browser?: MastraBrowser;
+  /**
    * Voice settings for speech input and output.
    */
   voice?: MastraVoice;
+  /**
+   * Messaging channels the agent communicates over (e.g. Slack, Discord).
+   *
+   * @example
+   * ```ts
+   * channels: {
+   *   adapters: {
+   *     discord: createDiscordAdapter(),
+   *     slack: { adapter: createSlackAdapter(), cards: false },
+   *   },
+   *   handlers: {
+   *     // Wrap default DM handler with logging
+   *     onDirectMessage: async (thread, msg, defaultHandler) => {
+   *       console.log('Received DM:', msg.text);
+   *       await defaultHandler(thread, msg);
+   *     },
+   *     // Disable mention handling
+   *     onMention: false,
+   *   },
+   * }
+   * ```
+   *
+   * For full control, pass an `AgentChannels` instance directly.
+   */
+  channels?: ChannelConfig | AgentChannels;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
@@ -320,6 +394,12 @@ export interface AgentConfig<
    */
   maxProcessorRetries?: number;
   /**
+   * Error processors that handle LLM API rejections.
+   * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
+   */
+  errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
+  /**
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
@@ -334,11 +414,16 @@ export interface AgentConfig<
    * If validation fails, an error is thrown.
    */
   requestContextSchema?: PublicSchema<TRequestContext>;
+  /**
+   * Background task configuration for this agent.
+   * Controls which tools can run in the background and their behavior.
+   */
+  backgroundTasks?: AgentBackgroundConfig;
 }
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
-  resource: string;
+  resource?: string;
   options?: MemoryConfigInternal;
 };
 
@@ -374,6 +459,15 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -393,6 +487,8 @@ export type AgentGenerateOptions<
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
+  /** Error processors to use for this generation call (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
@@ -463,6 +559,15 @@ export type AgentStreamOptions<
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
   /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
+  /**
    * Whether to save messages incrementally on step finish
    * @default false
    */
@@ -520,3 +625,71 @@ export type AgentExecuteOnFinishOptions = {
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+
+// =============================================================================
+// Durable Agent Types
+// =============================================================================
+
+/**
+ * Interface for durable agent wrappers (e.g., InngestAgent).
+ *
+ * Durable agents wrap a regular Agent with execution engine-specific
+ * capabilities (like Inngest's durable execution). They expose the
+ * underlying agent and any workflows that need to be registered with Mastra.
+ *
+ * The `stream()` method must return a MastraModelOutput (same as Agent.stream())
+ * to maintain compatibility with the server handlers.
+ */
+export interface DurableAgentLike {
+  /** Agent ID */
+  readonly id: string;
+  /** Agent name */
+  readonly name: string;
+  /** The underlying Mastra Agent */
+  readonly agent: Agent<any, any, any>;
+  /**
+   * Stream a response using durable execution.
+   * Must return MastraModelOutput to be compatible with Agent.stream().
+   */
+  stream(messages: any, options?: any): Promise<any>;
+  /**
+   * The PubSub instance used by this durable agent for streaming events.
+   * Used by server handlers to subscribe to the correct event bus when
+   * observing/reconnecting to agent streams.
+   */
+  readonly pubsub?: PubSub;
+  /**
+   * Get workflows that need to be registered with Mastra.
+   * Called during agent registration to auto-register durable execution workflows.
+   */
+  getDurableWorkflows?(): Workflow<any, any, any, any, any, any, any>[];
+  /**
+   * Set the Mastra instance for observability and other services.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  __setMastra?(mastra: any): void;
+
+  /**
+   * Implementations may proxy all Agent methods to the underlying agent.
+   * For example, InngestAgent uses a Proxy that forwards generate(), listTools(),
+   * getMemory(), etc. to the wrapped Agent instance.
+   */
+  [key: string]: any;
+}
+
+/**
+ * Type guard to check if an object is a DurableAgentLike wrapper.
+ */
+export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
+  if (!obj) return false;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    'agent' in obj &&
+    obj.agent !== null &&
+    typeof obj.agent === 'object' &&
+    typeof obj.agent.id === 'string' &&
+    typeof obj.stream === 'function'
+  );
+}

@@ -56,7 +56,7 @@ vi.mock('../handlers/restart-active-runs', () => ({
 }));
 
 vi.mock('../welcome', () => ({
-  html: '<html><body>Welcome to Mastra</body></html>',
+  welcomeHtml: () => '<html><body>Welcome to Mastra</body></html>',
 }));
 
 describe('Mastra Studio "studioBase" functionality', () => {

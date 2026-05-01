@@ -51,6 +51,20 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
+type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
+  messages?: MessageListInput;
+  runId: string;
+  toolCallId?: string;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+};
+
+type ToolCallRespondFn<OUTPUT> = (
+  messages: MessageListInput,
+  options: StreamParamsBaseWithoutMessages<OUTPUT> & {
+    structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  },
+) => Promise<FullOutput<OUTPUT>>;
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -66,7 +80,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
-  respondFn: Agent['generate'];
+  respondFn: ToolCallRespondFn<OUTPUT>;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -119,7 +133,15 @@ async function executeToolCallAndRespond<OUTPUT>({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
-        return respondFn(updatedMessages as MessageListInput, params);
+        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+        } = {
+          ...params,
+        };
+
+        delete (respondOptions as { messages?: MessageListInput }).messages;
+
+        return respondFn(updatedMessages as MessageListInput, respondOptions);
       }
     }
   }
@@ -541,7 +563,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
-        respondFn: this.generate.bind(this),
+        respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
@@ -1307,9 +1329,15 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
+    let requestBody = processedParams;
+    if (route === 'resume-stream') {
+      const { messages: _messages, ...resumeStreamBody } = processedParams;
+      requestBody = resumeStreamBody;
+    }
+
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
-      body: processedParams,
+      body: requestBody,
       stream: true,
     });
 
@@ -1434,7 +1462,9 @@ export class Agent extends BaseResource {
                   : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing
+                // This will wait for the recursive stream to complete before continuing.
+                // Forward `route` so stream-until-idle (and future non-default routes)
+                // stay on the same endpoint across client-tool continuations.
                 try {
                   await this.processStreamResponse(
                     {
@@ -1442,6 +1472,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
+                    route,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
@@ -1540,7 +1571,10 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveNetworkToolCall(params: { runId: string }): Promise<
+  async approveNetworkToolCall(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1549,9 +1583,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
     const response: Response = await this.request(`/agents/${this.agentId}/approve-network-tool-call`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
     });
 
@@ -1585,7 +1620,10 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineNetworkToolCall(params: { runId: string }): Promise<
+  async declineNetworkToolCall(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1594,9 +1632,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
     const response: Response = await this.request(`/agents/${this.agentId}/decline-network-tool-call`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
     });
 
@@ -1744,7 +1783,57 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions?: StreamParamsBaseWithoutMessages<any> & {
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamUntilIdle<OUTPUT>(
+    messagesOrParams: MessageListInput,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+      maxIdleMs?: number;
+    },
+  ): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1753,6 +1842,26 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    // Handle both new signature (messages, options) and old signature (single param object)
+    let params: StreamParams<OUTPUT> = {
+      messages: messagesOrParams as MessageListInput,
+      ...options,
+    } as StreamParams<OUTPUT>;
+
+    let structuredOutput: SerializableStructuredOutputOptions<OUTPUT> | undefined = undefined;
+    if (params.structuredOutput?.schema) {
+      structuredOutput = {
+        ...params.structuredOutput,
+        schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
+      } as SerializableStructuredOutputOptions<OUTPUT>;
+    }
+    const processedParams: StreamParams<OUTPUT> = {
+      ...params,
+      requestContext: parseClientRequestContext(params.requestContext),
+      clientTools: processClientTools(params.clientTools),
+      structuredOutput,
+    };
+
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -1762,7 +1871,8 @@ export class Agent extends BaseResource {
     });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, readableController!, 'approve-tool-call');
+    // This returns immediately with response metadata and continues streaming in background
+    const response = await this.processStreamResponse(processedParams, readableController!, 'stream-until-idle');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1792,7 +1902,11 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineToolCall(params: { runId: string; toolCallId: string }): Promise<
+  async approveToolCall(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1801,6 +1915,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
+    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -1810,7 +1927,7 @@ export class Agent extends BaseResource {
     });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, readableController!, 'decline-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController!, 'approve-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1826,6 +1943,191 @@ export class Agent extends BaseResource {
     };
 
     // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async declineToolCall(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const { requestContext, ...rest } = params;
+    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(processedParams, readableController!, 'decline-tool-call');
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Observe (reconnect to) an existing agent stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.runId - The run ID to observe
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a streaming Response
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a stream from a specific position
+   * const response = await client.agents('my-agent').observe({
+   *   runId: 'run-123',
+   *   offset: 42, // Resume from event 42
+   * });
+   *
+   * await response.processDataStream({
+   *   onChunk: (chunk) => console.log('Received:', chunk),
+   * });
+   * ```
+   */
+  async observe(params: { runId: string; offset?: number }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/agents/${this.agentId}/observe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Resumes a suspended agent stream with custom resume data.
+   * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
+   */
+  async resumeStream<OUTPUT extends {}>(
+    resumeData: JSONValue,
+    options: ResumeStreamParams<OUTPUT>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...options,
+      resumeData,
+      requestContext: parseClientRequestContext(options.requestContext),
+      clientTools: processClientTools(options.clientTools),
+      structuredOutput: options.structuredOutput
+        ? {
+            ...options.structuredOutput,
+            schema: standardSchemaToJSONSchema(toStandardSchema(options.structuredOutput.schema)),
+          }
+        : undefined,
+    };
+
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream');
+
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
     streamResponse.processDataStream = async ({
       onChunk,
     }: {
@@ -1844,10 +2146,15 @@ export class Agent extends BaseResource {
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
-  async approveToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+  async approveToolCallGenerate(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<any> {
+    const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
     });
   }
 
@@ -1855,10 +2162,15 @@ export class Agent extends BaseResource {
    * Declines a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
-  async declineToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+  async declineToolCallGenerate(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<any> {
+    const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
     });
   }
 

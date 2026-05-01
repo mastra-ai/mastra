@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SlashCommand } from '@mariozechner/pi-tui';
-import type { HarnessEventListener, TaskItem } from '@mastra/core/harness';
+import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
@@ -120,6 +120,9 @@ export function setupKeyboardShortcuts(
     }
     for (const reminder of state.allSystemReminderComponents) {
       reminder.setExpanded(state.toolOutputExpanded);
+    }
+    for (const shell of state.allShellComponents) {
+      shell.setExpanded(state.toolOutputExpanded);
     }
     state.ui.requestRender();
   });
@@ -293,8 +296,11 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
+    { name: 'browser', description: 'Configure browser automation' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
+    { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'observability', description: 'Configure cloud observability' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -492,8 +498,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const harnessState = state.harness.getState() as { tasks?: TaskItem[] };
-    const tasks = harnessState.tasks || [];
+    const tasks = state.harness.getDisplayState().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

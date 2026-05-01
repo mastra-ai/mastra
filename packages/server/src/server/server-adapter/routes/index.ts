@@ -10,6 +10,9 @@ import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
+import { BACKGROUND_TASK_ROUTES } from './background-tasks';
+import { CHANNELS_ROUTES } from './channels';
+import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -18,6 +21,7 @@ import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
+import { RESPONSES_ROUTES } from './responses';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { StoredAgentRoutes } from './stored-agents';
@@ -144,6 +148,8 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,
   ...PROCESSORS_ROUTES,
+  ...RESPONSES_ROUTES,
+  ...CONVERSATIONS_ROUTES,
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
   ...OBSERVABILITY_ROUTES,
@@ -164,6 +170,8 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...PROCESSOR_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
+  ...BACKGROUND_TASK_ROUTES,
+  ...CHANNELS_ROUTES,
 ];
 
 /**
@@ -176,6 +184,8 @@ export type ServerRoutes = readonly [
   ...typeof WORKFLOWS_ROUTES,
   ...typeof TOOLS_ROUTES,
   ...typeof PROCESSORS_ROUTES,
+  ...typeof RESPONSES_ROUTES,
+  ...typeof CONVERSATIONS_ROUTES,
   ...typeof MEMORY_ROUTES,
   ...typeof SCORES_ROUTES,
   ...typeof OBSERVABILITY_ROUTES,
@@ -196,6 +206,7 @@ export type ServerRoutes = readonly [
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
+  ...typeof CHANNELS_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

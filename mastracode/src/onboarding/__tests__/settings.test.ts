@@ -9,6 +9,7 @@ import {
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
 } from '../settings.js';
@@ -29,6 +30,10 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
+      observerModelOverride: null,
+      reflectorModelOverride: null,
+      omObservationThreshold: null,
+      omReflectionThreshold: null,
       subagentModels: {},
     },
     preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
@@ -47,6 +52,14 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     ],
     modelUseCounts: {},
     updateDismissedVersion: null,
+    memoryGateway: {},
+    browser: {
+      enabled: false,
+      provider: 'stagehand',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      stagehand: { env: 'LOCAL' },
+    },
     ...overrides,
   };
 }
@@ -63,8 +76,8 @@ const builtinPacks = [
   {
     id: 'openai',
     models: {
-      plan: 'openai/gpt-5.4',
-      build: 'openai/gpt-5.4',
+      plan: 'openai/gpt-5.5',
+      build: 'openai/gpt-5.5',
       fast: 'openai/gpt-5.4-mini',
     },
   },
@@ -254,8 +267,8 @@ describe('resolveThreadActiveModelPackId', () => {
     const settings = createSettings({ models: { ...createSettings().models, activeModelPackId: 'anthropic' } });
 
     const resolved = resolveThreadActiveModelPackId(settings, builtinPacks, {
-      modeModelId_plan: 'openai/gpt-5.4',
-      modeModelId_build: 'openai/gpt-5.4',
+      modeModelId_plan: 'openai/gpt-5.5',
+      modeModelId_build: 'openai/gpt-5.5',
       modeModelId_fast: 'openai/gpt-5.4-mini',
     });
 
@@ -283,6 +296,73 @@ describe('resolveThreadActiveModelPackId', () => {
     });
 
     expect(resolved).toBeNull();
+  });
+});
+
+describe('resolveOmRoleModel', () => {
+  const omPacks = [
+    { id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' },
+    { id: 'gemini', modelId: 'google/gemini-2.5-flash' },
+  ];
+
+  it('returns per-role overrides independently when both are set', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'custom',
+        omModelOverride: 'shared/fallback',
+        observerModelOverride: 'openrouter/anthropic/claude-haiku-4-5',
+        reflectorModelOverride: 'openrouter/openai/gpt-5.4-mini',
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('openrouter/anthropic/claude-haiku-4-5');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('openrouter/openai/gpt-5.4-mini');
+  });
+
+  it('falls back to omModelOverride when the role-specific override is null (back-compat)', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'custom',
+        omModelOverride: 'shared/fallback',
+        observerModelOverride: null,
+        reflectorModelOverride: null,
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('shared/fallback');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('shared/fallback');
+  });
+
+  it('resolves a built-in OM pack when no role override is set', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'anthropic',
+        omModelOverride: null,
+        observerModelOverride: null,
+        reflectorModelOverride: null,
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('anthropic/claude-haiku-4-5');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('anthropic/claude-haiku-4-5');
+  });
+
+  it('prefers role-specific override even when an active built-in pack exists', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeOmPackId: 'anthropic',
+        omModelOverride: null,
+        observerModelOverride: 'openrouter/x-ai/grok-4-fast',
+        reflectorModelOverride: null,
+      },
+    });
+
+    expect(resolveOmRoleModel(settings, 'observer', omPacks)).toBe('openrouter/x-ai/grok-4-fast');
+    expect(resolveOmRoleModel(settings, 'reflector', omPacks)).toBe('anthropic/claude-haiku-4-5');
   });
 });
 

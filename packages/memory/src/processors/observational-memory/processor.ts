@@ -9,6 +9,7 @@ import { omDebug } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
+import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
@@ -52,6 +53,14 @@ function getOmObservabilityContext(
   };
 }
 
+/** Key used to store gateway detection result in per-processor state. */
+const GATEWAY_STATE_KEY = '__isGatewayModel';
+
+/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
+function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
+  return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
+}
+
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
@@ -62,12 +71,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   /** Memory instance for loading context. */
   private readonly memory: MemoryContextProvider;
 
+  /** Whether temporal-gap reminder markers should be inserted. */
+  private readonly temporalMarkers: boolean;
+
   /** Active turn — created on first processInputStep, ended on processOutputResult. */
   private turn?: ObservationTurn;
 
-  constructor(engine: ObservationalMemory, memory: MemoryContextProvider) {
+  constructor(engine: ObservationalMemory, memory: MemoryContextProvider, options?: { temporalMarkers?: boolean }) {
     this.engine = engine;
     this.memory = memory;
+    this.temporalMarkers = options?.temporalMarkers ?? false;
   }
 
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
@@ -93,6 +106,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) {
       omDebug(`[OM:processInputStep:NO-CONTEXT] getThreadContext returned null — returning early`);
+      return messageList;
+    }
+
+    // When the agent is using a Mastra gateway model, the gateway handles OM
+    // (observation, reflection, context injection) server-side. Running it
+    // locally would double-process messages and cause history duplication.
+    // We detect this from the model directly (not requestContext) so that
+    // the flag doesn't leak to child agents in delegation scenarios.
+    if (isMastraGatewayModel(model)) {
+      state[GATEWAY_STATE_KEY] = true;
+      omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
       return messageList;
     }
 
@@ -127,6 +151,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // processOutputResult. In production, getInputProcessors() and
       // getOutputProcessors() each call createOMProcessor(), producing two
       // different instances that share only the processorStates map.
+      const activeTurn = (state.__omTurn as ObservationTurn | undefined) ?? this.turn;
+      if (activeTurn && activeTurn.messageList !== messageList) {
+        // Durable runs may deserialize a fresh MessageList between loop iterations. End the
+        // old turn first so any messages tracked on that list are flushed before OM moves on.
+        await activeTurn.end().catch(() => {});
+        if (this.turn === activeTurn) {
+          this.turn = undefined;
+        }
+        state.__omTurn = undefined;
+      }
+
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
@@ -139,17 +174,27 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
+            onSyncObservationComplete: rotateResponseMessageId,
           },
         });
         this.turn.writer = writer;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
+        if (stepNumber === 0 && this.temporalMarkers) {
+          await insertTemporalGapMarkers({ messageList, writer });
+        }
         state.__omTurn = this.turn;
       }
+
+      this.turn.addHooks({
+        onBufferChunkSealed: rotateResponseMessageId,
+        onSyncObservationComplete: rotateResponseMessageId,
+      });
 
       const observabilityContext = getOmObservabilityContext(args);
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
+      this.turn.actorModelContext = actorModelContext;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -240,6 +285,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             postContextTokenCount: finalTotalPending,
             messageList,
             details: {},
+            observerExchange: ctx.observerExchange,
           });
         }
       }
@@ -254,6 +300,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
+
+    // Gateway handles OM — skip local output processing (see processInputStep).
+    if (state[GATEWAY_STATE_KEY]) return messageList;
 
     const observabilityContext = getOmObservabilityContext(args);
     state.__omObservabilityContext = observabilityContext;

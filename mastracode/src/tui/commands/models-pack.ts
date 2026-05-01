@@ -2,6 +2,7 @@ import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SelectItem } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 
+import { setClipboardText } from '../../clipboard/index.js';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '../../onboarding/packs.js';
 import { getAvailableModePacks } from '../../onboarding/packs.js';
 import {
@@ -18,6 +19,54 @@ import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
 import { getSelectListTheme, mastra, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
+
+// ---------------------------------------------------------------------------
+// Pack sharing — serialize/deserialize
+// ---------------------------------------------------------------------------
+
+const SHARE_PREFIX = 'mastra-pack:';
+
+interface SharedPackPayload {
+  name: string;
+  models: { build: string; plan: string; fast: string };
+}
+
+export function serializePack(pack: ModePack): string {
+  const payload: SharedPackPayload = {
+    name: pack.name,
+    models: { build: pack.models.build, plan: pack.models.plan, fast: pack.models.fast },
+  };
+  return SHARE_PREFIX + Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64');
+}
+
+export function deserializePack(input: string): ModePack | null {
+  try {
+    const trimmed = input.trim();
+    if (!trimmed.startsWith(SHARE_PREFIX)) return null;
+    const json = Buffer.from(trimmed.slice(SHARE_PREFIX.length), 'base64').toString('utf-8');
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+
+    const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
+    if (!name) return null;
+
+    const models = parsed.models as Record<string, unknown> | undefined;
+    if (!models || typeof models !== 'object') return null;
+
+    const build = typeof models.build === 'string' ? models.build : '';
+    const plan = typeof models.plan === 'string' ? models.plan : '';
+    const fast = typeof models.fast === 'string' ? models.fast : '';
+    if (!build || !plan || !fast) return null;
+
+    return {
+      id: `custom:${name}`,
+      name,
+      description: 'Imported custom pack',
+      models: { build, plan, fast },
+    };
+  } catch {
+    return null;
+  }
+}
 
 async function selectModel(
   ctx: SlashCommandContext,
@@ -90,10 +139,11 @@ async function askCustomPackName(ctx: SlashCommandContext, defaultName?: string)
 async function askCustomPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'activate' | 'edit' | 'delete' | null> {
+): Promise<'activate' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
+    { id: 'share', label: 'Share', description: 'Copy to clipboard' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
 
@@ -112,6 +162,7 @@ async function askCustomPackAction(
     const detailById: Record<string, string> = {
       activate: getPackDetail(pack),
       edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
+      share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
     };
 
@@ -127,7 +178,7 @@ async function askCustomPackAction(
         new Text(theme.fg('text', `${theme.fg('success', '✓')} ${pack.name} → ${theme.bold(item.value)}`), 0, 0),
       );
       ctx.state.ui.requestRender();
-      resolve(item.value as 'activate' | 'edit' | 'delete');
+      resolve(item.value as 'activate' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
@@ -467,6 +518,93 @@ async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promi
   }
 }
 
+function sharePack(ctx: SlashCommandContext, pack: ModePack): void {
+  const serialized = serializePack(pack);
+  const copied = setClipboardText(serialized);
+  if (copied) {
+    ctx.showInfo(`Copied ${pack.name} pack to clipboard`);
+  } else {
+    ctx.showInfo(`Share string for ${pack.name}:\n${serialized}`);
+  }
+}
+
+async function askImportPackString(ctx: SlashCommandContext): Promise<string | null> {
+  return new Promise(resolve => {
+    const question = new AskQuestionInlineComponent(
+      {
+        question: 'Paste the shared model pack string',
+        formatResult: answer => `Import: ${answer.slice(0, 40)}${answer.length > 40 ? '…' : ''}`,
+        onSubmit: answer => {
+          ctx.state.activeInlineQuestion = undefined;
+          const trimmed = answer.trim();
+          resolve(trimmed.length > 0 ? trimmed : null);
+        },
+        onCancel: () => {
+          ctx.state.activeInlineQuestion = undefined;
+          resolve(null);
+        },
+      },
+      ctx.state.ui,
+    );
+
+    ctx.state.activeInlineQuestion = question;
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.chatContainer.addChild(question);
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.ui.requestRender();
+    ctx.state.chatContainer.invalidate();
+  });
+}
+
+async function askImportCollision(
+  ctx: SlashCommandContext,
+  existingName: string,
+): Promise<'overwrite' | 'rename' | 'cancel'> {
+  const actions = [
+    { id: 'overwrite', label: 'Overwrite', description: `Replace the existing "${existingName}" pack` },
+    { id: 'rename', label: 'Rename', description: 'Choose a different name for the imported pack' },
+    { id: 'cancel', label: 'Cancel', description: 'Abort import' },
+  ] as const;
+
+  return new Promise(resolve => {
+    const container = new Box(1, 1);
+    container.addChild(new Text(theme.bold(theme.fg('accent', `A pack named "${existingName}" already exists`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = actions.map(a => ({
+      value: a.id,
+      label: `  ${a.label}  ${theme.fg('dim', a.description)}`,
+    }));
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+
+    selectList.onSelect = (selected: SelectItem) => {
+      ctx.state.activeInlineQuestion = undefined;
+      container.clear();
+      container.addChild(new Text(theme.fg('dim', `${existingName}: ${selected.value}`), 0, 0));
+      ctx.state.ui.requestRender();
+      resolve(selected.value as 'overwrite' | 'rename' | 'cancel');
+    };
+
+    selectList.onCancel = () => {
+      ctx.state.activeInlineQuestion = undefined;
+      container.clear();
+      container.addChild(new Text(theme.fg('dim', `${existingName}: cancelled`), 0, 0));
+      ctx.state.ui.requestRender();
+      resolve('cancel');
+    };
+
+    container.addChild(selectList);
+
+    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
+    ctx.state.activeInlineQuestion = inputShim;
+    ctx.state.chatContainer.addChild(container);
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.ui.requestRender();
+    ctx.state.chatContainer.invalidate();
+  });
+}
+
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
   const harness = ctx.state.harness;
   const models = await harness.listAvailableModels();
@@ -513,6 +651,10 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     value: p.id,
     label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === currentPackId ? theme.fg('dim', ' (current)') : ''}`,
   }));
+  items.push({
+    value: '__import__',
+    label: `  Import Pack  ${theme.fg('dim', 'Paste a shared pack config')}`,
+  });
 
   return new Promise<void>(resolve => {
     const container = new Box(1, 1);
@@ -523,6 +665,11 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     const detailText = new Text('', 0, 0);
 
     const updateDetail = (packId: string) => {
+      if (packId === '__import__') {
+        detailText.setText(theme.fg('dim', '  Paste a mastra-pack:... string from someone else to import their pack.'));
+        ctx.state.ui.requestRender();
+        return;
+      }
       const pack = packs.find(p => p.id === packId);
       if (!pack) return;
       detailText.setText(getPackDetail(pack));
@@ -541,6 +688,70 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.activeInlineQuestion = undefined;
+
+      if (item.value === '__import__') {
+        collapseResult(null);
+        const importStr = await askImportPackString(ctx);
+        if (!importStr) {
+          collapseResult('cancelled');
+          resolve();
+          return;
+        }
+        const imported = deserializePack(importStr);
+        if (!imported) {
+          collapseResult('cancelled');
+          ctx.showInfo('Invalid pack string. Expected a mastra-pack:... value.');
+          resolve();
+          return;
+        }
+
+        // Validate that the imported model IDs are available in this environment
+        const availableModelIds = new Set(models.map(m => m.id));
+        const unavailable = Object.entries(imported.models)
+          .filter(([, modelId]) => !availableModelIds.has(modelId))
+          .map(([mode, modelId]) => `${mode}: ${modelId}`);
+        if (unavailable.length > 0) {
+          collapseResult('cancelled');
+          ctx.showInfo(`Can't import — these models aren't available:\n${unavailable.join('\n')}`);
+          resolve();
+          return;
+        }
+
+        // Handle name collision with existing custom pack
+        const s = loadSettings();
+        const existing = s.customModelPacks.find(p => p.name === imported.name);
+        if (existing) {
+          const collision = await askImportCollision(ctx, imported.name);
+          if (collision === 'cancel') {
+            collapseResult('cancelled');
+            resolve();
+            return;
+          }
+          if (collision === 'rename') {
+            const newName = await askCustomPackName(ctx, imported.name);
+            if (!newName) {
+              collapseResult('cancelled');
+              resolve();
+              return;
+            }
+            if (s.customModelPacks.some(p => p.name === newName)) {
+              collapseResult('cancelled');
+              ctx.showInfo(`A custom pack named "${newName}" already exists. Rename or delete it first.`);
+              resolve();
+              return;
+            }
+            imported.name = newName;
+            imported.id = `custom:${newName}`;
+          }
+          // collision === 'overwrite' falls through
+        }
+
+        await applyPack(ctx, imported);
+        collapseResult(`Imported pack → ${theme.bold(imported.name)}`);
+        ctx.showInfo(`Imported and activated ${imported.name} pack`);
+        resolve();
+        return;
+      }
 
       let pack: ModePack | null | undefined = packs.find(p => p.id === item.value);
       let previousPackId: string | undefined;
@@ -568,6 +779,11 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
             ctx.showInfo(`Deleted custom pack: ${pack.name}`);
             resolve();
             return;
+          }
+
+          if (action === 'share') {
+            sharePack(ctx, pack);
+            continue;
           }
 
           if (action === 'activate') {

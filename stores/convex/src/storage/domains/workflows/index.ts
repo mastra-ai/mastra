@@ -113,14 +113,19 @@ export class WorkflowsConvex extends WorkflowsStorage {
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
 
-    // Use index hint if workflowName is provided - critical for performance
-    const indexHint = workflowName ? { index: 'by_workflow' as const, workflowName } : undefined;
+    // Pass known filters to queryTable for server-side filtering instead of fetching all rows
+    const filters: Array<{ field: string; value: string }> = [];
+    if (workflowName) {
+      filters.push({ field: 'workflow_name', value: workflowName });
+    }
+    if (resourceId) {
+      filters.push({ field: 'resourceId', value: resourceId });
+    }
 
-    let rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined, indexHint);
-
-    // Apply filters in JavaScript (status requires parsing snapshot JSON)
-    if (workflowName) rows = rows.filter(run => run.workflow_name === workflowName);
-    if (resourceId) rows = rows.filter(run => run.resourceId === resourceId);
+    let rows = await this.#db.queryTable<RawWorkflowRun>(
+      TABLE_WORKFLOW_SNAPSHOT,
+      filters.length > 0 ? filters : undefined,
+    );
     if (fromDate) rows = rows.filter(run => new Date(run.createdAt).getTime() >= fromDate.getTime());
     if (toDate) rows = rows.filter(run => new Date(run.createdAt).getTime() <= toDate.getTime());
     if (status) {
@@ -158,8 +163,20 @@ export class WorkflowsConvex extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
-    const match = runs.find(run => run.run_id === runId && (!workflowName || run.workflow_name === workflowName));
+    let match: RawWorkflowRun | null;
+    if (workflowName) {
+      // O(1) composite key lookup via by_workflow_run index
+      match = await this.#db.load<RawWorkflowRun | null>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: workflowName, run_id: runId },
+      });
+    } else {
+      // Fallback: filter by run_id server-side (no dedicated index, but avoids full unfiltered scan)
+      const rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
+        { field: 'run_id', value: runId },
+      ]);
+      match = rows[0] ?? null;
+    }
     if (!match) return null;
 
     return {
@@ -177,10 +194,11 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }
 
   private async getRun(workflowName: string, runId: string): Promise<RawWorkflowRun | null> {
-    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
-      { field: 'workflow_name', value: workflowName },
-    ]);
-    return runs.find(run => run.run_id === runId) ?? null;
+    // O(1) composite key lookup instead of querying by workflow_name then filtering in JS
+    return this.#db.load<RawWorkflowRun | null>({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      keys: { workflow_name: workflowName, run_id: runId },
+    });
   }
 
   private ensureSnapshot(run: { snapshot: WorkflowRunState | string }): WorkflowRunState {

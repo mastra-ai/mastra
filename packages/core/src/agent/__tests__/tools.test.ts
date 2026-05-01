@@ -1388,3 +1388,74 @@ describe('requireApproval property preservation', () => {
     }
   });
 });
+
+describe('sub-agent prompt input normalization (GitHub #14154)', () => {
+  // The agentInputSchema defined inside listAgentTools uses z.string() for "prompt".
+  // When an LLM drifts to sending "query" instead, validateToolInput (called
+  // by CoreToolBuilder.createExecute) must normalize it before validation fails.
+  const agentInputSchema = z.object({
+    prompt: z.string().describe('The prompt to send to the agent'),
+    threadId: z.string().nullish().describe('Thread ID'),
+    resourceId: z.string().nullish().describe('Resource ID'),
+    instructions: z.string().nullish().describe('Additional instructions'),
+    maxSteps: z.number().min(3).nullish().describe('Max steps'),
+  });
+
+  it('should normalize "query" to "prompt" through validateToolInput', async () => {
+    const { validateToolInput } = await import('../../tools/validation');
+    const result = validateToolInput(agentInputSchema, { query: 'give me insights into target USA' });
+    expect(result.error).toBeUndefined();
+    expect(result.data?.prompt).toBe('give me insights into target USA');
+  });
+
+  it('should normalize "message" to "prompt" through validateToolInput', async () => {
+    const { validateToolInput } = await import('../../tools/validation');
+    const result = validateToolInput(agentInputSchema, { message: 'hello world' });
+    expect(result.error).toBeUndefined();
+    expect(result.data?.prompt).toBe('hello world');
+  });
+
+  it('should prefer "prompt" over alias when both present', async () => {
+    const { validateToolInput } = await import('../../tools/validation');
+    const result = validateToolInput(agentInputSchema, { prompt: 'real prompt', query: 'drifted query' });
+    expect(result.error).toBeUndefined();
+    expect(result.data?.prompt).toBe('real prompt');
+  });
+
+  it('sub-agent tool is created with correct schema', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [{ type: 'text', text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      instructions: 'You are a sub-agent',
+      model: mockModel,
+    });
+
+    const parentAgent = new Agent({
+      id: 'parent-agent',
+      name: 'Parent Agent',
+      instructions: 'You are a parent agent',
+      model: mockModel,
+      agents: { subAgent: subAgent },
+    });
+
+    const tools = await parentAgent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+
+    const subAgentTool = tools['agent-subAgent'];
+    expect(subAgentTool).toBeDefined();
+    expect(subAgentTool.description).toContain('subAgent');
+  });
+});

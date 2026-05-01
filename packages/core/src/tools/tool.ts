@@ -115,14 +115,32 @@ export class Tool<
   mastra?: Mastra;
 
   /**
-   * Whether the tool requires explicit user approval before execution
+   * Whether the tool requires explicit user approval before execution.
+   * Accepts a boolean for static behavior, or a function evaluated per-call
+   * for conditional approval.
    * @example
    * ```typescript
-   * // For destructive operations
+   * // Static
    * requireApproval: true
+   *
+   * // Conditional — only require approval for non-dry-run calls
+   * requireApproval: async ({ isDryRun }) => !isDryRun
    * ```
    */
-  requireApproval?: boolean;
+  requireApproval?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['requireApproval'];
+
+  /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
 
   /**
    * Provider-specific options passed to the model when this tool is used.
@@ -237,6 +255,7 @@ export class Tool<
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.strict = opts.strict;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.inputExamples = opts.inputExamples;

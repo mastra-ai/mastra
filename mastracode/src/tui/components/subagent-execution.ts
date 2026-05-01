@@ -10,6 +10,7 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import { safeStringify } from '@mastra/core/utils';
 import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
 import type { IToolExecutionComponent } from './tool-execution-interface.js';
 
@@ -35,6 +36,8 @@ const COLLAPSED_LINES = 15;
 export interface SubagentExecutionOptions {
   /** When true, auto-collapse to a single summary line on completion. Default false. */
   collapseOnComplete?: boolean;
+  /** True when this subagent is running on a forked copy of the parent thread. */
+  forked?: boolean;
 }
 
 export class SubagentExecutionComponent extends Container implements IToolExecutionComponent {
@@ -52,6 +55,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
   private finalResult?: string;
   private expanded = false;
   private collapseOnComplete: boolean;
+  private forked: boolean;
 
   constructor(agentType: string, task: string, ui: TUI, modelId?: string, options?: SubagentExecutionOptions) {
     super();
@@ -60,6 +64,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     this.modelId = modelId;
     this.ui = ui;
     this.collapseOnComplete = options?.collapseOnComplete ?? false;
+    this.forked = options?.forked ?? false;
 
     this.rebuild();
   }
@@ -76,7 +81,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
       if (toolCall.name === name && !toolCall.done) {
         toolCall.done = true;
         toolCall.isError = isError;
-        toolCall.result = typeof result === 'string' ? result : JSON.stringify(result ?? '');
+        toolCall.result = typeof result === 'string' ? result : safeStringify(result ?? '');
         break;
       }
     }
@@ -118,7 +123,8 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
 
     // ── Bottom border with info (always rendered) ──
-    const typeLabel = theme.bold(theme.fg('accent', this.agentType));
+    const typeLabelText = this.forked ? 'fork' : this.agentType;
+    const typeLabel = theme.bold(theme.fg('accent', typeLabelText));
     const modelLabel = this.modelId ? theme.fg('muted', ` ${this.modelId}`) : '';
     const statusIcon = this.done
       ? this.isError

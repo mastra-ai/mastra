@@ -21,7 +21,7 @@ const defaultOptions: ExternalToast = {
   unstyled: true,
   classNames: {
     toast:
-      'bg-surface3 w-full h-auto rounded-lg gap-2 border border-border1 px-3 py-2 flex items-center justify-between pointer-events-auto shadow-card :data-content:flex-1',
+      'bg-surface3 w-full h-auto rounded-xl gap-2 border border-border1 px-3 py-2 flex items-center justify-between pointer-events-auto shadow-card :data-content:flex-1',
     title: 'text-xs font-medium text-neutral5',
     description: 'text-xs text-neutral3',
     cancelButton:

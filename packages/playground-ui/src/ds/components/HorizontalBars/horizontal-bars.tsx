@@ -36,18 +36,15 @@ export function HorizontalBars({
             </div>
           ))}
         </div>
+        <span className="shrink-0 text-ui-sm text-neutral2 pr-2">Total</span>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
           const total = d.values.reduce((s, v) => s + v, 0);
 
           return (
-            <div key={d.name} className="grid gap-1">
-              <div className="flex items-center justify-between">
-                <span className="text-ui-sm text-neutral4 truncate">{d.name}</span>
-                <span className="text-ui-sm text-neutral4 tabular-nums shrink-0">{fmt(total)}</span>
-              </div>
-              <div className="relative h-5 w-full">
+            <div key={d.name} className="flex items-center gap-14 h-6 ">
+              <div className="relative h-full flex-1 min-w-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
@@ -65,7 +62,7 @@ export function HorizontalBars({
                             <div
                               key={seg.label}
                               className={cn(
-                                'absolute inset-y-0',
+                                'absolute inset-y-0 opacity-40 dark:opacity-100',
                                 si === 0 && 'rounded-l',
                                 isLastWithValue && 'rounded-r',
                               )}
@@ -81,7 +78,7 @@ export function HorizontalBars({
                         return (
                           <div
                             key={seg.label}
-                            className="absolute inset-y-0 left-0 rounded"
+                            className="absolute inset-y-0 left-0 rounded opacity-40 dark:opacity-100"
                             style={{ width: `${pct}%`, backgroundColor: seg.color }}
                           />
                         );
@@ -99,7 +96,11 @@ export function HorizontalBars({
                     </div>
                   </TooltipContent>
                 </Tooltip>
+                <span className="absolute inset-y-0 left-2.5 flex items-center text-ui-sm text-neutral4 truncate z-10 pointer-events-none">
+                  {d.name}
+                </span>
               </div>
+              <span className="text-ui-md text-neutral4 tabular-nums shrink-0 pr-3">{fmt(total)}</span>
             </div>
           );
         })}

@@ -71,8 +71,9 @@ await harness.sendMessage({ content: 'Hello!' })
   },
   {
     name: 'stateSchema',
-    type: 'z.ZodObject',
-    description: 'Zod schema defining the shape of harness state. Used for validation and extracting defaults.',
+    type: 'StandardJSONSchemaV1',
+    description:
+      'Standard JSON Schema defining the shape of harness state. Used for validation and extracting defaults.',
     isOptional: true,
   },
   {
@@ -220,6 +221,14 @@ await harness.sendMessage({ content: 'Hello!' })
             description: 'Optional stop condition for the spawned subagent.',
             isOptional: true,
           },
+          {
+            name: 'forked',
+            type: 'boolean',
+            description:
+              'When `true`, calls to this subagent default to forked mode: the subagent runs on a clone of the parent thread, reusing the parent agent’s instructions, tools, and model so the prompt-cache prefix stays intact. Requires `memory` to be configured. The subagent definition’s own `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode. Callers can still override per-invocation via `forked: false` in the `subagent` tool input. See the [Forked subagents](#forked-subagents) section below for full semantics.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
         ],
       },
     ],
@@ -336,6 +345,14 @@ Return a read-only snapshot of the current harness state.
 
 ```typescript
 const state = harness.getState()
+```
+
+#### `getDisplayState()`
+
+Return the current `HarnessDisplayState` snapshot for UI rendering.
+
+```typescript
+const displayState = harness.getDisplayState()
 ```
 
 #### `setState(updates)`
@@ -474,15 +491,20 @@ await harness.switchThread({ threadId: 'thread-abc123' })
 
 #### `listThreads(options?)`
 
-List threads from storage. By default, only threads for the current resource are returned.
+List threads from storage. By default, only threads for the current resource are returned, and transient [forked subagent](#forked-subagents) threads are hidden so they don’t appear in user-facing thread pickers / startup flows.
 
 ```typescript
-// List threads for current resource
+// List threads for current resource (forks hidden)
 const threads = await harness.listThreads()
 
-// List all threads across resources
+// List all threads across resources (forks still hidden)
 const allThreads = await harness.listThreads({ allResources: true })
+
+// Include forked subagent fork threads (debug / admin tooling only)
+const everything = await harness.listThreads({ includeForkedSubagents: true })
 ```
+
+Fork threads are tagged with `metadata.forkedSubagent === true` (and `metadata.parentThreadId`) by the harness. Set `includeForkedSubagents: true` to opt back into seeing them — e.g. for a debug panel.
 
 #### `renameThread({ title })`
 
@@ -644,6 +666,12 @@ Respond to a pending question from the `ask_user` built-in tool.
 
 ```typescript
 harness.respondToQuestion({ questionId: 'q-123', answer: 'Yes, proceed with the refactor' })
+```
+
+For multi-select questions, pass the selected option labels as a string array.
+
+```typescript
+harness.respondToQuestion({ questionId: 'q-123', answer: ['Add tests', 'Update docs'] })
 ```
 
 #### `respondToPlanApproval({ planId, response })`
@@ -859,11 +887,72 @@ await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-6' })
 await harness.setSubagentModelId({ modelId: 'anthropic/claude-haiku-3.5', agentType: 'explore' })
 ```
 
+### Forked subagents
+
+By default, a subagent runs with a fresh context — it doesn't see the parent conversation. **Forked subagents** opt into a different model: the subagent runs on a clone of the parent thread and reuses the parent agent's full configuration. This is useful when the subagent needs the full context of the conversation so far (e.g., recalling earlier user-supplied facts), and when prompt-cache hit rates matter.
+
+#### Enabling forked mode
+
+Set `forked: true` either on the [`HarnessSubagent` definition](#configuration) (per-type default) or on each `subagent` tool call (per-invocation override):
+
+```typescript
+// Per-type default — every call to this subagent forks unless overridden.
+const subagents: HarnessSubagent[] = [
+  {
+    id: 'collaborator',
+    name: 'Collaborator',
+    description: 'Continues the conversation in a fork to try a different angle.',
+    instructions: '...',
+    forked: true,
+  },
+]
+```
+
+The model can also pass `forked: true` (or `forked: false`) per-invocation in the `subagent` tool input; the per-invocation value wins.
+
+#### Semantics and constraints
+
+- **Memory required.** Forked mode calls `memory.cloneThread` to create the fork, so the harness must have `memory` configured and an active parent thread. Calls without those return a structured error rather than throwing.
+- **Parent agent reused.** The fork runs through the parent agent's `stream(...)` call. The parent's instructions, tools, model, `maxSteps`, and `stopWhen` apply. The subagent definition's `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode — this is what preserves the prompt-cache prefix.
+- **Toolsets inherited, recursive forks blocked at runtime.** Forks inherit the parent's toolsets verbatim (`ask_user`, `submit_plan`, user-configured harness tools, _including the `subagent` tool itself_) so the LLM request prefix — system prompt + tool list + tool schemas + tool descriptions — stays byte-identical to the parent's. This is what preserves the prompt cache. The `subagent` entry is kept on the model side but its `execute` is replaced inside the fork with a stub that returns a non-error "tool unavailable inside a forked subagent" message: nested forks are blocked at the runtime layer without perturbing the cached prefix.
+- **Fork threads are tagged.** Each fork thread is created with `metadata.forkedSubagent === true` and `metadata.parentThreadId === <parent>`. By default, [`listThreads`](#listthreadsoptions) hides these so they don't show up in user-facing thread pickers / startup flows. Pass `includeForkedSubagents: true` to see them in admin / debug tooling.
+- **Save-queue flushed before clone.** The agent stream batches message saves through a debounced `SaveQueueManager`, so the parent's latest user / assistant turn may not be on disk yet when the subagent tool call fires. The fork tool flushes pending saves first via the `flushMessages` callback on `AgentToolExecutionContext` before cloning, so the fork actually carries the latest turn. Flush failures are non-fatal — the clone still runs.
+- **Parent thread untouched.** All subagent activity (messages, OM writes) lands on the fork. The parent thread is never appended to during a forked subagent run.
+
+#### When to prefer non-forked mode
+
+Forked mode trades isolation for context inheritance. If the subagent should run with a strictly smaller toolset, a different system prompt, or a cheaper model, use the default (non-forked) mode and pass any required context explicitly in the `task` description.
+
 ### Events
+
+#### `subscribeDisplayState(listener, options?)`
+
+Register a listener for coalesced display state snapshots. Use this method for UI, Server-Sent Events (SSE), terminal UI (TUI), and bridge rendering paths that only need the latest `HarnessDisplayState`. Use [`subscribe`](#subscribelistener) when you need the raw event log.
+
+```typescript
+const unsubscribe = harness.subscribeDisplayState(displayState => {
+  render(displayState)
+})
+
+// Optional tuning:
+harness.subscribeDisplayState(render, {
+  windowMs: 250,
+  maxWaitMs: 500,
+})
+
+// Later:
+unsubscribe()
+```
+
+Returns: `() => void`
+
+`subscribeDisplayState()` does not call the listener immediately. Call [`getDisplayState`](#getdisplaystate) first if the UI needs an initial render before the next harness event.
 
 #### `subscribe(listener)`
 
 Register an event listener. Returns an unsubscribe function.
+
+Use this method for audit logs, debugging, analytics, deterministic replay, or consumers that need every raw event. For display rendering, prefer [`subscribeDisplayState`](#subscribedisplaystatelistener-options) so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the latest display state snapshot.
 
 ```typescript
 const unsubscribe = harness.subscribe(event => {
@@ -920,7 +1009,7 @@ The harness emits events through registered listeners. The following table lists
 | `om_observation_end` | An observation completed. |
 | `om_reflection_start` | A reflection started. |
 | `om_reflection_end` | A reflection completed. |
-| `ask_question` | The agent asked a question via the `ask_user` tool. |
+| `ask_question` | The agent asked a question via the `ask_user` tool. Includes optional choices and a selection mode. |
 | `plan_approval_required` | The agent submitted a plan for approval via the `submit_plan` tool. |
 | `plan_approved` | A plan was approved. |
 | `subagent_start` | A subagent started processing. |
@@ -937,8 +1026,25 @@ The harness provides built-in tools to agents in every mode:
 
 | Tool | Description |
 | - | - |
-| `ask_user` | Ask the user a question and wait for their response. |
+| `ask_user` | Ask the user a question and wait for their response. Supports free text, single-select choices, and multi-select choices. |
 | `submit_plan` | Submit a plan for user review and approval. |
 | `task_write` | Create or update a structured task list for tracking progress. |
 | `task_check` | Check the completion status of the current task list. |
-| `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). |
+| `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). Pass `forked: true` to inherit the parent conversation — see [Forked subagents](#forked-subagents). |
+
+### `ask_user` selections
+
+The `ask_user` tool accepts `options` for choice prompts. Set `selectionMode` to `single_select` to let the user pick one option, or `multi_select` to let the user pick multiple options. When `options` are provided and `selectionMode` is omitted, the prompt defaults to `single_select`. Omit `options` for free-text questions.
+
+The following example demonstrates a multi-select response handler. The UI reads `event.selectionMode`, lets the user choose multiple options, then returns a string array with `respondToQuestion()`.
+
+```typescript
+harness.subscribe(event => {
+  if (event.type === 'ask_question' && event.selectionMode === 'multi_select') {
+    harness.respondToQuestion({
+      questionId: event.questionId,
+      answer: ['Add tests', 'Update docs'],
+    })
+  }
+})
+```

@@ -19,11 +19,16 @@ test-outputs/
 **/tsconfig.tsbuildinfo
 
 .turbo
+.next
 
 openapi-ts-error*
 
 .mastra
 *.db*
+*.duckdb
+*.duckdb.wal
+*.duckdb*
+*.sqlite*
 memory.db
 memory.db-*
 

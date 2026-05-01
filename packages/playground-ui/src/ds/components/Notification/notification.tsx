@@ -55,7 +55,7 @@ export function Notification({
 
   const typeStyles = {
     info: 'bg-surface4 border-border1',
-    error: 'bg-accent2Darker border-accent2/30',
+    error: 'bg-accent2Darker border-accent2/20',
     success: 'bg-accent1Darker border-accent1/30',
     warning: 'bg-accent6Darker border-accent6/30',
   };
@@ -70,7 +70,7 @@ export function Notification({
   return (
     <div
       className={cn(
-        'grid grid-cols-[auto_1fr_auto] gap-3 rounded-lg border p-4 text-ui-md text-neutral4 items-start',
+        'grid grid-cols-[auto_1fr_auto] gap-3 rounded-xl border py-2.5 px-3.5 text-ui-md text-neutral4 items-start',
         'shadow-card',
         transitions.all,
         isAnimatingOut

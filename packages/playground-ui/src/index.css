@@ -8,99 +8,128 @@
 @custom-variant dark (&:is(.dark *));
 
 /* Base CSS variables - must be defined before @theme references them */
+
+/*
+ * Color tokens use oklch() — perceptually uniform, wide-gamut (P3) ready,
+ * predictable lightness across hues. Do not convert back to hex/rgba.
+ */
 :root {
   --font-inter: 'Inter', sans-serif;
   --tasa-explorer: 'TasaExplorer', sans-serif;
   --geist-mono: 'GeistMonoVF', monospace;
 
   /* Dark theme (default) */
-  --surface1: #09090b;
-  --surface2: #111113;
-  --surface3: #18181b;
-  --surface4: #212124;
-  --surface5: rgba(39, 39, 42, 0.9);
-  --surface6: #3b3b40;
+  --surface1: oklch(0.141 0 0);
+  --surface2: oklch(0.179 0 0);
+  --surface3: oklch(0.21 0 0);
+  --surface4: oklch(0.251 0 0);
+  --surface5: oklch(0.275 0 0 / 0.9);
+  --surface6: oklch(0.345 0 0);
 
-  --accent1: #22c55e;
-  --accent2: #ef4444;
-  --accent3: #3b82f6;
-  --accent5: #60a5fa;
-  --accent6: #f59e0b;
+  --accent1: oklch(0.723 0.219 149.579);
+  --accent2: oklch(0.637 0.237 25.331);
+  --accent3: oklch(0.623 0.214 259.815);
+  --accent5: oklch(0.707 0.165 254.624);
+  --accent6: oklch(0.769 0.188 70.08);
 
-  --accent1Dark: #0d2818;
-  --accent2Dark: #2a1515;
-  --accent3Dark: #152036;
-  --accent5Dark: #15202a;
-  --accent6Dark: #261d0d;
+  --accent1Dark: oklch(0.242 0.051 151);
+  --accent2Dark: oklch(0.216 0.044 22);
+  --accent3Dark: oklch(0.234 0.052 261);
+  --accent5Dark: oklch(0.227 0.03 244);
+  --accent6Dark: oklch(0.229 0.031 71);
 
-  --accent1Darker: #0a1a10;
-  --accent2Darker: #1a1010;
-  --accent3Darker: #0f1520;
-  --accent5Darker: #0f151a;
-  --accent6Darker: #1a140a;
+  --accent1Darker: oklch(0.181 0.033 147);
+  --accent2Darker: oklch(0.16 0.023 19);
+  --accent3Darker: oklch(0.174 0.031 263);
+  --accent5Darker: oklch(0.17 0.015 240);
+  --accent6Darker: oklch(0.175 0.019 72);
 
-  --neutral1: #52525b;
-  --neutral2: #71717a;
-  --neutral3: #a1a1aa;
-  --neutral4: #d4d4d8;
-  --neutral5: #e4e4e7;
-  --neutral6: #fafafa;
+  --neutral1: oklch(0.372 0 0);
+  --neutral2: oklch(0.553 0 0);
+  --neutral3: oklch(0.705 0 0);
+  --neutral4: oklch(0.871 0 0);
+  --neutral5: oklch(0.92 0 0);
+  --neutral6: oklch(0.985 0 0);
 
-  --error: #ef4444;
-  --overlay: rgba(0, 0, 0, 0.75);
-  --border1: rgba(255, 255, 255, 0.08);
-  --border2: rgba(255, 255, 255, 0.12);
+  --error: oklch(0.637 0.237 25.331);
+  --overlay: oklch(0 0 0 / 0.75);
+  --border1: oklch(1 0 0 / 0.08);
+  --border2: oklch(1 0 0 / 0.12);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);
+
+  /* Notice admonition colors — bg uses /20 alpha overlay; fg is the on-surface text/icon color */
+  --notice-success: oklch(0.92 0.27 138);
+  --notice-success-fg: oklch(0.96 0.025 145);
+  --notice-destructive: oklch(0.69 0.24 22);
+  --notice-destructive-fg: oklch(0.95 0.014 18);
+  --notice-warning: oklch(0.91 0.16 105);
+  --notice-warning-fg: oklch(0.97 0.025 100);
+  --notice-info: oklch(0.81 0.12 230);
+  --notice-info-fg: oklch(0.97 0.013 224);
+  --notice-note: oklch(0.18 0 0);
+  --notice-note-fg: oklch(0.99 0.001 230);
 }
 
 html.light {
-  --surface1: #ffffff;
-  --surface2: #f8fafc;
-  --surface3: #f1f5f9;
-  --surface4: #e2e8f0;
-  --surface5: rgba(226, 232, 240, 0.9);
-  --surface6: #cbd5e1;
+  --surface1: oklch(1 0 0);
+  --surface2: oklch(0.984 0 0);
+  --surface3: oklch(0.968 0 0);
+  --surface4: oklch(0.929 0 0);
+  --surface5: oklch(0.929 0 0 / 0.9);
+  --surface6: oklch(0.869 0 0);
 
-  --accent1: #16a34a;
-  --accent2: #dc2626;
-  --accent3: #2563eb;
-  --accent5: #3b82f6;
-  --accent6: #d97706;
+  --accent1: oklch(0.627 0.194 149.214);
+  --accent2: oklch(0.577 0.245 27.325);
+  --accent3: oklch(0.546 0.245 262.881);
+  --accent5: oklch(0.623 0.214 259.815);
+  --accent6: oklch(0.666 0.179 58.318);
 
-  --accent1Dark: #dcfce7;
-  --accent2Dark: #fee2e2;
-  --accent3Dark: #dbeafe;
-  --accent5Dark: #dbeafe;
-  --accent6Dark: #fef3c7;
+  --accent1Dark: oklch(0.962 0.044 156.743);
+  --accent2Dark: oklch(0.936 0.032 17.717);
+  --accent3Dark: oklch(0.932 0.032 255.585);
+  --accent5Dark: oklch(0.932 0.032 255.585);
+  --accent6Dark: oklch(0.962 0.059 95.617);
 
-  --accent1Darker: #bbf7d0;
-  --accent2Darker: #fecaca;
-  --accent3Darker: #bfdbfe;
-  --accent5Darker: #bfdbfe;
-  --accent6Darker: #fde68a;
+  --accent1Darker: oklch(0.925 0.084 155.995);
+  --accent2Darker: oklch(0.885 0.062 18.334);
+  --accent3Darker: oklch(0.882 0.059 254.128);
+  --accent5Darker: oklch(0.882 0.059 254.128);
+  --accent6Darker: oklch(0.924 0.12 95.746);
 
-  --neutral1: #64748b;
-  --neutral2: #475569;
-  --neutral3: #334155;
-  --neutral4: #1e293b;
-  --neutral5: #0f172a;
-  --neutral6: #020617;
+  --neutral1: oklch(0.554 0 0);
+  --neutral2: oklch(0.446 0 0);
+  --neutral3: oklch(0.372 0 0);
+  --neutral4: oklch(0.279 0 0);
+  --neutral5: oklch(0.208 0 0);
+  --neutral6: oklch(0.13 0 0);
 
-  --error: #dc2626;
-  --overlay: rgba(15, 23, 42, 0.45);
-  --border1: rgba(15, 23, 42, 0.12);
-  --border2: rgba(15, 23, 42, 0.2);
+  --error: oklch(0.577 0.245 27.325);
+  --overlay: oklch(0.208 0 0 / 0.45);
+  --border1: oklch(0.208 0 0 / 0.12);
+  --border2: oklch(0.208 0 0 / 0.2);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);
+
+  /* Notice admonition colors — bg keeps saturation, fg flips to deep tint for contrast on light surface */
+  --notice-success: oklch(0.55 0.2 140);
+  --notice-success-fg: oklch(0.32 0.1 145);
+  --notice-destructive: oklch(0.55 0.22 22);
+  --notice-destructive-fg: oklch(0.36 0.18 22);
+  --notice-warning: oklch(0.65 0.16 95);
+  --notice-warning-fg: oklch(0.36 0.1 95);
+  --notice-info: oklch(0.55 0.15 230);
+  --notice-info-fg: oklch(0.36 0.13 225);
+  --notice-note: oklch(0.97 0 0);
+  --notice-note-fg: oklch(0.18 0 0);
 }
 
 @utility container {
@@ -182,6 +211,7 @@ html.light {
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 6px;
+  --radius-xl: 12px;
 
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
@@ -283,6 +313,17 @@ html.light {
   --color-positive1: var(--positive1);
   --color-negative1: var(--negative1);
 
+  --color-notice-success: var(--notice-success);
+  --color-notice-success-fg: var(--notice-success-fg);
+  --color-notice-destructive: var(--notice-destructive);
+  --color-notice-destructive-fg: var(--notice-destructive-fg);
+  --color-notice-warning: var(--notice-warning);
+  --color-notice-warning-fg: var(--notice-warning-fg);
+  --color-notice-info: var(--notice-info);
+  --color-notice-info-fg: var(--notice-info-fg);
+  --color-notice-note: var(--notice-note);
+  --color-notice-note-fg: var(--notice-note-fg);
+
   --font-serif: var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   --font-mono:
     var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
@@ -296,16 +337,17 @@ html.light {
 
   --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.6);
-  --shadow-glow-accent1: 0 0 20px rgba(34, 197, 94, 0.25);
-  --shadow-glow-accent2: 0 0 20px rgba(239, 68, 68, 0.25);
-  --shadow-focus-ring: 0 0 0 3px rgba(34, 197, 94, 0.12);
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px oklch(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px oklch(0 0 0 / 0.4);
+  --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
+  --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
+  --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
+  --shadow-dialog:
+    0 0 0 1px oklch(0 0 0 / 0.04), 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
+  --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
+  --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
+  --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
 
   @keyframes shimmer {
     100% {
@@ -355,4 +397,21 @@ html.light {
   color: #e6e6e6 !important;
   background-color: #121212 !important;
   border: none !important;
+}
+
+/* Click ripple animation for browser view */
+@keyframes click-ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-click-ripple {
+  animation: click-ripple 300ms ease-out forwards;
 }

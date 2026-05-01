@@ -3,6 +3,47 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DuckDBStore } from '../../index';
 import type { ObservabilityStorageDuckDB } from './index';
 
+async function setupLegacyStore(): Promise<DuckDBStore> {
+  const legacyStore = new DuckDBStore({ path: ':memory:' });
+
+  await legacyStore.db.execute(`
+    CREATE TABLE score_events (
+      timestamp TIMESTAMP NOT NULL,
+      traceId VARCHAR NOT NULL,
+      spanId VARCHAR,
+      experimentId VARCHAR,
+      scoreTraceId VARCHAR,
+      scorerId VARCHAR NOT NULL,
+      scorerVersion VARCHAR,
+      source VARCHAR,
+      score DOUBLE NOT NULL,
+      reason VARCHAR,
+      metadata JSON
+    )
+  `);
+
+  await legacyStore.db.execute(`
+    CREATE TABLE feedback_events (
+      timestamp TIMESTAMP NOT NULL,
+      traceId VARCHAR NOT NULL,
+      spanId VARCHAR,
+      experimentId VARCHAR,
+      userId VARCHAR,
+      source VARCHAR,
+      feedbackType VARCHAR NOT NULL,
+      value VARCHAR NOT NULL,
+      comment VARCHAR,
+      metadata JSON
+    )
+  `);
+
+  await expect(legacyStore.observability.init()).rejects.toThrow(/MIGRATION REQUIRED/);
+  await legacyStore.observability.migrateSpans();
+  await legacyStore.observability.init();
+
+  return legacyStore;
+}
+
 describe('ObservabilityStorageDuckDB', () => {
   let store: DuckDBStore;
   let storage: ObservabilityStorageDuckDB;
@@ -265,6 +306,129 @@ describe('ObservabilityStorageDuckDB', () => {
     });
   });
 
+  it('requires manual migration for legacy score and feedback tables before init', async () => {
+    const legacyStore = await setupLegacyStore();
+
+    await legacyStore.observability.batchCreateScores({
+      scores: [
+        {
+          scoreId: 'legacy-score-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'legacy-trace',
+          spanId: 'legacy-span',
+          scorerId: 'legacy-scorer',
+          scoreSource: 'manual',
+          score: 0.7,
+          entityType: EntityType.AGENT,
+          entityName: 'legacy-agent',
+          executionSource: 'cloud',
+          scope: { phase: 'test' },
+          metadata: { migrated: true },
+        },
+      ],
+    });
+
+    await legacyStore.observability.batchCreateFeedback({
+      feedbacks: [
+        {
+          feedbackId: 'legacy-feedback-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'legacy-trace',
+          feedbackType: 'thumbs',
+          value: 1,
+          feedbackSource: 'user',
+          feedbackUserId: 'user-1',
+          entityType: EntityType.AGENT,
+          entityName: 'legacy-agent',
+          executionSource: 'cloud',
+          scope: { phase: 'test' },
+          metadata: { migrated: true },
+        },
+      ],
+    });
+
+    const scores = await legacyStore.observability.listScores({
+      filters: { traceId: 'legacy-trace' },
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+
+    const feedback = await legacyStore.observability.listFeedback({
+      filters: { traceId: 'legacy-trace' },
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+
+    expect(scores.scores[0]).toMatchObject({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      scorerId: 'legacy-scorer',
+      scoreSource: 'manual',
+      source: 'manual',
+      executionSource: 'cloud',
+      entityType: EntityType.AGENT,
+      entityName: 'legacy-agent',
+      scope: { phase: 'test' },
+    });
+
+    expect(feedback.feedback[0]).toMatchObject({
+      traceId: 'legacy-trace',
+      feedbackType: 'thumbs',
+      feedbackSource: 'user',
+      source: 'user',
+      feedbackUserId: 'user-1',
+      executionSource: 'cloud',
+      entityType: EntityType.AGENT,
+      entityName: 'legacy-agent',
+      scope: { phase: 'test' },
+    });
+
+    await legacyStore.db.close();
+  });
+
+  it('relaxes legacy score and feedback traceId columns during manual migration', async () => {
+    const legacyStore = await setupLegacyStore();
+
+    await legacyStore.observability.createScore({
+      score: {
+        scoreId: 'legacy-score-null-trace',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: null,
+        spanId: null,
+        scorerId: 'quality',
+        scoreSource: 'automated',
+        score: 0.8,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      } as any,
+    });
+
+    await legacyStore.observability.createFeedback({
+      feedback: {
+        feedbackId: 'legacy-feedback-null-trace',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: null,
+        spanId: null,
+        feedbackSource: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        sourceId: null,
+        metadata: null,
+      } as any,
+    });
+
+    const scores = await legacyStore.observability.listScores({});
+    const feedback = await legacyStore.observability.listFeedback({});
+
+    expect(scores.scores[0]!.traceId).toBeNull();
+    expect(feedback.feedback[0]!.traceId).toBeNull();
+
+    await legacyStore.db.close();
+  });
+
   // ==========================================================================
   // Logs
   // ==========================================================================
@@ -274,6 +438,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateLogs({
         logs: [
           {
+            logId: 'log-test-1',
             timestamp: new Date(),
             level: 'info',
             message: 'Test log message',
@@ -287,6 +452,7 @@ describe('ObservabilityStorageDuckDB', () => {
             metadata: null,
           },
           {
+            logId: 'log-test-2',
             timestamp: new Date(),
             level: 'error',
             message: 'Error occurred',
@@ -320,6 +486,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateMetrics({
         metrics: [
           {
+            metricId: 'metric-test-1',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             name: 'mastra_agent_duration_ms',
             value: 100,
@@ -333,6 +500,7 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'weatherAgent',
           },
           {
+            metricId: 'metric-test-2',
             timestamp: new Date('2026-01-01T00:00:05Z'),
             name: 'mastra_agent_duration_ms',
             value: 200,
@@ -346,6 +514,7 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'weatherAgent',
           },
           {
+            metricId: 'metric-test-3',
             timestamp: new Date('2026-01-01T00:00:10Z'),
             name: 'mastra_agent_duration_ms',
             value: 500,
@@ -359,6 +528,7 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'codeAgent',
           },
           {
+            metricId: 'metric-test-4',
             timestamp: new Date('2026-01-01T01:00:00Z'),
             name: 'mastra_tool_calls_started',
             value: 1,
@@ -459,6 +629,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateMetrics({
         metrics: [
           {
+            metricId: 'metric-test-5',
             timestamp: new Date('2026-01-01T00:00:20Z'),
             name: 'mastra_agent_duration_ms',
             value: 300,
@@ -467,6 +638,7 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'weatherAgent',
           },
           {
+            metricId: 'metric-test-6',
             timestamp: new Date('2026-01-01T00:00:25Z'),
             name: 'mastra_agent_duration_ms',
             value: 400,
@@ -512,6 +684,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateMetrics({
         metrics: [
           {
+            metricId: 'metric-test-5',
             timestamp: new Date('2026-01-01T02:00:00Z'),
             name: 'mastra_collision_metric',
             value: 10,
@@ -520,6 +693,7 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'search',
           },
           {
+            metricId: 'metric-test-6',
             timestamp: new Date('2026-01-01T02:00:00Z'),
             name: 'mastra_collision_metric',
             value: 20,
@@ -581,6 +755,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateMetrics({
         metrics: [
           {
+            metricId: 'metric-test-1',
             timestamp: new Date(),
             name: 'mastra_agent_duration_ms',
             value: 100,
@@ -592,6 +767,7 @@ describe('ObservabilityStorageDuckDB', () => {
             tags: ['metric-tag'],
           },
           {
+            metricId: 'metric-test-2',
             timestamp: new Date(),
             name: 'mastra_tool_calls_started',
             value: 1,
@@ -608,6 +784,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateLogs({
         logs: [
           {
+            logId: 'log-test-1',
             timestamp: new Date(),
             level: 'info',
             message: 'discovery-log',
@@ -734,6 +911,7 @@ describe('ObservabilityStorageDuckDB', () => {
     it('creates and lists scores', async () => {
       await storage.createScore({
         score: {
+          scoreId: 'score-test-1',
           timestamp: new Date(),
           traceId: 'trace-1',
           spanId: null,
@@ -747,6 +925,7 @@ describe('ObservabilityStorageDuckDB', () => {
 
       await storage.createScore({
         score: {
+          scoreId: 'score-test-2',
           timestamp: new Date(),
           traceId: 'trace-1',
           spanId: 'span-1',
@@ -767,6 +946,145 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores).toHaveLength(1);
       expect(filtered.scores[0]!.score).toBe(0.85);
     });
+
+    it('supports deprecated source aliases for scores', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'score-test-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-legacy-score',
+          spanId: null,
+          scorerId: 'legacy',
+          source: 'manual',
+          score: 1,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const filtered = await storage.listScores({
+        filters: { source: 'manual' },
+      });
+
+      expect(filtered.scores).toHaveLength(1);
+      expect(filtered.scores[0]!.traceId).toBe('trace-legacy-score');
+      expect(filtered.scores[0]!.source).toBe('manual');
+      expect(filtered.scores[0]!.scoreSource).toBe('manual');
+    });
+
+    it('supports nullable traceId for scores at the storage boundary', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'score-test-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: null,
+          spanId: null,
+          scorerId: 'quality',
+          scoreSource: 'automated',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        } as any,
+      });
+
+      const result = await storage.listScores({});
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]!.traceId).toBeNull();
+      expect(result.scores[0]!.scoreSource).toBe('automated');
+    });
+
+    it('supports score OLAP queries keyed by scorerId and optional scoreSource', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            scoreId: 'score-test-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'score-olap-1',
+            scorerId: 'relevance',
+            scoreSource: 'manual',
+            score: 0.8,
+            experimentId: 'exp-1',
+            entityName: 'agent-a',
+          },
+          {
+            scoreId: 'score-test-2',
+            timestamp: new Date('2026-01-01T00:20:00Z'),
+            traceId: 'score-olap-2',
+            scorerId: 'relevance',
+            scoreSource: 'manual',
+            score: 0.6,
+            experimentId: 'exp-2',
+            entityName: 'agent-b',
+          },
+          {
+            scoreId: 'score-test-3',
+            timestamp: new Date('2026-01-01T00:40:00Z'),
+            traceId: 'score-olap-3',
+            scorerId: 'relevance',
+            scoreSource: 'automated',
+            score: 0.2,
+            experimentId: 'exp-3',
+            entityName: 'agent-c',
+          },
+        ],
+      });
+
+      expect(
+        await storage.getScoreAggregate({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          aggregation: 'avg',
+        }),
+      ).toEqual({ value: 0.7 });
+
+      expect(
+        await storage.getScoreBreakdown({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          aggregation: 'avg',
+          groupBy: ['experimentId'],
+        }),
+      ).toEqual({
+        groups: [
+          { dimensions: { experimentId: 'exp-1' }, value: 0.8 },
+          { dimensions: { experimentId: 'exp-2' }, value: 0.6 },
+        ],
+      });
+
+      expect(
+        await storage.getScoreTimeSeries({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            name: 'relevance|manual',
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 0.7 }],
+          },
+        ],
+      });
+
+      expect(
+        await storage.getScorePercentiles({
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 0.7 }],
+          },
+        ],
+      });
+    });
   });
 
   // ==========================================================================
@@ -777,15 +1095,16 @@ describe('ObservabilityStorageDuckDB', () => {
     it('creates and lists feedback', async () => {
       await storage.createFeedback({
         feedback: {
+          feedbackId: 'feedback-test-1',
           timestamp: new Date(),
           traceId: 'trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Great!',
           experimentId: null,
-          userId: 'user-1',
+          feedbackUserId: 'user-1',
           sourceId: 'source-1',
           metadata: null,
         },
@@ -793,15 +1112,16 @@ describe('ObservabilityStorageDuckDB', () => {
 
       await storage.createFeedback({
         feedback: {
+          feedbackId: 'feedback-test-2',
           timestamp: new Date(),
           traceId: 'trace-2',
           spanId: null,
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
           experimentId: 'exp-1',
-          userId: 'user-2',
+          feedbackUserId: 'user-2',
           sourceId: 'source-2',
           metadata: null,
         },
@@ -811,53 +1131,106 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback).toHaveLength(2);
 
       const filtered = await storage.listFeedback({
-        filters: { source: 'user' },
+        filters: { feedbackSource: 'user' },
       });
       expect(filtered.feedback).toHaveLength(1);
       expect(filtered.feedback[0]!.value).toBe(1);
-      expect(filtered.feedback[0]!.userId).toBe('user-1');
+      expect(filtered.feedback[0]!.feedbackUserId).toBe('user-1');
       expect(filtered.feedback[0]!.sourceId).toBe('source-1');
+    });
+
+    it('supports deprecated source aliases for feedback', async () => {
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-test-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-legacy-feedback',
+          spanId: null,
+          source: 'manual',
+          feedbackType: 'rating',
+          value: 5,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        },
+      });
+
+      const filtered = await storage.listFeedback({
+        filters: { source: 'manual' },
+      });
+
+      expect(filtered.feedback).toHaveLength(1);
+      expect(filtered.feedback[0]!.traceId).toBe('trace-legacy-feedback');
+      expect(filtered.feedback[0]!.source).toBe('manual');
+      expect(filtered.feedback[0]!.feedbackSource).toBe('manual');
+    });
+
+    it('supports nullable traceId for feedback at the storage boundary', async () => {
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-test-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: null,
+          spanId: null,
+          feedbackSource: 'manual',
+          feedbackType: 'rating',
+          value: 5,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        } as any,
+      });
+
+      const result = await storage.listFeedback({});
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]!.traceId).toBeNull();
+      expect(result.feedback[0]!.feedbackSource).toBe('manual');
     });
 
     it('batch creates and lists feedback', async () => {
       await storage.batchCreateFeedback({
         feedbacks: [
           {
+            feedbackId: 'feedback-test-1',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'batch-trace-1',
             spanId: null,
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             comment: 'Helpful',
             experimentId: null,
-            userId: 'user-1',
+            feedbackUserId: 'user-1',
             sourceId: 'source-1',
             metadata: null,
           },
           {
+            feedbackId: 'feedback-test-2',
             timestamp: new Date('2026-01-01T00:00:01Z'),
             traceId: 'batch-trace-2',
             spanId: 'span-2',
-            source: 'reviewer',
+            feedbackSource: 'reviewer',
             feedbackType: 'rating',
             value: 4,
             comment: null,
             experimentId: 'exp-1',
-            userId: 'user-2',
+            feedbackUserId: 'user-2',
             sourceId: 'source-2',
             metadata: { category: 'quality' },
           },
           {
+            feedbackId: 'feedback-test-3',
             timestamp: new Date('2026-01-01T00:00:02Z'),
             traceId: 'batch-trace-3',
             spanId: null,
-            source: 'system',
+            feedbackSource: 'system',
             feedbackType: 'flag',
             value: 'needs-review',
             comment: 'Escalated',
             experimentId: null,
-            userId: null,
+            feedbackUserId: null,
             sourceId: 'source-3',
             metadata: { severity: 'high' },
           },
@@ -873,7 +1246,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-1',
           spanId: null,
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
           comment: 'Helpful',
@@ -882,7 +1255,7 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-2',
           spanId: 'span-2',
-          source: 'reviewer',
+          feedbackSource: 'reviewer',
           feedbackType: 'rating',
           value: 4,
           comment: null,
@@ -891,13 +1264,192 @@ describe('ObservabilityStorageDuckDB', () => {
         expect.objectContaining({
           traceId: 'batch-trace-3',
           spanId: null,
-          source: 'system',
+          feedbackSource: 'system',
           feedbackType: 'flag',
           value: 'needs-review',
           comment: 'Escalated',
           metadata: { severity: 'high' },
         }),
       ]);
+    });
+
+    it('supports feedback OLAP queries keyed by feedbackType and optional feedbackSource', async () => {
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          {
+            feedbackId: 'feedback-test-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'feedback-olap-1',
+            feedbackType: 'rating',
+            feedbackSource: 'user',
+            value: 5,
+            entityName: 'agent-a',
+          },
+          {
+            feedbackId: 'feedback-test-2',
+            timestamp: new Date('2026-01-01T00:10:00Z'),
+            traceId: 'feedback-olap-2',
+            feedbackType: 'rating',
+            feedbackSource: 'user',
+            value: '4',
+            entityName: 'agent-b',
+          },
+          {
+            feedbackId: 'feedback-test-3',
+            timestamp: new Date('2026-01-01T00:20:00Z'),
+            traceId: 'feedback-olap-3',
+            feedbackType: 'rating',
+            feedbackSource: 'system',
+            value: 1,
+            entityName: 'agent-a',
+          },
+          {
+            feedbackId: 'feedback-test-4',
+            timestamp: new Date('2026-01-01T00:30:00Z'),
+            traceId: 'feedback-olap-4',
+            feedbackType: 'rating',
+            feedbackSource: 'user',
+            value: 'needs-review',
+            entityName: 'agent-a',
+          },
+        ],
+      });
+
+      expect(
+        await storage.getFeedbackAggregate({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+        }),
+      ).toEqual({ value: 4.5 });
+
+      expect(
+        await storage.getFeedbackBreakdown({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        }),
+      ).toEqual({
+        groups: [
+          { dimensions: { entityName: 'agent-a' }, value: 5 },
+          { dimensions: { entityName: 'agent-b' }, value: 4 },
+        ],
+      });
+
+      expect(
+        await storage.getFeedbackTimeSeries({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            name: 'rating|user',
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 4.5 }],
+          },
+        ],
+      });
+
+      expect(
+        await storage.getFeedbackPercentiles({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).toEqual({
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2026-01-01T00:00:00Z'), value: 4.5 }],
+          },
+        ],
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Idempotent retries (signal-id primary keys)
+  // ==========================================================================
+
+  describe('retry idempotency', () => {
+    it('re-inserting the same logId does not throw or duplicate', async () => {
+      const log = {
+        logId: 'log-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        level: 'info',
+        message: 'retry-test',
+        data: null,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        tags: null,
+        metadata: null,
+      };
+      await storage.batchCreateLogs({ logs: [log] });
+      await storage.batchCreateLogs({ logs: [log] });
+      const result = await storage.listLogs({ filters: { traceId: 'trace-1' } });
+      expect(result.logs).toHaveLength(1);
+      expect(result.logs[0]!.logId).toBe('log-retry-1');
+    });
+
+    it('re-inserting the same metricId does not throw or duplicate', async () => {
+      const metric = {
+        metricId: 'metric-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        name: 'mastra_agent_duration_ms',
+        value: 100,
+        labels: null,
+        tags: null,
+      };
+      await storage.batchCreateMetrics({ metrics: [metric] });
+      await storage.batchCreateMetrics({ metrics: [metric] });
+      const result = await storage.listMetrics({ filters: { name: 'mastra_agent_duration_ms' } });
+      expect(result.metrics).toHaveLength(1);
+      expect(result.metrics[0]!.metricId).toBe('metric-retry-1');
+    });
+
+    it('re-inserting the same scoreId does not throw or duplicate', async () => {
+      const score = {
+        scoreId: 'score-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-retry-score',
+        spanId: null,
+        scorerId: 'scorer-1',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      await storage.createScore({ score });
+      await storage.createScore({ score });
+      const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]!.scoreId).toBe('score-retry-1');
+    });
+
+    it('re-inserting the same feedbackId does not throw or duplicate', async () => {
+      const feedback = {
+        feedbackId: 'feedback-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-retry-feedback',
+        spanId: null,
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+      };
+      await storage.createFeedback({ feedback });
+      await storage.createFeedback({ feedback });
+      const result = await storage.listFeedback({ filters: { traceId: 'trace-retry-feedback' } });
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]!.feedbackId).toBe('feedback-retry-1');
     });
   });
 });

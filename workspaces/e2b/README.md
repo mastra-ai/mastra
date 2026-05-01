@@ -31,11 +31,12 @@ const agent = new Agent({
 
 ### Mounting Cloud Storage
 
-E2B sandboxes can mount S3 or GCS filesystems, making cloud storage accessible as a local directory inside the sandbox:
+E2B sandboxes can mount S3, GCS, or Azure Blob filesystems, making cloud storage accessible as a local directory inside the sandbox:
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace';
 import { S3Filesystem } from '@mastra/s3';
+import { AzureBlobFilesystem } from '@mastra/azure/blob';
 import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
@@ -45,6 +46,11 @@ const workspace = new Workspace({
       region: 'us-east-1',
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }),
+    '/azure-data': new AzureBlobFilesystem({
+      container: 'my-container',
+      connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+      prefix: 'workspace/data',
     }),
   },
   sandbox: new E2BSandbox(),

@@ -4,7 +4,9 @@ import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
+import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
+import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
@@ -21,7 +23,9 @@ import { WorkspacesLibSQL } from './domains/workspaces';
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsLibSQL,
+  BackgroundTasksLibSQL,
   BlobsLibSQL,
+  ChannelsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
   MCPClientsLibSQL,
@@ -155,6 +159,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
+    const channels = new ChannelsLibSQL(domainConfig);
     const datasets = new DatasetsLibSQL(domainConfig);
     const experiments = new ExperimentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
@@ -164,6 +169,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const workspaces = new WorkspacesLibSQL(domainConfig);
     const skills = new SkillsLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
+    const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -171,6 +177,7 @@ export class LibSQLStore extends MastraCompositeStore {
       memory,
       observability,
       agents,
+      channels,
       datasets,
       experiments,
       promptBlocks,
@@ -180,6 +187,7 @@ export class LibSQLStore extends MastraCompositeStore {
       workspaces,
       skills,
       blobs,
+      backgroundTasks,
     };
   }
 }

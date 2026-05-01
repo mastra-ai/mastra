@@ -1,104 +1,99 @@
 import {
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  ButtonWithTooltip,
-  HeaderAction,
-  DocsIcon,
-  useAgents,
-  AgentsTable,
-  AgentsList,
   AgentIcon,
+  ButtonWithTooltip,
+  ErrorState,
   ListSearch,
-  MainHeader,
-  EntityListPageLayout,
-  useCanCreateAgent,
-  useLinkComponent,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
+import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
+import { useLinkComponent } from '@/lib/framework';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
-  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
   const createAgentPath = paths.cmsAgentCreateLink();
   const showCreateCta = canCreateAgent && Boolean(createAgentPath);
 
-  if (variant === 'new-proposal') {
+  if (error && is401UnauthorizedError(error)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <AgentIcon /> Agents
-              </MainHeader.Title>
-            </MainHeader.Column>
-            <MainHeader.Column className="flex justify-end gap-2">
-              {showCreateCta && (
-                <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
-                  <Plus />
-                </ButtonWithTooltip>
-              )}
-              <ButtonWithTooltip
-                as="a"
-                href="https://mastra.ai/en/docs/agents/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                tooltipContent="Go to Agents documentation"
-              >
-                <BookIcon />
-              </ButtonWithTooltip>
-            </MainHeader.Column>
-          </MainHeader>
-          <div className="max-w-[30rem]">
-            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
-          </div>
-        </EntityListPageLayout.Top>
+      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-        <AgentsList agents={agents} isLoading={isLoading} error={error} search={search} />
-      </EntityListPageLayout>
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+        <PermissionDenied resource="agents" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+        <ErrorState title="Failed to load agents" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(agents).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout title="Agents" icon={<AgentIcon />}>
+        <NoAgentsInfo />
+      </NoDataPageLayout>
     );
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <AgentIcon />
-          </Icon>
-          Agents
-        </HeaderTitle>
-
-        <HeaderAction>
-          {showCreateCta && (
-            <Button variant="light" as={FrameworkLink} to={createAgentPath}>
-              <Icon>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoading}>
+                <AgentIcon /> Agents
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            {showCreateCta && (
+              <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
                 <Plus />
-              </Icon>
-              Create an agent
-            </Button>
-          )}
-          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <DocsIcon />
-            Agents documentation
-          </Button>
-        </HeaderAction>
-      </Header>
+              </ButtonWithTooltip>
+            )}
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/agents/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Agents documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+        </div>
+      </PageLayout.TopArea>
 
-      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable agents={agents} isLoading={isLoading} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <AgentsList agents={agents} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }
 

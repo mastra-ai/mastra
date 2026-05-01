@@ -62,6 +62,16 @@ describe('ModelsDevGateway', () => {
         api: 'https://api.fireworks.ai/inference/v1',
         npm: '@ai-sdk/openai-compatible',
       },
+      'cloudflare-workers-ai': {
+        id: 'cloudflare-workers-ai',
+        name: 'Cloudflare Workers AI',
+        models: {
+          '@cf/meta/llama-3.1-8b-instruct': { name: 'Llama 3.1 8B Instruct' },
+        },
+        env: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_KEY'],
+        api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+        npm: '@ai-sdk/openai-compatible',
+      },
       'unknown-provider': {
         id: 'unknown-provider',
         name: 'Unknown',
@@ -126,6 +136,44 @@ describe('ModelsDevGateway', () => {
       expect(providers['fireworks-ai'].name).toBe('Fireworks AI');
       // But env var should use underscores
       expect(providers['fireworks-ai'].apiKeyEnvVar).toBe('FIREWORKS_API_KEY');
+    });
+
+    it('should ignore URL placeholder env vars when selecting the auth env var', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['cloudflare-workers-ai']).toBeDefined();
+      expect(providers['cloudflare-workers-ai'].url).toBe(
+        'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+      );
+      expect(providers['cloudflare-workers-ai'].apiKeyEnvVar).toBe('CLOUDFLARE_API_KEY');
+    });
+
+    it('should prefer token-like env vars over other auth candidates', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          'example-provider': {
+            id: 'example-provider',
+            name: 'Example Provider',
+            models: {
+              'example-model': { name: 'Example Model' },
+            },
+            env: ['EXAMPLE_ACCOUNT_ID', 'EXAMPLE_API_KEY', 'EXAMPLE_API_TOKEN'],
+            api: 'https://api.example.com/accounts/${EXAMPLE_ACCOUNT_ID}/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['example-provider']).toBeDefined();
+      expect(providers['example-provider'].apiKeyEnvVar).toBe('EXAMPLE_API_TOKEN');
     });
 
     it('should filter out deprecated models', async () => {

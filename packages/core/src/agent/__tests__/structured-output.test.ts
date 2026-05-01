@@ -6,8 +6,75 @@ import {
 } from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraModelGateway } from '../../llm/model/gateways/base';
+import type { ProviderConfig } from '../../llm/model/gateways/base';
 import { Mastra } from '../../mastra';
 import { Agent } from '../agent';
+
+class StructuredOutputTestGateway extends MastraModelGateway {
+  readonly id = 'structured-test';
+  readonly name = 'structured-output-test-gateway';
+  readonly prefix = 'structured-test';
+
+  async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    return {
+      'test-provider': {
+        name: 'Test Provider',
+        models: ['structuring-model'],
+        apiKeyEnvVar: 'TEST_API_KEY',
+        gateway: 'structured-output-test-gateway',
+        url: 'https://api.test.com/v1',
+      },
+    };
+  }
+
+  buildUrl(_modelId: string): string {
+    return 'https://api.test.com/v1';
+  }
+
+  async getApiKey(_modelId: string): Promise<string> {
+    return process.env.TEST_API_KEY || 'test-key';
+  }
+
+  async resolveLanguageModel(_args: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+    headers?: Record<string, string>;
+  }): Promise<MockLanguageModelV2> {
+    return new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          { type: 'text', text: JSON.stringify({ summary: 'There are 3 files in the directory.', filesFound: 3 }) },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'structuring-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: JSON.stringify({ summary: 'There are 3 files in the directory.', filesFound: 3 }),
+          },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+  }
+}
 
 function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
   let zodSchemaModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
@@ -399,6 +466,193 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
     });
 
     if (version === 'v2' || version === 'v3') {
+      it('should use Mastra custom gateways for a separate structuring model', async () => {
+        process.env.TEST_API_KEY = 'test-api-key-123';
+
+        const primaryModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  warnings: [],
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
+                }),
+              })
+            : new MockLanguageModelV3({
+                doGenerate: async () => ({
+                  finishReason: 'stop' as const,
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 20, text: 20, reasoning: undefined },
+                  },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  stream: convertArrayToReadableStreamV3([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
+                    },
+                  ]),
+                }),
+              });
+
+        const agent = new Agent({
+          id: `structured-output-custom-gateway-${version}`,
+          name: 'Structured Output Custom Gateway',
+          instructions: 'You are a helpful assistant.',
+          model: primaryModel,
+        });
+
+        const mastra = new Mastra({
+          agents: { agent },
+          gateways: {
+            structuredTest: new StructuredOutputTestGateway(),
+          },
+          logger: false,
+        });
+
+        const registeredAgent = mastra.getAgent('agent');
+
+        const result = await registeredAgent.generate('Summarize: there are 3 files in the directory.', {
+          structuredOutput: {
+            schema: z.object({
+              summary: z.string(),
+              filesFound: z.number(),
+            }),
+            model: 'structured-test/test-provider/structuring-model',
+          },
+        });
+
+        expect(result.tripwire).toBeUndefined();
+        expect(result.object).toEqual({
+          summary: 'There are 3 files in the directory.',
+          filesFound: 3,
+        });
+      });
+
+      it('should surface separate structuring model errors from the processor', async () => {
+        const primaryModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  warnings: [],
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
+                }),
+              })
+            : new MockLanguageModelV3({
+                doGenerate: async () => ({
+                  finishReason: 'stop' as const,
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 20, text: 20, reasoning: undefined },
+                  },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  stream: convertArrayToReadableStreamV3([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
+                    },
+                  ]),
+                }),
+              });
+
+        const structuringError = new Error('No recording found for gpt-5.4');
+        const structuringModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doStream: async () => {
+                  throw structuringError;
+                },
+              })
+            : new MockLanguageModelV3({
+                doStream: async () => {
+                  throw structuringError;
+                },
+              });
+
+        const agent = new Agent({
+          id: `structured-output-separate-model-error-${version}`,
+          name: 'Structured Output Separate Model Error',
+          instructions: 'You are a helpful assistant.',
+          model: primaryModel,
+        });
+
+        const result = await agent.generate('Summarize: there are 3 files in the directory.', {
+          structuredOutput: {
+            schema: z.object({
+              summary: z.string(),
+              filesFound: z.number(),
+            }),
+            model: structuringModel,
+          },
+        });
+
+        expect(result.object).toBeUndefined();
+        expect(result.tripwire?.reason).toBe(
+          '[StructuredOutputProcessor] Structured output processing failed: [StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+        );
+      });
+
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
         let bedrockStyleModel: MockLanguageModelV2 | MockLanguageModelV3;
         if (version === 'v2') {

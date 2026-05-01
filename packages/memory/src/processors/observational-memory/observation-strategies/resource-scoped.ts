@@ -52,6 +52,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   get needsReflection() {
     return true;
   }
+  get rethrowOnFailure() {
+    return true;
+  }
 
   async prepare() {
     const { record, threadId: currentThreadId, messages: currentThreadMessages } = this.opts;

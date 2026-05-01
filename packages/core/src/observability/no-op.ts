@@ -1,15 +1,19 @@
 import type { Mastra } from '..';
 import type { IMastraLogger } from '../logger';
 import type {
+  CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
   Counter,
+  FeedbackInput,
   Gauge,
   Histogram,
   LoggerContext,
   MetricsContext,
   ObservabilityEntrypoint,
   ObservabilityInstance,
+  RecordedTrace,
+  ScoreInput,
   TracingContext,
 } from './types';
 
@@ -92,6 +96,28 @@ export class NoOpObservability implements ObservabilityEntrypoint {
   }
 
   getSelectedInstance(_options: ConfigSelectorOptions): ObservabilityInstance | undefined {
+    return;
+  }
+
+  async getRecordedTrace(_args: { traceId: string }): Promise<RecordedTrace | null> {
+    return null;
+  }
+
+  async addScore(_args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void> {
+    return;
+  }
+
+  async addFeedback(_args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void> {
     return;
   }
 

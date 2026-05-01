@@ -50,7 +50,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
       prettyStream = pretty({
         colorize: true,
         levelFirst: true,
-        ignore: 'pid,hostname',
+        ignore: 'pid,hostname,component',
         colorizeObjects: true,
         translateTime: 'SYS:standard',
         singleLine: false,

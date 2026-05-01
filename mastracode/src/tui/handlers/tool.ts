@@ -7,6 +7,7 @@
  */
 
 import type { TaskItem } from '@mastra/core/harness';
+import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
@@ -51,7 +52,7 @@ export function formatToolResult(result: unknown): string {
       }
     }
     try {
-      return JSON.stringify(result, null, 2);
+      return safeStringify(result, 2);
     } catch {
       return String(result);
     }
@@ -207,7 +208,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   // task_write (streams to pinned TaskProgressComponent),
   // and ask_user (uses AskQuestionInlineComponent)
   if (toolName === 'ask_user') {
-    const askComponent = AskQuestionInlineComponent.createStreaming();
+    const askComponent = AskQuestionInlineComponent.createStreaming(state.ui);
     ctx.addChildBeforeFollowUps(askComponent);
     state.lastAskUserComponent = askComponent;
     state.pendingAskUserComponents.set(toolCallId, askComponent);
