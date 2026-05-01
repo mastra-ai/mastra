@@ -275,20 +275,43 @@ export class LocalFilesystem extends MastraFilesystem {
 
     if (this._contained) {
       if (!this._isWithinAnyRoot(absolutePath)) {
-        // Help the LLM (or developer) recover when they pass an absolute path
-        // that escapes the workspace — point them at the relative form.
-        if (nodePath.isAbsolute(inputPath)) {
-          const suggested = inputPath.replace(/^[/\\]+/, '');
-          throw new PermissionError(
-            inputPath,
-            `access (path is outside the workspace; use a relative path like "${suggested}")`,
-          );
-        }
-        throw new PermissionError(inputPath, 'access');
+        throw new PermissionError(inputPath, this._accessOperationHint(inputPath));
       }
     }
 
     return absolutePath;
+  }
+
+  /**
+   * Build the operation string for a containment-violation `PermissionError`.
+   *
+   * When the caller passed an absolute path, suggest a concrete relative form
+   * only when that suffix names an existing entry under the workspace (e.g.
+   * `/src/app.ts` → `src/app.ts` if `<basePath>/src` exists). Otherwise emit a
+   * soft hint that doesn't lie about specific paths — agents that mistake `/`
+   * for the workspace root learn the workspace is sandboxed without us
+   * inventing a fictitious in-workspace location for `/etc/passwd`.
+   */
+  private _accessOperationHint(inputPath: string): string {
+    if (!nodePath.isAbsolute(inputPath)) return 'access';
+
+    const stripped = inputPath.replace(/^[/\\]+/, '');
+    if (!stripped) return 'access';
+
+    // If the first segment exists under basePath, the LLM almost certainly
+    // meant a workspace-relative path. Suggest the exact form.
+    const firstSegment = stripped.split(/[/\\]/, 1)[0];
+    if (firstSegment) {
+      try {
+        if (realpathSync(nodePath.join(this._basePath, firstSegment))) {
+          return `access (path is outside the workspace; use a relative path like "${stripped}")`;
+        }
+      } catch {
+        // Fall through to the soft hint
+      }
+    }
+
+    return 'access (path is outside the workspace; use a path relative to the workspace root, without a leading "/")';
   }
 
   /**

@@ -546,11 +546,20 @@ describe('LocalFilesystem', () => {
       await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
     });
 
-    it('should hint at the relative form when an absolute path is rejected', async () => {
-      // The error message should guide the LLM (or developer) toward a relative path
-      // instead of just saying "permission denied".
-      await expect(localFs.writeFile('/data/output.txt', 'nope')).rejects.toThrow(/data\/output\.txt/);
-      await expect(localFs.writeFile('/data/output.txt', 'nope')).rejects.toThrow(/relative path/);
+    it('should suggest the concrete relative form when the first segment exists in the workspace', async () => {
+      // Create a `src/` directory in the workspace; the LLM passes `/src/app.ts`.
+      // The hint should suggest `src/app.ts` because `<basePath>/src` is real.
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await expect(localFs.writeFile('/src/app.ts', 'nope')).rejects.toThrow(/"src\/app\.ts"/);
+      await expect(localFs.writeFile('/src/app.ts', 'nope')).rejects.toThrow(/relative path/);
+    });
+
+    it('should fall back to a soft hint when the suggested path would be misleading', async () => {
+      // `/etc/passwd` has no corresponding `<basePath>/etc` — don't invent a
+      // suggestion that points somewhere the LLM almost certainly didn't mean.
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(/relative to the workspace root/);
+      await expect(localFs.readFile('/etc/passwd')).rejects.not.toThrow(/"etc\/passwd"/);
     });
 
     it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
