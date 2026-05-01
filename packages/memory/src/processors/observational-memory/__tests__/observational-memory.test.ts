@@ -145,6 +145,110 @@ function createInMemoryStorage(): InMemoryMemory {
   return new InMemoryMemory({ db });
 }
 
+describe('ObservationalMemoryProcessor read-only mode', () => {
+  it('loads stored context without starting observation side effects', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'read-only-om-thread';
+    const resourceId = 'read-only-om-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Read-only OM',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'stored-user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Stored read-only context' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId,
+          resourceId,
+        } as any,
+      ],
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 1 },
+    });
+
+    const baseMemoryProvider = createMemoryProvider(om);
+    const memoryProvider: MemoryContextProvider = {
+      getContext: vi.fn(baseMemoryProvider.getContext),
+      persistMessages: vi.fn(baseMemoryProvider.persistMessages),
+    };
+
+    const beginTurnSpy = vi.spyOn(om, 'beginTurn');
+    const observeSpy = vi.spyOn(om, 'observe');
+    const bufferSpy = vi.spyOn(om, 'buffer');
+    const persistSpy = vi.spyOn(om, 'persistMessages');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+      memoryConfig: { readOnly: true },
+    });
+
+    const state: Record<string, unknown> = {};
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(memoryProvider.getContext).toHaveBeenCalledTimes(1);
+    expect(memoryProvider.getContext).toHaveBeenCalledWith({ threadId, resourceId });
+    expect(messageList.get.all.db().map(m => m.id)).toContain('stored-user-1');
+
+    expect(state.__omTurn).toBeUndefined();
+    expect(beginTurnSpy).not.toHaveBeenCalled();
+    expect(observeSpy).not.toHaveBeenCalled();
+    expect(bufferSpy).not.toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+    expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
+    expect(emitProgressSpy).not.toHaveBeenCalled();
+  });
+});
+
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
     const originalDoGenerate = config.doGenerate;
