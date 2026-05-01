@@ -147,7 +147,16 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Calculate 5 + 3"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -298,7 +307,24 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Calculate 5 + 3"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: calculator]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: calculator]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]

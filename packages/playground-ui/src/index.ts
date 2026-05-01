@@ -61,14 +61,12 @@ export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
-export * from './ds/components/CombinedButtons';
 export * from './ds/components/DateTimePicker';
 export * from './ds/components/EntryList';
 export * from './ds/components/FormFields';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
-export * from './ds/components/Notification';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SelectElement';

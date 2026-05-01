@@ -136,7 +136,16 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                  },
+                  {
+                    "role": "user",
+                    "content": "What is 5 + 3?"
+                  }
+                ],
                 "output": {
                   "text": "Let me calculate that for you. ",
                   "toolCalls": [
@@ -303,7 +312,28 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                  },
+                  {
+                    "role": "user",
+                    "content": "What is 5 + 3?"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: calculator]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: calculator]"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "Let me calculate that for you. "
+                  }
+                ],
                 "output": {
                   "text": "The result of 5 + 3 is 8.",
                   "toolCalls": []

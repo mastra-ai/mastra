@@ -311,11 +311,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
-        },
-        {
-          type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
         },
@@ -558,6 +553,11 @@ const sidebars = {
               type: 'category',
               label: 'Bridges',
               items: [
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'Datadog',
+                },
                 {
                   type: 'doc',
                   id: 'observability/tracing/bridges/otel',
