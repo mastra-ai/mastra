@@ -49,7 +49,7 @@ const calculatorAppHtml = `<!DOCTYPE html>
   <div id="history" class="history"></div>
   <script>
     var lastResult = null;
-    var history = [];
+    var calcHistory = [];
 
     // Hydrate from tool input if available (populated by the host)
     if (window.__mcpApp) {
@@ -84,7 +84,7 @@ const calculatorAppHtml = `<!DOCTYPE html>
           if (match) val = Number(match[1]);
         }
         lastResult = { n1: n1, n2: n2, op: op, result: val };
-        history.push(lastResult);
+        calcHistory.push(lastResult);
         resultDiv.className = 'result';
         resultDiv.innerHTML = '<span>Result: <strong>' + n1 + ' ' + (op === 'add' ? '+' : '\\u2212') + ' ' + n2 + ' = ' + val + '</strong></span>' +
           '<button class="share-btn" onclick="shareResult()">Share</button>';
@@ -111,9 +111,9 @@ const calculatorAppHtml = `<!DOCTYPE html>
 
     function renderHistory() {
       var div = document.getElementById('history');
-      if (history.length < 2) { div.innerHTML = ''; return; }
+      if (calcHistory.length < 2) { div.innerHTML = ''; return; }
       div.innerHTML = '<p style="font-size:12px;color:#999;margin-bottom:4px;">History</p>';
-      history.forEach(function(h) {
+      calcHistory.forEach(function(h) {
         var item = document.createElement('div');
         item.className = 'history-item';
         item.textContent = h.n1 + ' ' + (h.op === 'add' ? '+' : '\\u2212') + ' ' + h.n2 + ' = ' + h.result;

@@ -19,9 +19,8 @@ export const calculatorWithUI = createTool({
   mcp: {
     _meta: { ui: { resourceUri: 'ui://calculator/app' } },
   },
-  execute: async ({ num1, num2, operation }) => {
-    const result = operation === 'add' ? num1 + num2 : num1 - num2;
-    return `Interactive calculator displayed. Initial computation: ${num1} ${operation === 'add' ? '+' : '−'} ${num2} = ${result}. The user can now perform additional calculations in the UI.`;
+  execute: async () => {
+    return `Interactive calculator is now displayed. The user can enter numbers, choose an operation, and compute results directly in the UI.`;
   },
 });
 
