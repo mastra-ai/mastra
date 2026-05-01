@@ -44,8 +44,13 @@ export type ToolCallFilterOptions = {
    */
   preserveLatestStep?: boolean;
   /**
+   * Preserve tool calls and results from this many recent tool-producing steps when processInputStep runs.
+   * When set, this takes precedence over preserveLatestStep.
+   */
+  filterAfterToolSteps?: number;
+  /**
    * Keep completed tool results that have providerMetadata.mastra.modelOutput,
-   * replacing the raw result with that compact model-facing projection.
+   * replacing the filtered tool part with compact text-only model-facing output.
    *
    * @default false
    */
@@ -62,6 +67,7 @@ export class ToolCallFilter implements Processor {
   name = 'ToolCallFilter';
   private exclude: string[] | 'all';
   private preserveLatestStep: boolean;
+  private filterAfterToolSteps: number | undefined;
   private preserveModelOutput: boolean;
 
   /**
@@ -69,10 +75,12 @@ export class ToolCallFilter implements Processor {
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
    * @param options.preserveLatestStep Keep the latest step's tool calls and results during processInputStep.
+   * @param options.filterAfterToolSteps Preserve tool calls and results from this many recent tool-producing steps during processInputStep.
    * @param options.preserveModelOutput Keep completed tool results that have providerMetadata.mastra.modelOutput.
    */
   constructor(options: ToolCallFilterOptions = {}) {
     this.preserveLatestStep = options.preserveLatestStep ?? true;
+    this.filterAfterToolSteps = options.filterAfterToolSteps;
     this.preserveModelOutput = options.preserveModelOutput ?? false;
 
     // If no options or exclude is provided, exclude all tools
@@ -130,7 +138,7 @@ export class ToolCallFilter implements Processor {
     return (mastraMetadata as Record<string, unknown>).modelOutput;
   }
 
-  private compactToolResultPart(part: MessagePart & ToolLikePart): (MessagePart & ToolLikePart) | null {
+  private getPreservedModelOutputPart(part: MessagePart & ToolLikePart): MessagePart | null {
     if (!this.preserveModelOutput || part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') {
       return null;
     }
@@ -140,13 +148,65 @@ export class ToolCallFilter implements Processor {
       return null;
     }
 
+    const text = this.modelOutputToText(modelOutput);
+    if (!text) {
+      return null;
+    }
+
     return {
-      ...part,
-      toolInvocation: {
-        ...part.toolInvocation,
-        result: modelOutput,
-      },
-    };
+      type: 'text',
+      text: `${part.toolInvocation.toolName} result:\n${text}`,
+    } as MessagePart;
+  }
+
+  private modelOutputToText(modelOutput: unknown): string | null {
+    if (typeof modelOutput === 'string') {
+      return modelOutput;
+    }
+
+    if (typeof modelOutput === 'number' || typeof modelOutput === 'boolean' || typeof modelOutput === 'bigint') {
+      return String(modelOutput);
+    }
+
+    if (Array.isArray(modelOutput)) {
+      const text = modelOutput
+        .map(part => this.modelOutputToText(part))
+        .filter((part): part is string => Boolean(part))
+        .join('\n');
+      return text || this.safeStringify(modelOutput);
+    }
+
+    if (modelOutput && typeof modelOutput === 'object') {
+      const output = modelOutput as Record<string, unknown>;
+      if (output.type === 'text') {
+        if (typeof output.value === 'string') {
+          return output.value;
+        }
+        if (typeof output.text === 'string') {
+          return output.text;
+        }
+      }
+
+      if ('value' in output) {
+        return this.modelOutputToText(output.value);
+      }
+
+      if ('text' in output && typeof output.text === 'string') {
+        return output.text;
+      }
+
+      return this.safeStringify(modelOutput);
+    }
+
+    return null;
+  }
+
+  private safeStringify(value: unknown): string | null {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
   }
 
   private collectToolCallIds(parts: MessagePart[], toolCallIds: Set<string>) {
@@ -324,8 +384,8 @@ export class ToolCallFilter implements Processor {
                   return [part];
                 }
 
-                const compactPart = this.compactToolResultPart(part);
-                return compactPart ? [compactPart] : [];
+                const modelOutputPart = this.getPreservedModelOutputPart(part);
+                return modelOutputPart ? [modelOutputPart] : [];
               }),
             )
           : undefined;
@@ -390,6 +450,36 @@ export class ToolCallFilter implements Processor {
     return { messages: filteredMessages, changed };
   }
 
+  private getRecentToolStepToolCallIds(args: ProcessInputStepArgs): Set<string> {
+    const state = args.state as {
+      toolCallFilterSeenToolCallIds?: string[];
+      toolCallFilterStepToolCallIds?: string[][];
+    };
+    const seenToolCallIds = new Set(state.toolCallFilterSeenToolCallIds ?? []);
+    const responseToolCallIds = this.getMessageToolCallIds(args.messageList.get.response.db());
+    const newToolCallIds = [...responseToolCallIds].filter(toolCallId => !seenToolCallIds.has(toolCallId));
+
+    state.toolCallFilterSeenToolCallIds = [...new Set([...seenToolCallIds, ...newToolCallIds])];
+    state.toolCallFilterStepToolCallIds = [...(state.toolCallFilterStepToolCallIds ?? []), newToolCallIds];
+
+    const preserveStepCount = Math.max(0, this.filterAfterToolSteps ?? 0);
+    const recentStepToolCallIds =
+      preserveStepCount === 0 ? [] : state.toolCallFilterStepToolCallIds.slice(-preserveStepCount).flat();
+
+    return new Set(recentStepToolCallIds);
+  }
+
+  private getMessageToolCallIds(messages: MastraDBMessage[]): Set<string> {
+    const toolCallIds = new Set<string>();
+
+    for (const message of messages) {
+      this.collectToolCallIds(message.content?.parts ?? [], toolCallIds);
+      this.collectToolInvocationIds([message], toolCallIds);
+    }
+
+    return toolCallIds;
+  }
+
   async processInput(args: {
     messages: MastraDBMessage[];
     messageList: MessageList;
@@ -402,7 +492,10 @@ export class ToolCallFilter implements Processor {
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
-    const preservedToolCallIds = this.getLatestStepToolCallIds(args.steps, args.messages);
+    const preservedToolCallIds =
+      this.filterAfterToolSteps === undefined
+        ? this.getLatestStepToolCallIds(args.steps, args.messages)
+        : this.getRecentToolStepToolCallIds(args);
     const result = this.filterMessages(args.messages, preservedToolCallIds);
     if (!result.changed) {
       return {};

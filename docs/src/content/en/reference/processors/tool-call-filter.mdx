@@ -57,6 +57,21 @@ const filterStepHistory = new ToolCallFilter({
             isOptional: true,
             defaultValue: 'true',
           },
+          {
+            name: 'filterAfterToolSteps',
+            type: 'number',
+            description:
+              'Preserves tool calls and results from this many recent tool-producing steps during processInputStep. When set, this takes precedence over preserveLatestStep',
+            isOptional: true,
+          },
+          {
+            name: 'preserveModelOutput',
+            type: 'boolean',
+            description:
+              'Keeps compact model-facing output from filtered completed tool results while removing raw tool args and raw results',
+            isOptional: true,
+            defaultValue: 'false',
+          },
         ],
       },
     ],
@@ -135,6 +150,37 @@ Set `preserveLatestStep` to `false` to remove all matching tool calls and result
 ```typescript
 new ToolCallFilter({
   preserveLatestStep: false,
+})
+```
+
+Set `filterAfterToolSteps` to preserve tool calls and results from a fixed number of recent tool-producing steps:
+
+```typescript
+new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+```
+
+Set `filterAfterToolSteps` to `0` to remove all previous tool calls and results on each step.
+
+## Preserve compact model output
+
+Set `preserveModelOutput` to `true` to retain compact `toModelOutput` history for filtered completed tool results. This keeps only the model-facing output as text in the prompt and removes raw tool args and raw tool results.
+
+Only completed tool results with `providerMetadata.mastra.modelOutput` are preserved. Tool calls, incomplete results, and results without stored model output are still filtered.
+
+```typescript
+new ToolCallFilter({
+  preserveModelOutput: true,
+})
+```
+
+Combine `preserveModelOutput` with `exclude` to preserve compact output only for filtered tools:
+
+```typescript
+new ToolCallFilter({
+  exclude: ['searchDatabase'],
+  preserveModelOutput: true,
 })
 ```
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage } from '../../memory/types';
+import { toolCallFilterProvider } from '../../processor-provider/providers';
 
 import { ToolCallFilter } from './tool-call-filter';
 
@@ -182,20 +183,11 @@ describe('ToolCallFilter', () => {
       const parts = resultMessages[0]!.content.parts;
       expect(parts).toHaveLength(1);
       expect(parts[0]).toMatchObject({
-        type: 'tool-invocation',
-        toolInvocation: {
-          state: 'result',
-          toolCallId: 'call-1',
-          toolName: 'weather',
-          result: modelOutput,
-        },
-        providerMetadata: {
-          mastra: {
-            modelOutput,
-          },
-        },
+        type: 'text',
+        text: 'weather result:\nWeather summary: sunny, 72F',
       });
       expect(JSON.stringify(resultMessages)).not.toContain('retainedOnlyForApp');
+      expect(JSON.stringify(resultMessages)).not.toContain('location');
 
       const filteredList = new MessageList();
       filteredList.add(resultMessages, 'memory');
@@ -630,12 +622,25 @@ describe('ToolCallFilter', () => {
       });
 
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
-      const parts = resultMessages[0]!.content.parts.filter((part: any) => part.type === 'tool-invocation');
+      const parts = resultMessages[0]!.content.parts;
+      const textParts = parts.filter((part: any) => part.type === 'text');
+      const toolParts = parts.filter((part: any) => part.type === 'tool-invocation');
 
-      expect(parts).toHaveLength(2);
-      expect((parts[0] as any).toolInvocation.result).toEqual(weatherModelOutput);
-      expect((parts[1] as any).toolInvocation.result).toEqual({ value: 4 });
+      expect(textParts).toHaveLength(1);
+      expect(textParts[0]).toMatchObject({ text: 'weather result:\nWeather summary: sunny' });
+      expect(toolParts).toHaveLength(1);
+      expect((toolParts[0] as any).toolInvocation.result).toEqual({ value: 4 });
       expect(JSON.stringify(resultMessages)).not.toContain('rawWeather');
+    });
+
+    it('should expose step filtering and model output options through the processor provider config', async () => {
+      const parsedConfig = toolCallFilterProvider.configSchema.parse({
+        filterAfterToolSteps: 0,
+        preserveModelOutput: true,
+      });
+      const processor = toolCallFilterProvider.createProcessor(parsedConfig);
+
+      expect(processor).toBeInstanceOf(ToolCallFilter);
     });
 
     it('should exclude multiple specified tools', async () => {
@@ -1016,6 +1021,51 @@ describe('ToolCallFilter', () => {
   });
 
   describe('processInputStep', () => {
+    it('should filter all previous tool calls when filterAfterToolSteps is 0', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 0 });
+      const messages = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text' as const, text: 'Use a tool.' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'old-call',
+                  toolName: 'search',
+                  args: { q: 'old' },
+                  result: 'OLD_TOOL_RESULT',
+                },
+              },
+              { type: 'text' as const, text: 'Tool completed.' },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ] as unknown as MastraDBMessage[];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(createProcessInputStepArgs(messageList));
+
+      expect(result.modelContextMessages).toHaveLength(2);
+      expect(JSON.stringify(result.modelContextMessages)).not.toContain('OLD_TOOL_RESULT');
+      expect(JSON.stringify(result.modelContextMessages)).toContain('Tool completed.');
+    });
+
     it('should run at each step and preserve the latest step tool result by default', async () => {
       const filter = new ToolCallFilter();
 
