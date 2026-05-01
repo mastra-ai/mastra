@@ -63,7 +63,15 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     ctx.showInfo(`Goal resumed: "${goal.objective}" — turn counter reset. Sending continuation...`);
 
     // Kick off the next turn
-    state.harness.sendMessage({ content: `Continue working toward the goal: ${goal.objective}` }).catch(() => {});
+    try {
+      await state.harness.sendMessage({ content: `Continue working toward the goal: ${goal.objective}` });
+    } catch (err) {
+      goalManager.pause();
+      await goalManager.saveToThread(state);
+      ctx.showError(
+        `Goal paused — failed to send continuation for "${goal.objective}": ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     return;
   }
 
@@ -110,7 +118,13 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
         ctx.showInfo(`Goal set (${goal.maxTurns}-turn budget, judge: ${model.id}): "${objective}"`);
 
         // Kick off the first turn
-        state.harness.sendMessage({ content: objective }).catch(() => {});
+        try {
+          await state.harness.sendMessage({ content: objective });
+        } catch (err) {
+          goalManager.pause();
+          await goalManager.saveToThread(state);
+          ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        }
         resolve();
       },
       onCancel: () => {

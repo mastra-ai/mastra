@@ -143,26 +143,31 @@ export class GoalManager {
 
     this.goal.turnsUsed++;
 
-    // Budget exhaustion
-    if (this.goal.turnsUsed >= this.goal.maxTurns) {
-      this.goal.status = 'paused';
-      await this.saveToThread(state);
-      return null;
-    }
-
     // Get last assistant message
     const lastAssistantContent = await this.getLastAssistantContent(state);
     if (!lastAssistantContent) {
-      // No assistant message to judge — continue anyway
+      // No assistant message to judge — continue anyway (but check budget)
+      if (this.goal.turnsUsed >= this.goal.maxTurns) {
+        this.goal.status = 'paused';
+        await this.saveToThread(state);
+        return null;
+      }
       await this.saveToThread(state);
       return this.buildContinuationPrompt('No response yet, keep working.');
     }
 
-    // Call judge
+    // Call judge — always judge the current turn's response before enforcing budget
     const result = await this.callJudge(lastAssistantContent);
 
     if (result.decision === 'done') {
       this.goal.status = 'done';
+      await this.saveToThread(state);
+      return null;
+    }
+
+    // Budget exhaustion (checked after judging so the last turn can still be marked done)
+    if (this.goal.turnsUsed >= this.goal.maxTurns) {
+      this.goal.status = 'paused';
       await this.saveToThread(state);
       return null;
     }

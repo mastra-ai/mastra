@@ -152,6 +152,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      // Clear or load goal state for new thread
+      state.goalManager.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
