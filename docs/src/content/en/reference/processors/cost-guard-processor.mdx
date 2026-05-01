@@ -1,15 +1,15 @@
 ---
 title: "Reference: CostGuardProcessor | Processors"
-description: "API reference for CostGuardProcessor, a processor that monitors cumulative token usage and step count to enforce cost limits on agent runs."
+description: "API reference for CostGuardProcessor, a processor that monitors cumulative token usage and estimated cost to enforce limits on agent runs."
 packages:
   - "@mastra/core"
 ---
 
 # CostGuardProcessor
 
-The `CostGuardProcessor` monitors cumulative token usage and step count across the agentic loop, blocking or warning when configurable limits are exceeded.
+The `CostGuardProcessor` monitors cumulative token usage and estimated cost across the agentic loop, blocking or warning when configurable limits are exceeded.
 
-It uses `processInputStep` to check limits before each LLM call. For `resource` and `thread` scopes, it queries the observability storage APIs to retrieve cumulative usage across runs.
+It uses `processInputStep` to check limits before each LLM call. For `resource` and `thread` scopes, it queries the observability storage APIs to retrieve cumulative usage and cost data across runs.
 
 Supports three scoping modes:
 
@@ -25,22 +25,22 @@ Track token usage within a single agent run:
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  limits: { maxTotalTokens: 100_000, maxSteps: 10 },
+  limits: { maxTotalTokens: 100_000 },
 })
 ```
 
-Track cumulative usage per thread across runs:
+Track cumulative cost per thread across runs:
 
 ```typescript
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  limits: { maxTotalTokens: 500_000 },
+  limits: { maxCost: 1.0 },
   scope: 'thread',
 })
 ```
 
-Attach to an agent:
+Attach to an agent with an `onViolation` callback:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -52,7 +52,11 @@ const agent = new Agent({
   processors: {
     input: [
       new CostGuardProcessor({
-        limits: { maxTotalTokens: 50_000, maxSteps: 5 },
+        limits: { maxCost: 5.0 },
+        scope: 'resource',
+        onViolation: ({ limitType, usage, limit, scopeKey }) => {
+          console.log(`Limit ${limitType} exceeded for ${scopeKey}: ${usage}/${limit}`)
+        },
       }),
     ],
   },
@@ -66,7 +70,7 @@ const agent = new Agent({
   {
     name: 'limits',
     type: 'CostGuardLimits',
-    description: 'Token and step limits for the cost guard. At least one limit must be set.',
+    description: 'Token and cost limits for the cost guard. At least one limit must be set.',
     isOptional: false,
     properties: [
       {
@@ -91,9 +95,10 @@ const agent = new Agent({
             isOptional: true,
           },
           {
-            name: 'maxSteps',
+            name: 'maxCost',
             type: 'number',
-            description: 'Maximum number of LLM steps allowed.',
+            description:
+              'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Uses cost data from observability metrics. Only effective with resource or thread scopes.',
             isOptional: true,
           },
         ],
@@ -104,7 +109,7 @@ const agent = new Agent({
     name: 'scope',
     type: "'run' | 'resource' | 'thread'",
     description:
-      "Scope for cost tracking. 'run' tracks usage within the current agent run. 'resource' tracks cumulative usage per resourceId across runs. 'thread' tracks cumulative usage per threadId across runs. Resource and thread scopes require observability storage.",
+      "Scope for cost tracking. 'run' tracks usage within the current agent run. 'resource' tracks cumulative usage per resourceId across runs. 'thread' tracks cumulative usage per threadId across runs. Resource and thread scopes require observability storage with getMetricAggregate support.",
     isOptional: true,
     defaultValue: "'run'",
   },
@@ -123,6 +128,13 @@ const agent = new Agent({
       'Custom message template for the abort reason. Supports {limitType}, {usage}, and {limit} placeholders.',
     isOptional: true,
     defaultValue: "'Cost guard: {limitType} limit exceeded ({usage}/{limit})'",
+  },
+  {
+    name: 'onViolation',
+    type: '(violation: object) => void | Promise<void>',
+    description:
+      'Callback invoked when a limit violation is detected, regardless of strategy. Use this for side effects like alerting, emailing users, or logging to external systems. Receives an object with limitType, usage, limit, totalUsage, scope, and scopeKey.',
+    isOptional: true,
   },
 ]}
 />
@@ -147,7 +159,7 @@ const agent = new Agent({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Checks cumulative token usage and step count against configured limits before each LLM call. For resource and thread scopes, queries observability storage for historical usage. Throws TripWire when limits are exceeded (block strategy) or logs a warning (warn strategy).',
+      'Checks cumulative token usage and estimated cost against configured limits before each LLM call. For resource and thread scopes, queries observability storage for historical usage and cost. Calls abort() when limits are exceeded (block strategy) or logs a warning (warn strategy).',
     isOptional: false,
   },
 ]}
@@ -155,10 +167,10 @@ const agent = new Agent({
 
 ## Error behavior
 
-When the `block` strategy is active (default), `CostGuardProcessor` throws a `TripWire` error with `retry: false` when any limit is exceeded. The TripWire metadata includes:
+When the `block` strategy is active (default), `CostGuardProcessor` calls `abort()` with `retry: false` when any limit is exceeded. The TripWire metadata includes:
 
 - `processorId`: `'cost-guard'`
-- `usage`: Current cumulative usage (`inputTokens`, `outputTokens`, `totalTokens`, `steps`)
+- `usage`: Current cumulative usage (`inputTokens`, `outputTokens`, `totalTokens`, `estimatedCost`, `costUnit`)
 - `limit`: The configured limits object
 - `scope`: The active scope (`'run'`, `'resource'`, or `'thread'`)
 - `scopeKey`: The scope identifier for resource/thread scopes (if applicable)
@@ -168,9 +180,9 @@ When the `block` strategy is active (default), `CostGuardProcessor` throws a `Tr
 | Scope | Tracks across runs | Requires | Requires context |
 | - | - | - | - |
 | `run` | No | Nothing | No |
-| `resource` | Yes | Observability storage | `resourceId` in `RequestContext` |
-| `thread` | Yes | Observability storage | `threadId` in `RequestContext` |
+| `resource` | Yes | Observability storage with `getMetricAggregate` | `resourceId` in `RequestContext` |
+| `thread` | Yes | Observability storage with `getMetricAggregate` | `threadId` in `RequestContext` |
 
-For `resource` and `thread` scopes, the processor queries the observability storage APIs (`getMetricAggregate`) to retrieve cumulative token usage metrics (`mastra_model_total_input_tokens`, `mastra_model_total_output_tokens`). If the Mastra instance does not have observability storage configured, an error is thrown at registration time.
+For `resource` and `thread` scopes, the processor queries the observability storage APIs (`getMetricAggregate`) to retrieve cumulative token usage metrics (`mastra_model_total_input_tokens`, `mastra_model_total_output_tokens`) along with associated `estimatedCost` data. If the Mastra instance does not have observability storage configured with `getMetricAggregate` support, an error is thrown at registration time.
 
 If the required context ID is missing at runtime, the processor falls back to run-scoped tracking. Observability query failures are handled with a fail-open strategy: if a query fails, historical usage starts from zero.

@@ -38,8 +38,8 @@ function createInputStepArgs(overrides: Partial<ProcessInputStepArgs> = {}): Pro
       },
     ],
     messageList: {} as MessageList,
-    abort: (() => {
-      throw new Error('abort');
+    abort: ((reason?: string, options?: any) => {
+      throw new TripWire(reason ?? 'abort', options ?? {});
     }) as any,
     retryCount: 0,
     model: { modelId: 'test', provider: 'test', specificationVersion: 'v2' } as any,
@@ -49,16 +49,28 @@ function createInputStepArgs(overrides: Partial<ProcessInputStepArgs> = {}): Pro
   };
 }
 
-function createMockObservabilityStorage(inputTokens: number = 0, outputTokens: number = 0): ObservabilityStorage {
+function createMockObservabilityStorage(
+  inputTokens: number = 0,
+  outputTokens: number = 0,
+  options?: { inputCost?: number; outputCost?: number; costUnit?: string },
+): ObservabilityStorage {
   return {
     getMetricAggregate: vi.fn().mockImplementation(async (args: { name: string[] }) => {
       if (args.name[0] === 'mastra_model_total_input_tokens') {
-        return { value: inputTokens };
+        return {
+          value: inputTokens,
+          estimatedCost: options?.inputCost ?? null,
+          costUnit: options?.costUnit ?? null,
+        };
       }
       if (args.name[0] === 'mastra_model_total_output_tokens') {
-        return { value: outputTokens };
+        return {
+          value: outputTokens,
+          estimatedCost: options?.outputCost ?? null,
+          costUnit: options?.costUnit ?? null,
+        };
       }
-      return { value: null };
+      return { value: null, estimatedCost: null, costUnit: null };
     }),
   } as unknown as ObservabilityStorage;
 }
@@ -80,14 +92,14 @@ describe('CostGuardProcessor', () => {
       expect(guard.id).toBe('cost-guard');
     });
 
-    it('accepts maxSteps limit', () => {
-      const guard = new CostGuardProcessor({ limits: { maxSteps: 5 } });
+    it('accepts maxCost limit', () => {
+      const guard = new CostGuardProcessor({ limits: { maxCost: 1.0 } });
       expect(guard.name).toBe('Cost Guard');
     });
 
     it('accepts multiple limits', () => {
       const guard = new CostGuardProcessor({
-        limits: { maxTotalTokens: 1000, maxInputTokens: 500, maxSteps: 10 },
+        limits: { maxTotalTokens: 1000, maxInputTokens: 500, maxCost: 2.0 },
       });
       expect(guard.id).toBe('cost-guard');
     });
@@ -146,19 +158,6 @@ describe('CostGuardProcessor', () => {
       await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
     });
 
-    it('blocks when maxSteps exceeded', async () => {
-      const guard = new CostGuardProcessor({
-        limits: { maxSteps: 3 },
-      });
-
-      const args = createInputStepArgs({
-        steps: [createStep(10, 10), createStep(10, 10), createStep(10, 10)],
-        stepNumber: 3,
-      });
-
-      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
-    });
-
     it('sums tokens across multiple steps', async () => {
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
@@ -206,7 +205,6 @@ describe('CostGuardProcessor', () => {
             inputTokens: 30,
             outputTokens: 30,
             totalTokens: 60,
-            steps: 1,
           },
           limit: { maxTotalTokens: 50 },
         });
@@ -489,6 +487,19 @@ describe('CostGuardProcessor', () => {
       expect(() => guard.__registerMastra(mockMastra)).toThrow('observability storage');
     });
 
+    it('throws when observability storage lacks getMetricAggregate', () => {
+      const mockMastra = {
+        getStorage: () => ({ stores: { observability: { listMetrics: vi.fn() } } }),
+      } as any;
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 100 },
+        scope: 'resource',
+      });
+
+      expect(() => guard.__registerMastra(mockMastra)).toThrow('getMetricAggregate');
+    });
+
     it('does not require observability storage for run scope', () => {
       const mockMastra = {
         getStorage: () => undefined,
@@ -501,6 +512,295 @@ describe('CostGuardProcessor', () => {
 
       guard.__registerMastra(mockMastra);
       expect((guard as any).observabilityStorage).toBeUndefined();
+    });
+  });
+
+  describe('maxCost limit', () => {
+    it('blocks when estimated cost exceeds maxCost', async () => {
+      const obsStorage = createMockObservabilityStorage(1000, 500, {
+        inputCost: 0.3,
+        outputCost: 0.25,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        limits: { maxCost: 0.5 },
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-cost');
+
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      // Total cost: 0.30 + 0.25 = 0.55 > 0.50
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+    });
+
+    it('allows when estimated cost is under maxCost', async () => {
+      const obsStorage = createMockObservabilityStorage(100, 50, {
+        inputCost: 0.1,
+        outputCost: 0.05,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        limits: { maxCost: 0.5 },
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-cheap');
+
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      // Total cost: 0.10 + 0.05 = 0.15 < 0.50
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+    });
+
+    it('includes cost info in TripWire metadata', async () => {
+      const obsStorage = createMockObservabilityStorage(1000, 500, {
+        inputCost: 0.6,
+        outputCost: 0.5,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        limits: { maxCost: 1.0 },
+        scope: 'thread',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-cost');
+
+      const args = createInputStepArgs({
+        steps: [createStep(1, 1)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.message).toContain('maxCost');
+        expect(tripwire.options.metadata.usage.estimatedCost).toBe(1.1);
+        expect(tripwire.options.metadata.usage.costUnit).toBe('usd');
+      }
+    });
+
+    it('skips maxCost check when no cost data available', async () => {
+      const obsStorage = createMockObservabilityStorage(10, 10);
+
+      const guard = new CostGuardProcessor({
+        limits: { maxCost: 0.01 },
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-no-cost');
+
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      // No cost data returned → maxCost check is skipped
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+    });
+
+    it('maxCost only works with observability scopes (not run scope)', async () => {
+      const guard = new CostGuardProcessor({
+        limits: { maxCost: 0.01 },
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(10000, 10000)],
+        stepNumber: 1,
+      });
+
+      // Run scope doesn't have cost data, so maxCost check is skipped
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('onViolation callback', () => {
+    it('calls onViolation when a limit is exceeded with block strategy', async () => {
+      const onViolation = vi.fn();
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 50 },
+        onViolation,
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(30, 30)],
+        stepNumber: 1,
+      });
+
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        limitType: 'maxTotalTokens',
+        usage: 60,
+        limit: 50,
+        totalUsage: expect.objectContaining({ inputTokens: 30, outputTokens: 30, totalTokens: 60 }),
+        scope: 'run',
+        scopeKey: undefined,
+      });
+    });
+
+    it('calls onViolation when a limit is exceeded with warn strategy', async () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const onViolation = vi.fn();
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 50 },
+        strategy: 'warn',
+        onViolation,
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(30, 30)],
+        stepNumber: 1,
+      });
+
+      await guard.processInputStep(args);
+      expect(onViolation).toHaveBeenCalledOnce();
+
+      spy.mockRestore();
+    });
+
+    it('does not call onViolation when under limits', async () => {
+      const onViolation = vi.fn();
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 1000 },
+        onViolation,
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+      });
+
+      await guard.processInputStep(args);
+      expect(onViolation).not.toHaveBeenCalled();
+    });
+
+    it('continues even if onViolation throws', async () => {
+      const onViolation = vi.fn().mockRejectedValue(new Error('notification failed'));
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 50 },
+        onViolation,
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(30, 30)],
+        stepNumber: 1,
+      });
+
+      // Should still throw TripWire even though onViolation failed
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalled();
+    });
+
+    it('includes scope key for scoped violations', async () => {
+      const onViolation = vi.fn();
+      const obsStorage = createMockObservabilityStorage(80, 80);
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 100 },
+        scope: 'thread',
+        onViolation,
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-callback');
+
+      const args = createInputStepArgs({
+        steps: [createStep(1, 1)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'thread',
+          scopeKey: 'thread:thread-callback',
+        }),
+      );
+    });
+
+    it('awaits async onViolation before continuing', async () => {
+      const callOrder: string[] = [];
+      const onViolation = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        callOrder.push('violation');
+      });
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 50 },
+        strategy: 'warn',
+        onViolation,
+      });
+
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {
+        callOrder.push('warn');
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(30, 30)],
+        stepNumber: 1,
+      });
+
+      await guard.processInputStep(args);
+      expect(callOrder).toEqual(['violation', 'warn']);
+
+      spy.mockRestore();
+    });
+  });
+
+  describe('abort() usage', () => {
+    it('uses abort() from args instead of manually throwing TripWire', async () => {
+      const abortFn = vi.fn(((reason?: string, options?: any) => {
+        throw new TripWire(reason ?? 'abort', options ?? {});
+      }) as any);
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 50 },
+      });
+
+      const args = createInputStepArgs({
+        steps: [createStep(30, 30)],
+        stepNumber: 1,
+        abort: abortFn,
+      });
+
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+      expect(abortFn).toHaveBeenCalledWith(
+        expect.stringContaining('maxTotalTokens'),
+        expect.objectContaining({
+          retry: false,
+          metadata: expect.objectContaining({ processorId: 'cost-guard' }),
+        }),
+      );
     });
   });
 
@@ -545,7 +845,7 @@ describe('CostGuardProcessor', () => {
 
     it('handles null values from observability aggregate', async () => {
       const obsStorage = {
-        getMetricAggregate: vi.fn().mockResolvedValue({ value: null }),
+        getMetricAggregate: vi.fn().mockResolvedValue({ value: null, estimatedCost: null, costUnit: null }),
       } as unknown as ObservabilityStorage;
 
       const guard = new CostGuardProcessor({

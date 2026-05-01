@@ -1,5 +1,4 @@
 import type { StepResult } from '@internal/ai-sdk-v5';
-import { TripWire } from '../../agent/trip-wire';
 import type { Mastra } from '../../mastra';
 import { EntityType } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -17,13 +16,14 @@ import type { ProcessInputStepArgs, Processor } from '../index';
 export type CostScope = 'run' | 'resource' | 'thread';
 
 /**
- * Token usage summary for cost guard decisions
+ * Token and cost usage summary for cost guard decisions
  */
 export interface CostGuardUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  steps: number;
+  estimatedCost: number | null;
+  costUnit: string | null;
 }
 
 /**
@@ -38,7 +38,8 @@ export interface CostGuardTripwireMetadata {
 }
 
 /**
- * Cost guard limits configuration
+ * Cost guard limits configuration.
+ * Set token-based limits and/or a monetary cost limit.
  */
 export interface CostGuardLimits {
   /** Maximum total tokens (input + output) allowed */
@@ -47,8 +48,8 @@ export interface CostGuardLimits {
   maxInputTokens?: number;
   /** Maximum output tokens allowed */
   maxOutputTokens?: number;
-  /** Maximum number of LLM steps allowed */
-  maxSteps?: number;
+  /** Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Uses the cost data from observability metrics. */
+  maxCost?: number;
 }
 
 /**
@@ -56,7 +57,7 @@ export interface CostGuardLimits {
  */
 export interface CostGuardOptions {
   /**
-   * Token and step limits for the cost guard.
+   * Token and cost limits for the cost guard.
    * At least one limit must be set.
    */
   limits: CostGuardLimits;
@@ -81,30 +82,55 @@ export interface CostGuardOptions {
    * Placeholders: {limitType}, {usage}, {limit}
    */
   message?: string;
+
+  /**
+   * Callback invoked when a limit violation is detected, regardless of strategy.
+   * Use this for side effects like alerting, emailing users, or logging to external systems.
+   */
+  onViolation?: (violation: {
+    limitType: string;
+    usage: number;
+    limit: number;
+    totalUsage: CostGuardUsage;
+    scope: CostScope;
+    scopeKey?: string;
+  }) => void | Promise<void>;
 }
 
 /**
- * CostGuardProcessor monitors cumulative token usage and step count across the agentic loop,
+ * CostGuardProcessor monitors cumulative token usage and estimated cost across the agentic loop,
  * blocking or warning when configurable limits are exceeded.
  *
  * Uses `processInputStep` to check limits before each LLM call. For 'resource' and 'thread'
  * scopes, queries the observability storage APIs to retrieve cumulative usage across runs.
  *
- * Requires the new observability APIs when using 'resource' or 'thread' scopes. If the Mastra
- * instance does not have observability storage configured, an error is thrown at registration time.
+ * Requires the new observability APIs (specifically `getMetricAggregate`) when using 'resource'
+ * or 'thread' scopes. If the Mastra instance does not have observability storage configured,
+ * an error is thrown at registration time.
  *
  * @example Run-scoped (tracks usage within a single agent run):
  * ```typescript
  * new CostGuardProcessor({
- *   limits: { maxTotalTokens: 100_000, maxSteps: 10 },
+ *   limits: { maxTotalTokens: 100_000 },
  * })
  * ```
  *
- * @example Thread-scoped (tracks cumulative usage per thread across runs):
+ * @example Thread-scoped with cost limit:
  * ```typescript
  * new CostGuardProcessor({
- *   limits: { maxTotalTokens: 500_000 },
+ *   limits: { maxCost: 1.00 },
  *   scope: 'thread',
+ * })
+ * ```
+ *
+ * @example With onViolation callback:
+ * ```typescript
+ * new CostGuardProcessor({
+ *   limits: { maxCost: 5.00 },
+ *   scope: 'resource',
+ *   onViolation: ({ limitType, usage, limit, scope, scopeKey }) => {
+ *     alertSystem.notify(`Cost limit exceeded for ${scopeKey}: ${usage}/${limit}`);
+ *   },
  * })
  * ```
  */
@@ -116,11 +142,12 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private scope: CostScope;
   private strategy: 'block' | 'warn';
   private messageTemplate: string;
+  private onViolation?: CostGuardOptions['onViolation'];
   private observabilityStorage?: ObservabilityStorage;
 
   constructor(options: CostGuardOptions) {
     const { limits } = options;
-    if (!limits.maxTotalTokens && !limits.maxInputTokens && !limits.maxOutputTokens && !limits.maxSteps) {
+    if (!limits.maxTotalTokens && !limits.maxInputTokens && !limits.maxOutputTokens && !limits.maxCost) {
       throw new Error('CostGuardProcessor requires at least one limit to be set');
     }
 
@@ -128,15 +155,16 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.scope = options.scope ?? 'run';
     this.strategy = options.strategy ?? 'block';
     this.messageTemplate = options.message ?? 'Cost guard: {limitType} limit exceeded ({usage}/{limit})';
+    this.onViolation = options.onViolation;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     if (this.scope !== 'run') {
       const storage = mastra.getStorage();
       const obsStorage = storage?.stores?.observability;
-      if (!obsStorage) {
+      if (!obsStorage || typeof obsStorage.getMetricAggregate !== 'function') {
         throw new Error(
-          `CostGuardProcessor with scope '${this.scope}' requires observability storage. ` +
+          `CostGuardProcessor with scope '${this.scope}' requires observability storage with getMetricAggregate support. ` +
             'Configure observability storage on your Mastra instance to use resource or thread scoping.',
         );
       }
@@ -158,7 +186,8 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      steps: steps.length,
+      estimatedCost: null,
+      costUnit: null,
     };
   }
 
@@ -176,7 +205,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
   private async queryPersistedUsage(scopeFilter: { resourceId?: string; threadId?: string }): Promise<CostGuardUsage> {
     if (!this.observabilityStorage) {
-      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: 0 };
+      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: null, costUnit: null };
     }
     try {
       const filters = {
@@ -200,15 +229,20 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       const inputTokens = inputResult.value ?? 0;
       const outputTokens = outputResult.value ?? 0;
 
+      const inputCost = inputResult.estimatedCost ?? 0;
+      const outputCost = outputResult.estimatedCost ?? 0;
+      const totalCost = inputCost + outputCost;
+      const costUnit = inputResult.costUnit ?? outputResult.costUnit ?? null;
+
       return {
         inputTokens,
         outputTokens,
         totalTokens: inputTokens + outputTokens,
-        steps: 0,
+        estimatedCost: totalCost > 0 ? totalCost : null,
+        costUnit,
       };
     } catch {
-      // fail-open: if observability query fails, start from zero
-      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: 0 };
+      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: null, costUnit: null };
     }
   }
 
@@ -235,7 +269,8 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         inputTokens: persistedUsage.inputTokens + runUsage.inputTokens,
         outputTokens: persistedUsage.outputTokens + runUsage.outputTokens,
         totalTokens: persistedUsage.totalTokens + runUsage.totalTokens,
-        steps: persistedUsage.steps + runUsage.steps,
+        estimatedCost: persistedUsage.estimatedCost,
+        costUnit: persistedUsage.costUnit,
       },
       scopeKey,
     };
@@ -251,8 +286,8 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     if (this.limits.maxOutputTokens && usage.outputTokens >= this.limits.maxOutputTokens) {
       return { limitType: 'maxOutputTokens', usage: usage.outputTokens, limit: this.limits.maxOutputTokens };
     }
-    if (this.limits.maxSteps && usage.steps >= this.limits.maxSteps) {
-      return { limitType: 'maxSteps', usage: usage.steps, limit: this.limits.maxSteps };
+    if (this.limits.maxCost && usage.estimatedCost !== null && usage.estimatedCost >= this.limits.maxCost) {
+      return { limitType: 'maxCost', usage: usage.estimatedCost, limit: this.limits.maxCost };
     }
     return null;
   }
@@ -272,12 +307,27 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
     const message = this.formatMessage(violation.limitType, violation.usage, violation.limit);
 
+    if (this.onViolation) {
+      try {
+        await this.onViolation({
+          limitType: violation.limitType,
+          usage: violation.usage,
+          limit: violation.limit,
+          totalUsage: usage,
+          scope: this.scope,
+          scopeKey,
+        });
+      } catch {
+        // onViolation errors should not prevent the guard from functioning
+      }
+    }
+
     if (this.strategy === 'warn') {
       console.warn(`[CostGuardProcessor] ${message}`);
       return;
     }
 
-    throw new TripWire<CostGuardTripwireMetadata>(message, {
+    args.abort(message, {
       retry: false,
       metadata: {
         processorId: this.id,
