@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
@@ -60,7 +61,7 @@ describe('Agent FGA checks', () => {
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
       (agent as any).__registerMastra(mastra);
 
-      const requestContext = new Map<string, unknown>();
+      const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
       try {
@@ -82,7 +83,7 @@ describe('Agent FGA checks', () => {
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
       (agent as any).__registerMastra(mastra);
 
-      const requestContext = new Map<string, unknown>();
+      const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
 
       await expect(agent.generate('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
@@ -95,7 +96,7 @@ describe('Agent FGA checks', () => {
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
       (agent as any).__registerMastra(mastra);
 
-      const requestContext = new Map<string, unknown>();
+      const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
 
       await agent.generate('test', { requestContext: requestContext as any });
@@ -112,7 +113,7 @@ describe('Agent FGA checks', () => {
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
       (agent as any).__registerMastra(mastra);
 
-      const requestContext = new Map<string, unknown>();
+      const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
       try {
@@ -134,7 +135,7 @@ describe('Agent FGA checks', () => {
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
       (agent as any).__registerMastra(mastra);
 
-      const requestContext = new Map<string, unknown>();
+      const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
 
       await expect(agent.stream('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
