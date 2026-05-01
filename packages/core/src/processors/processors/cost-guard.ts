@@ -81,12 +81,6 @@ export interface CostGuardOptions {
    * Placeholders: {usage}, {limit}
    */
   message?: string;
-
-  /**
-   * @deprecated Use the `onViolation` property on the Processor interface instead.
-   * Callback invoked when a cost violation is detected, regardless of strategy.
-   */
-  onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
 }
 
 /**
@@ -173,7 +167,6 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.window = options.window ?? '7d';
     this.strategy = options.strategy ?? 'block';
     this.messageTemplate = options.message ?? 'Cost guard: cost limit exceeded ({usage}/{limit})';
-    this.onViolation = options.onViolation;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -307,29 +300,30 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
     const message = this.formatMessage(usage.estimatedCost, this.maxCost);
 
-    if (this.onViolation) {
-      try {
-        await this.onViolation({
-          processorId: this.id,
-          message,
-          detail: {
-            usage: usage.estimatedCost,
-            limit: this.maxCost,
-            totalUsage: usage,
-            scope: this.scope,
-            scopeKey,
-          },
-        });
-      } catch {
-        // onViolation errors should not prevent the guard from functioning
-      }
-    }
-
     if (this.strategy === 'warn') {
+      // For warn strategy, manually invoke onViolation since no TripWire is thrown
+      if (this.onViolation) {
+        try {
+          await this.onViolation({
+            processorId: this.id,
+            message,
+            detail: {
+              usage: usage.estimatedCost,
+              limit: this.maxCost,
+              totalUsage: usage,
+              scope: this.scope,
+              scopeKey,
+            },
+          });
+        } catch {
+          // onViolation errors should not prevent the guard from functioning
+        }
+      }
       console.warn(`[CostGuardProcessor] ${message}`);
       return;
     }
 
+    // For block strategy, onViolation is called by the runner when the TripWire is caught
     args.abort(message, {
       retry: false,
       metadata: {

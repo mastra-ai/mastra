@@ -572,13 +572,11 @@ describe('CostGuardProcessor', () => {
   });
 
   describe('onViolation callback', () => {
-    it('calls onViolation when cost limit is exceeded with block strategy', async () => {
+    it('does not call onViolation directly for block strategy (runner handles it)', async () => {
       const onViolation = vi.fn();
 
-      const guard = new CostGuardProcessor({
-        maxCost: 0.5,
-        onViolation,
-      });
+      const guard = new CostGuardProcessor({ maxCost: 0.5 });
+      guard.onViolation = onViolation;
 
       const args = createInputStepArgs({
         steps: [createStep(100, 50, { estimatedCost: 0.6, costUnit: 'usd' })],
@@ -586,16 +584,7 @@ describe('CostGuardProcessor', () => {
       });
 
       await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
-      expect(onViolation).toHaveBeenCalledWith({
-        processorId: 'cost-guard',
-        message: expect.stringContaining('cost limit exceeded'),
-        detail: expect.objectContaining({
-          usage: 0.6,
-          limit: 0.5,
-          totalUsage: expect.objectContaining({ estimatedCost: 0.6, costUnit: 'usd' }),
-          scope: 'run',
-        }),
-      });
+      expect(onViolation).not.toHaveBeenCalled();
     });
 
     it('calls onViolation when cost limit is exceeded with warn strategy', async () => {
@@ -605,8 +594,8 @@ describe('CostGuardProcessor', () => {
       const guard = new CostGuardProcessor({
         maxCost: 0.5,
         strategy: 'warn',
-        onViolation,
       });
+      guard.onViolation = onViolation;
 
       const args = createInputStepArgs({
         steps: [createStep(100, 50, { estimatedCost: 0.6, costUnit: 'usd' })],
@@ -622,10 +611,8 @@ describe('CostGuardProcessor', () => {
     it('does not call onViolation when under limit', async () => {
       const onViolation = vi.fn();
 
-      const guard = new CostGuardProcessor({
-        maxCost: 10.0,
-        onViolation,
-      });
+      const guard = new CostGuardProcessor({ maxCost: 10.0 });
+      guard.onViolation = onViolation;
 
       const args = createInputStepArgs({
         steps: [createStep(10, 10, { estimatedCost: 0.01, costUnit: 'usd' })],
@@ -636,27 +623,14 @@ describe('CostGuardProcessor', () => {
       expect(onViolation).not.toHaveBeenCalled();
     });
 
-    it('continues even if onViolation throws', async () => {
+    it('continues even if onViolation throws (warn strategy)', async () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const onViolation = vi.fn().mockRejectedValue(new Error('notification failed'));
 
       const guard = new CostGuardProcessor({
         maxCost: 0.5,
-        onViolation,
+        strategy: 'warn',
       });
-
-      const args = createInputStepArgs({
-        steps: [createStep(100, 50, { estimatedCost: 0.6, costUnit: 'usd' })],
-        stepNumber: 1,
-      });
-
-      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
-      expect(onViolation).toHaveBeenCalled();
-    });
-
-    it('can be set via the Processor interface onViolation property', async () => {
-      const onViolation = vi.fn();
-
-      const guard = new CostGuardProcessor({ maxCost: 0.5 });
       guard.onViolation = onViolation;
 
       const args = createInputStepArgs({
@@ -664,17 +638,44 @@ describe('CostGuardProcessor', () => {
         stepNumber: 1,
       });
 
-      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
-      expect(onViolation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          processorId: 'cost-guard',
-          message: expect.any(String),
-          detail: expect.objectContaining({ usage: 0.6, limit: 0.5 }),
-        }),
-      );
+      await guard.processInputStep(args);
+      expect(onViolation).toHaveBeenCalled();
+
+      spy.mockRestore();
     });
 
-    it('includes scope key for scoped violations', async () => {
+    it('includes violation detail for warn strategy', async () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const onViolation = vi.fn();
+
+      const guard = new CostGuardProcessor({
+        maxCost: 0.5,
+        strategy: 'warn',
+      });
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        steps: [createStep(100, 50, { estimatedCost: 0.6, costUnit: 'usd' })],
+        stepNumber: 1,
+      });
+
+      await guard.processInputStep(args);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'cost-guard',
+        message: expect.stringContaining('cost limit exceeded'),
+        detail: expect.objectContaining({
+          usage: 0.6,
+          limit: 0.5,
+          totalUsage: expect.objectContaining({ estimatedCost: 0.6, costUnit: 'usd' }),
+          scope: 'run',
+        }),
+      });
+
+      spy.mockRestore();
+    });
+
+    it('includes scope key for scoped violations (warn strategy)', async () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const onViolation = vi.fn();
       const obsStorage = createMockObservabilityStorage({
         inputCost: 1.0,
@@ -685,8 +686,9 @@ describe('CostGuardProcessor', () => {
       const guard = new CostGuardProcessor({
         maxCost: 1.0,
         scope: 'thread',
-        onViolation,
+        strategy: 'warn',
       });
+      guard.onViolation = onViolation;
       (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
@@ -698,7 +700,7 @@ describe('CostGuardProcessor', () => {
         requestContext,
       });
 
-      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+      await guard.processInputStep(args);
       expect(onViolation).toHaveBeenCalledWith(
         expect.objectContaining({
           detail: expect.objectContaining({
@@ -707,6 +709,8 @@ describe('CostGuardProcessor', () => {
           }),
         }),
       );
+
+      spy.mockRestore();
     });
 
     it('awaits async onViolation before continuing', async () => {
@@ -719,8 +723,8 @@ describe('CostGuardProcessor', () => {
       const guard = new CostGuardProcessor({
         maxCost: 0.5,
         strategy: 'warn',
-        onViolation,
       });
+      guard.onViolation = onViolation;
 
       const spy = vi.spyOn(console, 'warn').mockImplementation(() => {
         callOrder.push('warn');
