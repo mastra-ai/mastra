@@ -2921,8 +2921,8 @@ export class Workflow<
       suspendedPaths: includeAllFields || fieldsSet.has('suspendedPaths') ? snapshotState.suspendedPaths : undefined,
       resumeLabels: includeAllFields || fieldsSet.has('resumeLabels') ? snapshotState.resumeLabels : undefined,
       waitingPaths: includeAllFields || fieldsSet.has('waitingPaths') ? snapshotState.waitingPaths : undefined,
-      requestContext: includeAllFields || fieldsSet.has('requestContext') ? snapshotState.requestContext : undefined,
-      tracingContext: includeAllFields || fieldsSet.has('tracingContext') ? snapshotState.tracingContext : undefined,
+      ...(fieldsSet.has('requestContext') ? { requestContext: snapshotState.requestContext } : {}),
+      ...(fieldsSet.has('tracingContext') ? { tracingContext: snapshotState.tracingContext } : {}),
     };
 
     // Clean up undefined/empty values if field filtering is active
