@@ -6,6 +6,7 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
+import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
@@ -25,6 +26,7 @@ export {
   AgentsLibSQL,
   BackgroundTasksLibSQL,
   BlobsLibSQL,
+  ChannelsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
   MCPClientsLibSQL,
@@ -159,6 +161,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
+    const channels = new ChannelsLibSQL(domainConfig);
     const datasets = new DatasetsLibSQL(domainConfig);
     const experiments = new ExperimentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
@@ -177,6 +180,7 @@ export class LibSQLStore extends MastraCompositeStore {
       memory,
       observability,
       agents,
+      channels,
       datasets,
       experiments,
       promptBlocks,

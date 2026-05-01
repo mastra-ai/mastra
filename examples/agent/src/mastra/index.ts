@@ -1,15 +1,14 @@
-import { Mastra, type Config } from '@mastra/core/mastra';
-
-import { MastraCompositeStore, FilesystemStore, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
+import { Mastra } from '@mastra/core/mastra';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
 import { builderAgent } from '@mastra/editor/ee';
+import { ComposioToolProvider } from '@mastra/editor/composio';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
+import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { SlackProvider } from '@mastra/slack';
 
-import { mastraAuth, rbacProvider } from './auth';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-
-import { ComposioToolProvider } from '@mastra/editor/composio';
+// import { mastraAuth, rbacProvider } from './auth';
 
 import {
   agentThatHarassesYou,
@@ -20,6 +19,7 @@ import {
   dynamicToolsAgent,
   schemaValidatedAgent,
   requestContextDemoAgent,
+  slackDemoAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -51,7 +51,6 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';
 import { StagehandBrowser } from '@mastra/stagehand';
 
@@ -67,23 +66,16 @@ const storage = new MastraCompositeStore({
   domains: {
     observability: duckdbStore.observability,
   },
-  // editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
-const workspace = new Workspace({
-  id: 'builder-workspace',
-  // filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
-  sandbox: new DaytonaSandbox(),
-});
-
-const config: Config = {
+export const mastra = new Mastra({
   agents: {
     builderAgent,
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
-    dynamicToolsAgent, // Dynamic tool search example
+    dynamicToolsAgent,
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
@@ -100,6 +92,7 @@ const config: Config = {
     supervisorAgent,
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
+    slackDemoAgent,
   },
   processors: {
     moderationProcessor,
@@ -126,21 +119,7 @@ const config: Config = {
   bundler: {
     sourcemap: true,
   },
-  editor: new MastraEditor(),
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-  },
-  workspace,
-};
 
-export const mastra = new Mastra({
-  ...config,
-  backgroundTasks: {
-    enabled: true,
-    globalConcurrency: 10,
-    perAgentConcurrency: 5,
-  },
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
@@ -215,6 +194,20 @@ export const mastra = new Mastra({
       },
     },
   }),
+  channels: {
+    slack: new SlackProvider({
+      baseUrl: process.env.MASTRA_BASE_URL,
+    }),
+  },
+  // server: {
+  //   auth: mastraAuth,
+  //   rbac: rbacProvider,
+  // },
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 10,
+    perAgentConcurrency: 5,
+  },
   observability: new Observability({
     configs: {
       default: {

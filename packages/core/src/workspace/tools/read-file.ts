@@ -11,7 +11,7 @@ export const readFileTool = createTool({
   description:
     'Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files.',
   inputSchema: z.object({
-    path: z.string().describe('The path to the file to read (e.g., "/data/config.json")'),
+    path: z.string().describe('The path to the file to read (e.g., "data/config.json")'),
     encoding: z
       .enum(['utf-8', 'utf8', 'base64', 'hex', 'binary'])
       .optional()

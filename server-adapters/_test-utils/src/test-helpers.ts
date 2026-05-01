@@ -437,6 +437,32 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const workspace = await createTestWorkspace();
 
   // Create Mastra instance with all test entities
+  // Mock channel provider for channel route tests
+  const mockChannelProvider = {
+    id: 'test-platform',
+    getRoutes: () => [],
+    getInfo: () => ({
+      id: 'test-platform',
+      name: 'Test Platform',
+      isConfigured: true,
+    }),
+    connect: async () => ({
+      type: 'immediate' as const,
+      installationId: 'test-installation',
+    }),
+    disconnect: async () => {},
+    listInstallations: async () => [
+      {
+        id: 'test-installation',
+        platform: 'test-platform',
+        agentId: 'test-agent',
+        status: 'active' as const,
+        displayName: 'Test Installation',
+        installedAt: new Date(),
+      },
+    ],
+  };
+
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
     storage: new InMemoryStore(),
@@ -458,6 +484,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
     backgroundTasks: {
       enabled: true,
+    },
+    channels: {
+      'test-platform': mockChannelProvider as any,
     },
   });
 

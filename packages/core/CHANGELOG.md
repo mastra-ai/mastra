@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 1.31.0-alpha.3
+
+### Minor Changes
+
+- Enhanced load_tool to accept an array of tool names, enabling bulk tool loading in a single call. Returns 'loaded', 'notFound', and 'alreadyLoaded' arrays for clearer response shape. ([#15472](https://github.com/mastra-ai/mastra/pull/15472))
+
+- Added platform channels framework with ChannelProvider interface, ChannelsStorage domain, and ChannelConnectResult discriminated union supporting OAuth, deep link, and immediate connection flows. Channels can be registered on the Mastra instance and expose connect/disconnect/list APIs for platform integrations. ([#15876](https://github.com/mastra-ai/mastra/pull/15876))
+
+### Patch Changes
+
+- Workspace search no longer throws when requesting hybrid or vector mode if the configuration does not support it. The search tool now gracefully falls back to the best available mode instead of throwing an error. ([#14533](https://github.com/mastra-ai/mastra/pull/14533))
+
+- Workspace file tools no longer use misleading absolute-path examples (e.g. `/data/output.txt`) that caused weaker LLMs to attempt writes at the actual filesystem root. The example paths in `read_file` and `write_file` are now relative. ([#14544](https://github.com/mastra-ai/mastra/pull/14544))
+
+  Additionally, when a contained workspace rejects an absolute path that escapes its boundary, the resulting `PermissionError` now guides the agent toward a relative path so it can self-correct on the next turn. When the path's first segment names a real directory in the workspace (e.g. `/src/app.ts` with an existing `src/`), the error suggests the exact relative form. Otherwise it falls back to a generic hint instead of inventing a misleading suggestion for genuinely out-of-workspace paths like `/etc/passwd`.
+
+  Fixes #14542
+
+- Fixed Linux bubblewrap failing when Workspace mounts use symlinks under LocalSandbox by resolving mount paths to real directories for isolation allowlists. ([#15498](https://github.com/mastra-ai/mastra/pull/15498))
+
+## 1.31.0-alpha.2
+
+### Patch Changes
+
+- Fixed BatchPartsProcessor using a hardcoded id in batched text-delta chunks. The real message id and runId are now preserved from the original chunks, preventing AI SDK UIMessage stream from dropping batched deltas. ([#14974](https://github.com/mastra-ai/mastra/pull/14974))
+
 ## 1.31.0-alpha.1
 
 ### Patch Changes
