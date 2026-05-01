@@ -290,6 +290,65 @@ describe('Koa Server Adapter', () => {
       expect(afterResponse.headers.get('x-interleaved')).toBe('true');
       await expect(afterResponse.json()).resolves.toEqual({ route: 'after' });
     });
+
+    it('reuses a dispatcher group when app.use wraps middleware functions', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const originalUse = app.use.bind(app);
+      app.use = ((middleware: Koa.Middleware) => {
+        const wrapped = async function wrappedMiddleware(ctx: Koa.Context, next: Koa.Next) {
+          return middleware(ctx, next);
+        };
+        return originalUse(wrapped);
+      }) as typeof app.use;
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/first',
+          responseType: 'json',
+          handler: async () => ({ route: 'first' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/second',
+          responseType: 'json',
+          handler: async () => ({ route: 'second' }),
+        },
+        { prefix: '' },
+      );
+
+      expect(app.middleware).toHaveLength(3);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const firstResponse = await fetch(`http://localhost:${port}/first`);
+      expect(firstResponse.status).toBe(200);
+      await expect(firstResponse.json()).resolves.toEqual({ route: 'first' });
+
+      const secondResponse = await fetch(`http://localhost:${port}/second`);
+      expect(secondResponse.status).toBe(200);
+      await expect(secondResponse.json()).resolves.toEqual({ route: 'second' });
+    });
   });
 
   describe('Stream Data Redaction', () => {

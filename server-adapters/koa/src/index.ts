@@ -27,7 +27,7 @@ type RegisteredKoaRoute = {
 };
 type RouteDispatcherGroup = {
   routes: RegisteredKoaRoute[];
-  middleware: Middleware;
+  stackLengthAfterRegistration: number;
 };
 
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -267,16 +267,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
   private getRouteDispatcherGroup(app: Koa): RouteDispatcherGroup {
     const activeGroup = this.activeRouteDispatchers.get(app);
-    if (activeGroup && app.middleware[app.middleware.length - 1] === activeGroup.middleware) {
+    if (activeGroup && app.middleware.length === activeGroup.stackLengthAfterRegistration) {
       return activeGroup;
     }
 
     const group: RouteDispatcherGroup = {
       routes: [],
-      middleware: undefined as unknown as Middleware,
+      stackLengthAfterRegistration: 0,
     };
-    group.middleware = this.createRouteDispatcherMiddleware(group);
-    app.use(group.middleware);
+    app.use(this.createRouteDispatcherMiddleware(group));
+    group.stackLengthAfterRegistration = app.middleware.length;
     this.activeRouteDispatchers.set(app, group);
     return group;
   }
