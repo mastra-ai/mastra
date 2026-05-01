@@ -22,6 +22,7 @@ import {
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -111,6 +112,8 @@ export const mastra = new Mastra({
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
+    heartbeatWorkflow,
+    multiCadenceWorkflow,
   },
   bundler: {
     sourcemap: true,
