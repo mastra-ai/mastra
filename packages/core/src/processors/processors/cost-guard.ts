@@ -1,18 +1,18 @@
 import type { StepResult } from '@internal/ai-sdk-v5';
-import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { MastraServerCache } from '../../cache';
 import type { Mastra } from '../../mastra';
+import { EntityType } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
+import type { ObservabilityStorage } from '../../storage/domains';
 import type { LanguageModelUsage } from '../../stream/types';
-import type { ProcessInputStepArgs, ProcessOutputStepArgs, Processor } from '../index';
+import type { ProcessInputStepArgs, Processor } from '../index';
 
 /**
  * Cost scope determines what usage is tracked:
  * - 'run': Only tokens from the current agent run (default)
- * - 'resource': Cumulative tokens across runs for the same resourceId (requires cache)
- * - 'thread': Cumulative tokens across runs for the same threadId (requires cache)
+ * - 'resource': Cumulative tokens across runs for the same resourceId (requires observability storage)
+ * - 'thread': Cumulative tokens across runs for the same threadId (requires observability storage)
  */
 export type CostScope = 'run' | 'resource' | 'thread';
 
@@ -64,8 +64,8 @@ export interface CostGuardOptions {
   /**
    * Scope for cost tracking:
    * - 'run': Track usage within the current agent run only (default)
-   * - 'resource': Track cumulative usage per resourceId across runs (requires cache)
-   * - 'thread': Track cumulative usage per threadId across runs (requires cache)
+   * - 'resource': Track cumulative usage per resourceId across runs (requires observability storage)
+   * - 'thread': Track cumulative usage per threadId across runs (requires observability storage)
    */
   scope?: CostScope;
 
@@ -87,8 +87,11 @@ export interface CostGuardOptions {
  * CostGuardProcessor monitors cumulative token usage and step count across the agentic loop,
  * blocking or warning when configurable limits are exceeded.
  *
- * Uses `processInputStep` to check limits before each LLM call, and `processOutputStep`
- * to record usage after each LLM response for cross-run scopes.
+ * Uses `processInputStep` to check limits before each LLM call. For 'resource' and 'thread'
+ * scopes, queries the observability storage APIs to retrieve cumulative usage across runs.
+ *
+ * Requires the new observability APIs when using 'resource' or 'thread' scopes. If the Mastra
+ * instance does not have observability storage configured, an error is thrown at registration time.
  *
  * @example Run-scoped (tracks usage within a single agent run):
  * ```typescript
@@ -102,7 +105,6 @@ export interface CostGuardOptions {
  * new CostGuardProcessor({
  *   limits: { maxTotalTokens: 500_000 },
  *   scope: 'thread',
- *   // TTL controlled by your Mastra server cache configuration
  * })
  * ```
  */
@@ -114,7 +116,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private scope: CostScope;
   private strategy: 'block' | 'warn';
   private messageTemplate: string;
-  private cache?: MastraServerCache;
+  private observabilityStorage?: ObservabilityStorage;
 
   constructor(options: CostGuardOptions) {
     const { limits } = options;
@@ -130,7 +132,15 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     if (this.scope !== 'run') {
-      this.cache = mastra.getServerCache();
+      const storage = mastra.getStorage();
+      const obsStorage = storage?.stores?.observability;
+      if (!obsStorage) {
+        throw new Error(
+          `CostGuardProcessor with scope '${this.scope}' requires observability storage. ` +
+            'Configure observability storage on your Mastra instance to use resource or thread scoping.',
+        );
+      }
+      this.observabilityStorage = obsStorage;
     }
   }
 
@@ -152,45 +162,53 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     };
   }
 
-  private resolveScopeKey(requestContext?: RequestContext): string | undefined {
+  private resolveScopeFilter(requestContext?: RequestContext): { resourceId?: string; threadId?: string } | undefined {
     if (this.scope === 'resource') {
       const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-      return resourceId ? `cost-guard:resource:${resourceId}` : undefined;
+      return resourceId ? { resourceId } : undefined;
     }
     if (this.scope === 'thread') {
       const threadId = requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-      return threadId ? `cost-guard:thread:${threadId}` : undefined;
+      return threadId ? { threadId } : undefined;
     }
     return undefined;
   }
 
-  private async loadPersistedUsage(scopeKey: string): Promise<CostGuardUsage> {
-    if (!this.cache) {
+  private async queryPersistedUsage(scopeFilter: { resourceId?: string; threadId?: string }): Promise<CostGuardUsage> {
+    if (!this.observabilityStorage) {
       return { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: 0 };
     }
     try {
-      const cached = await this.cache.get(scopeKey);
-      if (cached && typeof cached === 'object') {
-        const usage = cached as CostGuardUsage;
-        return {
-          inputTokens: usage.inputTokens ?? 0,
-          outputTokens: usage.outputTokens ?? 0,
-          totalTokens: usage.totalTokens ?? 0,
-          steps: usage.steps ?? 0,
-        };
-      }
-    } catch {
-      // fail-open: if cache read fails, start from zero
-    }
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: 0 };
-  }
+      const filters = {
+        ...scopeFilter,
+        entityType: EntityType.AGENT,
+      };
 
-  private async savePersistedUsage(scopeKey: string, usage: CostGuardUsage): Promise<void> {
-    if (!this.cache) return;
-    try {
-      await this.cache.set(scopeKey, usage);
+      const [inputResult, outputResult] = await Promise.all([
+        this.observabilityStorage.getMetricAggregate({
+          name: ['mastra_model_total_input_tokens'],
+          aggregation: 'sum',
+          filters,
+        }),
+        this.observabilityStorage.getMetricAggregate({
+          name: ['mastra_model_total_output_tokens'],
+          aggregation: 'sum',
+          filters,
+        }),
+      ]);
+
+      const inputTokens = inputResult.value ?? 0;
+      const outputTokens = outputResult.value ?? 0;
+
+      return {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        steps: 0,
+      };
     } catch {
-      // fail-open: if cache write fails, continue without persisting
+      // fail-open: if observability query fails, start from zero
+      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: 0 };
     }
   }
 
@@ -204,12 +222,14 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       return { usage: runUsage };
     }
 
-    const scopeKey = this.resolveScopeKey(requestContext);
-    if (!scopeKey) {
+    const scopeFilter = this.resolveScopeFilter(requestContext);
+    if (!scopeFilter) {
       return { usage: runUsage };
     }
 
-    const persistedUsage = await this.loadPersistedUsage(scopeKey);
+    const scopeKey = scopeFilter.resourceId ? `resource:${scopeFilter.resourceId}` : `thread:${scopeFilter.threadId}`;
+
+    const persistedUsage = await this.queryPersistedUsage(scopeFilter);
     return {
       usage: {
         inputTokens: persistedUsage.inputTokens + runUsage.inputTokens,
@@ -267,30 +287,5 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         scopeKey,
       },
     });
-  }
-
-  async processOutputStep(args: ProcessOutputStepArgs<CostGuardTripwireMetadata>): Promise<MastraDBMessage[]> {
-    if (this.scope === 'run') {
-      return args.messages;
-    }
-
-    const scopeKey = this.resolveScopeKey(args.requestContext);
-    if (!scopeKey) {
-      return args.messages;
-    }
-
-    const stepUsage = args.usage;
-    const persistedUsage = await this.loadPersistedUsage(scopeKey);
-    const stepInput = stepUsage?.inputTokens ?? 0;
-    const stepOutput = stepUsage?.outputTokens ?? 0;
-
-    await this.savePersistedUsage(scopeKey, {
-      inputTokens: persistedUsage.inputTokens + stepInput,
-      outputTokens: persistedUsage.outputTokens + stepOutput,
-      totalTokens: persistedUsage.totalTokens + stepInput + stepOutput,
-      steps: persistedUsage.steps + 1,
-    });
-
-    return args.messages;
   }
 }

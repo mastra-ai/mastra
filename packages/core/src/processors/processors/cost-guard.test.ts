@@ -1,10 +1,10 @@
 import type { StepResult } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraDBMessage, MessageList } from '../../agent/message-list';
+import type { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { InMemoryServerCache } from '../../cache/inmemory';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
-import type { ProcessInputStepArgs, ProcessOutputStepArgs } from '../index';
+import type { ObservabilityStorage } from '../../storage/domains';
+import type { ProcessInputStepArgs } from '../index';
 import { CostGuardProcessor } from './cost-guard';
 
 function createStep(inputTokens: number, outputTokens: number): StepResult<any> {
@@ -25,20 +25,18 @@ function createStep(inputTokens: number, outputTokens: number): StepResult<any> 
   } as unknown as StepResult<any>;
 }
 
-function createMessage(text: string): MastraDBMessage {
-  return {
-    id: `msg-${Math.random()}`,
-    role: 'user',
-    content: { format: 2, parts: [{ type: 'text' as const, text }] },
-    createdAt: new Date(),
-  };
-}
-
 function createInputStepArgs(overrides: Partial<ProcessInputStepArgs> = {}): ProcessInputStepArgs {
   return {
     steps: [],
     stepNumber: 0,
-    messages: [createMessage('hello')],
+    messages: [
+      {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text' as const, text: 'hello' }] },
+        createdAt: new Date(),
+      },
+    ],
     messageList: {} as MessageList,
     abort: (() => {
       throw new Error('abort');
@@ -51,27 +49,18 @@ function createInputStepArgs(overrides: Partial<ProcessInputStepArgs> = {}): Pro
   };
 }
 
-function createOutputStepArgs(
-  inputTokens: number,
-  outputTokens: number,
-  overrides: Partial<ProcessOutputStepArgs> = {},
-): ProcessOutputStepArgs {
-  const messages = [createMessage('response')];
+function createMockObservabilityStorage(inputTokens: number = 0, outputTokens: number = 0): ObservabilityStorage {
   return {
-    stepNumber: 0,
-    steps: [],
-    messages,
-    messageList: {} as MessageList,
-    abort: (() => {
-      throw new Error('abort');
-    }) as any,
-    retryCount: 0,
-    systemMessages: [],
-    state: {},
-    finishReason: 'stop',
-    usage: { inputTokens, outputTokens },
-    ...overrides,
-  };
+    getMetricAggregate: vi.fn().mockImplementation(async (args: { name: string[] }) => {
+      if (args.name[0] === 'mastra_model_total_input_tokens') {
+        return { value: inputTokens };
+      }
+      if (args.name[0] === 'mastra_model_total_output_tokens') {
+        return { value: outputTokens };
+      }
+      return { value: null };
+    }),
+  } as unknown as ObservabilityStorage;
 }
 
 describe('CostGuardProcessor', () => {
@@ -289,22 +278,14 @@ describe('CostGuardProcessor', () => {
   });
 
   describe('resource scope', () => {
-    it('combines persisted and run usage', async () => {
-      const cache = new InMemoryServerCache({ ttlMs: 60000 });
-      // Pre-seed cached usage for a resource
-      await cache.set('cost-guard:resource:user-123', {
-        inputTokens: 40,
-        outputTokens: 30,
-        totalTokens: 70,
-        steps: 2,
-      });
+    it('combines observability data and run usage', async () => {
+      const obsStorage = createMockObservabilityStorage(40, 30);
 
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
         scope: 'resource',
       });
-      // Simulate __registerMastra
-      (guard as any).cache = cache;
+      (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-123');
@@ -319,22 +300,54 @@ describe('CostGuardProcessor', () => {
       await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
     });
 
+    it('queries with correct resourceId filter', async () => {
+      const obsStorage = createMockObservabilityStorage(0, 0);
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 1000 },
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-456');
+
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      await guard.processInputStep(args);
+
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ resourceId: 'user-456' }),
+        }),
+      );
+    });
+
     it('falls back to run scope when no resourceId', async () => {
+      const obsStorage = createMockObservabilityStorage(90, 90);
+
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
         scope: 'resource',
       });
-      (guard as any).cache = new InMemoryServerCache();
+      (guard as any).observabilityStorage = obsStorage;
 
       const args = createInputStepArgs({
         steps: [createStep(10, 10)],
         stepNumber: 1,
       });
 
+      // No resourceId → falls back to run scope, run usage is 20 < 100
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      // Should NOT have queried observability since there's no resourceId
+      expect(obsStorage.getMetricAggregate).not.toHaveBeenCalled();
     });
 
-    it('falls back to run scope when no cache', async () => {
+    it('falls back to run scope when no observability storage', async () => {
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
         scope: 'resource',
@@ -354,20 +367,14 @@ describe('CostGuardProcessor', () => {
   });
 
   describe('thread scope', () => {
-    it('combines persisted and run usage for thread', async () => {
-      const cache = new InMemoryServerCache({ ttlMs: 60000 });
-      await cache.set('cost-guard:thread:thread-abc', {
-        inputTokens: 80,
-        outputTokens: 15,
-        totalTokens: 95,
-        steps: 5,
-      });
+    it('combines observability data and run usage for thread', async () => {
+      const obsStorage = createMockObservabilityStorage(80, 15);
 
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
         scope: 'thread',
       });
-      (guard as any).cache = cache;
+      (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-abc');
@@ -381,89 +388,71 @@ describe('CostGuardProcessor', () => {
       // Persisted: 95, run: 6, total: 101 > 100
       await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
     });
-  });
 
-  describe('processOutputStep - usage persistence', () => {
-    it('persists step usage for resource scope', async () => {
-      const cache = new InMemoryServerCache({ ttlMs: 60000 });
+    it('queries with correct threadId filter', async () => {
+      const obsStorage = createMockObservabilityStorage(0, 0);
 
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 1000 },
-        scope: 'resource',
+        scope: 'thread',
       });
-      (guard as any).cache = cache;
+      (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-456');
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-xyz');
 
-      const args = createOutputStepArgs(100, 50, { requestContext });
-      await guard.processOutputStep(args);
-
-      const stored = (await cache.get('cost-guard:resource:user-456')) as any;
-      expect(stored).toMatchObject({
-        inputTokens: 100,
-        outputTokens: 50,
-        totalTokens: 150,
-        steps: 1,
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+        requestContext,
       });
+
+      await guard.processInputStep(args);
+
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ threadId: 'thread-xyz' }),
+        }),
+      );
     });
 
-    it('accumulates usage across multiple steps', async () => {
-      const cache = new InMemoryServerCache({ ttlMs: 60000 });
+    it('includes scope key in TripWire metadata', async () => {
+      const obsStorage = createMockObservabilityStorage(80, 80);
 
       const guard = new CostGuardProcessor({
-        limits: { maxTotalTokens: 1000 },
-        scope: 'resource',
+        limits: { maxTotalTokens: 100 },
+        scope: 'thread',
       });
-      (guard as any).cache = cache;
+      (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-789');
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-meta');
 
-      await guard.processOutputStep(createOutputStepArgs(50, 30, { requestContext }));
-      await guard.processOutputStep(createOutputStepArgs(40, 20, { requestContext }));
-
-      const stored = (await cache.get('cost-guard:resource:user-789')) as any;
-      expect(stored).toMatchObject({
-        inputTokens: 90,
-        outputTokens: 50,
-        totalTokens: 140,
-        steps: 2,
-      });
-    });
-
-    it('no-ops for run scope', async () => {
-      const guard = new CostGuardProcessor({
-        limits: { maxTotalTokens: 1000 },
-        scope: 'run',
+      const args = createInputStepArgs({
+        steps: [createStep(1, 1)],
+        stepNumber: 1,
+        requestContext,
       });
 
-      const args = createOutputStepArgs(100, 50);
-      const result = await guard.processOutputStep(args);
-      expect(result).toEqual(args.messages);
-    });
-
-    it('returns messages unchanged', async () => {
-      const cache = new InMemoryServerCache({ ttlMs: 60000 });
-      const guard = new CostGuardProcessor({
-        limits: { maxTotalTokens: 1000 },
-        scope: 'resource',
-      });
-      (guard as any).cache = cache;
-
-      const requestContext = new RequestContext();
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-x');
-
-      const args = createOutputStepArgs(10, 10, { requestContext });
-      const result = await guard.processOutputStep(args);
-      expect(result).toBe(args.messages);
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata).toMatchObject({
+          scope: 'thread',
+          scopeKey: 'thread:thread-meta',
+        });
+      }
     });
   });
 
   describe('__registerMastra', () => {
-    it('resolves cache from Mastra instance for non-run scopes', () => {
-      const mockCache = new InMemoryServerCache();
-      const mockMastra = { getServerCache: () => mockCache } as any;
+    it('resolves observability storage for non-run scopes', () => {
+      const mockObsStorage = createMockObservabilityStorage();
+      const mockMastra = {
+        getStorage: () => ({ stores: { observability: mockObsStorage } }),
+      } as any;
 
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
@@ -471,12 +460,39 @@ describe('CostGuardProcessor', () => {
       });
 
       guard.__registerMastra(mockMastra);
-      expect((guard as any).cache).toBe(mockCache);
+      expect((guard as any).observabilityStorage).toBe(mockObsStorage);
     });
 
-    it('does not resolve cache for run scope', () => {
-      const mockCache = new InMemoryServerCache();
-      const mockMastra = { getServerCache: () => mockCache } as any;
+    it('throws when observability storage is not available for non-run scopes', () => {
+      const mockMastra = {
+        getStorage: () => ({ stores: {} }),
+      } as any;
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 100 },
+        scope: 'resource',
+      });
+
+      expect(() => guard.__registerMastra(mockMastra)).toThrow('observability storage');
+    });
+
+    it('throws when storage is not configured for non-run scopes', () => {
+      const mockMastra = {
+        getStorage: () => undefined,
+      } as any;
+
+      const guard = new CostGuardProcessor({
+        limits: { maxTotalTokens: 100 },
+        scope: 'thread',
+      });
+
+      expect(() => guard.__registerMastra(mockMastra)).toThrow('observability storage');
+    });
+
+    it('does not require observability storage for run scope', () => {
+      const mockMastra = {
+        getStorage: () => undefined,
+      } as any;
 
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
@@ -484,7 +500,7 @@ describe('CostGuardProcessor', () => {
       });
 
       guard.__registerMastra(mockMastra);
-      expect((guard as any).cache).toBeUndefined();
+      expect((guard as any).observabilityStorage).toBeUndefined();
     });
   });
 
@@ -503,15 +519,16 @@ describe('CostGuardProcessor', () => {
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
     });
 
-    it('cache read failure falls back to zero (fail-open)', async () => {
-      const cache = new InMemoryServerCache();
-      vi.spyOn(cache, 'get').mockRejectedValue(new Error('cache unavailable'));
+    it('observability query failure falls back to zero (fail-open)', async () => {
+      const obsStorage = {
+        getMetricAggregate: vi.fn().mockRejectedValue(new Error('observability unavailable')),
+      } as unknown as ObservabilityStorage;
 
       const guard = new CostGuardProcessor({
         limits: { maxTotalTokens: 100 },
         scope: 'resource',
       });
-      (guard as any).cache = cache;
+      (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-fail');
@@ -522,24 +539,32 @@ describe('CostGuardProcessor', () => {
         requestContext,
       });
 
+      // Observability query fails → persisted = 0, run = 20 < 100 → allows
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
     });
 
-    it('cache write failure does not throw (fail-open)', async () => {
-      const cache = new InMemoryServerCache();
-      vi.spyOn(cache, 'set').mockRejectedValue(new Error('cache write fail'));
+    it('handles null values from observability aggregate', async () => {
+      const obsStorage = {
+        getMetricAggregate: vi.fn().mockResolvedValue({ value: null }),
+      } as unknown as ObservabilityStorage;
 
       const guard = new CostGuardProcessor({
-        limits: { maxTotalTokens: 1000 },
+        limits: { maxTotalTokens: 100 },
         scope: 'resource',
       });
-      (guard as any).cache = cache;
+      (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-write-fail');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-null');
 
-      const args = createOutputStepArgs(10, 10, { requestContext });
-      await expect(guard.processOutputStep(args)).resolves.toEqual(args.messages);
+      const args = createInputStepArgs({
+        steps: [createStep(10, 10)],
+        stepNumber: 1,
+        requestContext,
+      });
+
+      // null values → persisted = 0, run = 20 < 100 → allows
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
     });
 
     it('exact boundary: blocks at exactly the limit', async () => {
