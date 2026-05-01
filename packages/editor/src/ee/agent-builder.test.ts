@@ -25,32 +25,70 @@ describe('EditorAgentBuilder', () => {
     });
   });
 
-  describe('getFeatures', () => {
-    it('returns undefined when features not set', () => {
+  describe('getFeatures (default-on semantics)', () => {
+    it('returns all features defaulted to true (browser stays false without config)', () => {
       const builder = new EditorAgentBuilder({});
-      expect(builder.getFeatures()).toBeUndefined();
+      expect(builder.getFeatures()?.agent).toEqual({
+        tools: true,
+        agents: true,
+        workflows: true,
+        scorers: true,
+        skills: true,
+        memory: true,
+        variables: true,
+        stars: true,
+        avatarUpload: true,
+        model: true,
+        browser: false,
+      });
     });
 
-    it('returns features object unchanged', () => {
-      const features = { agent: { tools: true, memory: false } };
-      const builder = new EditorAgentBuilder({ features });
-      expect(builder.getFeatures()).toBe(features);
+    it('explicit false overrides the default-on for the listed keys', () => {
+      const builder = new EditorAgentBuilder({ features: { agent: { tools: false, memory: false } } });
+      const resolved = builder.getFeatures()?.agent;
+      expect(resolved?.tools).toBe(false);
+      expect(resolved?.memory).toBe(false);
+      // siblings remain default-on
+      expect(resolved?.agents).toBe(true);
+      expect(resolved?.workflows).toBe(true);
+      expect(resolved?.skills).toBe(true);
     });
 
-    it('returns features with all toggles', () => {
-      const features = {
-        agent: {
-          tools: true,
-          agents: true,
-          workflows: false,
-          scorers: true,
-          skills: false,
-          memory: true,
-          variables: false,
+    it('explicit toggles round-trip while omitted keys default to true', () => {
+      const builder = new EditorAgentBuilder({
+        features: {
+          agent: {
+            tools: true,
+            workflows: false,
+            skills: false,
+            variables: false,
+          },
         },
-      };
-      const builder = new EditorAgentBuilder({ features });
-      expect(builder.getFeatures()).toEqual(features);
+      });
+      expect(builder.getFeatures()?.agent).toEqual({
+        tools: true,
+        agents: true,
+        workflows: false,
+        scorers: true,
+        skills: false,
+        memory: true,
+        variables: false,
+        stars: true,
+        avatarUpload: true,
+        model: true,
+        browser: false,
+      });
+    });
+
+    it('browser defaults to true when a valid browser config is provided', () => {
+      const builder = new EditorAgentBuilder({
+        configuration: {
+          agent: {
+            browser: { type: 'inline' as const, config: { provider: 'stagehand' } },
+          },
+        },
+      });
+      expect(builder.getFeatures()?.agent?.browser).toBe(true);
     });
   });
 
@@ -105,7 +143,19 @@ describe('EditorAgentBuilder', () => {
       ).not.toThrow();
     });
 
-    it('throws when locked mode has no default model', () => {
+    it('throws when locked mode (model: false) has no default model', () => {
+      expect(
+        () =>
+          new EditorAgentBuilder({
+            features: { agent: { model: false } },
+            configuration: {
+              agent: { models: { allowed: [{ provider: 'openai' }] } },
+            },
+          }),
+      ).toThrow(/locked mode but no default/);
+    });
+
+    it('does not require a default in open mode (model defaults to true)', () => {
       expect(
         () =>
           new EditorAgentBuilder({
@@ -113,7 +163,7 @@ describe('EditorAgentBuilder', () => {
               agent: { models: { allowed: [{ provider: 'openai' }] } },
             },
           }),
-      ).toThrow(/locked mode but no default/);
+      ).not.toThrow();
     });
 
     it('accepts open mode + allowlist + default in allowlist', () => {
@@ -219,15 +269,19 @@ describe('EditorAgentBuilder', () => {
       warnSpy.mockRestore();
     });
 
-    it('does nothing when browser feature is not enabled', () => {
+    it('silently keeps browser=false when no config is provided (default-on, no warning)', () => {
+      // With default-on, omitted `browser` is implicitly true, but the missing
+      // browser config downgrades it silently — admins who never configured
+      // the browser shouldn't see warnings about a feature they never opted in to.
       const builder = new EditorAgentBuilder({
         features: { agent: { tools: true } },
       });
       expect(builder.getModelPolicyWarnings()).toEqual([]);
-      expect(builder.getFeatures()?.agent?.browser).toBeUndefined();
+      expect(builder.getFeatures()?.agent?.browser).toBe(false);
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
-    it('downgrades browser to false and warns when feature enabled but no browser config', () => {
+    it('warns only when browser is *explicitly* enabled but config is missing', () => {
       const builder = new EditorAgentBuilder({
         features: { agent: { browser: true } },
       });

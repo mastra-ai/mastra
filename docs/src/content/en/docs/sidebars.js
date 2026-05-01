@@ -239,6 +239,11 @@ const sidebars = {
           id: 'workflows/error-handling',
           label: 'Error Handling',
         },
+        {
+          type: 'doc',
+          id: 'workflows/scheduled-workflows',
+          label: 'Scheduled Workflows',
+        },
       ],
     },
     {
@@ -548,6 +553,11 @@ const sidebars = {
               type: 'category',
               label: 'Bridges',
               items: [
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'Datadog',
+                },
                 {
                   type: 'doc',
                   id: 'observability/tracing/bridges/otel',

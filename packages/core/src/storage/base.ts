@@ -17,6 +17,7 @@ import type {
   DatasetsStorage,
   ExperimentsStorage,
   BackgroundTasksStorage,
+  SchedulesStorage,
   ChannelsStorage,
 } from './domains';
 
@@ -39,6 +40,7 @@ export type StorageDomains = {
   stars?: StarsStorage;
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
+  schedules?: SchedulesStorage;
 };
 
 /**
@@ -294,6 +296,7 @@ export class MastraCompositeStore extends MastraBase {
         stars: resolve('stars'),
         blobs: resolve('blobs'),
         backgroundTasks: resolve('backgroundTasks'),
+        schedules: resolve('schedules'),
         channels: resolve('channels'),
       } as StorageDomains;
     }
@@ -393,6 +396,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.backgroundTasks) {
       initTasks.push(this.stores.backgroundTasks.init());
+    }
+
+    if (this.stores?.schedules) {
+      initTasks.push(this.stores.schedules.init());
     }
 
     if (this.stores?.channels) {

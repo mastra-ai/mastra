@@ -6,6 +6,9 @@ import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } fr
 import { initWorkOS } from './auth';
 import { StagehandBrowser } from '@mastra/stagehand';
 import { ComposioToolProvider } from '@mastra/editor/composio';
+import { weatherInfo } from './tools';
+import { weatherAgent } from './agents';
+import { greetWorkflow } from './workflows';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -16,6 +19,13 @@ export const mastra = new Mastra({
   storage,
   agents: {
     builderAgent,
+    weatherAgent,
+  },
+  tools: {
+    weatherInfo,
+  },
+  workflows: {
+    greetWorkflow,
   },
   bundler: {
     sourcemap: true,
@@ -78,12 +88,12 @@ export const mastra = new Mastra({
               modelId: 'gpt-5.4',
             },
           },
-          workspace: { type: 'id', workspaceId: 'builder-workspace' },
           memory: {
-            options: {
-              lastMessages: 10,
-            },
+            observationalMemory: true,
           },
+          tools: { allowed: ['weather-info'] },
+          agents: { allowed: ['weather-agent'] },
+          workflows: { allowed: ['greet-workflow'] },
           browser: {
             type: 'inline',
             config: {

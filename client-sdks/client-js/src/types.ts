@@ -552,9 +552,7 @@ export interface QueryVectorParams {
   includeVector?: boolean;
 }
 
-export interface QueryVectorResponse {
-  results: QueryResult[];
-}
+export type QueryVectorResponse = QueryResult[];
 
 export interface GetVectorIndexResponse {
   dimension: number;
@@ -2858,6 +2856,70 @@ export interface StreamBackgroundTasksParams {
   taskId?: string;
 }
 
+export type ScheduleStatus = 'active' | 'paused';
+
+export interface ScheduleTarget {
+  type: 'workflow';
+  workflowId: string;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+
+export interface ScheduleRunSummary {
+  status: WorkflowRunStatus;
+  startedAt?: number;
+  completedAt?: number;
+  durationMs?: number;
+  error?: string;
+}
+
+export interface ScheduleResponse {
+  id: string;
+  target: ScheduleTarget;
+  cron: string;
+  timezone?: string;
+  status: ScheduleStatus;
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  lastRun?: ScheduleRunSummary;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type ScheduleTriggerStatus = 'published' | 'failed';
+
+export interface ScheduleTriggerResponse {
+  scheduleId: string;
+  runId: string;
+  scheduledFireAt: number;
+  actualFireAt: number;
+  status: ScheduleTriggerStatus;
+  error?: string;
+  run?: ScheduleRunSummary;
+}
+
+export interface ListSchedulesParams {
+  workflowId?: string;
+  status?: ScheduleStatus;
+}
+
+export interface ListSchedulesResponse {
+  schedules: ScheduleResponse[];
+}
+
+export interface ListScheduleTriggersParams {
+  limit?: number;
+  fromActualFireAt?: number;
+  toActualFireAt?: number;
+}
+
+export interface ListScheduleTriggersResponse {
+  triggers: ScheduleTriggerResponse[];
+}
+
 export interface ExperimentReviewCounts {
   experimentId: string;
   total: number;
@@ -2912,9 +2974,31 @@ export interface BuilderSettingsResponse {
    */
   modelPolicy?: BuilderModelPolicy;
   /**
+   * Resolved picker visibility for tools, agents, and workflows. Present when
+   * the builder is enabled. Each `visible*` field is `null` when unrestricted
+   * (show all registered entries) and `string[]` otherwise — making the
+   * empty-vs-unrestricted distinction explicit so the UI never has to
+   * disambiguate.
+   */
+  picker?: BuilderPickerResponse;
+  /**
    * Non-fatal warnings produced by builder config validation (e.g. allowlist
-   * entries with unknown providers that aren't tagged `kind: 'custom'`).
+   * entries with unknown providers that aren't tagged `kind: 'custom'`, or
+   * picker allowlist entries that don't match a registered ID).
    * Only present when there is at least one warning.
    */
   modelPolicyWarnings?: string[];
+}
+
+/**
+ * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.
+ *
+ * Per kind:
+ * - `null` ⇒ unrestricted (show all registered entries).
+ * - `string[]` ⇒ explicit allowlist (may be empty to show none).
+ */
+export interface BuilderPickerResponse {
+  visibleTools: string[] | null;
+  visibleAgents: string[] | null;
+  visibleWorkflows: string[] | null;
 }

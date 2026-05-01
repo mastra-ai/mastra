@@ -8,7 +8,10 @@ export type {
   IAgentBuilder,
   KnownProviderEntry,
   ProviderModelEntry,
+  ResolveAgentFeaturesContext,
 } from './types';
+
+export { BUILDER_FEATURE_DEFAULTS, resolveAgentFeatures } from './types';
 
 export {
   assertModelAllowed,
@@ -27,5 +30,7 @@ export {
 } from './normalize-candidate';
 
 export { builderToModelPolicy, isBuilderModelPolicyActive, type BuilderModelPolicyInputs } from './policy';
+
+export { resolvePickerVisibility, type ResolvePickerVisibilityInputs, type ResolvedPickerVisibility } from './picker';
 
 export { ModelNotAllowedError, MODEL_NOT_ALLOWED_CODE, isModelNotAllowedError } from './errors';

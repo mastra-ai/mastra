@@ -23,6 +23,7 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
 import { RESPONSES_ROUTES } from './responses';
+import { SCHEDULES_ROUTES } from './schedules';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { StoredAgentRoutes } from './stored-agents';
@@ -173,6 +174,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
   ...EDITOR_BUILDER_ROUTES,
+  ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
 ];
 

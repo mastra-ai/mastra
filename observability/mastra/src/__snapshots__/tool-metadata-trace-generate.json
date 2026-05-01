@@ -140,7 +140,16 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You use tools and add metadata"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Use metadata tool to process some data"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -281,7 +290,24 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You use tools and add metadata"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Use metadata tool to process some data"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: metadataTool]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: metadataTool]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]

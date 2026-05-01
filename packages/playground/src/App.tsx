@@ -92,6 +92,8 @@ import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
 import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
+import SchedulePage from './pages/workflows/schedule';
+import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
@@ -124,6 +126,8 @@ const paths: LinkComponentProviderProps['paths'] = {
     messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
+  schedulesLink: () => `/workflows/schedules`,
+  scheduleLink: (scheduleId: string) => `/workflows/schedules/${encodeURIComponent(scheduleId)}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
@@ -352,6 +356,8 @@ const routes = [
       { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
 
       { path: '/workflows', element: <Workflows /> },
+      { path: '/workflows/schedules', element: <SchedulesPage /> },
+      { path: '/workflows/schedules/:scheduleId', element: <SchedulePage /> },
       {
         path: '/workflows/:workflowId',
         element: (

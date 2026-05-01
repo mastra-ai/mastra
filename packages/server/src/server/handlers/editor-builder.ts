@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 
-import { builderToModelPolicy } from '@mastra/core/agent-builder/ee';
+import { builderToModelPolicy, resolvePickerVisibility } from '@mastra/core/agent-builder/ee';
 import { HTTPException } from '../http-exception';
 import { agentFeaturesSchema, builderSettingsResponseSchema } from '../schemas/editor-builder';
 import type { AgentFeatures } from '../schemas/editor-builder';
@@ -86,13 +86,76 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
         return { enabled: false, modelPolicy: { active: false } };
       }
 
-      const modelPolicyWarnings = builder.getModelPolicyWarnings?.() ?? [];
+      const baseWarnings = builder.getModelPolicyWarnings?.() ?? [];
+      const configuration = builder.getConfiguration();
+
+      // Picker allowlists are written against entity `.id` (what users see in
+      // the UI, URLs, traces). The client filters list responses by their
+      // response keys, which are not always `.id`:
+      //   - GET /agents     keys by `agent.id`
+      //   - GET /tools      keys by registration key (values include `id`)
+      //   - GET /workflows  keys by registration key (values omit `id`)
+      // To keep the client filter simple, we accept `.id` (fallback to
+      // registration key) for matching, but emit visible IDs as response keys
+      // so `Object.keys(data)` lines up.
+      type AliasPair = { id: string; key: string };
+      const collectAliases = (registry: Record<string, unknown>): AliasPair[] =>
+        Object.entries(registry).map(([key, entity]) => ({
+          id: (entity as { id?: string }).id || key,
+          key,
+        }));
+
+      const toolAliases = collectAliases(mastra.listTools() ?? {});
+      const agentAliases = collectAliases(mastra.listAgents() ?? {});
+      const workflowAliases = collectAliases(mastra.listWorkflows() ?? {});
+
+      // Tools/workflows responses are keyed by registration key. Agents
+      // response is keyed by `.id`.
+      const toResponseKey = (aliases: AliasPair[], byId: 'id' | 'key') => {
+        const map = new Map<string, string>();
+        for (const a of aliases) {
+          map.set(a.id, byId === 'id' ? a.id : a.key);
+          map.set(a.key, byId === 'id' ? a.id : a.key);
+        }
+        return map;
+      };
+      const toolKeyMap = toResponseKey(toolAliases, 'key');
+      const agentKeyMap = toResponseKey(agentAliases, 'id');
+      const workflowKeyMap = toResponseKey(workflowAliases, 'key');
+
+      const picker = resolvePickerVisibility({
+        config: configuration?.agent,
+        registeredToolIds: toolAliases.flatMap(a => [a.id, a.key]),
+        registeredAgentIds: agentAliases.flatMap(a => [a.id, a.key]),
+        registeredWorkflowIds: workflowAliases.flatMap(a => [a.id, a.key]),
+      });
+
+      const normalize = (visible: string[] | null, map: Map<string, string>): string[] | null => {
+        if (visible === null) return null;
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const id of visible) {
+          const mapped = map.get(id);
+          if (mapped && !seen.has(mapped)) {
+            seen.add(mapped);
+            out.push(mapped);
+          }
+        }
+        return out;
+      };
+
+      const modelPolicyWarnings = [...baseWarnings, ...picker.warnings];
 
       return {
         enabled: true,
         features: builder.getFeatures(),
-        configuration: builder.getConfiguration(),
+        configuration,
         modelPolicy: builderToModelPolicy(builder),
+        picker: {
+          visibleTools: normalize(picker.visibleTools, toolKeyMap),
+          visibleAgents: normalize(picker.visibleAgents, agentKeyMap),
+          visibleWorkflows: normalize(picker.visibleWorkflows, workflowKeyMap),
+        },
         ...(modelPolicyWarnings.length > 0 ? { modelPolicyWarnings } : {}),
       };
     } catch (error) {

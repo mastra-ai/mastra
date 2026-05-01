@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sentry",
-  "version": "1.0.21-alpha.1",
+  "version": "1.0.22-alpha.0",
   "description": "Sentry AI observability exporter for Mastra",
   "type": "module",
   "main": "dist/index.js",
