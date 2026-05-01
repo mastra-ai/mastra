@@ -168,6 +168,55 @@ describe('dynamic sandbox tools', () => {
     ).rejects.toThrow('Sandbox does not support processes');
   });
 
+  it('should throw a clear error when background execution is requested without process support', async () => {
+    const sandbox = {
+      id: 'minimal-sandbox',
+      name: 'MinimalSandbox',
+      provider: 'minimal',
+      status: 'running' as const,
+      executeCommand: async () => ({
+        command: 'echo ok',
+        stdout: 'ok',
+        stderr: '',
+        exitCode: 0,
+        success: true,
+        executionTimeMs: 1,
+      }),
+    };
+    const workspace = new Workspace({ sandbox: () => sandbox });
+    const tools = await createWorkspaceTools(workspace);
+
+    await expect(
+      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
+        { command: 'sleep 1', background: true },
+        { requestContext: new RequestContext() },
+      ),
+    ).rejects.toThrow('Sandbox does not support processes');
+  });
+
+  it('should throw a clear error when the resolved sandbox lacks command execution support', async () => {
+    const sandbox = {
+      id: 'process-only-sandbox',
+      name: 'ProcessOnlySandbox',
+      provider: 'process-only',
+      status: 'running' as const,
+      processes: {
+        spawn: async () => {
+          throw new Error('not used');
+        },
+      },
+    };
+    const workspace = new Workspace({ sandbox: () => sandbox as any });
+    const tools = await createWorkspaceTools(workspace);
+
+    await expect(
+      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
+        { command: 'echo ok' },
+        { requestContext: new RequestContext() },
+      ),
+    ).rejects.toThrow('Sandbox does not support executeCommand');
+  });
+
   it('should not invoke the sandbox resolver when only filesystem tools execute', async () => {
     let resolverCalls = 0;
     const workspace = new Workspace({
