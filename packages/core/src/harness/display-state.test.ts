@@ -718,6 +718,45 @@ describe('subagent lifecycle', () => {
     expect(history[0]!.parentEndReason).toBeUndefined();
   });
 
+  it('ignores duplicate subagent_end events for an already-ended subagent', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'late duplicate',
+      isError: true,
+      durationMs: 2000,
+    });
+
+    const ds = harness.getDisplayState();
+    expect(ds.activeSubagents.get('s1')).toEqual(
+      expect.objectContaining({
+        status: 'completed',
+        result: 'done',
+        durationMs: 1234,
+      }),
+    );
+    expect(ds.subagentHistory).toHaveLength(1);
+    expect(ds.subagentHistory[0]).toEqual(
+      expect.objectContaining({
+        toolCallId: 's1',
+        status: 'completed',
+        result: 'done',
+        durationMs: 1234,
+        order: 0,
+      }),
+    );
+  });
+
   it('preserves subagentHistory after agent_end', () => {
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
     emit(harness, {
@@ -754,6 +793,41 @@ describe('subagent lifecycle', () => {
       }),
     );
     expect(ds.subagentHistory[0]!.endedAt).toBeInstanceOf(Date);
+  });
+
+  it('keeps completed history and aborts only running subagents on agent_end', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 'done', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, { type: 'subagent_start', toolCallId: 'running', agentType: 'explore', task: 'find', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 'done',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+
+    emit(harness, { type: 'agent_end', reason: 'suspended' });
+
+    const ds = harness.getDisplayState();
+    expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.subagentHistory).toHaveLength(2);
+    expect(ds.subagentHistory[0]).toEqual(
+      expect.objectContaining({
+        toolCallId: 'done',
+        status: 'completed',
+        order: 0,
+      }),
+    );
+    expect(ds.subagentHistory[0]!.parentEndReason).toBeUndefined();
+    expect(ds.subagentHistory[1]).toEqual(
+      expect.objectContaining({
+        toolCallId: 'running',
+        status: 'aborted',
+        parentEndReason: 'suspended',
+        order: 1,
+      }),
+    );
   });
 
   it('defaults parentEndReason to aborted when agent_end has no reason', () => {

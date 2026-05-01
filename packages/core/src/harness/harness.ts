@@ -2940,7 +2940,7 @@ export class Harness<TState = {}> {
 
       case 'subagent_end': {
         const endedSub = ds.activeSubagents.get(event.toolCallId);
-        if (endedSub) {
+        if (endedSub?.status === 'running') {
           endedSub.status = event.isError ? 'error' : 'completed';
           endedSub.durationMs = event.durationMs;
           endedSub.result = event.result;
