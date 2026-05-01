@@ -1,7 +1,7 @@
-import type { AwsCredentialIdentity } from '@smithy/types';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
-import { NovaSonicError } from './errors';
+import type { AwsCredentialIdentity } from '@smithy/types';
 import { NovaSonicErrorCode } from '../types';
+import { NovaSonicError } from './errors';
 
 /**
  * Get AWS credentials from various sources
@@ -12,7 +12,7 @@ export async function getAwsCredentials(
 ): Promise<AwsCredentialIdentity> {
   if (explicitCredentials) {
     if (debug) {
-      console.log('[getAwsCredentials] Using explicit credentials provided in config');
+      console.info('[getAwsCredentials] Using explicit credentials provided in config');
     }
     return explicitCredentials;
   }
@@ -26,13 +26,13 @@ export async function getAwsCredentials(
   // 5. Other credential sources
   try {
     if (debug) {
-      console.log('[getAwsCredentials] Using default credential provider chain');
+      console.info('[getAwsCredentials] Using default credential provider chain');
     }
 
     const credentials = await defaultProvider()();
 
     if (debug) {
-      console.log('[getAwsCredentials] Credentials retrieved successfully');
+      console.info('[getAwsCredentials] Credentials retrieved successfully');
     }
 
     return credentials;
@@ -47,4 +47,3 @@ export async function getAwsCredentials(
     );
   }
 }
-

@@ -1,17 +1,11 @@
-import { PassThrough } from 'node:stream';
 import { randomUUID } from 'node:crypto';
+import { PassThrough } from 'node:stream';
+import { BedrockRuntimeClient, InvokeModelWithBidirectionalStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import { MastraVoice } from '@mastra/core/voice';
 import type { VoiceConfig, VoiceEventType } from '@mastra/core/voice';
-import {
-  BedrockRuntimeClient,
-  InvokeModelWithBidirectionalStreamCommand,
-} from '@aws-sdk/client-bedrock-runtime';
-import {
-  NodeHttp2Handler,
-} from '@smithy/node-http-handler';
-
+import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import type { AwsCredentialIdentity } from '@smithy/types';
 import type {
   NovaSonicVoiceConfig as ConfigType,
@@ -22,13 +16,13 @@ import type {
   NovaSonicRegion,
 } from './types';
 import { NovaSonicErrorCode as ErrorCode } from './types';
+import { getAwsCredentials } from './utils/auth';
 import { NovaSonicError } from './utils/errors';
 
 // Re-export for consumer usage (error handling, type checking)
 export { NovaSonicError } from './utils/errors';
 export { NovaSonicErrorCode } from './types';
 export type { NovaSonicVoiceConfig, NovaSonicSessionConfig, NovaSonicToolConfig, NovaSonicVoiceOptions } from './types';
-import { getAwsCredentials } from './utils/auth';
 
 /**
  * Default configuration values
@@ -137,9 +131,7 @@ export class NovaSonicVoice extends MastraVoice<
    * });
    * ```
    */
-  constructor(
-    config: VoiceConfig<ConfigType> | ConfigType = {},
-  ) {
+  constructor(config: VoiceConfig<ConfigType> | ConfigType = {}) {
     // Normalize config to VoiceConfig format
     let normalizedConfig: VoiceConfig<ConfigType>;
     if ('realtimeConfig' in config || 'speechModel' in config || 'listeningModel' in config) {
@@ -180,19 +172,35 @@ export class NovaSonicVoice extends MastraVoice<
 
   /**
    * Returns a list of available voice speakers.
-   * 
+   *
    * Nova 2 Sonic provides expressive voices across multiple languages.
    * Tiffany (en-US, feminine) and Matthew (en-US, masculine) are polyglot
    * voices that can speak all supported languages.
    *
    * @returns Promise resolving to an array of voice objects
    */
-  async getSpeakers(): Promise<Array<{ voiceId: string; name: string; language: string; locale: string; gender: 'masculine' | 'feminine'; polyglot: boolean }>> {
+  async getSpeakers(): Promise<
+    Array<{
+      voiceId: string;
+      name: string;
+      language: string;
+      locale: string;
+      gender: 'masculine' | 'feminine';
+      polyglot: boolean;
+    }>
+  > {
     // Nova 2 Sonic available voices according to AWS documentation
     return Promise.resolve([
       // English (US) - Polyglot voices
       { voiceId: 'tiffany', name: 'Tiffany', language: 'English', locale: 'en-US', gender: 'feminine', polyglot: true },
-      { voiceId: 'matthew', name: 'Matthew', language: 'English', locale: 'en-US', gender: 'masculine', polyglot: true },
+      {
+        voiceId: 'matthew',
+        name: 'Matthew',
+        language: 'English',
+        locale: 'en-US',
+        gender: 'masculine',
+        polyglot: true,
+      },
       // English (UK)
       { voiceId: 'amy', name: 'Amy', language: 'English', locale: 'en-GB', gender: 'feminine', polyglot: false },
       // English (Australia)
@@ -202,18 +210,53 @@ export class NovaSonicVoice extends MastraVoice<
       { voiceId: 'arjun', name: 'Arjun', language: 'English', locale: 'en-IN', gender: 'masculine', polyglot: false },
       // French
       { voiceId: 'ambre', name: 'Ambre', language: 'French', locale: 'fr-FR', gender: 'feminine', polyglot: false },
-      { voiceId: 'florian', name: 'Florian', language: 'French', locale: 'fr-FR', gender: 'masculine', polyglot: false },
+      {
+        voiceId: 'florian',
+        name: 'Florian',
+        language: 'French',
+        locale: 'fr-FR',
+        gender: 'masculine',
+        polyglot: false,
+      },
       // Italian
-      { voiceId: 'beatrice', name: 'Beatrice', language: 'Italian', locale: 'it-IT', gender: 'feminine', polyglot: false },
-      { voiceId: 'lorenzo', name: 'Lorenzo', language: 'Italian', locale: 'it-IT', gender: 'masculine', polyglot: false },
+      {
+        voiceId: 'beatrice',
+        name: 'Beatrice',
+        language: 'Italian',
+        locale: 'it-IT',
+        gender: 'feminine',
+        polyglot: false,
+      },
+      {
+        voiceId: 'lorenzo',
+        name: 'Lorenzo',
+        language: 'Italian',
+        locale: 'it-IT',
+        gender: 'masculine',
+        polyglot: false,
+      },
       // German
       { voiceId: 'tina', name: 'Tina', language: 'German', locale: 'de-DE', gender: 'feminine', polyglot: false },
-      { voiceId: 'lennart', name: 'Lennart', language: 'German', locale: 'de-DE', gender: 'masculine', polyglot: false },
+      {
+        voiceId: 'lennart',
+        name: 'Lennart',
+        language: 'German',
+        locale: 'de-DE',
+        gender: 'masculine',
+        polyglot: false,
+      },
       // Spanish (US)
       { voiceId: 'lupe', name: 'Lupe', language: 'Spanish', locale: 'es-US', gender: 'feminine', polyglot: false },
       { voiceId: 'carlos', name: 'Carlos', language: 'Spanish', locale: 'es-US', gender: 'masculine', polyglot: false },
       // Portuguese
-      { voiceId: 'carolina', name: 'Carolina', language: 'Portuguese', locale: 'pt-BR', gender: 'feminine', polyglot: false },
+      {
+        voiceId: 'carolina',
+        name: 'Carolina',
+        language: 'Portuguese',
+        locale: 'pt-BR',
+        gender: 'feminine',
+        polyglot: false,
+      },
       { voiceId: 'leo', name: 'Leo', language: 'Portuguese', locale: 'pt-BR', gender: 'masculine', polyglot: false },
       // Hindi
       { voiceId: 'kiara', name: 'Kiara', language: 'Hindi', locale: 'hi-IN', gender: 'feminine', polyglot: false },
@@ -250,7 +293,7 @@ export class NovaSonicVoice extends MastraVoice<
       await this.sendInitialConnectCommand(asyncIterable);
 
       // Start processing the stream (fire and forget)
-      this.processStream().catch((error) => {
+      this.processStream().catch(error => {
         this.log('Error in stream processing:', error);
         this.emit('error', {
           message: error instanceof Error ? error.message : 'Stream processing error',
@@ -269,13 +312,8 @@ export class NovaSonicVoice extends MastraVoice<
         this.client = undefined;
       }
       this.log('Connection error:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error during connection';
-      throw new NovaSonicError(
-        ErrorCode.CONNECTION_FAILED,
-        `Failed to connect to AWS Bedrock: ${errorMessage}`,
-        error,
-      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error during connection';
+      throw new NovaSonicError(ErrorCode.CONNECTION_FAILED, `Failed to connect to AWS Bedrock: ${errorMessage}`, error);
     }
   }
 
@@ -326,182 +364,187 @@ export class NovaSonicVoice extends MastraVoice<
    */
   private createEventQueue(): AsyncIterable<any> {
     this.log('Creating bidirectional stream command...');
-      
-      // Use a queue to store events and a signal to wake up the iterator
-      // The iterator waits on the signal when queue is empty, allowing SDK to establish connection
-      // Use array of resolve functions to handle multiple concurrent next() calls
-      const voiceInstance = this;
-      const eventQueue: Array<{ event: any }> = [];
-      const pendingResolvers: Array<() => void> = [];
-      let closeSignal = false;
-      let streamError: Error | null = null;
-      
-      // Function to signal that data is available in the queue
-      // Resolves all pending Promises (handles multiple concurrent next() calls)
-      const signalQueue = () => {
-        if (pendingResolvers.length > 0) {
-          voiceInstance.log(`[AsyncIterable] Signaling queue - resolving ${pendingResolvers.length} pending Promise(s)`);
-          const resolvers = [...pendingResolvers];
-          pendingResolvers.length = 0; // Clear array
-          resolvers.forEach(resolve => resolve());
-        } else {
-          voiceInstance.log('[AsyncIterable] signalQueue called but no pending Promise');
-        }
-      };
-      
-      // Create async iterable
-      const asyncIterable = {
-        [Symbol.asyncIterator]: () => {
-          voiceInstance.log('[AsyncIterable] Iterator requested');
-          
-          return {
-            next: async (): Promise<IteratorResult<any>> => {
-              try {
-                // Check if closed
-                // Allow 'connecting' state since iterator is created during connection
-                if (closeSignal || voiceInstance.state === 'disconnected') {
-                  voiceInstance.log(`[AsyncIterable] Stream closed (state: ${voiceInstance.state}), done = true`);
-                  return { value: undefined, done: true };
-                }
-                
-                // Wait for items in the queue or close signal
-                // CRITICAL: We must wait indefinitely when queue is empty, as long as connection is active
-                // Only return done: true when explicitly closed or disconnected
-                // This keeps the stream open for ongoing conversation
-                if (eventQueue.length === 0) {
-                  try {
-                    voiceInstance.log('[AsyncIterable] Queue empty, waiting for signal...');
-                    // Wait for signal that data is available or stream is closed
-                    // This Promise stays pending until signalQueue() is called OR connection is closed
-                    // We DON'T timeout here - we wait indefinitely for new events as long as connection is active
-                    await new Promise<void>((resolve) => {
-                      // Add to array of pending resolvers (handles multiple concurrent next() calls)
-                      pendingResolvers.push(resolve);
-                      voiceInstance.log(`[AsyncIterable] Promise created, waiting for signal (${pendingResolvers.length} pending)...`);
-                      
-                      // Double-check conditions after setting up the resolve
-                      setImmediate(() => {
-                        // If data arrived or connection closed, resolve immediately
-                        if (eventQueue.length > 0) {
-                          voiceInstance.log('[AsyncIterable] Data arrived before wait, resolving immediately');
-                          const index = pendingResolvers.indexOf(resolve);
-                          if (index !== -1) {
-                            pendingResolvers.splice(index, 1);
-                            resolve();
-                          }
-                          return;
-                        }
-                        if (closeSignal || voiceInstance.state === 'disconnected') {
-                          voiceInstance.log('[AsyncIterable] Closed before wait, resolving');
-                          const index = pendingResolvers.indexOf(resolve);
-                          if (index !== -1) {
-                            pendingResolvers.splice(index, 1);
-                            resolve();
-                          }
-                          return;
-                        }
-                        // Otherwise, Promise stays pending until signalQueue() is called
-                        // This allows SDK to establish connection while waiting
-                        // We DON'T timeout here - we wait indefinitely for new events
-                      });
-                    });
-                    voiceInstance.log('[AsyncIterable] Promise resolved, checking queue...');
-                  } catch (error) {
-                    if (error instanceof Error && error.message === 'Stream closed') {
-                      voiceInstance.log('[AsyncIterable] Stream closed during wait');
-                      return { value: undefined, done: true };
-                    }
-                    voiceInstance.log('[AsyncIterable] Error during wait:', error);
-                  }
-                }
-                
-                // Check if closed after waiting (state could have changed)
-                if (closeSignal) {
-                  voiceInstance.log('[AsyncIterable] Stream closed (closeSignal)');
-                  return { value: undefined, done: true };
-                }
-                // Check state (use type assertion to avoid TypeScript narrowing issues)
-                if ((voiceInstance.state as string) === 'disconnected') {
-                  voiceInstance.log('[AsyncIterable] Stream closed (disconnected state)');
-                  return { value: undefined, done: true };
-                }
-                
-                // If queue is still empty after signal but connection is still active,
-                // we should wait again (not return done: true)
-                // This keeps the stream open for ongoing conversation
-                // Loop back to wait again if queue is still empty
-                while (eventQueue.length === 0 && !closeSignal) {
-                  // Check state before waiting (use type assertion to avoid narrowing)
-                  if ((voiceInstance.state as string) === 'disconnected') {
-                    voiceInstance.log('[AsyncIterable] Stream closed before wait loop');
-                    return { value: undefined, done: true };
-                  }
-                  
-                  voiceInstance.log('[AsyncIterable] Queue still empty, waiting again...');
-                  await new Promise<void>((resolve) => {
+
+    // Use a queue to store events and a signal to wake up the iterator
+    // The iterator waits on the signal when queue is empty, allowing SDK to establish connection
+    // Use array of resolve functions to handle multiple concurrent next() calls
+    const voiceInstance = this;
+    const eventQueue: Array<{ event: any }> = [];
+    const pendingResolvers: Array<() => void> = [];
+    let closeSignal = false;
+    let streamError: Error | null = null;
+
+    // Function to signal that data is available in the queue
+    // Resolves all pending Promises (handles multiple concurrent next() calls)
+    const signalQueue = () => {
+      if (pendingResolvers.length > 0) {
+        voiceInstance.log(`[AsyncIterable] Signaling queue - resolving ${pendingResolvers.length} pending Promise(s)`);
+        const resolvers = [...pendingResolvers];
+        pendingResolvers.length = 0; // Clear array
+        resolvers.forEach(resolve => resolve());
+      } else {
+        voiceInstance.log('[AsyncIterable] signalQueue called but no pending Promise');
+      }
+    };
+
+    // Create async iterable
+    const asyncIterable = {
+      [Symbol.asyncIterator]: () => {
+        voiceInstance.log('[AsyncIterable] Iterator requested');
+
+        return {
+          next: async (): Promise<IteratorResult<any>> => {
+            try {
+              // Check if closed
+              // Allow 'connecting' state since iterator is created during connection
+              if (closeSignal || voiceInstance.state === 'disconnected') {
+                voiceInstance.log(`[AsyncIterable] Stream closed (state: ${voiceInstance.state}), done = true`);
+                return { value: undefined, done: true };
+              }
+
+              // Wait for items in the queue or close signal
+              // CRITICAL: We must wait indefinitely when queue is empty, as long as connection is active
+              // Only return done: true when explicitly closed or disconnected
+              // This keeps the stream open for ongoing conversation
+              if (eventQueue.length === 0) {
+                try {
+                  voiceInstance.log('[AsyncIterable] Queue empty, waiting for signal...');
+                  // Wait for signal that data is available or stream is closed
+                  // This Promise stays pending until signalQueue() is called OR connection is closed
+                  // We DON'T timeout here - we wait indefinitely for new events as long as connection is active
+                  await new Promise<void>(resolve => {
+                    // Add to array of pending resolvers (handles multiple concurrent next() calls)
                     pendingResolvers.push(resolve);
+                    voiceInstance.log(
+                      `[AsyncIterable] Promise created, waiting for signal (${pendingResolvers.length} pending)...`,
+                    );
+
+                    // Double-check conditions after setting up the resolve
                     setImmediate(() => {
-                      // Check state (use type assertion to avoid narrowing)
-                      if (eventQueue.length > 0 || closeSignal || (voiceInstance.state as string) === 'disconnected') {
+                      // If data arrived or connection closed, resolve immediately
+                      if (eventQueue.length > 0) {
+                        voiceInstance.log('[AsyncIterable] Data arrived before wait, resolving immediately');
                         const index = pendingResolvers.indexOf(resolve);
                         if (index !== -1) {
                           pendingResolvers.splice(index, 1);
                           resolve();
                         }
+                        return;
                       }
+                      if (closeSignal || voiceInstance.state === 'disconnected') {
+                        voiceInstance.log('[AsyncIterable] Closed before wait, resolving');
+                        const index = pendingResolvers.indexOf(resolve);
+                        if (index !== -1) {
+                          pendingResolvers.splice(index, 1);
+                          resolve();
+                        }
+                        return;
+                      }
+                      // Otherwise, Promise stays pending until signalQueue() is called
+                      // This allows SDK to establish connection while waiting
+                      // We DON'T timeout here - we wait indefinitely for new events
                     });
                   });
-                  
-                  // Check if closed after waiting (use type assertion to avoid narrowing)
-                  if (closeSignal || (voiceInstance.state as string) === 'disconnected') {
-                    voiceInstance.log('[AsyncIterable] Stream closed during wait loop');
+                  voiceInstance.log('[AsyncIterable] Promise resolved, checking queue...');
+                } catch (error) {
+                  if (error instanceof Error && error.message === 'Stream closed') {
+                    voiceInstance.log('[AsyncIterable] Stream closed during wait');
                     return { value: undefined, done: true };
                   }
+                  voiceInstance.log('[AsyncIterable] Error during wait:', error);
                 }
-                
-                // Get next item from queue
-                const nextEvent = eventQueue.shift()!;
-                const eventJson = JSON.stringify(nextEvent);
-                const eventBytes = Buffer.from(eventJson, 'utf-8');
-                
-                voiceInstance.log(`[AsyncIterable] Yielding event of size: ${eventBytes.length}`);
-                return {
-                  value: {
-                    chunk: {
-                      bytes: eventBytes
-                    }
-                  },
-                  done: false
-                };
-              } catch (error) {
-                voiceInstance.log('[AsyncIterable] Error in iterator:', error);
-                closeSignal = true;
+              }
+
+              // Check if closed after waiting (state could have changed)
+              if (closeSignal) {
+                voiceInstance.log('[AsyncIterable] Stream closed (closeSignal)');
                 return { value: undefined, done: true };
               }
-            },
-            
-            return: async (): Promise<IteratorResult<any>> => {
-              voiceInstance.log('[AsyncIterable] Iterator return() called');
+              // Check state (use type assertion to avoid TypeScript narrowing issues)
+              if ((voiceInstance.state as string) === 'disconnected') {
+                voiceInstance.log('[AsyncIterable] Stream closed (disconnected state)');
+                return { value: undefined, done: true };
+              }
+
+              // If queue is still empty after signal but connection is still active,
+              // we should wait again (not return done: true)
+              // This keeps the stream open for ongoing conversation
+              // Loop back to wait again if queue is still empty
+              while (eventQueue.length === 0 && !closeSignal) {
+                // Check state before waiting (use type assertion to avoid narrowing)
+                if ((voiceInstance.state as string) === 'disconnected') {
+                  voiceInstance.log('[AsyncIterable] Stream closed before wait loop');
+                  return { value: undefined, done: true };
+                }
+
+                voiceInstance.log('[AsyncIterable] Queue still empty, waiting again...');
+                await new Promise<void>(resolve => {
+                  pendingResolvers.push(resolve);
+                  setImmediate(() => {
+                    // Check state (use type assertion to avoid narrowing)
+                    if (eventQueue.length > 0 || closeSignal || (voiceInstance.state as string) === 'disconnected') {
+                      const index = pendingResolvers.indexOf(resolve);
+                      if (index !== -1) {
+                        pendingResolvers.splice(index, 1);
+                        resolve();
+                      }
+                    }
+                  });
+                });
+
+                // Check if closed after waiting (use type assertion to avoid narrowing)
+                if (closeSignal || (voiceInstance.state as string) === 'disconnected') {
+                  voiceInstance.log('[AsyncIterable] Stream closed during wait loop');
+                  return { value: undefined, done: true };
+                }
+              }
+
+              // Get next item from queue
+              const nextEvent = eventQueue.shift()!;
+              const eventJson = JSON.stringify(nextEvent);
+              const eventBytes = Buffer.from(eventJson, 'utf-8');
+
+              voiceInstance.log(`[AsyncIterable] Yielding event of size: ${eventBytes.length}`);
+              return {
+                value: {
+                  chunk: {
+                    bytes: eventBytes,
+                  },
+                },
+                done: false,
+              };
+            } catch (error) {
+              voiceInstance.log('[AsyncIterable] Error in iterator:', error);
               closeSignal = true;
-              signalQueue();
               return { value: undefined, done: true };
-            },
-            
-            throw: async (error: any): Promise<IteratorResult<any>> => {
-              voiceInstance.log('[AsyncIterable] Iterator throw() called:', error);
-              closeSignal = true;
-              streamError = error instanceof Error ? error : new Error(String(error));
-              signalQueue();
-              throw error;
             }
-          };
-        }
-      };
-      
+          },
+
+          return: async (): Promise<IteratorResult<any>> => {
+            voiceInstance.log('[AsyncIterable] Iterator return() called');
+            closeSignal = true;
+            signalQueue();
+            return { value: undefined, done: true };
+          },
+
+          throw: async (error: any): Promise<IteratorResult<any>> => {
+            voiceInstance.log('[AsyncIterable] Iterator throw() called:', error);
+            closeSignal = true;
+            streamError = error instanceof Error ? error : new Error(String(error));
+            signalQueue();
+            throw error;
+          },
+        };
+      },
+    };
+
     // Store the queue and signal function for use in sendClientEvent
     this._eventQueue = eventQueue;
     this._signalQueue = signalQueue;
-    this._closeSignal = () => { closeSignal = true; signalQueue(); };
+    this._closeSignal = () => {
+      closeSignal = true;
+      signalQueue();
+    };
 
     // Reference streamError to keep it observable for future error propagation
     void streamError;
@@ -531,194 +574,198 @@ export class NovaSonicVoice extends MastraVoice<
     // Generate promptName for this session
     const promptName = randomUUID();
     this._promptName = promptName;
-      
-      // 1. Session start event
-      // Build sessionStart event with all available parameters from sessionConfig
-      const sessionStartEvent: any = {};
-      
-      if (this.sessionConfig) {
-        // Extract inferenceConfiguration from sessionConfig
-        if (this.sessionConfig.inferenceConfiguration) {
-          sessionStartEvent.inferenceConfiguration = {
-            maxTokens: this.sessionConfig.inferenceConfiguration.maxTokens || 4096,
-            topP: this.sessionConfig.inferenceConfiguration.topP || 0.9,
-            temperature: this.sessionConfig.inferenceConfiguration.temperature || 0.7,
-            ...(this.sessionConfig.inferenceConfiguration.topK !== undefined && { topK: this.sessionConfig.inferenceConfiguration.topK }),
-            ...(this.sessionConfig.inferenceConfiguration.stopSequences && { stopSequences: this.sessionConfig.inferenceConfiguration.stopSequences }),
-          };
-        } else {
-          // Default inference configuration if not provided
-          sessionStartEvent.inferenceConfiguration = {
-            maxTokens: 4096,
-            topP: 0.9,
-            temperature: 0.7,
-          };
-        }
-        
-        // Extract turnDetectionConfiguration (Nova 2 Sonic uses this instead of turnTaking)
-        if (this.sessionConfig.turnDetectionConfiguration) {
-          sessionStartEvent.turnDetectionConfiguration = {
-            ...(this.sessionConfig.turnDetectionConfiguration.endpointingSensitivity && { 
-              endpointingSensitivity: this.sessionConfig.turnDetectionConfiguration.endpointingSensitivity 
-            }),
-          };
-        }
-        
-        // Note: turnTaking is NOT supported in Nova 2 Sonic - only turnDetectionConfiguration is valid
-        // Legacy turnTaking support removed for Nova 2 Sonic compatibility
+
+    // 1. Session start event
+    // Build sessionStart event with all available parameters from sessionConfig
+    const sessionStartEvent: any = {};
+
+    if (this.sessionConfig) {
+      // Extract inferenceConfiguration from sessionConfig
+      if (this.sessionConfig.inferenceConfiguration) {
+        sessionStartEvent.inferenceConfiguration = {
+          maxTokens: this.sessionConfig.inferenceConfiguration.maxTokens || 4096,
+          topP: this.sessionConfig.inferenceConfiguration.topP || 0.9,
+          temperature: this.sessionConfig.inferenceConfiguration.temperature || 0.7,
+          ...(this.sessionConfig.inferenceConfiguration.topK !== undefined && {
+            topK: this.sessionConfig.inferenceConfiguration.topK,
+          }),
+          ...(this.sessionConfig.inferenceConfiguration.stopSequences && {
+            stopSequences: this.sessionConfig.inferenceConfiguration.stopSequences,
+          }),
+        };
       } else {
-        // Default inference configuration if no sessionConfig provided
+        // Default inference configuration if not provided
         sessionStartEvent.inferenceConfiguration = {
           maxTokens: 4096,
           topP: 0.9,
           temperature: 0.7,
         };
       }
-      
-      eventQueue.push({
-        event: {
-          sessionStart: sessionStartEvent,
-        },
-      });
-      
-      // 2. Prompt start event (required - AWS validates this during connection)
-      // Determine voice ID - prioritize sessionConfig.voice, then this.speaker, then default to matthew
-      let voiceId = 'matthew'; // Default polyglot voice
-      if (this.sessionConfig?.voice) {
-        if (typeof this.sessionConfig.voice === 'string') {
-          voiceId = this.sessionConfig.voice;
-        } else if (this.sessionConfig.voice.name) {
-          voiceId = this.sessionConfig.voice.name;
-        }
-      } else if (this.speaker && this.speaker !== 'default') {
-        if (typeof this.speaker === 'string') {
-          voiceId = this.speaker;
-        } else {
-          // Type guard for object with name property
-          const speakerObj = this.speaker as { name?: string };
-          if (speakerObj && typeof speakerObj === 'object' && speakerObj.name) {
-            voiceId = speakerObj.name;
-          }
-        }
-      }
-      
-      // Build promptStart event with all available parameters
-      // AWS REQUIRES audioOutputConfiguration to be set (it's mandatory)
-      // However, when it's set, AWS expects audio input
-      // For text-only input, we'll send an empty audio contentEnd to satisfy the requirement
-      const promptStartEvent: any = {
-        promptName,
-        textOutputConfiguration: {
-          mediaType: "text/plain",
-        },
-        // AWS REQUIRES this - cannot be omitted
-        audioOutputConfiguration: {
-          mediaType: "audio/lpcm",
-          sampleRateHertz: 24000,
-          sampleSizeBits: 16,
-          channelCount: 1,
-          voiceId: voiceId,
-          encoding: "base64",
-          audioType: "SPEECH",
-        },
-      };
-      
-      // Add toolConfiguration if tools are configured
-      // According to AWS Nova 2 Sonic docs, tools should be in toolConfiguration.tools[].toolSpec format
-      if (this.sessionConfig?.tools && this.sessionConfig.tools.length > 0) {
-        promptStartEvent.toolConfiguration = {
-          tools: this.sessionConfig.tools.map(tool => {
-            // inputSchema should be a JSON string according to Nova 2 Sonic documentation
-            // If it's already a string, use it; otherwise stringify the object
-            let inputSchemaJson: string;
-            if (typeof tool.inputSchema === 'string') {
-              inputSchemaJson = tool.inputSchema;
-            } else {
-              inputSchemaJson = JSON.stringify(tool.inputSchema);
-            }
-            
-            return {
-              toolSpec: {
-                name: tool.name,
-                description: tool.description,
-                inputSchema: {
-                  json: inputSchemaJson,
-                },
-              },
-            };
+
+      // Extract turnDetectionConfiguration (Nova 2 Sonic uses this instead of turnTaking)
+      if (this.sessionConfig.turnDetectionConfiguration) {
+        sessionStartEvent.turnDetectionConfiguration = {
+          ...(this.sessionConfig.turnDetectionConfiguration.endpointingSensitivity && {
+            endpointingSensitivity: this.sessionConfig.turnDetectionConfiguration.endpointingSensitivity,
           }),
-          // toolChoice goes inside toolConfiguration for Nova 2 Sonic
-          ...(this.sessionConfig?.toolChoice && { toolChoice: this.sessionConfig.toolChoice }),
-        };
-      } else if (this.sessionConfig?.toolChoice) {
-        // If toolChoice is specified without tools, still include it in toolConfiguration
-        promptStartEvent.toolConfiguration = {
-          toolChoice: this.sessionConfig.toolChoice,
         };
       }
-      
-      // Note: knowledgeBaseConfig is not documented in Nova 2 Sonic promptStart event structure
-      // If needed, it may be configured differently or may not be supported in the bidirectional streaming API
-      // Commenting out for now to ensure compatibility
-      // if (this.sessionConfig?.knowledgeBaseConfig) {
-      //   promptStartEvent.knowledgeBaseConfig = {
-      //     ...(this.sessionConfig.knowledgeBaseConfig.knowledgeBaseId && { 
-      //       knowledgeBaseId: this.sessionConfig.knowledgeBaseConfig.knowledgeBaseId 
-      //     }),
-      //     ...(this.sessionConfig.knowledgeBaseConfig.dataSourceId && { 
-      //       dataSourceId: this.sessionConfig.knowledgeBaseConfig.dataSourceId 
-      //     }),
-      //   };
-      // }
-      
-      eventQueue.push({
-        event: {
-          promptStart: promptStartEvent,
-        },
-      });
-      
-      // Mark prompt as started since we've sent promptStart during connection
-      this.promptStarted = true;
-      
-      // 3. System prompt events
-      // AWS requires that the FIRST content after promptStart must have SYSTEM role
-      // We always send a SYSTEM content, even if instructions are empty
-      const systemContentName = randomUUID();
-      // Content start
-      eventQueue.push({
-        event: {
-          contentStart: {
-            promptName,
-            contentName: systemContentName,
-            type: "TEXT",
-            interactive: false,
-            role: "SYSTEM",
-            textInputConfiguration: {
-              mediaType: "text/plain",
+
+      // Note: turnTaking is NOT supported in Nova 2 Sonic - only turnDetectionConfiguration is valid
+      // Legacy turnTaking support removed for Nova 2 Sonic compatibility
+    } else {
+      // Default inference configuration if no sessionConfig provided
+      sessionStartEvent.inferenceConfiguration = {
+        maxTokens: 4096,
+        topP: 0.9,
+        temperature: 0.7,
+      };
+    }
+
+    eventQueue.push({
+      event: {
+        sessionStart: sessionStartEvent,
+      },
+    });
+
+    // 2. Prompt start event (required - AWS validates this during connection)
+    // Determine voice ID - prioritize sessionConfig.voice, then this.speaker, then default to matthew
+    let voiceId = 'matthew'; // Default polyglot voice
+    if (this.sessionConfig?.voice) {
+      if (typeof this.sessionConfig.voice === 'string') {
+        voiceId = this.sessionConfig.voice;
+      } else if (this.sessionConfig.voice.name) {
+        voiceId = this.sessionConfig.voice.name;
+      }
+    } else if (this.speaker && this.speaker !== 'default') {
+      if (typeof this.speaker === 'string') {
+        voiceId = this.speaker;
+      } else {
+        // Type guard for object with name property
+        const speakerObj = this.speaker as { name?: string };
+        if (speakerObj && typeof speakerObj === 'object' && speakerObj.name) {
+          voiceId = speakerObj.name;
+        }
+      }
+    }
+
+    // Build promptStart event with all available parameters
+    // AWS REQUIRES audioOutputConfiguration to be set (it's mandatory)
+    // However, when it's set, AWS expects audio input
+    // For text-only input, we'll send an empty audio contentEnd to satisfy the requirement
+    const promptStartEvent: any = {
+      promptName,
+      textOutputConfiguration: {
+        mediaType: 'text/plain',
+      },
+      // AWS REQUIRES this - cannot be omitted
+      audioOutputConfiguration: {
+        mediaType: 'audio/lpcm',
+        sampleRateHertz: 24000,
+        sampleSizeBits: 16,
+        channelCount: 1,
+        voiceId: voiceId,
+        encoding: 'base64',
+        audioType: 'SPEECH',
+      },
+    };
+
+    // Add toolConfiguration if tools are configured
+    // According to AWS Nova 2 Sonic docs, tools should be in toolConfiguration.tools[].toolSpec format
+    if (this.sessionConfig?.tools && this.sessionConfig.tools.length > 0) {
+      promptStartEvent.toolConfiguration = {
+        tools: this.sessionConfig.tools.map(tool => {
+          // inputSchema should be a JSON string according to Nova 2 Sonic documentation
+          // If it's already a string, use it; otherwise stringify the object
+          let inputSchemaJson: string;
+          if (typeof tool.inputSchema === 'string') {
+            inputSchemaJson = tool.inputSchema;
+          } else {
+            inputSchemaJson = JSON.stringify(tool.inputSchema);
+          }
+
+          return {
+            toolSpec: {
+              name: tool.name,
+              description: tool.description,
+              inputSchema: {
+                json: inputSchemaJson,
+              },
             },
+          };
+        }),
+        // toolChoice goes inside toolConfiguration for Nova 2 Sonic
+        ...(this.sessionConfig?.toolChoice && { toolChoice: this.sessionConfig.toolChoice }),
+      };
+    } else if (this.sessionConfig?.toolChoice) {
+      // If toolChoice is specified without tools, still include it in toolConfiguration
+      promptStartEvent.toolConfiguration = {
+        toolChoice: this.sessionConfig.toolChoice,
+      };
+    }
+
+    // Note: knowledgeBaseConfig is not documented in Nova 2 Sonic promptStart event structure
+    // If needed, it may be configured differently or may not be supported in the bidirectional streaming API
+    // Commenting out for now to ensure compatibility
+    // if (this.sessionConfig?.knowledgeBaseConfig) {
+    //   promptStartEvent.knowledgeBaseConfig = {
+    //     ...(this.sessionConfig.knowledgeBaseConfig.knowledgeBaseId && {
+    //       knowledgeBaseId: this.sessionConfig.knowledgeBaseConfig.knowledgeBaseId
+    //     }),
+    //     ...(this.sessionConfig.knowledgeBaseConfig.dataSourceId && {
+    //       dataSourceId: this.sessionConfig.knowledgeBaseConfig.dataSourceId
+    //     }),
+    //   };
+    // }
+
+    eventQueue.push({
+      event: {
+        promptStart: promptStartEvent,
+      },
+    });
+
+    // Mark prompt as started since we've sent promptStart during connection
+    this.promptStarted = true;
+
+    // 3. System prompt events
+    // AWS requires that the FIRST content after promptStart must have SYSTEM role
+    // We always send a SYSTEM content, even if instructions are empty
+    const systemContentName = randomUUID();
+    // Content start
+    eventQueue.push({
+      event: {
+        contentStart: {
+          promptName,
+          contentName: systemContentName,
+          type: 'TEXT',
+          interactive: false,
+          role: 'SYSTEM',
+          textInputConfiguration: {
+            mediaType: 'text/plain',
           },
         },
-      });
-      // Text input (send instructions if provided, otherwise empty string)
-      eventQueue.push({
-        event: {
-          textInput: {
-            promptName,
-            contentName: systemContentName,
-            content: this.instructions || '',
-          },
+      },
+    });
+    // Text input (send instructions if provided, otherwise empty string)
+    eventQueue.push({
+      event: {
+        textInput: {
+          promptName,
+          contentName: systemContentName,
+          content: this.instructions || '',
         },
-      });
-      // Content end
-      eventQueue.push({
-        event: {
-          contentEnd: {
-            promptName,
-            contentName: systemContentName,
-          },
+      },
+    });
+    // Content end
+    eventQueue.push({
+      event: {
+        contentEnd: {
+          promptName,
+          contentName: systemContentName,
         },
-      });
-      
+      },
+    });
+
     // 4. Do NOT send AUDIO contentStart during connection
     // AUDIO contentStart should only be sent when audio streaming actually starts (via send() method)
     // The audioContentName will be set when send() is first called
@@ -782,7 +829,9 @@ export class NovaSonicVoice extends MastraVoice<
     this.log('Received response from AWS Bedrock');
 
     this.stream = response.body;
-    this.log(`[DEBUG] Response stream is async iterable: ${this.stream && typeof this.stream[Symbol.asyncIterator] === 'function'}`);
+    this.log(
+      `[DEBUG] Response stream is async iterable: ${this.stream && typeof this.stream[Symbol.asyncIterator] === 'function'}`,
+    );
     this.state = 'connected';
     this.log(`[STATE] State set to 'connected'`);
   }
@@ -795,7 +844,7 @@ export class NovaSonicVoice extends MastraVoice<
       this.log('[Stream] No stream available, cannot process');
       return;
     }
-    
+
     // Allow re-processing if stream is still active but processingStream was reset
     // This handles the case where the stream continues but processingStream was set to false
     if (this.processingStream) {
@@ -808,7 +857,7 @@ export class NovaSonicVoice extends MastraVoice<
 
     let eventCount = 0;
     let lastEventTime = Date.now();
-    
+
     try {
       for await (const chunk of this.stream) {
         if (chunk.chunk) {
@@ -818,28 +867,31 @@ export class NovaSonicVoice extends MastraVoice<
           const now = Date.now();
           const timeSinceLastEvent = now - lastEventTime;
           lastEventTime = now;
-          this.log(`[Stream] Received chunk #${eventCount}, length: ${textResponse.length}, time since last: ${timeSinceLastEvent}ms`);
-          
+          this.log(
+            `[Stream] Received chunk #${eventCount}, length: ${textResponse.length}, time since last: ${timeSinceLastEvent}ms`,
+          );
+
           try {
             const jsonResponse = JSON.parse(textResponse);
             this.log(`[Stream] ========================================`);
             this.log(`[Stream] Parsed JSON response, keys: ${Object.keys(jsonResponse).join(', ')}`);
-            
+
             // AWS wraps most events in an 'event' property
             // Structure: { event: { textOutput: ..., audioOutput: ..., etc } }
             // But some events like usageEvent might be at top level
             // Following AWS sample pattern exactly
             if (jsonResponse.event) {
-              const eventData = jsonResponse.event as NovaSonicServerEvent;
               const eventKeys = Object.keys(jsonResponse.event);
               this.log(`[Stream] Event keys: ${eventKeys.join(', ')}`);
-              
+
               // Handle events in the same order as AWS sample
               if (jsonResponse.event.contentStart) {
                 this.log(`[Stream] → Handling contentStart`);
                 this.handleServerEvent({ contentStart: jsonResponse.event.contentStart } as NovaSonicServerEvent);
               } else if (jsonResponse.event.textOutput) {
-                this.log(`[Stream] → Handling textOutput, content length: ${jsonResponse.event.textOutput?.content?.length ?? 0}`);
+                this.log(
+                  `[Stream] → Handling textOutput, content length: ${jsonResponse.event.textOutput?.content?.length ?? 0}`,
+                );
                 this.handleServerEvent({ textOutput: jsonResponse.event.textOutput } as NovaSonicServerEvent);
               } else if (jsonResponse.event.audioOutput) {
                 this.handleServerEvent({ audioOutput: jsonResponse.event.audioOutput } as NovaSonicServerEvent);
@@ -848,17 +900,25 @@ export class NovaSonicVoice extends MastraVoice<
               } else if (jsonResponse.event.contentEnd && jsonResponse.event.contentEnd.type === 'TOOL') {
                 this.handleServerEvent({ contentEnd: jsonResponse.event.contentEnd } as NovaSonicServerEvent);
               } else if (jsonResponse.event.contentEnd) {
-                this.log(`[Stream] Found contentEnd, type: ${jsonResponse.event.contentEnd.type}, stopReason: ${jsonResponse.event.contentEnd.stopReason}`);
+                this.log(
+                  `[Stream] Found contentEnd, type: ${jsonResponse.event.contentEnd.type}, stopReason: ${jsonResponse.event.contentEnd.stopReason}`,
+                );
                 this.handleServerEvent({ contentEnd: jsonResponse.event.contentEnd } as NovaSonicServerEvent);
               } else if (jsonResponse.event.completionStart) {
                 // Handle completionStart inside event object
                 // According to AWS docs: completionStart signals the start of a response
-                this.log('[Stream] Found completionStart inside event object:', JSON.stringify(jsonResponse.event.completionStart, null, 2));
+                this.log(
+                  '[Stream] Found completionStart inside event object:',
+                  JSON.stringify(jsonResponse.event.completionStart, null, 2),
+                );
                 this.emit('completionStart', jsonResponse.event.completionStart);
               } else if (jsonResponse.event.completionEnd) {
                 // Handle completionEnd inside event object
                 // According to AWS docs: completionEnd with stopReason "END_TURN" signals turn completion
-                this.log('[Stream] Found completionEnd inside event object:', JSON.stringify(jsonResponse.event.completionEnd, null, 2));
+                this.log(
+                  '[Stream] Found completionEnd inside event object:',
+                  JSON.stringify(jsonResponse.event.completionEnd, null, 2),
+                );
                 this.handleServerEvent({ completionEnd: jsonResponse.event.completionEnd } as NovaSonicServerEvent);
               } else {
                 // Handle other events - dispatch the first event key found (AWS sample pattern)
@@ -890,9 +950,12 @@ export class NovaSonicVoice extends MastraVoice<
             } else {
               // Handle events that might be at top level (usageEvent, completionEnd, etc.)
               if (this.debug) {
-                this.log('[Stream] Received event without "event" wrapper, keys:', Object.keys(jsonResponse).join(', '));
+                this.log(
+                  '[Stream] Received event without "event" wrapper, keys:',
+                  Object.keys(jsonResponse).join(', '),
+                );
               }
-              
+
               // Check if it's a usageEvent
               if (jsonResponse.usageEvent) {
                 // Emit usage event
@@ -902,19 +965,25 @@ export class NovaSonicVoice extends MastraVoice<
                   totalTokens: jsonResponse.usageEvent.totalTokens || 0,
                 });
               }
-              
+
               // Check if it's a completionEnd at top level
               if (jsonResponse.completionEnd) {
-                this.log('[Stream] Found completionEnd at top level:', JSON.stringify(jsonResponse.completionEnd, null, 2));
+                this.log(
+                  '[Stream] Found completionEnd at top level:',
+                  JSON.stringify(jsonResponse.completionEnd, null, 2),
+                );
                 this.handleServerEvent({ completionEnd: jsonResponse.completionEnd } as NovaSonicServerEvent);
               }
-              
+
               // Also check if completionEnd might be directly in jsonResponse (not wrapped)
               if (!jsonResponse.event && !jsonResponse.completionEnd && !jsonResponse.usageEvent) {
                 // Log the entire response to see what we're missing
-                this.log('[Stream] Received response without event wrapper, keys:', Object.keys(jsonResponse).join(', '));
+                this.log(
+                  '[Stream] Received response without event wrapper, keys:',
+                  Object.keys(jsonResponse).join(', '),
+                );
               }
-              
+
               // Check if it's a completionStart at top level or in event
               if (jsonResponse.completionStart || jsonResponse.event?.completionStart) {
                 const completionStart = jsonResponse.completionStart || jsonResponse.event.completionStart;
@@ -983,9 +1052,11 @@ export class NovaSonicVoice extends MastraVoice<
       // This is normal - the stream should stay open for the entire session
       // But if the loop exits, it means AWS closed the stream or stopped sending chunks
       this.processingStream = false;
-      this.log(`[Stream] processStream finished, processingStream set to false. Total events received: ${eventCount || 0}`);
+      this.log(
+        `[Stream] processStream finished, processingStream set to false. Total events received: ${eventCount || 0}`,
+      );
       this.log(`[Stream] Stream state: state=${this.state}, stream exists=${!!this.stream}`);
-      
+
       // CRITICAL: If the stream ends without receiving completionEnd, we need to signal turn completion
       // This handles the case where AWS closes the stream after sending all audio but before sending completionEnd
       // According to AWS docs, completionEnd should always be sent, but if the stream closes, we should still signal completion
@@ -993,10 +1064,12 @@ export class NovaSonicVoice extends MastraVoice<
       // This prevents duplicate emissions when the stream restarts
       if (!this.turnCompleted && this.audioContentStarted) {
         this.log('[Stream] Stream ended but turn not completed - signaling turn completion as fallback');
-        this.log(`[Stream] State: turnCompleted=${this.turnCompleted}, audioContentStarted=${this.audioContentStarted}, hasSentContentEnd=${this.hasSentContentEnd}`);
+        this.log(
+          `[Stream] State: turnCompleted=${this.turnCompleted}, audioContentStarted=${this.audioContentStarted}, hasSentContentEnd=${this.hasSentContentEnd}`,
+        );
         this.turnCompleted = true;
         this.emit('turnComplete', { timestamp: Date.now() });
-        
+
         if (this.currentResponseId) {
           const stream = this.speakerStreams.get(this.currentResponseId);
           if (stream) {
@@ -1005,15 +1078,17 @@ export class NovaSonicVoice extends MastraVoice<
           this.speakerStreams.delete(this.currentResponseId);
           this.currentResponseId = undefined;
         }
-        
+
         this.hasSentContentEnd = false;
         this.log('[Stream] Turn completion signaled, ready for next turn');
       } else if (this.turnCompleted) {
         this.log('[Stream] Stream ended and turn was already completed');
       } else {
-        this.log(`[Stream] Stream ended but turn not completed - audioContentStarted=${this.audioContentStarted}, turnCompleted=${this.turnCompleted}`);
+        this.log(
+          `[Stream] Stream ended but turn not completed - audioContentStarted=${this.audioContentStarted}, turnCompleted=${this.turnCompleted}`,
+        );
       }
-      
+
       // CRITICAL: If the stream is still open (state is connected), we should restart processing
       // The for await loop exits when no more chunks are available, but the stream might still be open
       // We need to restart processing to handle subsequent turns
@@ -1025,7 +1100,7 @@ export class NovaSonicVoice extends MastraVoice<
         setImmediate(() => {
           if (this.stream && this.state === 'connected' && !this.processingStream) {
             this.log('[Stream] Restarting stream processing for subsequent turns');
-            this.processStream().catch((error) => {
+            this.processStream().catch(error => {
               this.log('[Stream] Error restarting stream processing:', error);
               this.streamRestartAttempted = false; // Reset on error to allow retry
             });
@@ -1210,7 +1285,7 @@ export class NovaSonicVoice extends MastraVoice<
     });
 
     if (this.tools && toolName in this.tools) {
-      this.handleToolCall(toolName, toolInput, toolUseId);
+      void this.handleToolCall(toolName, toolInput, toolUseId);
     }
   }
 
@@ -1230,135 +1305,147 @@ export class NovaSonicVoice extends MastraVoice<
     // Emit contentEnd event (AWS sample forwards this directly to clients)
     this.emit('contentEnd', contentEnd);
 
-      // Check for interruption (barge-in) - stopReason can be in contentEnd
-      if (contentEnd.stopReason === 'INTERRUPTED') {
-        this.log('[Event] Content interrupted by user (barge-in)');
-        this.emit('interrupt', { type: 'user', timestamp: Date.now() });
-        
-        // Clear audio playback buffer immediately
+    // Check for interruption (barge-in) - stopReason can be in contentEnd
+    if (contentEnd.stopReason === 'INTERRUPTED') {
+      this.log('[Event] Content interrupted by user (barge-in)');
+      this.emit('interrupt', { type: 'user', timestamp: Date.now() });
+
+      // Clear audio playback buffer immediately
+      if (this.currentResponseId) {
+        const stream = this.speakerStreams.get(this.currentResponseId);
+        if (stream) {
+          stream.destroy(); // Destroy instead of end to immediately stop
+        }
+        this.speakerStreams.delete(this.currentResponseId);
+      }
+      this.currentResponseId = undefined;
+
+      // Following AWS sample: even after interruption, we keep audioContentStarted=true
+      // and reuse the same audioContentName. We just continue with audioInput chunks.
+      this.log('[Event] After interruption, keeping audioContentStarted=true for continued streaming');
+      // DO NOT reset audioContentName - it persists for the entire session
+    } else if (contentEnd.type === 'TOOL' && this.currentResponseId) {
+      // Tool execution completed
+      const stream = this.speakerStreams.get(this.currentResponseId);
+      if (stream) {
+        stream.end();
+      }
+    } else if (contentEnd.type === 'AUDIO') {
+      // Audio content ended - this could be user input ending OR assistant output ending
+      // According to AWS documentation:
+      // - contentEnd (AUDIO) with stopReason "PARTIAL_TURN" or "END_TURN" marks end of audio content
+      // - completionEnd with stopReason "END_TURN" signals turn completion
+      // However, AWS may not always send completionEnd, so we need a fallback
+      // If we receive contentEnd (AUDIO) with END_TURN for assistant output, we should signal turn complete
+      // But we'll wait a bit to see if more audio chunks arrive
+      if (contentEnd.stopReason === 'END_TURN') {
+        // This is assistant audio output ending with END_TURN
+        // According to AWS docs: contentEnd (AUDIO) with END_TURN marks end of audio content
+        // completionEnd should follow, but if it doesn't, we should still signal turn completion
+        // We'll emit turnComplete immediately, but also wait for completionEnd as the definitive signal
+        this.log(`[Event] contentEnd (AUDIO) with stopReason END_TURN - signaling turn complete`);
+
+        // End the audio stream
         if (this.currentResponseId) {
           const stream = this.speakerStreams.get(this.currentResponseId);
           if (stream) {
-            stream.destroy(); // Destroy instead of end to immediately stop
+            stream.end();
           }
           this.speakerStreams.delete(this.currentResponseId);
+          this.currentResponseId = undefined;
         }
-        this.currentResponseId = undefined;
-        
-        // Following AWS sample: even after interruption, we keep audioContentStarted=true
-        // and reuse the same audioContentName. We just continue with audioInput chunks.
-        this.log('[Event] After interruption, keeping audioContentStarted=true for continued streaming');
+
+        // Emit turnComplete immediately (frontend is already handling contentEnd with END_TURN)
+        // But also set a flag to check if completionEnd arrives (which would be the definitive signal)
+        // CRITICAL: Only emit once - check turnCompleted flag to prevent duplicate emissions
+        if (!this.turnCompleted) {
+          this.turnCompleted = true;
+          this.emit('turnComplete', { timestamp: Date.now() });
+          this.hasSentContentEnd = false;
+          this.log(
+            `[Event] Turn complete (from contentEnd AUDIO with END_TURN), ready for next turn. audioContentStarted: ${this.audioContentStarted}, audioContentName: ${this.audioContentName}`,
+          );
+        } else {
+          this.log(
+            `[Event] contentEnd (AUDIO) with END_TURN received but turn already completed - skipping duplicate turnComplete emission`,
+          );
+        }
+
+        // Set a timeout to clear any pending state if completionEnd doesn't arrive
+        // This is just for cleanup, not for signaling (we already signaled above)
+        if (!this.turnCompleteTimeout) {
+          this.turnCompleteTimeout = setTimeout(() => {
+            // If completionEnd hasn't arrived, that's okay - we already signaled turn completion
+            this.log(`[Event] Timeout: completionEnd not received, but turn already completed from contentEnd`);
+            this.turnCompleteTimeout = undefined;
+          }, 1000); // Short timeout just for logging
+        }
+      } else {
+        // This is user audio input ending (stopReason might be undefined or PARTIAL_TURN)
+        // OR assistant audio output ending with PARTIAL_TURN
+        // Following AWS sample: contentStart (AUDIO) is sent ONCE at the beginning
+        // and NEVER reset. We just continue sending audioInput chunks for subsequent turns.
+        // DO NOT reset audioContentStarted - it stays true for the entire session
         // DO NOT reset audioContentName - it persists for the entire session
-      } else if (contentEnd.type === 'TOOL' && this.currentResponseId) {
-        // Tool execution completed
-        const stream = this.speakerStreams.get(this.currentResponseId);
-        if (stream) {
-          stream.end();
-        }
-      } else if (contentEnd.type === 'AUDIO') {
-        // Audio content ended - this could be user input ending OR assistant output ending
-        // According to AWS documentation:
-        // - contentEnd (AUDIO) with stopReason "PARTIAL_TURN" or "END_TURN" marks end of audio content
-        // - completionEnd with stopReason "END_TURN" signals turn completion
-        // However, AWS may not always send completionEnd, so we need a fallback
-        // If we receive contentEnd (AUDIO) with END_TURN for assistant output, we should signal turn complete
-        // But we'll wait a bit to see if more audio chunks arrive
-        if (contentEnd.stopReason === 'END_TURN') {
-          // This is assistant audio output ending with END_TURN
-          // According to AWS docs: contentEnd (AUDIO) with END_TURN marks end of audio content
-          // completionEnd should follow, but if it doesn't, we should still signal turn completion
-          // We'll emit turnComplete immediately, but also wait for completionEnd as the definitive signal
-          this.log(`[Event] contentEnd (AUDIO) with stopReason END_TURN - signaling turn complete`);
-          
-          // End the audio stream
-          if (this.currentResponseId) {
-            const stream = this.speakerStreams.get(this.currentResponseId);
-            if (stream) {
-              stream.end();
-            }
-            this.speakerStreams.delete(this.currentResponseId);
-            this.currentResponseId = undefined;
-          }
-          
-          // Emit turnComplete immediately (frontend is already handling contentEnd with END_TURN)
-          // But also set a flag to check if completionEnd arrives (which would be the definitive signal)
-          // CRITICAL: Only emit once - check turnCompleted flag to prevent duplicate emissions
-          if (!this.turnCompleted) {
-            this.turnCompleted = true;
-            this.emit('turnComplete', { timestamp: Date.now() });
-            this.hasSentContentEnd = false;
-            this.log(`[Event] Turn complete (from contentEnd AUDIO with END_TURN), ready for next turn. audioContentStarted: ${this.audioContentStarted}, audioContentName: ${this.audioContentName}`);
-          } else {
-            this.log(`[Event] contentEnd (AUDIO) with END_TURN received but turn already completed - skipping duplicate turnComplete emission`);
-          }
-          
-          // Set a timeout to clear any pending state if completionEnd doesn't arrive
-          // This is just for cleanup, not for signaling (we already signaled above)
-          if (!this.turnCompleteTimeout) {
+
+        // If this is assistant audio output ending (we were receiving assistant audio),
+        // and stopReason is PARTIAL_TURN, we should wait for completionEnd
+        // But if completionEnd doesn't arrive, we'll use a fallback timeout
+        if (this.isReceivingAssistantAudio && contentEnd.stopReason === 'PARTIAL_TURN') {
+          // This is assistant output ending - wait for completionEnd
+          // Set a fallback timeout to emit turnComplete if completionEnd doesn't arrive
+          this.isReceivingAssistantAudio = false; // Reset flag
+          if (!this.turnCompleteTimeout && !this.turnCompleted) {
+            this.log(
+              `[Event] contentEnd (AUDIO) with PARTIAL_TURN for assistant output - waiting for completionEnd, setting fallback timeout`,
+            );
             this.turnCompleteTimeout = setTimeout(() => {
-              // If completionEnd hasn't arrived, that's okay - we already signaled turn completion
-              this.log(`[Event] Timeout: completionEnd not received, but turn already completed from contentEnd`);
-              this.turnCompleteTimeout = undefined;
-            }, 1000); // Short timeout just for logging
+              if (!this.turnCompleted) {
+                this.log(
+                  `[Event] Fallback: completionEnd not received after contentEnd (AUDIO) with PARTIAL_TURN, signaling turn complete`,
+                );
+                this.turnCompleted = true;
+                this.emit('turnComplete', { timestamp: Date.now() });
+
+                if (this.currentResponseId) {
+                  const stream = this.speakerStreams.get(this.currentResponseId);
+                  if (stream) {
+                    stream.end();
+                  }
+                  this.speakerStreams.delete(this.currentResponseId);
+                  this.currentResponseId = undefined;
+                }
+
+                this.hasSentContentEnd = false;
+                this.turnCompleteTimeout = undefined;
+              }
+            }, 2000); // 2 second timeout (reduced from 3)
           }
         } else {
-          // This is user audio input ending (stopReason might be undefined or PARTIAL_TURN)
-          // OR assistant audio output ending with PARTIAL_TURN
-          // Following AWS sample: contentStart (AUDIO) is sent ONCE at the beginning
-          // and NEVER reset. We just continue sending audioInput chunks for subsequent turns.
-          // DO NOT reset audioContentStarted - it stays true for the entire session
-          // DO NOT reset audioContentName - it persists for the entire session
-          
-          // If this is assistant audio output ending (we were receiving assistant audio), 
-          // and stopReason is PARTIAL_TURN, we should wait for completionEnd
-          // But if completionEnd doesn't arrive, we'll use a fallback timeout
-          if (this.isReceivingAssistantAudio && contentEnd.stopReason === 'PARTIAL_TURN') {
-            // This is assistant output ending - wait for completionEnd
-            // Set a fallback timeout to emit turnComplete if completionEnd doesn't arrive
-            this.isReceivingAssistantAudio = false; // Reset flag
-            if (!this.turnCompleteTimeout && !this.turnCompleted) {
-              this.log(`[Event] contentEnd (AUDIO) with PARTIAL_TURN for assistant output - waiting for completionEnd, setting fallback timeout`);
-              this.turnCompleteTimeout = setTimeout(() => {
-                if (!this.turnCompleted) {
-                  this.log(`[Event] Fallback: completionEnd not received after contentEnd (AUDIO) with PARTIAL_TURN, signaling turn complete`);
-                  this.turnCompleted = true;
-                  this.emit('turnComplete', { timestamp: Date.now() });
-                  
-                  if (this.currentResponseId) {
-                    const stream = this.speakerStreams.get(this.currentResponseId);
-                    if (stream) {
-                      stream.end();
-                    }
-                    this.speakerStreams.delete(this.currentResponseId);
-                    this.currentResponseId = undefined;
-                  }
-                  
-                  this.hasSentContentEnd = false;
-                  this.turnCompleteTimeout = undefined;
-                }
-              }, 2000); // 2 second timeout (reduced from 3)
-            }
-          } else {
-            // This is user audio input ending
-            // Reset hasSentContentEnd flag to allow sending contentEnd for the next turn
-            // Also reset turnCompleted flag to allow new user input
-            this.hasSentContentEnd = false;
-            this.turnCompleted = false; // Reset for next turn
-            this.log(`[Event] contentEnd (AUDIO) - user input ended, stopReason: ${contentEnd.stopReason}. Keeping audioContentStarted=true for next turn. Reset hasSentContentEnd=false, turnCompleted=false.`);
-          }
-        }
-      } else if (contentEnd.type === 'TEXT') {
-        // Text content ended — clear generationStage tracking
-        this.currentTextGenerationStage = undefined;
-        // IMPORTANT: Do NOT emit turnComplete here. Nova Sonic sends one contentEnd(TEXT) per
-        // text content block, so emitting turnComplete here would fire multiple times per turn.
-        // The definitive turn-completion signal comes from completionEnd (line ~1278) or
-        // contentEnd(AUDIO, END_TURN) (line ~1171), both of which have proper guards.
-        this.log(`[Event] contentEnd (TEXT) received, stopReason: ${contentEnd.stopReason}. Turn completion handled by completionEnd/contentEnd(AUDIO).`);
-        if (contentEnd.stopReason === 'END_TURN') {
+          // This is user audio input ending
+          // Reset hasSentContentEnd flag to allow sending contentEnd for the next turn
+          // Also reset turnCompleted flag to allow new user input
           this.hasSentContentEnd = false;
+          this.turnCompleted = false; // Reset for next turn
+          this.log(
+            `[Event] contentEnd (AUDIO) - user input ended, stopReason: ${contentEnd.stopReason}. Keeping audioContentStarted=true for next turn. Reset hasSentContentEnd=false, turnCompleted=false.`,
+          );
         }
       }
+    } else if (contentEnd.type === 'TEXT') {
+      // Text content ended — clear generationStage tracking
+      this.currentTextGenerationStage = undefined;
+      // IMPORTANT: Do NOT emit turnComplete here. Nova Sonic sends one contentEnd(TEXT) per
+      // text content block, so emitting turnComplete here would fire multiple times per turn.
+      // The definitive turn-completion signal comes from completionEnd (line ~1278) or
+      // contentEnd(AUDIO, END_TURN) (line ~1171), both of which have proper guards.
+      this.log(
+        `[Event] contentEnd (TEXT) received, stopReason: ${contentEnd.stopReason}. Turn completion handled by completionEnd/contentEnd(AUDIO).`,
+      );
+      if (contentEnd.stopReason === 'END_TURN') {
+        this.hasSentContentEnd = false;
+      }
+    }
   }
 
   /**
@@ -1393,7 +1480,9 @@ export class NovaSonicVoice extends MastraVoice<
     // Only emit once - turnCompleted flag prevents duplicate emissions when contentEnd
     // (AUDIO with END_TURN) already signaled turn completion.
     if (!this.turnCompleted) {
-      this.log(`[Event] completionEnd - signaling turn complete (stopReason: ${completionEnd.stopReason || 'undefined'})`);
+      this.log(
+        `[Event] completionEnd - signaling turn complete (stopReason: ${completionEnd.stopReason || 'undefined'})`,
+      );
       this.turnCompleted = true;
       this.emit('turnComplete', { timestamp: Date.now() });
       this.hasSentContentEnd = false;
@@ -1405,9 +1494,7 @@ export class NovaSonicVoice extends MastraVoice<
       this.emit('usage', {
         inputTokens: completionEnd.usage.inputTokens || 0,
         outputTokens: completionEnd.usage.outputTokens || 0,
-        totalTokens:
-          (completionEnd.usage.inputTokens || 0) +
-          (completionEnd.usage.outputTokens || 0),
+        totalTokens: (completionEnd.usage.inputTokens || 0) + (completionEnd.usage.outputTokens || 0),
       });
     }
   }
@@ -1473,30 +1560,27 @@ export class NovaSonicVoice extends MastraVoice<
    */
   private async sendClientEvent(event: NovaSonicClientEvent): Promise<void> {
     if (this.state !== 'connected') {
-      throw new NovaSonicError(
-        ErrorCode.NOT_CONNECTED,
-        'Not connected to AWS Bedrock. Call connect() first.',
-      );
+      throw new NovaSonicError(ErrorCode.NOT_CONNECTED, 'Not connected to AWS Bedrock. Call connect() first.');
     }
 
     try {
       // Add event to queue and signal (following AWS sample pattern)
       const eventQueue = this._eventQueue;
       const signalQueue = this._signalQueue;
-      
+
       if (!eventQueue || !signalQueue) {
         throw new NovaSonicError(
           ErrorCode.NOT_CONNECTED,
           'Event queue not initialized. Connection may not be fully established.',
         );
       }
-      
+
       this.log(`[sendClientEvent] Adding event to queue (queue size: ${eventQueue.length})`);
       eventQueue.push({ event });
       this.log(`[sendClientEvent] Event added, queue size now: ${eventQueue.length}, signaling...`);
       signalQueue(); // Signal that data is available
       this.log(`[sendClientEvent] Signal sent`);
-      
+
       if (this.debug) {
         this.log('Sent client event, keys:', Object.keys(event).join(', '));
       }
@@ -1594,13 +1678,10 @@ export class NovaSonicVoice extends MastraVoice<
    */
   async speak(
     input: string | NodeJS.ReadableStream,
-    options?: { speaker?: string } & NovaSonicVoiceOptions,
+    _options?: { speaker?: string } & NovaSonicVoiceOptions,
   ): Promise<void> {
     if (this.state !== 'connected') {
-      throw new NovaSonicError(
-        ErrorCode.NOT_CONNECTED,
-        'Not connected. Call connect() first.',
-      );
+      throw new NovaSonicError(ErrorCode.NOT_CONNECTED, 'Not connected. Call connect() first.');
     }
 
     // Convert stream to string if needed
@@ -1653,11 +1734,11 @@ export class NovaSonicVoice extends MastraVoice<
       contentStart: {
         promptName,
         contentName,
-        type: "TEXT",
+        type: 'TEXT',
         interactive: true,
-        role: "USER",
+        role: 'USER',
         textInputConfiguration: {
-          mediaType: "text/plain",
+          mediaType: 'text/plain',
         },
       },
     });
@@ -1682,19 +1763,13 @@ export class NovaSonicVoice extends MastraVoice<
    * Convert speech to text (transcription)
    * For Nova Sonic, this is the same as send() - both stream audio input
    */
-  async listen(
-    audioStream: NodeJS.ReadableStream | unknown,
-    options?: NovaSonicVoiceOptions,
-  ): Promise<void> {
+  async listen(audioStream: NodeJS.ReadableStream | unknown, _options?: NovaSonicVoiceOptions): Promise<void> {
     // For Nova Sonic, listen() and send() are the same - both stream audio
     // Convert to Int16Array or ReadableStream format expected by send()
     if (audioStream && typeof audioStream === 'object' && 'read' in audioStream) {
       await this.send(audioStream as NodeJS.ReadableStream);
     } else {
-      throw new NovaSonicError(
-        ErrorCode.INVALID_AUDIO_FORMAT,
-        'Unsupported audio stream format for listen()',
-      );
+      throw new NovaSonicError(ErrorCode.INVALID_AUDIO_FORMAT, 'Unsupported audio stream format for listen()');
     }
   }
 
@@ -1718,10 +1793,7 @@ export class NovaSonicVoice extends MastraVoice<
 
     // Validate audio format early, before any network operations
     if (!(audioData instanceof Int16Array) && !(audioData && typeof audioData === 'object' && 'read' in audioData)) {
-      throw new NovaSonicError(
-        ErrorCode.INVALID_AUDIO_FORMAT,
-        'Unsupported audio data format',
-      );
+      throw new NovaSonicError(ErrorCode.INVALID_AUDIO_FORMAT, 'Unsupported audio data format');
     }
 
     // Reset turnCompleted flag when user starts speaking again (new turn)
@@ -1731,7 +1803,9 @@ export class NovaSonicVoice extends MastraVoice<
     // CRITICAL: Always reset hasSentContentEnd when starting a new turn (sending new audio)
     // This ensures we can send contentEnd for the new turn even if the previous turn didn't complete properly
     if (this.turnCompleted || this.hasSentContentEnd) {
-      this.log(`[send] Starting new turn - resetting flags. turnCompleted=${this.turnCompleted}, hasSentContentEnd=${this.hasSentContentEnd}.`);
+      this.log(
+        `[send] Starting new turn - resetting flags. turnCompleted=${this.turnCompleted}, hasSentContentEnd=${this.hasSentContentEnd}.`,
+      );
       const needNewContent = this.hasSentContentEnd;
       this.turnCompleted = false;
       this.hasSentContentEnd = false;
@@ -1744,7 +1818,9 @@ export class NovaSonicVoice extends MastraVoice<
         this.audioContentStarted = false;
         this.log(`[send] contentEnd was previously sent - will create new audio content container`);
       }
-      this.log(`[send] State reset: turnCompleted=false, hasSentContentEnd=false, audioContentStarted=${this.audioContentStarted}`);
+      this.log(
+        `[send] State reset: turnCompleted=false, hasSentContentEnd=false, audioContentStarted=${this.audioContentStarted}`,
+      );
     }
 
     // promptStart is now sent during connection, so we just need to ensure audio contentStart is sent
@@ -1766,38 +1842,35 @@ export class NovaSonicVoice extends MastraVoice<
       // First time sending audio - need to send contentStart first
       const audioContentId = randomUUID();
       this.audioContentName = audioContentId;
-      
+
       this.log(`[send] First audio send - sending AUDIO contentStart with contentName: ${audioContentId}`);
-      
+
       await this.sendClientEvent({
         contentStart: {
           promptName,
           contentName: audioContentId,
-          type: "AUDIO",
+          type: 'AUDIO',
           interactive: true,
-          role: "USER",
+          role: 'USER',
           audioInputConfiguration: {
-            mediaType: "audio/lpcm",
+            mediaType: 'audio/lpcm',
             sampleRateHertz: 16000,
             sampleSizeBits: 16,
             channelCount: 1,
-            encoding: "base64",
-            audioType: "SPEECH",
+            encoding: 'base64',
+            audioType: 'SPEECH',
           },
         },
       });
-      
+
       this.audioContentStarted = true;
       this.log(`[send] AUDIO contentStart sent, ready to stream audio`);
     } else {
       this.log(`[send] AUDIO contentStart already sent, sending audioInput chunks directly`);
     }
-    
+
     if (!this.audioContentName) {
-      throw new NovaSonicError(
-        ErrorCode.INVALID_STATE,
-        'Audio content name not initialized. This should not happen.',
-      );
+      throw new NovaSonicError(ErrorCode.INVALID_STATE, 'Audio content name not initialized. This should not happen.');
     }
     const contentName = this.audioContentName;
 
@@ -1805,17 +1878,16 @@ export class NovaSonicVoice extends MastraVoice<
     if (audioData instanceof Int16Array) {
       const buffer = Buffer.from(audioData.buffer, audioData.byteOffset, audioData.byteLength);
       const base64Audio = buffer.toString('base64');
-      this.log(`[send] Sending audioInput chunk, size: ${buffer.length} bytes, contentName: ${contentName}, turnCompleted: ${this.turnCompleted}, hasSentContentEnd: ${this.hasSentContentEnd}, audioContentStarted: ${this.audioContentStarted}, state: ${this.state}`);
-      
+      this.log(
+        `[send] Sending audioInput chunk, size: ${buffer.length} bytes, contentName: ${contentName}, turnCompleted: ${this.turnCompleted}, hasSentContentEnd: ${this.hasSentContentEnd}, audioContentStarted: ${this.audioContentStarted}, state: ${this.state}`,
+      );
+
       // Verify stream is still active
       if (this.state !== 'connected') {
         this.log(`[send] ERROR: State changed to '${this.state}' during send!`);
-        throw new NovaSonicError(
-          ErrorCode.NOT_CONNECTED,
-          `Connection lost during send. State: ${this.state}`,
-        );
+        throw new NovaSonicError(ErrorCode.NOT_CONNECTED, `Connection lost during send. State: ${this.state}`);
       }
-      
+
       await this.sendClientEvent({
         audioInput: {
           promptName,
@@ -1829,7 +1901,9 @@ export class NovaSonicVoice extends MastraVoice<
       for await (const chunk of stream) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         const base64Audio = buffer.toString('base64');
-        this.log(`[send] Sending audioInput chunk from stream, size: ${buffer.length} bytes, contentName: ${contentName}, turnCompleted: ${this.turnCompleted}, hasSentContentEnd: ${this.hasSentContentEnd}`);
+        this.log(
+          `[send] Sending audioInput chunk from stream, size: ${buffer.length} bytes, contentName: ${contentName}, turnCompleted: ${this.turnCompleted}, hasSentContentEnd: ${this.hasSentContentEnd}`,
+        );
         await this.sendClientEvent({
           audioInput: {
             promptName,
@@ -1839,10 +1913,7 @@ export class NovaSonicVoice extends MastraVoice<
         });
       }
     } else {
-      throw new NovaSonicError(
-        ErrorCode.INVALID_AUDIO_FORMAT,
-        'Unsupported audio data format',
-      );
+      throw new NovaSonicError(ErrorCode.INVALID_AUDIO_FORMAT, 'Unsupported audio data format');
     }
   }
 
@@ -1856,16 +1927,18 @@ export class NovaSonicVoice extends MastraVoice<
       this.log('[endAudioInput] contentEnd already sent for this turn, skipping');
       return;
     }
-    
+
     // Prevent sending contentEnd if turn has already been completed by AWS
     // This can happen if the frontend sends contentEnd after AWS has already signaled turn completion
     if (this.turnCompleted) {
-      this.log('[endAudioInput] Turn already completed by AWS, skipping contentEnd. Resetting turnCompleted flag for next turn.');
+      this.log(
+        '[endAudioInput] Turn already completed by AWS, skipping contentEnd. Resetting turnCompleted flag for next turn.',
+      );
       this.turnCompleted = false; // Reset for next turn
       this.hasSentContentEnd = false; // Reset flag
       return;
     }
-    
+
     if (this.audioContentStarted && this.audioContentName && this._promptName) {
       const promptName = this._promptName;
       this.log('[endAudioInput] Sending contentEnd for audio input');
@@ -1878,7 +1951,12 @@ export class NovaSonicVoice extends MastraVoice<
       this.hasSentContentEnd = true; // Mark that we've sent contentEnd
       // Don't reset state here - it will be reset when we receive contentEnd.type === 'AUDIO' from AWS
     } else {
-      this.log('[endAudioInput] Cannot send contentEnd: audioContentStarted=' + this.audioContentStarted + ', audioContentName=' + this.audioContentName);
+      this.log(
+        '[endAudioInput] Cannot send contentEnd: audioContentStarted=' +
+          this.audioContentStarted +
+          ', audioContentName=' +
+          this.audioContentName,
+      );
     }
   }
 
@@ -1944,8 +2022,7 @@ export class NovaSonicVoice extends MastraVoice<
    */
   private log(...args: unknown[]): void {
     if (this.debug) {
-      console.log('[NovaSonicVoice]', ...args);
+      console.info('[NovaSonicVoice]', ...args);
     }
   }
 }
-

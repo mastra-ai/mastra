@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    name: 'e2e:voice/aws-nova-sonic',
     globals: true,
     include: ['src/**/*.test.ts'],
     // E2E tests hit real AWS Bedrock and require credentials. They are only

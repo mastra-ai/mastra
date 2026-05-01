@@ -1,8 +1,8 @@
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NovaSonicVoice } from './index';
 import { NovaSonicErrorCode } from './types';
 import { NovaSonicError } from './utils/errors';
+import { NovaSonicVoice } from './index';
 
 // Mock AWS SDK
 const mockSendFn = vi.fn();
@@ -94,7 +94,7 @@ describe('NovaSonicVoice', () => {
 
     it('should include all required voice properties', async () => {
       const speakers = await voice.getSpeakers();
-      speakers.forEach((speaker) => {
+      speakers.forEach(speaker => {
         expect(speaker).toHaveProperty('voiceId');
         expect(speaker).toHaveProperty('name');
         expect(speaker).toHaveProperty('language');
@@ -112,14 +112,14 @@ describe('NovaSonicVoice', () => {
 
     it('should include polyglot voices (tiffany and matthew)', async () => {
       const speakers = await voice.getSpeakers();
-      const tiffany = speakers.find((s) => s.voiceId === 'tiffany');
-      const matthew = speakers.find((s) => s.voiceId === 'matthew');
-      
+      const tiffany = speakers.find(s => s.voiceId === 'tiffany');
+      const matthew = speakers.find(s => s.voiceId === 'matthew');
+
       expect(tiffany).toBeDefined();
       expect(tiffany?.polyglot).toBe(true);
       expect(tiffany?.locale).toBe('en-US');
       expect(tiffany?.gender).toBe('feminine');
-      
+
       expect(matthew).toBeDefined();
       expect(matthew?.polyglot).toBe(true);
       expect(matthew?.locale).toBe('en-US');
@@ -128,8 +128,8 @@ describe('NovaSonicVoice', () => {
 
     it('should include all language variants', async () => {
       const speakers = await voice.getSpeakers();
-      const locales = new Set(speakers.map((s) => s.locale));
-      
+      const locales = new Set(speakers.map(s => s.locale));
+
       expect(locales.has('en-US')).toBe(true);
       expect(locales.has('en-GB')).toBe(true);
       expect(locales.has('en-AU')).toBe(true);
@@ -229,7 +229,7 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voice as any)._eventQueue;
       const sessionStartEvent = eventQueue.find((e: any) => e.event?.sessionStart);
-      
+
       expect(sessionStartEvent).toBeDefined();
       expect(sessionStartEvent.event.sessionStart.inferenceConfiguration).toEqual({
         maxTokens: 4096,
@@ -267,13 +267,12 @@ describe('NovaSonicVoice', () => {
 
       // Verify the command was called
       expect(mockSendFn).toHaveBeenCalled();
-      const command = mockSendFn.mock.calls[0][0];
-      
+
       // The body is an async iterable, so we need to check the first event
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       expect(eventQueue).toBeDefined();
       expect(eventQueue.length).toBeGreaterThan(0);
-      
+
       const sessionStartEvent = eventQueue.find((e: any) => e.event?.sessionStart);
       expect(sessionStartEvent).toBeDefined();
       expect(sessionStartEvent.event.sessionStart.inferenceConfiguration).toEqual({
@@ -310,7 +309,7 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const sessionStartEvent = eventQueue.find((e: any) => e.event?.sessionStart);
-      
+
       expect(sessionStartEvent).toBeDefined();
       expect(sessionStartEvent.event.sessionStart.turnDetectionConfiguration).toEqual({
         endpointingSensitivity: 'MEDIUM',
@@ -321,7 +320,7 @@ describe('NovaSonicVoice', () => {
 
     it('should support all endpointingSensitivity values (HIGH, MEDIUM, LOW)', async () => {
       const sensitivities: Array<'HIGH' | 'MEDIUM' | 'LOW'> = ['HIGH', 'MEDIUM', 'LOW'];
-      
+
       for (const sensitivity of sensitivities) {
         const mockStream = {
           [Symbol.asyncIterator]: async function* () {
@@ -347,9 +346,11 @@ describe('NovaSonicVoice', () => {
 
         const eventQueue = (voiceWithConfig as any)._eventQueue;
         const sessionStartEvent = eventQueue.find((e: any) => e.event?.sessionStart);
-        
-        expect(sessionStartEvent.event.sessionStart.turnDetectionConfiguration.endpointingSensitivity).toBe(sensitivity);
-        
+
+        expect(sessionStartEvent.event.sessionStart.turnDetectionConfiguration.endpointingSensitivity).toBe(
+          sensitivity,
+        );
+
         // Clean up for next iteration
         await voiceWithConfig.close();
         vi.clearAllMocks();
@@ -391,18 +392,18 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration.tools).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration.tools.length).toBe(1);
-      
+
       // Verify toolSpec structure
       const toolSpec = promptStartEvent.event.promptStart.toolConfiguration.tools[0].toolSpec;
       expect(toolSpec.name).toBe('test_tool');
       expect(toolSpec.description).toBe('A test tool');
       expect(toolSpec.inputSchema.json).toBeDefined();
-      
+
       // Verify inputSchema is a JSON string
       const parsedSchema = JSON.parse(toolSpec.inputSchema.json);
       expect(parsedSchema).toEqual({
@@ -412,7 +413,7 @@ describe('NovaSonicVoice', () => {
         },
         required: ['param'],
       });
-      
+
       // Verify old structure is NOT present
       expect(promptStartEvent.event.promptStart.tools).toBeUndefined();
     });
@@ -449,7 +450,9 @@ describe('NovaSonicVoice', () => {
       await voiceWithObjectSchema.connect();
       const eventQueue1 = (voiceWithObjectSchema as any)._eventQueue;
       const promptStartEvent1 = eventQueue1.find((e: any) => e.event?.promptStart);
-      const schema1 = JSON.parse(promptStartEvent1.event.promptStart.toolConfiguration.tools[0].toolSpec.inputSchema.json);
+      const schema1 = JSON.parse(
+        promptStartEvent1.event.promptStart.toolConfiguration.tools[0].toolSpec.inputSchema.json,
+      );
       expect(schema1.type).toBe('object');
 
       await voiceWithObjectSchema.close();
@@ -480,7 +483,9 @@ describe('NovaSonicVoice', () => {
       await voiceWithStringSchema.connect();
       const eventQueue2 = (voiceWithStringSchema as any)._eventQueue;
       const promptStartEvent2 = eventQueue2.find((e: any) => e.event?.promptStart);
-      const schema2 = JSON.parse(promptStartEvent2.event.promptStart.toolConfiguration.tools[0].toolSpec.inputSchema.json);
+      const schema2 = JSON.parse(
+        promptStartEvent2.event.promptStart.toolConfiguration.tools[0].toolSpec.inputSchema.json,
+      );
       expect(schema2.type).toBe('object');
     });
 
@@ -510,7 +515,7 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       // knowledgeBaseConfig is not included in Nova 2 Sonic promptStart event
       expect(promptStartEvent.event.promptStart.knowledgeBaseConfig).toBeUndefined();
@@ -539,7 +544,7 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration.toolChoice).toBe('any');
@@ -580,7 +585,7 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration).toBeDefined();
       expect(promptStartEvent.event.promptStart.toolConfiguration.toolChoice).toBe('auto');
@@ -608,10 +613,10 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (testVoice as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       expect(promptStartEvent.event.promptStart.audioOutputConfiguration.voiceId).toBe('matthew');
-      
+
       testVoice.close();
     });
 
@@ -636,10 +641,10 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithSpeaker as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       expect(promptStartEvent.event.promptStart.audioOutputConfiguration.voiceId).toBe('tiffany');
-      
+
       voiceWithSpeaker.close();
     });
 
@@ -667,11 +672,11 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       // sessionConfig.voice should take priority
       expect(promptStartEvent.event.promptStart.audioOutputConfiguration.voiceId).toBe('amy');
-      
+
       voiceWithConfig.close();
     });
 
@@ -702,10 +707,10 @@ describe('NovaSonicVoice', () => {
 
       const eventQueue = (voiceWithConfig as any)._eventQueue;
       const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-      
+
       expect(promptStartEvent).toBeDefined();
       expect(promptStartEvent.event.promptStart.audioOutputConfiguration.voiceId).toBe('olivia');
-      
+
       voiceWithConfig.close();
     });
 
@@ -721,9 +726,22 @@ describe('NovaSonicVoice', () => {
       });
 
       const availableVoices = [
-        'tiffany', 'matthew', 'amy', 'olivia', 'kiara', 'arjun',
-        'ambre', 'florian', 'beatrice', 'lorenzo', 'tina', 'lennart',
-        'lupe', 'carlos', 'carolina', 'leo',
+        'tiffany',
+        'matthew',
+        'amy',
+        'olivia',
+        'kiara',
+        'arjun',
+        'ambre',
+        'florian',
+        'beatrice',
+        'lorenzo',
+        'tina',
+        'lennart',
+        'lupe',
+        'carlos',
+        'carolina',
+        'leo',
       ];
 
       for (const voiceId of availableVoices) {
@@ -737,10 +755,10 @@ describe('NovaSonicVoice', () => {
 
         const eventQueue = (testVoice as any)._eventQueue;
         const promptStartEvent = eventQueue.find((e: any) => e.event?.promptStart);
-        
+
         expect(promptStartEvent).toBeDefined();
         expect(promptStartEvent.event.promptStart.audioOutputConfiguration.voiceId).toBe(voiceId);
-        
+
         testVoice.close();
       }
     });
@@ -836,4 +854,3 @@ describe('NovaSonicVoice', () => {
     });
   });
 });
-

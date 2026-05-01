@@ -15,4 +15,3 @@ export default defineConfig({
     await generateTypes(process.cwd());
   },
 });
-
