@@ -69,6 +69,16 @@ export type WorkspaceFilesystemResolver = (context: {
 }) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>;
 
 /**
+ * A function that resolves a WorkspaceSandbox dynamically based on request context.
+ * Called on each tool invocation, allowing different sandboxes per request.
+ *
+ * The caller owns the returned sandbox's lifecycle.
+ */
+export type WorkspaceSandboxResolver = (context: {
+  requestContext: RequestContext;
+}) => WorkspaceSandbox | Promise<WorkspaceSandbox>;
+
+/**
  * Configuration for creating a Workspace.
  * Users pass provider instances directly.
  *
@@ -99,11 +109,18 @@ export interface WorkspaceConfig<
   filesystem?: TFilesystem | WorkspaceFilesystemResolver;
 
   /**
-   * Sandbox provider instance.
-   * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
-   * Extend MastraSandbox for automatic logger integration.
+   * Sandbox provider instance, or a resolver function for dynamic per-request sandboxes.
+   *
+   * Static: Pass a LocalSandbox, ComputeSDKSandbox, or any WorkspaceSandbox instance.
+   * Dynamic: Pass a function `({ requestContext }) => WorkspaceSandbox` to resolve
+   * a different sandbox per request. The resolver is called at tool execution time.
+   *
+   * When using a resolver, the caller owns the returned sandbox's lifecycle.
+   * Mounts and `lsp: true` are incompatible with a resolver.
+   *
+   * Extend MastraSandbox for automatic logger integration (static instances only).
    */
-  sandbox?: TSandbox;
+  sandbox?: TSandbox | WorkspaceSandboxResolver;
 
   /**
    * Mount multiple filesystems at different paths.
@@ -476,6 +493,7 @@ export class Workspace<
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
+  private readonly _sandboxResolver?: WorkspaceSandboxResolver;
   private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
@@ -490,13 +508,33 @@ export class Workspace<
     this.lastAccessedAt = new Date();
 
     this._config = config;
-    this._sandbox = config.sandbox;
+
+    if (typeof config.sandbox === 'function') {
+      if (/^class\s/.test(Function.prototype.toString.call(config.sandbox))) {
+        throw new WorkspaceError(
+          'sandbox received a class constructor instead of an instance or resolver function. ' +
+            'Pass an instance (e.g., new LocalSandbox(...)) or a resolver function (({ requestContext }) => sandbox).',
+          'INVALID_CONFIG',
+        );
+      }
+      this._sandboxResolver = config.sandbox as WorkspaceSandboxResolver;
+    } else {
+      this._sandbox = config.sandbox;
+    }
 
     // Setup mounts - creates CompositeFilesystem and informs sandbox
     if (config.mounts && Object.keys(config.mounts).length > 0) {
       // Validate: can't use both filesystem and mounts
       if (config.filesystem) {
         throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
+      }
+      if (this._sandboxResolver) {
+        throw new WorkspaceError(
+          'Cannot use "mounts" with a dynamic sandbox resolver. ' +
+            'Mounts are attached to a sandbox instance at construction time. ' +
+            'Either pass a static sandbox instance, or have your resolver return a sandbox with its mounts already configured.',
+          'INVALID_CONFIG',
+        );
       }
 
       // Warn: contained: false is incompatible with mounts
@@ -598,7 +636,11 @@ export class Workspace<
     // Initialize LSP if configured and a process manager is available
     if (config.lsp) {
       const processes = this._sandbox?.processes;
-      if (!this._sandbox) {
+      if (this._sandboxResolver) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true is incompatible with a dynamic sandbox resolver — LSP needs a process manager at construction time, but the sandbox is resolved per request. LSP disabled.`,
+        );
+      } else if (!this._sandbox) {
         console.warn(
           `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
         );
@@ -619,7 +661,7 @@ export class Workspace<
 
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
-    if (!this._fs && !this._filesystemResolver && !this._sandbox && !this.hasSkillsConfig()) {
+    if (!this._fs && !this._filesystemResolver && !this._sandbox && !this._sandboxResolver && !this.hasSkillsConfig()) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
     }
   }
@@ -727,6 +769,26 @@ export class Workspace<
       return await this._filesystemResolver({ requestContext });
     }
     return this._fs;
+  }
+
+  /**
+   * Returns true if a sandbox is configured, either as a static instance or a resolver function.
+   */
+  hasSandboxConfig(): boolean {
+    return this._sandbox !== undefined || this._sandboxResolver !== undefined;
+  }
+
+  /**
+   * Resolve the sandbox for a given request context.
+   * When a resolver function is configured, calls it with the provided requestContext.
+   * When a static sandbox is configured, returns it directly.
+   * Returns undefined if no sandbox is configured.
+   */
+  async resolveSandbox({ requestContext }: { requestContext: RequestContext }): Promise<WorkspaceSandbox | undefined> {
+    if (this._sandboxResolver) {
+      return await this._sandboxResolver({ requestContext });
+    }
+    return this._sandbox;
   }
 
   /**
@@ -1051,6 +1113,9 @@ export class Workspace<
   /**
    * Initialize the workspace.
    * Starts the sandbox, initializes the filesystem, and auto-mounts filesystems.
+   *
+   * Resolver-backed providers are skipped because there is no instance until
+   * the resolver runs.
    */
   async init(): Promise<void> {
     this._status = 'initializing';
@@ -1170,6 +1235,8 @@ export class Workspace<
         status: sandboxInfo?.status ?? this._sandbox.status,
         resources: sandboxInfo?.resources,
       };
+    } else if (this._sandboxResolver) {
+      info.sandbox = { provider: 'dynamic', status: 'pending' };
     }
 
     return info;

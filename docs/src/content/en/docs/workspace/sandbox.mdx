@@ -58,6 +58,75 @@ const response = await agent.generate('Run `ls -la` in the workspace directory')
 
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
+## Dynamic sandbox
+
+The `sandbox` option accepts a resolver function instead of a static instance. The resolver receives `requestContext` and returns a sandbox per request, allowing a single workspace to serve different sandboxes based on the caller's identity, role, or tenant.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  // highlight-start
+  sandbox: ({ requestContext }) => {
+    const userId = requestContext.get('user-id') as string
+    return new LocalSandbox({
+      workingDirectory: `/workspaces/${userId}`,
+    })
+  },
+  // highlight-end
+})
+
+const agent = new Agent({
+  id: 'multi-tenant-agent',
+  model: 'openai/gpt-5.4',
+  workspace,
+})
+```
+
+Each request resolves its own sandbox at tool execution time:
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+// User Alice — commands run in /workspaces/alice
+const aliceCtx = new RequestContext([['user-id', 'alice']])
+await agent.generate('List files in cwd', { requestContext: aliceCtx })
+
+// User Bob — commands run in /workspaces/bob
+const bobCtx = new RequestContext([['user-id', 'bob']])
+await agent.generate('List files in cwd', { requestContext: bobCtx })
+```
+
+The resolver can also be asynchronous — for example to look up tenant configuration from a database:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: async ({ requestContext }) => {
+    const tenant = await db.getTenant(requestContext.get('tenant-id'))
+    return new LocalSandbox({ workingDirectory: tenant.workspacePath })
+  },
+})
+```
+
+### Lifecycle ownership
+
+When the sandbox is a static instance, `workspace.init()` calls its `start()` method and `workspace.destroy()` calls its `destroy()` method. With a resolver, the workspace has no instance to manage at construction time — the caller owns the returned sandbox's lifecycle.
+
+The resolver must return a sandbox that is ready to use (already started, or able to handle calls without explicit startup), and must clean it up when the request finishes.
+
+:::note
+
+`sandbox` resolvers are incompatible with `mounts` and `lsp: true`. Both require a concrete sandbox instance at construction time, so combining them with a resolver throws an `INVALID_CONFIG` error (for `mounts`) or disables LSP with a warning (for `lsp: true`).
+
+:::
+
+### Tool registration
+
+With a static sandbox, the workspace inspects the instance to decide which tools to register. With a resolver, the workspace assumes full capabilities and registers `execute_command` (with `background` support), `get_process_output`, and `kill_process`. If the resolved sandbox does not implement a capability, the runtime throws a clear `SandboxFeatureNotSupportedError`.
+
+For background commands, return the same sandbox for follow-up calls that share a request scope, tenant, or user. `get_process_output` and `kill_process` read from the process manager on the resolved sandbox, so a fresh sandbox instance may not know about a process started by an earlier tool call.
+
 ## Agent tools
 
 When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands.

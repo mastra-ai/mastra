@@ -57,8 +57,9 @@ const workspace = new Workspace({
   },
   {
     name: 'sandbox',
-    type: 'WorkspaceSandbox',
-    description: 'Sandbox provider instance (e.g., LocalSandbox)',
+    type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
+    description:
+      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox).',
     isOptional: true,
   },
   {
@@ -252,7 +253,8 @@ Tool names must be unique across all workspace tools. Setting a custom name that
   {
     name: 'sandbox',
     type: 'WorkspaceSandbox | undefined',
-    description: 'The sandbox provider',
+    description:
+      'The static sandbox provider. Returns `undefined` when a resolver function is configured — use `hasSandboxConfig()` to check availability.',
   },
   {
     name: 'skills',
@@ -452,6 +454,45 @@ const fs = await workspace.resolveFilesystem({ requestContext: ctx })
 
 **Returns:** `Promise<WorkspaceFilesystem | undefined>`
 
+### Dynamic sandbox
+
+#### `hasSandboxConfig()`
+
+Check whether a sandbox is configured, either as a static instance or a resolver function. Use this instead of checking `workspace.sandbox` directly, because a resolver-based workspace returns `undefined` from the `sandbox` property.
+
+```typescript
+if (workspace.hasSandboxConfig()) {
+  // Sandbox tools are available
+}
+```
+
+**Returns:** `boolean`
+
+#### `resolveSandbox({ requestContext })`
+
+Resolve the sandbox for a given request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static sandbox is configured, returns it directly. Returns `undefined` if no sandbox is configured.
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+const ctx = new RequestContext([['user-id', 'alice']])
+const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'The request context to pass to the resolver function.',
+  },
+]}
+/>
+
+**Returns:** `Promise<WorkspaceSandbox | undefined>`
+
 ## Agent tools
 
 A workspace provides tools to agents based on what's configured.
@@ -519,6 +560,8 @@ Added when a sandbox is configured:
 | `mastra_workspace_execute_command` | Execute a shell command. Returns stdout, stderr, and exit code. When the sandbox has a process manager, accepts `background: true` to spawn a long-running process and return a PID. |
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
+
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox does not implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 
