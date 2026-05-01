@@ -269,7 +269,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   private redactMessages(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages.map(msg => {
       if (typeof msg.content === 'string') {
-        return { ...msg, content: this.redactText(msg.content) };
+        // At runtime, content may be a plain string even though MastraDBMessage types it as MastraMessageContentV2.
+        // Redact the string and preserve the original shape.
+        return { ...msg, content: this.redactText(msg.content) } as unknown as MastraDBMessage;
       }
       if (!msg.content || typeof msg.content !== 'object' || !('parts' in msg.content) || !msg.content.parts) {
         return msg;
