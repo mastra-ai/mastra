@@ -184,6 +184,88 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
   });
 });
 
+describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+  });
+
+  it('should use the suspended step payload when resuming a step with stale previous output', async () => {
+    const workflowId = 'resume-payload-repro';
+    const runId = randomUUID();
+    const resumedStep = {
+      id: 'needs-approval',
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ resumed: z.boolean(), receivedId: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData }: { inputData: { id: string }; resumeData?: { approved: boolean } }) => {
+        return { resumed: resumeData?.approved ?? false, receivedId: inputData.id };
+      },
+    };
+    const producerStep = {
+      id: 'producer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({ stale: true }),
+    };
+    const stepResults = {
+      producer: {
+        status: 'success',
+        output: { stale: true },
+        payload: {},
+      },
+      'needs-approval': {
+        status: 'suspended',
+        payload: { id: 'from-suspended-snapshot' },
+        suspendPayload: { reason: 'manual-review' },
+        suspendedAt: Date.now(),
+      },
+    } as Record<string, StepResult<any, any, any, any>>;
+
+    const result = await engine.executeEntry({
+      workflowId,
+      runId,
+      entry: { type: 'step', step: resumedStep },
+      prevStep: { type: 'step', step: producerStep },
+      serializedStepGraph: [],
+      stepResults,
+      resume: {
+        steps: ['needs-approval'],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [],
+      },
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [1],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.result).toMatchObject({
+      status: 'success',
+      output: { resumed: true, receivedId: 'from-suspended-snapshot' },
+    });
+  });
+});
+
 describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   let engine: DefaultExecutionEngine;
   let pubsub: PubSub;
