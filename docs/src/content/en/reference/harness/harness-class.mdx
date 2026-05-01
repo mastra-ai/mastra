@@ -658,6 +658,46 @@ harness.respondToToolApproval({ decision: 'approve' })
 harness.respondToToolApproval({ decision: 'decline' })
 ```
 
+#### `waitForAwaitingInputReady({ id, timeoutMs?, intervalMs? })`
+
+Wait for an awaiting-input id to become ready. For tool approval and tool suspension states, this resolves after the backing workflow snapshot can be read from storage.
+
+```typescript
+const awaitingInput = await harness.waitForAwaitingInputReady({
+  id: 'tool-call-123',
+  timeoutMs: 5000,
+})
+```
+
+Returns: `Promise<HarnessAwaitingInput | null>`
+
+#### `getAwaitingInput({ id })`
+
+Return metadata for a pending awaiting-input id.
+
+```typescript
+const awaitingInput = await harness.getAwaitingInput({ id: 'tool-call-123' })
+
+if (awaitingInput?.kind === 'tool_suspension' && awaitingInput.durable) {
+  console.log(awaitingInput.runId, awaitingInput.toolName)
+}
+```
+
+Returns: `Promise<HarnessAwaitingInput | null>`
+
+#### `resumeAwaitingInput({ id, resumeData, requestContext? })`
+
+Resume a pending awaiting-input id. Tool approval and tool suspension states can be resumed from a new `Harness` instance when the state is backed by storage.
+
+```typescript
+const result = await harness.resumeAwaitingInput({
+  id: 'tool-call-123',
+  resumeData: { approved: true },
+})
+```
+
+Returns: `Promise<HarnessResumeAwaitingInputResult>`
+
 ### Questions and plans
 
 #### `respondToQuestion({ questionId, answer })`
@@ -685,6 +725,21 @@ harness.respondToPlanApproval({
   response: { action: 'rejected', feedback: 'Needs more detail' },
 })
 ```
+
+## Awaiting input durability
+
+The awaiting-input APIs expose pending Harness states by id:
+
+| Kind | Durable | Resume behavior |
+| - | - | - |
+| `tool_approval` | Yes, when storage has a suspended workflow snapshot | Resume with `resumeAwaitingInput()` from the same process or a fresh process. |
+| `tool_suspension` | Yes, when storage has a suspended workflow snapshot | Resume with `resumeAwaitingInput()` from the same process or a fresh process. |
+| `question` | No | Use `respondToQuestion()` in the same live Harness session. |
+| `plan_approval` | No | Use `respondToPlanApproval()` in the same live Harness session. |
+
+Use `waitForAwaitingInputReady()` before persisting a tool approval or suspension id in an application. This avoids resuming before the workflow snapshot is readable.
+
+Durable lookup is scoped to the harness `resourceId`. A fresh process that resumes an id must construct the `Harness` with the same `resourceId` as the process that created the pending tool state.
 
 ### Permissions
 

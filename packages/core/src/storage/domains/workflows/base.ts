@@ -58,4 +58,37 @@ export abstract class WorkflowsStorage extends StorageDomain {
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
   abstract deleteWorkflowRunById(args: { runId: string; workflowName: string }): Promise<void>;
+
+  async getSuspendedWorkflowRunByResumeLabel({
+    workflowName,
+    resourceId,
+    resumeLabel,
+  }: {
+    workflowName?: string;
+    resourceId?: string;
+    resumeLabel: string;
+  }): Promise<WorkflowRun | null> {
+    const listRuns = async (status: 'suspended' | 'waiting') =>
+      await this.listWorkflowRuns({
+        ...(workflowName ? { workflowName } : {}),
+        ...(resourceId ? { resourceId } : {}),
+        status,
+        perPage: false,
+      });
+
+    const [suspended, waiting] = await Promise.all([listRuns('suspended'), listRuns('waiting')]);
+    const runs = [...suspended.runs, ...waiting.runs].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+    return (
+      runs.find(run => {
+        try {
+          const snapshot =
+            typeof run.snapshot === 'string' ? (JSON.parse(run.snapshot) as WorkflowRunState) : run.snapshot;
+          return Object.prototype.hasOwnProperty.call(snapshot.resumeLabels ?? {}, resumeLabel);
+        } catch {
+          return false;
+        }
+      }) ?? null
+    );
+  }
 }

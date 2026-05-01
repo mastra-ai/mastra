@@ -8,6 +8,8 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
+import type { WorkflowRun } from '../storage/types';
+import type { WorkflowRunState } from '../workflows';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import { safeStringify } from '../utils';
@@ -25,18 +27,23 @@ import type {
   AvailableModel,
   HeartbeatHandler,
   HarnessConfig,
+  HarnessAwaitingInput,
   HarnessDisplayState,
   HarnessDisplayStateListener,
   HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
+  HarnessGetAwaitingInputOptions,
   HarnessMessage,
   HarnessMessageContent,
   HarnessMode,
   HarnessQuestionAnswer,
+  HarnessResumeAwaitingInputOptions,
+  HarnessResumeAwaitingInputResult,
   HarnessRequestContext,
   HarnessSession,
   HarnessThread,
+  HarnessWaitForAwaitingInputReadyOptions,
   ModelAuthStatus,
   PermissionPolicy,
   PermissionRules,
@@ -71,6 +78,60 @@ function addOptionalUsageField(
     usage[key] = (usage[key] ?? 0) + value;
   }
 }
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getWorkflowInputState(snapshot: WorkflowRunState): Record<string, unknown> | undefined {
+  const input = snapshot.context?.input;
+  if (!isRecord(input)) return undefined;
+  const state = input.state;
+  return isRecord(state) ? state : undefined;
+}
+
+function getSnapshotHarnessContext(snapshot: WorkflowRunState): Record<string, unknown> | undefined {
+  const requestContext = snapshot.requestContext;
+  if (!isRecord(requestContext)) return undefined;
+  const harness = requestContext.harness;
+  return isRecord(harness) ? harness : undefined;
+}
+
+function getSnapshotHarnessState(snapshot: WorkflowRunState): Record<string, unknown> | undefined {
+  const harness = getSnapshotHarnessContext(snapshot);
+  const state = harness?.state;
+  return isRecord(state) ? state : undefined;
+}
+
+function getStreamState(suspendPayload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const streamState = suspendPayload.__streamState;
+  return isRecord(streamState) ? streamState : undefined;
+}
+
+function getStreamToolPayload(suspendPayload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const streamState = getStreamState(suspendPayload);
+  const toolCalls = Array.isArray(streamState?.toolCalls) ? streamState.toolCalls : undefined;
+  const toolCall = toolCalls?.find(call => isRecord(call) && isRecord(call.payload));
+  return isRecord(toolCall) && isRecord(toolCall.payload) ? toolCall.payload : undefined;
+}
+
+function getStreamMemoryInfo(suspendPayload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const streamState = getStreamState(suspendPayload);
+  const messageList = streamState?.messageList;
+  if (!isRecord(messageList)) return undefined;
+  const memoryInfo = messageList.memoryInfo;
+  return isRecord(memoryInfo) ? memoryInfo : undefined;
+}
+
+const HARNESS_AGENTIC_LOOP_WORKFLOW_NAME = 'agentic-loop';
 
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
@@ -2349,6 +2410,163 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Wait until an awaiting-input id is visible and, for durable tool states,
+   * backed by a resumable workflow snapshot.
+   */
+  async waitForAwaitingInputReady({
+    id,
+    timeoutMs = 5_000,
+    intervalMs = 50,
+  }: HarnessWaitForAwaitingInputReadyOptions): Promise<HarnessAwaitingInput | null> {
+    if (!this.config.storage) {
+      return this.getLiveAwaitingInput(id);
+    }
+
+    const startedAt = Date.now();
+
+    while (true) {
+      const awaitingInput = await this.getAwaitingInput({ id });
+      if (
+        awaitingInput &&
+        (awaitingInput.durable ||
+          awaitingInput.kind === 'question' ||
+          awaitingInput.kind === 'plan_approval' ||
+          Date.now() - startedAt >= timeoutMs)
+      ) {
+        return awaitingInput;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        return awaitingInput ?? null;
+      }
+
+      await delay(Math.max(1, intervalMs));
+    }
+  }
+
+  /**
+   * Return metadata for a pending awaiting-input id.
+   * Tool approvals and suspensions are read from durable storage when available.
+   */
+  async getAwaitingInput({ id }: HarnessGetAwaitingInputOptions): Promise<HarnessAwaitingInput | null> {
+    const durableInput = await this.getDurableAwaitingInput(id);
+    if (durableInput) return durableInput;
+
+    return this.getLiveAwaitingInput(id);
+  }
+
+  /**
+   * Resume a pending awaiting-input id.
+   * Durable tool approval and suspension states can be resumed from a fresh Harness instance.
+   */
+  async resumeAwaitingInput({
+    id,
+    resumeData,
+    requestContext,
+  }: HarnessResumeAwaitingInputOptions): Promise<HarnessResumeAwaitingInputResult> {
+    const awaitingInput = await this.getAwaitingInput({ id });
+
+    if (!awaitingInput) {
+      return {
+        status: 'already_resolved',
+        id,
+        message: `No pending awaiting input was found for id "${id}". It may have already been resolved.`,
+      };
+    }
+
+    if (awaitingInput.kind === 'question' || awaitingInput.kind === 'plan_approval') {
+      return {
+        status: 'live_session_only',
+        awaitingInput,
+        message: `${awaitingInput.kind} awaiting inputs are live-session-only and cannot be durably resumed.`,
+      };
+    }
+
+    if (!awaitingInput.durable || !awaitingInput.runId) {
+      return {
+        status: 'live_session_only',
+        awaitingInput,
+        message: `Awaiting input "${id}" is not backed by a durable workflow snapshot yet.`,
+      };
+    }
+
+    this.currentRunId = awaitingInput.runId;
+    if (awaitingInput.threadId && awaitingInput.threadId !== this.currentThreadId) {
+      await this.activateResumeThread(awaitingInput.threadId);
+    }
+    if (
+      awaitingInput.modeId &&
+      awaitingInput.modeId !== this.currentModeId &&
+      this.config.modes.some(mode => mode.id === awaitingInput.modeId)
+    ) {
+      await this.switchMode({ modeId: awaitingInput.modeId });
+    }
+
+    if (
+      awaitingInput.kind === 'tool_approval' &&
+      isRecord(resumeData) &&
+      resumeData.decision === 'always_allow_category'
+    ) {
+      const category = this.getToolCategory({ toolName: awaitingInput.toolName });
+      if (category) {
+        this.grantSessionCategory({ category });
+      }
+    }
+
+    this.emit({ type: 'agent_start' });
+
+    try {
+      const streamResult =
+        awaitingInput.kind === 'tool_approval'
+          ? await this.handleToolApproveOrDeclineByRunId({
+              runId: awaitingInput.runId,
+              toolCallId: awaitingInput.toolCallId,
+              resumeData,
+              requestContext,
+              threadId: awaitingInput.threadId,
+              resourceId: awaitingInput.resourceId,
+              requireToolApproval: awaitingInput.requireToolApproval,
+            })
+          : await this.handleToolResumeByRunId({
+              runId: awaitingInput.runId,
+              toolCallId: awaitingInput.toolCallId,
+              resumeData,
+              requestContext,
+              threadId: awaitingInput.threadId,
+              resourceId: awaitingInput.resourceId,
+              requireToolApproval: awaitingInput.requireToolApproval,
+            });
+
+      const reason = streamResult.suspended ? 'suspended' : 'complete';
+      this.emit({ type: 'agent_end', reason });
+
+      return { status: 'resumed', awaitingInput, message: streamResult.message, suspended: streamResult.suspended };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const errorId = isRecord(err) ? err.id : undefined;
+      const errorCode = isRecord(err) ? readString(err.code) : undefined;
+      if (
+        errorId === 'AGENT_RESUME_NO_SNAPSHOT_FOUND' ||
+        errorCode === 'SUSPENDED_RUN_NOT_FOUND' ||
+        errorCode === 'RUN_NOT_SUSPENDED' ||
+        (errorCode === undefined &&
+          (err.message.includes('could not find a suspended run') || err.message.includes('was not suspended')))
+      ) {
+        this.emit({ type: 'agent_end', reason: 'complete' });
+        return {
+          status: 'already_resolved',
+          id,
+          message: `Awaiting input "${id}" is no longer pending.`,
+        };
+      }
+
+      this.emit({ type: 'error', error: err });
+      this.emit({ type: 'agent_end', reason: 'error' });
+      throw err;
+    }
+  }
+
+  /**
    * Reset display state fields that are scoped to a thread.
    * Called on thread switch/creation.
    */
@@ -2495,6 +2713,297 @@ export class Harness<TState = {}> {
 
     this.pendingPlanApprovals.delete(planId);
     resolve(response);
+  }
+
+  private getLiveAwaitingInput(id: string): HarnessAwaitingInput | null {
+    const pendingApproval = this.displayState.pendingApproval;
+    if (pendingApproval?.toolCallId === id) {
+      return {
+        id,
+        kind: 'tool_approval',
+        durable: false,
+        runId: this.currentRunId ?? undefined,
+        modeId: this.currentModeId,
+        threadId: this.currentThreadId ?? undefined,
+        resourceId: this.resourceId,
+        toolCallId: pendingApproval.toolCallId,
+        toolName: pendingApproval.toolName,
+        args: pendingApproval.args,
+        requireToolApproval: (this.state as Record<string, unknown>).yolo !== true,
+      };
+    }
+
+    const pendingSuspension = this.displayState.pendingSuspension;
+    if (pendingSuspension?.toolCallId === id) {
+      return {
+        id,
+        kind: 'tool_suspension',
+        durable: false,
+        runId: this.pendingSuspensionRunId ?? this.currentRunId ?? undefined,
+        modeId: this.currentModeId,
+        threadId: this.currentThreadId ?? undefined,
+        resourceId: this.resourceId,
+        toolCallId: pendingSuspension.toolCallId,
+        toolName: pendingSuspension.toolName,
+        args: pendingSuspension.args,
+        suspendPayload: pendingSuspension.suspendPayload,
+        resumeSchema: pendingSuspension.resumeSchema,
+        requireToolApproval: (this.state as Record<string, unknown>).yolo !== true,
+      };
+    }
+
+    const pendingQuestion = this.displayState.pendingQuestion;
+    if (pendingQuestion?.questionId === id) {
+      return {
+        id,
+        kind: 'question',
+        durable: false,
+        questionId: pendingQuestion.questionId,
+        question: pendingQuestion.question,
+        options: pendingQuestion.options,
+        selectionMode: pendingQuestion.selectionMode,
+      };
+    }
+
+    const pendingPlanApproval = this.displayState.pendingPlanApproval;
+    if (pendingPlanApproval?.planId === id) {
+      return {
+        id,
+        kind: 'plan_approval',
+        durable: false,
+        planId: pendingPlanApproval.planId,
+        title: pendingPlanApproval.title,
+        plan: pendingPlanApproval.plan,
+      };
+    }
+
+    return null;
+  }
+
+  private async getDurableAwaitingInput(id: string): Promise<HarnessAwaitingInput | null> {
+    const workflowsStore = await this.config.storage?.getStore('workflows');
+    if (!workflowsStore) return null;
+
+    const run = await workflowsStore.getSuspendedWorkflowRunByResumeLabel({
+      workflowName: HARNESS_AGENTIC_LOOP_WORKFLOW_NAME,
+      resourceId: this.resourceId,
+      resumeLabel: id,
+    });
+
+    return run ? this.getAwaitingInputFromWorkflowRun({ id, run }) : null;
+  }
+
+  private async activateResumeThread(threadId: string): Promise<void> {
+    await this.config.threadLock?.acquire(threadId);
+
+    const previousThreadId = this.currentThreadId;
+    if (previousThreadId && previousThreadId !== threadId) {
+      await this.config.threadLock?.release(previousThreadId);
+    }
+
+    this.currentThreadId = threadId;
+    await this.loadThreadMetadata();
+  }
+
+  private getAwaitingInputFromWorkflowRun({ id, run }: { id: string; run: WorkflowRun }): HarnessAwaitingInput | null {
+    if (run.resourceId && run.resourceId !== this.resourceId) return null;
+
+    let snapshot: WorkflowRunState;
+    try {
+      snapshot = typeof run.snapshot === 'string' ? (JSON.parse(run.snapshot) as WorkflowRunState) : run.snapshot;
+    } catch {
+      return null;
+    }
+    const resumeLabels = snapshot.resumeLabels;
+    if (!Object.prototype.hasOwnProperty.call(resumeLabels ?? {}, id)) return null;
+    const resumeLabel = resumeLabels?.[id];
+    if (!resumeLabel) return null;
+
+    const stepResult = snapshot.context?.[resumeLabel.stepId];
+    if (!isRecord(stepResult) || stepResult.status !== 'suspended') return null;
+
+    const suspendPayload = stepResult.suspendPayload;
+    if (!isRecord(suspendPayload)) return null;
+
+    const inputState = getWorkflowInputState(snapshot);
+    const harnessContext = getSnapshotHarnessContext(snapshot);
+    const harnessState = getSnapshotHarnessState(snapshot);
+    const streamMemoryInfo = getStreamMemoryInfo(suspendPayload);
+    const threadId =
+      readString(inputState?.threadId) ??
+      readString(harnessContext?.threadId) ??
+      readString(streamMemoryInfo?.threadId);
+    const modeId = readString(harnessContext?.modeId);
+    const resourceId =
+      readString(inputState?.resourceId) ??
+      readString(harnessContext?.resourceId) ??
+      readString(streamMemoryInfo?.resourceId) ??
+      run.resourceId;
+    const payloadType = readString(suspendPayload.type);
+    const streamToolPayload = getStreamToolPayload(suspendPayload);
+    const requireToolApproval = harnessState?.yolo !== true;
+
+    if (payloadType === 'approval') {
+      const approvalPayload = isRecord(suspendPayload.requireToolApproval)
+        ? suspendPayload.requireToolApproval
+        : suspendPayload;
+      const toolCallId = readString(approvalPayload.toolCallId) ?? id;
+      const toolName = readString(approvalPayload.toolName);
+      if (!toolName) return null;
+
+      return {
+        id,
+        kind: 'tool_approval',
+        durable: true,
+        runId: run.runId,
+        modeId,
+        threadId,
+        resourceId,
+        toolCallId,
+        toolName,
+        args: approvalPayload.args,
+        resumeSchema: readString(suspendPayload.resumeSchema),
+        requireToolApproval,
+      };
+    }
+
+    if (payloadType === 'suspension' || Object.prototype.hasOwnProperty.call(suspendPayload, 'toolCallSuspended')) {
+      const toolCallId = readString(suspendPayload.toolCallId) ?? readString(streamToolPayload?.toolCallId) ?? id;
+      const toolName = readString(suspendPayload.toolName) ?? readString(streamToolPayload?.toolName);
+      if (!toolName) return null;
+
+      return {
+        id,
+        kind: 'tool_suspension',
+        durable: true,
+        runId: run.runId,
+        modeId,
+        threadId,
+        resourceId,
+        toolCallId,
+        toolName,
+        args: suspendPayload.args ?? streamToolPayload?.args,
+        suspendPayload: Object.prototype.hasOwnProperty.call(suspendPayload, 'toolCallSuspended')
+          ? suspendPayload.toolCallSuspended
+          : undefined,
+        resumeSchema: readString(suspendPayload.resumeSchema),
+        requireToolApproval,
+      };
+    }
+
+    return null;
+  }
+
+  private normalizeToolApprovalResumeData(resumeData: unknown): unknown {
+    if (isRecord(resumeData)) {
+      const decision = resumeData.decision;
+      if (decision === 'approve' || decision === 'always_allow_category') {
+        return { approved: true };
+      }
+      if (decision === 'decline') {
+        return { approved: false };
+      }
+    }
+
+    if (resumeData === 'approve') return { approved: true };
+    if (resumeData === 'decline') return { approved: false };
+
+    return resumeData;
+  }
+
+  private async handleToolApproveOrDeclineByRunId({
+    runId,
+    toolCallId,
+    resumeData,
+    requestContext: requestContextInput,
+    threadId,
+    resourceId,
+    requireToolApproval,
+  }: {
+    runId: string;
+    toolCallId?: string;
+    resumeData: unknown;
+    requestContext?: RequestContext;
+    threadId?: string;
+    resourceId?: string;
+    requireToolApproval?: boolean;
+  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+    const agent = this.getCurrentAgent();
+    const createdAbortController = !this.abortController;
+
+    if (!this.abortController) {
+      this.abortController = new AbortController();
+    }
+
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    try {
+      const response = await agent.resumeStream(this.normalizeToolApprovalResumeData(resumeData), {
+        runId,
+        toolCallId,
+        requireToolApproval: requireToolApproval ?? (this.state as Record<string, unknown>).yolo !== true,
+        memory: threadId ? { thread: threadId, resource: resourceId ?? this.resourceId } : undefined,
+        abortSignal: this.abortController.signal,
+        requestContext,
+        toolsets: await this.buildToolsets(requestContext),
+      });
+
+      return await this.processStream(response, requestContext);
+    } finally {
+      if (createdAbortController) {
+        this.abortController = null;
+        this.abortRequested = false;
+      }
+    }
+  }
+
+  private async handleToolResumeByRunId({
+    runId,
+    toolCallId,
+    resumeData,
+    requestContext: requestContextInput,
+    threadId,
+    resourceId,
+    requireToolApproval,
+  }: {
+    runId: string;
+    toolCallId?: string;
+    resumeData: unknown;
+    requestContext?: RequestContext;
+    threadId?: string;
+    resourceId?: string;
+    requireToolApproval?: boolean;
+  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+    const agent = this.getCurrentAgent();
+    const createdAbortController = !this.abortController;
+
+    if (!this.abortController) {
+      this.abortController = new AbortController();
+    }
+
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    try {
+      const response = await agent.resumeStream(resumeData, {
+        runId,
+        toolCallId,
+        requireToolApproval: requireToolApproval ?? (this.state as Record<string, unknown>).yolo !== true,
+        memory: threadId ? { thread: threadId, resource: resourceId ?? this.resourceId } : undefined,
+        abortSignal: this.abortController.signal,
+        requestContext,
+        toolsets: await this.buildToolsets(requestContext),
+      });
+
+      if (this.pendingSuspensionRunId === runId && this.pendingSuspensionToolCallId === toolCallId) {
+        this.pendingSuspensionRunId = null;
+        this.pendingSuspensionToolCallId = null;
+      }
+
+      return await this.processStream(response, requestContext);
+    } finally {
+      if (createdAbortController) {
+        this.abortController = null;
+        this.abortRequested = false;
+      }
+    }
   }
 
   private async handleToolApprove({
