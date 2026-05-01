@@ -134,12 +134,14 @@
     "@mastra/google-drive": "0.0.1",
     "@mastra/perplexity": "0.1.0-alpha.0",
     "@mastra/slack": "1.0.2",
-    "@mastra/nestjs": "0.0.0"
+    "@mastra/nestjs": "0.0.0",
+    "@mastra/voice-aws-nova-sonic": "0.0.0"
   },
   "changesets": [
     "@mastra_deployer-15211-dependencies",
     "all-paws-shake",
     "automated-provider-registry-20260430-184308",
+    "aws-nova-sonic-voice-provider",
     "bright-moons-cheer",
     "brown-lamps-lie",
     "chilly-turtles-rescue",
@@ -163,6 +165,7 @@
     "green-birds-knock",
     "green-snails-relax",
     "icy-trains-wait",
+    "multiline-question-input",
     "new-pets-live",
     "proud-bags-create",
     "public-jeans-dance",
