@@ -7,6 +7,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
+import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
@@ -140,8 +141,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
         : null;
 
-      // ── Read-only fast path: skip turn creation and observation lifecycle ──
+      // ── Read-only path: load existing context, skip observation lifecycle ──
       if (readOnly) {
+        await loadMemoryContextMessages({
+          memory: this.memory,
+          messageList,
+          threadId,
+          resourceId,
+        });
         return messageList;
       }
 
