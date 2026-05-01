@@ -707,6 +707,18 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
     expect(serialized).toEqual({ userId: 'user-123' });
   });
 
+  it('should serialize Map request context values', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const requestContext = new Map([
+      ['userId', 'user-123'],
+      ['tenantId', 'tenant-456'],
+    ]);
+
+    const serialized = engine.serializeRequestContext(requestContext as any);
+
+    expect(serialized).toEqual({ userId: 'user-123', tenantId: 'tenant-456' });
+  });
+
   it('should return a RequestContext instance with all entries from the plain object', () => {
     const engine = new TestableExecutionEngine({ mastra: undefined });
     const plainObj = { userId: 'user-123', tenantId: 'tenant-456', nested: { flag: true } };
