@@ -1,8 +1,9 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
-import type { Processor } from '../../processors/index';
+import type { Processor, ProcessOutputStreamArgs } from '../../processors/index';
 import { InMemoryStore } from '../../storage';
+import type { ChunkType } from '../../stream';
 import { Agent } from '../agent';
 
 /**
@@ -100,7 +101,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       readonly id = 'recording-processor';
       readonly name = 'Recording Processor';
 
-      async processOutputStream({ part }: any) {
+      async processOutputStream({ part }: ProcessOutputStreamArgs) {
         capturedChunkTypes.push(part.type);
         return part;
       }
@@ -136,7 +137,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       readonly id = 'filter-nested-agent-chunks';
       readonly name = 'Filter Nested Agent Chunks';
 
-      async processOutputStream({ part }: any) {
+      async processOutputStream({ part }: ProcessOutputStreamArgs) {
         // tool-output chunks where the wrapped output is itself an agent chunk
         // (i.e. a chunk that has a `from` field of 'AGENT') indicate forwarded
         // sub-agent stream content. Drop them.
@@ -162,7 +163,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
     });
 
     const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
-    const consumerChunks: any[] = [];
+    const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
     }
@@ -198,7 +199,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
     });
 
     const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
-    const consumerChunks: any[] = [];
+    const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
     }
@@ -215,7 +216,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       readonly id = 'rewrite-nested-agent-chunks';
       readonly name = 'Rewrite Nested Agent Chunks';
 
-      async processOutputStream({ part }: any) {
+      async processOutputStream({ part }: ProcessOutputStreamArgs) {
         if (part?.type === 'tool-output' && part?.payload?.output?.from === 'AGENT') {
           return {
             ...part,
@@ -241,7 +242,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
     });
 
     const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
-    const consumerChunks: any[] = [];
+    const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
     }
@@ -261,7 +262,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       readonly id = 'tripwire-on-nested-agent-chunks';
       readonly name = 'Tripwire On Nested Agent Chunks';
 
-      async processOutputStream({ part, abort }: any) {
+      async processOutputStream({ part, abort }: ProcessOutputStreamArgs) {
         if (
           part?.type === 'tool-output' &&
           part?.payload?.output?.from === 'AGENT' &&
@@ -288,7 +289,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
     });
 
     const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
-    const consumerChunks: any[] = [];
+    const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
     }
