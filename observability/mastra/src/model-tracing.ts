@@ -244,6 +244,7 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  #currentStepInputIsFinal: boolean = false;
   /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
   #deferStepClose: boolean = false;
   /** Stored step-finish payload when defer mode is enabled */
@@ -353,6 +354,7 @@ export class ModelSpanTracker {
       return;
     }
 
+    const input = extractStepInput(payload);
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
@@ -361,8 +363,9 @@ export class ModelSpanTracker {
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
         ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
       },
-      input: extractStepInput(payload),
+      input,
     });
+    this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
     // Reset chunk sequence for new step
     this.#chunkSequence = 0;
   }
@@ -376,14 +379,20 @@ export class ModelSpanTracker {
       return;
     }
 
+    const hasFinalInput = Array.isArray(payload.inputMessages);
+    const input = hasFinalInput || !this.#currentStepInputIsFinal ? extractStepInput(payload) : undefined;
+
     // Update span with request/warnings from the step-start chunk
     this.#currentStepSpan.update({
-      input: extractStepInput(payload),
+      ...(input !== undefined ? { input } : {}),
       attributes: {
         ...(payload.messageId ? { messageId: payload.messageId } : {}),
         ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
       },
     });
+    if (hasFinalInput) {
+      this.#currentStepInputIsFinal = true;
+    }
   }
 
   /**
@@ -429,6 +438,7 @@ export class ModelSpanTracker {
       },
     });
     this.#currentStepSpan = undefined;
+    this.#currentStepInputIsFinal = false;
     this.#stepIndex++;
   }
 

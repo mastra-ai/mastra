@@ -3,7 +3,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType, StepStartPayload } from '../../stream/types';
+import type { ChunkType } from '../../stream/types';
 import { MessageList } from '../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
 import type {
@@ -303,12 +303,7 @@ export async function emitChunkEvent<OUTPUT = undefined>(
 export async function emitStepStartEvent(
   pubsub: PubSub,
   runId: string,
-  data: {
-    stepId?: string;
-    request?: unknown;
-    inputMessages?: StepStartPayload['inputMessages'];
-    warnings?: unknown[];
-  },
+  data: { stepId?: string; request?: unknown; warnings?: unknown[] },
 ): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,

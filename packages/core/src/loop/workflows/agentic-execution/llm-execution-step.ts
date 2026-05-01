@@ -801,13 +801,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     request = requestFromStream || {};
                     rawResponse = rawResponseFromStream;
 
+                    modelSpanTracker?.updateStep({
+                      request: request || {},
+                      inputMessages,
+                      warnings: warnings || [],
+                      messageId: currentStep.messageId,
+                    });
+
                     safeEnqueue(controller, {
                       runId,
                       from: ChunkFrom.AGENT,
                       type: 'step-start',
                       payload: {
                         request: request || {},
-                        inputMessages,
                         warnings: warnings || [],
                         messageId: currentStep.messageId,
                       },

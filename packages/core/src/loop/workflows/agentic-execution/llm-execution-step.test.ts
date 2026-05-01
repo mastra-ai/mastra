@@ -575,11 +575,16 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  it('includes final input messages on step-start chunks for tracing', async () => {
+  it('updates model step tracing with final input messages', async () => {
     messageList.addSystem(
       'WORKING_MEMORY_SYSTEM_INSTRUCTION:\n<working_memory_data>saved</working_memory_data>',
       'memory',
     );
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({})),
+      startStep: vi.fn(),
+      updateStep: vi.fn(),
+    };
 
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([]),
@@ -621,6 +626,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         serialize: vi.fn(),
         deserialize: vi.fn(),
       },
+      modelSpanTracker,
       logger: {
         error: vi.fn(),
         warn: vi.fn(),
@@ -633,19 +639,24 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     await llmExecutionStep.execute(createExecuteParams(input));
 
+    expect(modelSpanTracker.updateStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputMessages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('WORKING_MEMORY_SYSTEM_INSTRUCTION'),
+          }),
+          expect.objectContaining({
+            role: 'user',
+          }),
+        ]),
+      }),
+    );
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'step-start',
-        payload: expect.objectContaining({
-          inputMessages: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'system',
-              content: expect.stringContaining('WORKING_MEMORY_SYSTEM_INSTRUCTION'),
-            }),
-            expect.objectContaining({
-              role: 'user',
-            }),
-          ]),
+        payload: expect.not.objectContaining({
+          inputMessages: expect.any(Array),
         }),
       }),
     );

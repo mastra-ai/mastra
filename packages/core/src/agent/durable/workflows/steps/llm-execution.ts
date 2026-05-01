@@ -316,7 +316,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   void emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     request,
-                    inputMessages,
                     warnings,
                   });
                 }
