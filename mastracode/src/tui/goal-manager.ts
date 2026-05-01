@@ -45,18 +45,22 @@ export interface GoalEvaluationResult {
 const DEFAULT_MAX_TURNS = 20;
 const THREAD_GOAL_KEY = 'goal';
 
-const JUDGE_SYSTEM_PROMPT = `You are a goal completion judge. You evaluate whether an AI assistant has achieved a stated goal based on its most recent response.
+const JUDGE_SYSTEM_PROMPT = `You are a goal completion judge. Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied.
 
-You MUST respond with exactly one of these two words on the first line: "done" or "continue"
-Then on the second line, provide a brief reason (one sentence).
+Think step by step:
+1. What does the goal require? Break it into concrete deliverables or success criteria.
+2. What has the assistant actually produced or accomplished in this response?
+3. Are all requirements met?
 
-Rules:
-- Say "done" if the goal has been clearly and fully achieved.
-- Say "done" if the assistant explicitly states the goal is complete, finished, or done.
-- Say "done" if all requested deliverables have been produced (e.g., all stories written, all items listed, all code generated).
-- Say "continue" ONLY if there is clearly unfinished work remaining that the assistant has not yet addressed.
-- If the assistant says it has completed the task or is waiting for further instructions, say "done".
-- When in doubt about whether the goal is complete, lean toward "done" — the user can always set a new goal.`;
+Then respond with exactly one of these two words on the FIRST line: "done" or "continue"
+On the SECOND line, provide a brief reason explaining what was accomplished or what remains.
+
+Guidelines:
+- Focus on the substance of the goal — compare what was asked vs what was delivered.
+- If the goal asks for N items and N items have been produced, say "done".
+- If the assistant's output satisfies the goal's intent even if phrased differently, say "done".
+- Say "continue" with specific feedback about what is still missing or incomplete.
+- Your reason on the "continue" line will be sent back to the assistant as guidance, so be specific about what still needs to be done.`;
 
 // =============================================================================
 // GoalManager
@@ -230,7 +234,7 @@ export class GoalManager {
         model,
         system: JUDGE_SYSTEM_PROMPT,
         prompt: `Goal: ${this.goal!.objective}\n\nAssistant's last response:\n${truncated}`,
-        maxOutputTokens: 100,
+        maxOutputTokens: 300,
         temperature: 0,
       });
 
@@ -252,20 +256,35 @@ export class GoalManager {
 
   private parseJudgeResponse(text: string): GoalJudgeResult {
     const lines = text.trim().split('\n');
-    const firstLine = (lines[0] ?? '').toLowerCase().trim();
-    const reason = lines.slice(1).join(' ').trim() || 'No reason provided.';
 
-    if (firstLine.startsWith('done')) {
-      return { decision: 'done', reason };
+    // Scan for the first line that is a decision keyword
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!.toLowerCase().trim();
+      if (line === 'done' || line.startsWith('done')) {
+        const reason =
+          lines
+            .slice(i + 1)
+            .join(' ')
+            .trim() || 'Goal completed.';
+        return { decision: 'done', reason };
+      }
+      if (line === 'continue' || line.startsWith('continue')) {
+        const reason =
+          lines
+            .slice(i + 1)
+            .join(' ')
+            .trim() || 'Continuing.';
+        return { decision: 'continue', reason };
+      }
     }
 
-    // Default to continue (fail OPEN)
-    return { decision: 'continue', reason };
+    // If no clear decision found, default to continue (fail OPEN)
+    return { decision: 'continue', reason: text.trim().split('\n').pop() || 'No clear decision from judge.' };
   }
 
   private buildContinuationPrompt(judgeReason: string): string {
     const turn = this.goal!.turnsUsed;
     const max = this.goal!.maxTurns;
-    return `Continue working toward the goal. (Turn ${turn}/${max}: ${judgeReason})`;
+    return `[Goal attempt ${turn}/${max}] The goal is not yet complete. Judge feedback: ${judgeReason}\n\nContinue working toward the goal: ${this.goal!.objective}`;
   }
 }
