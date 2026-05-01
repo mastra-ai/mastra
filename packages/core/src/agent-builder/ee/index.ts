@@ -8,7 +8,10 @@ export type {
   IAgentBuilder,
   KnownProviderEntry,
   ProviderModelEntry,
+  ResolveAgentFeaturesContext,
 } from './types';
+
+export { BUILDER_FEATURE_DEFAULTS, resolveAgentFeatures } from './types';
 
 export {
   assertModelAllowed,

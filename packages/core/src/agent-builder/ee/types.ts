@@ -129,14 +129,27 @@ export interface BuilderAgentDefaults extends Record<string, unknown> {
  * Feature toggles for the agent editor surface.
  * Each key controls visibility of that section in the builder UI.
  *
- * **Semantic: omitted = false (blocklist model)**
- * - `true` — feature is visible to users
- * - `false` or omitted — feature is hidden
+ * **Semantic: omitted = true (allowlist model — features default ON)**
+ * - omitted or `true` — feature is visible to users
+ * - `false` — feature is hidden
  *
- * Consumer code should use strict equality:
+ * Admins opt OUT of features by setting them to `false`. The raw
+ * `AgentFeatures` shape carries `undefined`/`true`/`false`; the resolved
+ * shape produced by {@link resolveAgentFeatures} is fully populated and is
+ * what consumers (server handlers, UI hooks) actually read via
+ * `IAgentBuilder.getFeatures()`.
+ *
+ * Consumer code should use strict equality on the resolved shape:
  * ```ts
  * const showTools = builder.getFeatures()?.agent?.tools === true;
  * ```
+ *
+ * Special case — `browser`: defaults to `true` ONLY when a valid
+ * `configuration.agent.browser` (with `config.provider`) is provided.
+ * Without a provider, the toggle has no backend, so the resolved value is
+ * `false` regardless of the omitted-default. An explicit `browser: true`
+ * with missing/invalid config is downgraded to `false` and surfaced as a
+ * warning by `EditorAgentBuilder` (admin error feedback).
  */
 export interface AgentFeatures {
   tools?: boolean;
@@ -149,14 +162,96 @@ export interface AgentFeatures {
   /** Star (favorite) agents and skills with per-user state and aggregate counts. */
   stars?: boolean;
   avatarUpload?: boolean;
-  /** Allow end-users to enable browser access for their agents. */
+  /**
+   * Allow end-users to enable browser access for their agents.
+   * Defaults to `true` only when a valid browser provider is configured;
+   * otherwise resolves to `false`. See doc above for the full rule.
+   */
   browser?: boolean;
   /**
    * Whether the model picker is visible to end-users in the Agent Builder.
-   * Omitted/`false` ⇒ picker hidden (locked mode); admin's `models.default` is applied.
-   * `true` ⇒ picker visible; choices are filtered by `models.allowed` if set.
+   * Omitted ⇒ picker visible (default-on). `false` ⇒ picker hidden (locked
+   * mode); admin's `models.default` is applied.
+   * When visible, choices are filtered by `models.allowed` if set.
    */
   model?: boolean;
+}
+
+/**
+ * Default-on values for {@link AgentFeatures}. `browser` is defaulted
+ * dynamically by {@link resolveAgentFeatures} based on configuration; it is
+ * intentionally absent here so the shape mirrors what `resolveAgentFeatures`
+ * unconditionally fills in.
+ */
+export const BUILDER_FEATURE_DEFAULTS: Required<Omit<AgentFeatures, 'browser'>> = {
+  tools: true,
+  agents: true,
+  workflows: true,
+  scorers: true,
+  skills: true,
+  memory: true,
+  variables: true,
+  stars: true,
+  avatarUpload: true,
+  model: true,
+};
+
+/**
+ * Context required to resolve {@link AgentFeatures} defaults. Lives separately
+ * from the raw config so this helper stays pure and synchronous.
+ */
+export interface ResolveAgentFeaturesContext {
+  /**
+   * Whether `configuration.agent.browser` declares a valid provider.
+   * Drives the default-on/off decision for `features.agent.browser`.
+   */
+  hasBrowserConfig: boolean;
+}
+
+/**
+ * Pure normalization of the raw {@link AgentFeatures} into a fully-populated
+ * shape with default-on semantics applied.
+ *
+ * Rules:
+ * - Explicit `false` always wins (admin opt-out).
+ * - Explicit `true` wins for non-`browser` keys.
+ * - Omitted keys resolve to `true` (except `browser`, see below).
+ * - `browser`:
+ *   - explicit `false` ⇒ `false`.
+ *   - explicit `true` + `hasBrowserConfig: false` ⇒ `false` (caller is
+ *     responsible for emitting a warning; this helper does not throw).
+ *   - explicit `true` + `hasBrowserConfig: true` ⇒ `true`.
+ *   - omitted ⇒ `hasBrowserConfig` (default-on only when prerequisite met).
+ */
+export function resolveAgentFeatures(
+  raw: AgentFeatures | undefined,
+  ctx: ResolveAgentFeaturesContext,
+): Required<AgentFeatures> {
+  const pick = <K extends keyof typeof BUILDER_FEATURE_DEFAULTS>(key: K): boolean => {
+    const explicit = raw?.[key];
+    return explicit === undefined ? BUILDER_FEATURE_DEFAULTS[key] : explicit;
+  };
+
+  const resolveBrowser = (): boolean => {
+    const explicit = raw?.browser;
+    if (explicit === false) return false;
+    if (explicit === true) return ctx.hasBrowserConfig;
+    return ctx.hasBrowserConfig;
+  };
+
+  return {
+    tools: pick('tools'),
+    agents: pick('agents'),
+    workflows: pick('workflows'),
+    scorers: pick('scorers'),
+    skills: pick('skills'),
+    memory: pick('memory'),
+    variables: pick('variables'),
+    stars: pick('stars'),
+    avatarUpload: pick('avatarUpload'),
+    model: pick('model'),
+    browser: resolveBrowser(),
+  };
 }
 
 /**

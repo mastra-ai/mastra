@@ -1438,11 +1438,14 @@ describe('MastraEditor.resolveBuilder', () => {
   });
 
   it('passes options to EditorAgentBuilder', async () => {
-    const features = { agent: { tools: true } };
+    const features = { agent: { tools: false } };
     const configuration = { agent: { memory: {} } };
     const editor = new MastraEditor({ builder: { features, configuration } });
     const result = await editor.resolveBuilder();
-    expect(result?.getFeatures()).toBe(features);
+    const resolved = result?.getFeatures();
+    expect(resolved?.agent?.tools).toBe(false);
+    expect(resolved?.agent?.agents).toBe(true);
+    expect(resolved?.agent?.workflows).toBe(true);
     expect(result?.getConfiguration()).toBe(configuration);
   });
 

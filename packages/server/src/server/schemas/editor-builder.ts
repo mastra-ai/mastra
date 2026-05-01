@@ -2,7 +2,17 @@ import { z } from 'zod/v4';
 
 /**
  * Agent feature flags for the builder.
- * Omitted keys default to `false` (blocklist model).
+ *
+ * Wire format: each key is an optional boolean. The server normalizes admin
+ * input via `resolveAgentFeatures` (default-on semantics): any omitted key
+ * resolves to `true`; admins opt out by setting a key to `false`. The
+ * `GET /editor/builder/settings` response always carries a fully-resolved
+ * object — clients should still use strict `=== true` checks.
+ *
+ * Special cases:
+ * - `browser`: only resolves to `true` when `configuration.agent.browser` is
+ *   provided. Omitted with no config ⇒ silently `false` (no warning).
+ *   Explicit `true` with no config ⇒ warns and downgrades to `false`.
  */
 export const agentFeaturesSchema = z.object({
   tools: z.boolean().optional(),
@@ -17,7 +27,8 @@ export const agentFeaturesSchema = z.object({
   browser: z.boolean().optional(),
   /**
    * Whether the model picker is visible in the Agent Builder.
-   * Omitted/`false` ⇒ picker hidden (locked mode); `models.default` is applied.
+   * Omitted ⇒ picker visible (default-on). Explicit `false` ⇒ picker hidden
+   * (locked mode); `models.default` is required and applied.
    */
   model: z.boolean().optional(),
 });
