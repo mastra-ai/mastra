@@ -77,6 +77,7 @@ function createState(isRunning: boolean) {
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
+    allShellComponents: [],
     ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
   } as any;
 
