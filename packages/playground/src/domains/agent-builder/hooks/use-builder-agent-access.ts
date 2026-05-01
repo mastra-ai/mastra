@@ -27,8 +27,8 @@ export interface UseBuilderAgentAccessResult {
 export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
   const { hasAllPermissions, rbacEnabled } = usePermissions();
 
-  const hasRequiredPermissions = !rbacEnabled || hasAllPermissions(['agents:read', 'stored-agents:write']);
-  const canFetchSettings = !rbacEnabled || hasAllPermissions(['agents:read']);
+  const hasRequiredPermissions = !rbacEnabled || hasAllPermissions(['stored-agents:read', 'stored-agents:write']);
+  const canFetchSettings = !rbacEnabled || hasAllPermissions(['stored-agents:read']);
   const {
     data: builderSettings,
     isLoading,

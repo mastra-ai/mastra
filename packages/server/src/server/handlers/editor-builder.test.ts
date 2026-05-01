@@ -129,8 +129,8 @@ describe('GET /editor/builder/settings route metadata', () => {
     expect(GET_EDITOR_BUILDER_SETTINGS_ROUTE.method).toBe('GET');
   });
 
-  it('requires agents:read permission', () => {
-    expect(GET_EDITOR_BUILDER_SETTINGS_ROUTE.requiresPermission).toBe('agents:read');
+  it('requires stored-agents:read permission', () => {
+    expect(GET_EDITOR_BUILDER_SETTINGS_ROUTE.requiresPermission).toBe('stored-agents:read');
   });
 
   it('requires authentication', () => {

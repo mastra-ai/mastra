@@ -60,7 +60,7 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
   description: 'Returns the agent builder feature flags and configuration for UI gating',
   tags: ['Editor'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: 'stored-agents:read',
   handler: async ({ mastra }) => {
     try {
       const editor = mastra.getEditor();
