@@ -33,6 +33,11 @@ export interface GoalJudgeResult {
   reason: string;
 }
 
+export interface GoalEvaluationResult {
+  continuation: string | null;
+  judgeResult: GoalJudgeResult | null;
+}
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -46,10 +51,12 @@ You MUST respond with exactly one of these two words on the first line: "done" o
 Then on the second line, provide a brief reason (one sentence).
 
 Rules:
-- Say "done" ONLY if the goal has been clearly and fully achieved based on the assistant's last response.
-- Say "continue" if the goal is partially done, in progress, or not yet addressed.
-- When in doubt, say "continue".
-- Do not be overly strict — if the assistant has made substantial progress and the remaining work is trivial cleanup, say "done".`;
+- Say "done" if the goal has been clearly and fully achieved.
+- Say "done" if the assistant explicitly states the goal is complete, finished, or done.
+- Say "done" if all requested deliverables have been produced (e.g., all stories written, all items listed, all code generated).
+- Say "continue" ONLY if there is clearly unfinished work remaining that the assistant has not yet addressed.
+- If the assistant says it has completed the task or is waiting for further instructions, say "done".
+- When in doubt about whether the goal is complete, lean toward "done" — the user can always set a new goal.`;
 
 // =============================================================================
 // GoalManager
@@ -134,11 +141,11 @@ export class GoalManager {
 
   /**
    * Called after each agent turn completes. Evaluates whether to continue.
-   * Returns a continuation prompt if the goal is not yet achieved, or null if done/paused/budget exhausted.
+   * Returns a GoalEvaluationResult with continuation prompt and judge result.
    */
-  async evaluateAfterTurn(state: TUIState): Promise<string | null> {
+  async evaluateAfterTurn(state: TUIState): Promise<GoalEvaluationResult> {
     if (!this.goal || this.goal.status !== 'active') {
-      return null;
+      return { continuation: null, judgeResult: null };
     }
 
     this.goal.turnsUsed++;
@@ -150,10 +157,10 @@ export class GoalManager {
       if (this.goal.turnsUsed >= this.goal.maxTurns) {
         this.goal.status = 'paused';
         await this.saveToThread(state);
-        return null;
+        return { continuation: null, judgeResult: null };
       }
       await this.saveToThread(state);
-      return this.buildContinuationPrompt('No response yet, keep working.');
+      return { continuation: this.buildContinuationPrompt('No response yet, keep working.'), judgeResult: null };
     }
 
     // Call judge — always judge the current turn's response before enforcing budget
@@ -162,18 +169,18 @@ export class GoalManager {
     if (result.decision === 'done') {
       this.goal.status = 'done';
       await this.saveToThread(state);
-      return null;
+      return { continuation: null, judgeResult: result };
     }
 
     // Budget exhaustion (checked after judging so the last turn can still be marked done)
     if (this.goal.turnsUsed >= this.goal.maxTurns) {
       this.goal.status = 'paused';
       await this.saveToThread(state);
-      return null;
+      return { continuation: null, judgeResult: result };
     }
 
     await this.saveToThread(state);
-    return this.buildContinuationPrompt(result.reason);
+    return { continuation: this.buildContinuationPrompt(result.reason), judgeResult: result };
   }
 
   // ===========================================================================

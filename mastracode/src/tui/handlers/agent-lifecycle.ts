@@ -5,6 +5,7 @@
 import { Spacer, Text } from '@mariozechner/pi-tui';
 
 import { getCurrentGitBranch } from '../../utils/project.js';
+import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { showInfo } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
@@ -113,6 +114,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   // Pause the goal loop on user-initiated abort
   if (state.userInitiatedAbort && state.goalManager.isActive()) {
     state.goalManager.pause();
+    state.goalManager.saveToThread(state).catch(() => {});
     showInfo(state, 'Goal paused (interrupted). Use /goal resume to continue.');
   }
 
@@ -176,10 +178,18 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
 
   state.goalManager
     .evaluateAfterTurn(state)
-    .then(continuation => {
+    .then(({ continuation, judgeResult }) => {
+      // Display the judge result in chat if available
+      if (judgeResult) {
+        const goal = state.goalManager.getGoal()!;
+        const judgeComponent = new JudgeDisplayComponent(judgeResult, goal.turnsUsed, goal.maxTurns);
+        state.chatContainer.addChild(judgeComponent);
+        state.ui.requestRender();
+      }
+
       if (continuation) {
         const goal = state.goalManager.getGoal()!;
-        showInfo(state, `Continuing toward goal (${goal.turnsUsed}/${goal.maxTurns})...`);
+        showInfo(state, `Continuing toward goal (attempt ${goal.turnsUsed}/${goal.maxTurns})...`);
         ctx.fireMessage(continuation);
       } else {
         // Goal is done or paused
@@ -187,7 +197,7 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
         if (goal?.status === 'done') {
           showInfo(state, `Goal achieved: "${goal.objective}"`);
         } else if (goal?.status === 'paused') {
-          showInfo(state, `Goal paused (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`);
+          showInfo(state, `Goal paused (attempt ${goal.turnsUsed}/${goal.maxTurns}). Use /goal resume to continue.`);
         }
       }
     })

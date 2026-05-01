@@ -152,9 +152,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
-      // If a goal was just set (still in memory), save it to the new thread.
-      // Otherwise load from the (likely empty) new-thread metadata.
-      if (state.goalManager.getGoal()) {
+      // If a goal was just set (turnsUsed === 0) and hasn't been persisted yet,
+      // save it to the new thread (this happens when /goal's sendMessage creates the thread).
+      // Otherwise clear the in-memory goal so it doesn't bleed into unrelated new threads.
+      const currentGoal = state.goalManager.getGoal();
+      if (currentGoal && currentGoal.turnsUsed === 0 && currentGoal.status === 'active') {
         state.goalManager.saveToThread(state).catch(() => {});
       } else {
         state.goalManager.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);

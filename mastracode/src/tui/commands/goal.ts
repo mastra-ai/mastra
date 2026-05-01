@@ -10,11 +10,14 @@
  *   /goal clear       Drop the goal
  */
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 
 import type { SlashCommandContext } from './types.js';
+
+const DEFAULT_MAX_CYCLES = 20;
 
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state } = ctx;
@@ -112,20 +115,40 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
         (s.models as Record<string, unknown>).goalJudgeModel = model.id;
         saveSettings(s);
 
-        // Set the goal
-        const goal = goalManager.setGoal(objective, model.id);
-        await goalManager.saveToThread(state);
-        ctx.showInfo(`Goal set (${goal.maxTurns}-turn budget, judge: ${model.id}): "${objective}"`);
+        // Show max-cycles input
+        const cyclesDialog = new GoalCyclesDialogComponent({
+          defaultValue: DEFAULT_MAX_CYCLES,
+          onSubmit: async (maxCycles: number) => {
+            state.ui.hideOverlay();
 
-        // Kick off the first turn
-        try {
-          await state.harness.sendMessage({ content: objective });
-        } catch (err) {
-          goalManager.pause();
-          await goalManager.saveToThread(state);
-          ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
-        }
-        resolve();
+            // Set the goal
+            const goal = goalManager.setGoal(objective, model.id, maxCycles);
+            await goalManager.saveToThread(state);
+            ctx.showInfo(`Goal set (${goal.maxTurns} max attempts, judge: ${model.id}): "${objective}"`);
+
+            // Kick off the first turn
+            try {
+              await state.harness.sendMessage({ content: objective });
+            } catch (err) {
+              goalManager.pause();
+              await goalManager.saveToThread(state);
+              ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            resolve();
+          },
+          onCancel: () => {
+            state.ui.hideOverlay();
+            ctx.showInfo('Goal cancelled.');
+            resolve();
+          },
+        });
+
+        state.ui.showOverlay(cyclesDialog, {
+          width: '50%',
+          maxHeight: '40%',
+          anchor: 'center',
+        });
+        cyclesDialog.focused = true;
       },
       onCancel: () => {
         state.ui.hideOverlay();
