@@ -13,6 +13,7 @@ import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { MongoDBPromptBlocksStorage } from './domains/prompt-blocks';
+import { SchedulesMongoDB } from './domains/schedules';
 import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { MongoDBSkillsStorage } from './domains/skills';
@@ -31,6 +32,7 @@ export {
   MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
   MongoDBPromptBlocksStorage,
+  SchedulesMongoDB,
   MongoDBScorerDefinitionsStorage,
   MongoDBSkillsStorage,
   MongoDBWorkspacesStorage,
@@ -104,6 +106,8 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const backgroundTasks = new BackgroundTasksStorageMongoDB(domainConfig);
 
+    const schedules = new SchedulesMongoDB(domainConfig);
+
     this.stores = {
       memory,
       scores,
@@ -120,6 +124,7 @@ export class MongoDBStore extends MastraCompositeStore {
       backgroundTasks,
       datasets,
       experiments,
+      schedules,
     };
   }
 
