@@ -20,8 +20,8 @@ export type WorkflowStateReader = {
   getStatus: () => WorkflowState['status'];
   getResult: () => WorkflowState['result'];
   getError: () => WorkflowState['error'];
-  getStepOutput: (stepId: string) => any;
-  getStepPayload: (stepId: string) => any;
+  getStepOutput: <T = any>(stepId: string) => T | Array<T | undefined> | undefined;
+  getStepPayload: <T = any>(stepId: string) => T | Array<T | undefined> | undefined;
   getSuspendedStep: () => WorkflowSuspendedStep | undefined;
   getSuspendedSteps: () => WorkflowSuspendedStep[];
   getResumeLabel: (label: string) => WorkflowResumeLabel | undefined;
@@ -39,14 +39,20 @@ const getNestedSuspendPath = (step?: WorkflowStateStepResult): string[] => {
   return Array.isArray(path) ? path.filter((part): part is string => typeof part === 'string') : [];
 };
 
-export function getWorkflowStepOutput(state: WorkflowState, stepId: string) {
+export function getWorkflowStepOutput<T = any>(
+  state: WorkflowState,
+  stepId: string,
+): T | Array<T | undefined> | undefined {
   const step = getStep(state, stepId);
-  return Array.isArray(step) ? step.map(result => result?.output) : step?.output;
+  return Array.isArray(step) ? step.map(result => result?.output as T | undefined) : (step?.output as T | undefined);
 }
 
-export function getWorkflowStepPayload(state: WorkflowState, stepId: string) {
+export function getWorkflowStepPayload<T = any>(
+  state: WorkflowState,
+  stepId: string,
+): T | Array<T | undefined> | undefined {
   const step = getStep(state, stepId);
-  return Array.isArray(step) ? step.map(result => result?.payload) : step?.payload;
+  return Array.isArray(step) ? step.map(result => result?.payload as T | undefined) : (step?.payload as T | undefined);
 }
 
 export function getWorkflowResumeLabel(state: WorkflowState, label: string) {

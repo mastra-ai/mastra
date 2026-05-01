@@ -21,6 +21,7 @@ describe('workflow state reader', () => {
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     status: 'suspended',
+    error: { message: 'workflow failed' },
     payload: { value: 'initial' },
     result: { done: true },
     steps: {
@@ -74,7 +75,7 @@ describe('workflow state reader', () => {
 
     expect(reader.getStatus()).toBe('suspended');
     expect(reader.getResult()).toEqual({ done: true });
-    expect(reader.getError()).toBeUndefined();
+    expect(reader.getError()).toEqual({ message: 'workflow failed' });
     expect(reader.getStepOutput('first-step')).toEqual({ value: 'processed' });
     expect(reader.getStepPayload('first-step')).toEqual({ value: 'initial' });
     expect(reader.getStepOutput('nested-workflow.review-step')).toEqual({ reviewed: true });

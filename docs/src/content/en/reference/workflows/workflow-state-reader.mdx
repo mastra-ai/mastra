@@ -43,27 +43,27 @@ Returns: `WorkflowStateReader`
 
 ### `getWorkflowStepOutput(state, stepId)`
 
-Returns the output for a step ID, including nested workflow dot paths such as `parent.child`.
+Returns the output for a step ID, including nested workflow dot paths such as `parent.child`. For `foreach` steps, returns one entry per iteration; suspended iterations can have `undefined` output entries.
 
 ```typescript
 const output = getWorkflowStepOutput(state, 'extract-data')
 ```
 
-Returns: `any | undefined`
+Returns: `any | Array<any | undefined> | undefined`
 
 ### `getWorkflowStepPayload(state, stepId)`
 
-Returns the payload that was passed to a step.
+Returns the payload that was passed to a step. For `foreach` steps, returns one entry per iteration.
 
 ```typescript
 const payload = getWorkflowStepPayload(state, 'extract-data')
 ```
 
-Returns: `any | undefined`
+Returns: `any | Array<any | undefined> | undefined`
 
 ### `getWorkflowSuspendedStep(state)`
 
-Returns the first suspended step from the workflow state.
+Returns the first suspended step from the workflow state. When multiple steps are suspended, ordering follows the order stored in `suspendedPaths`.
 
 ```typescript
 const suspendedStep = getWorkflowSuspendedStep(state)
@@ -124,12 +124,12 @@ Returns: `Record<string, { stepId: string; foreachIndex?: number }>`
   },
   {
     name: 'getStepOutput',
-    type: '(stepId: string) => any | undefined',
+    type: '(stepId: string) => any | Array<any | undefined> | undefined',
     description: 'Returns the output for a step ID or nested workflow dot path.',
   },
   {
     name: 'getStepPayload',
-    type: '(stepId: string) => any | undefined',
+    type: '(stepId: string) => any | Array<any | undefined> | undefined',
     description: 'Returns the payload for a step ID or nested workflow dot path.',
   },
   {
@@ -174,6 +174,10 @@ type WorkflowResumeLabel = {
   foreachIndex?: number
 }
 ```
+
+## Notes
+
+`requestContext` and `tracingContext` are only returned by `workflow.getWorkflowRunById()` when explicitly requested with `fields`.
 
 ## Related
 

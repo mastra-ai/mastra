@@ -345,6 +345,7 @@ export interface WorkflowState {
  * Valid field names for filtering WorkflowState responses.
  * Use with getWorkflowRunById to reduce payload size.
  * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
+ * requestContext and tracingContext are only returned when explicitly requested.
  */
 export type WorkflowStateField =
   | 'result'
