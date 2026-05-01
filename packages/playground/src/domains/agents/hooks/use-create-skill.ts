@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree';
 import type { InMemoryFileNode } from '../components/agent-edit-page/utils/form-validation';
+import { usePermissions } from '@/domains/auth/hooks';
 import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 
 interface CreateSkillParams {
@@ -32,24 +33,30 @@ export function useCreateSkill() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const writeFile = useWriteWorkspaceFile();
+  const { hasPermission } = usePermissions();
+  const canWriteWorkspace = hasPermission('workspaces:write');
 
   return useMutation({
     mutationFn: async (params: CreateSkillParams): Promise<StoredSkillResponse> => {
       const { name, description, workspaceId, files } = params;
 
-      // Write files to workspace filesystem if a workspace is available
-      if (workspaceId) {
+      // Write files to workspace filesystem (best-effort — DB is the source of truth)
+      if (workspaceId && canWriteWorkspace) {
         const filesToWrite = flattenFiles(files, '');
-        await Promise.all(
-          filesToWrite.map(file =>
-            writeFile.mutateAsync({
-              workspaceId,
-              path: `skills/${file.path}`,
-              content: file.content,
-              recursive: true,
-            }),
-          ),
-        );
+        try {
+          await Promise.all(
+            filesToWrite.map(file =>
+              writeFile.mutateAsync({
+                workspaceId,
+                path: `skills/${file.path}`,
+                content: file.content,
+                recursive: true,
+              }),
+            ),
+          );
+        } catch (err) {
+          console.warn('[skill] Workspace file write failed, saving to DB only:', err);
+        }
       }
 
       // Create stored skill via API (DB record always created)

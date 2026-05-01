@@ -166,15 +166,15 @@ export const mastra = new Mastra({
       },
       configuration: {
         agent: {
-          // workspace: { type: 'id', workspaceId: 'builder-workspace' },
-          workspace: {
-            type: 'inline',
-            config: {
-              name: 'builder-workspace',
-              filesystem: { provider: 'local', config: { basePath: '.mastra/workspace' } },
-              sandbox: { provider: 'daytona', config: {} },
-            },
-          },
+          workspace: { type: 'id', workspaceId: 'builder-workspace' },
+          // workspace: {
+          //   type: 'inline',
+          //   config: {
+          //     name: 'builder-workspace',
+          //     filesystem: { provider: 'local', config: { basePath: '.mastra/workspace' } },
+          //     sandbox: { provider: 'daytona', config: {} },
+          //   },
+          // },
           memory: {
             options: {
               lastMessages: 10,

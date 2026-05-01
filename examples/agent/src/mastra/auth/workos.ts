@@ -24,11 +24,10 @@ export async function initWorkOS(): Promise<AuthResult> {
       // Agent Builder access: CRUD agents/skills, workspace file I/O, chat history
       member: [
         'stored-agents:*',
-        'agents:*',
         'stored-skills:*',
-        'stored-workspaces:read',
-        'workspaces:read',
-        'workspaces:write',
+        'agents:read',
+        'agents:execute',
+        //not necessary, but lose out on some features (tools in tool list and chat history)
         'tools:read',
         'workflows:read',
         'memory:read',
