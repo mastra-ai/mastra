@@ -27,6 +27,24 @@ import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from
 
 const FILTER_ACCESSIBLE_CHECK_CONCURRENCY = 5;
 
+export class WorkOSFGAResourceNotFoundError extends Error {
+  readonly status = 404;
+  readonly resourceType: string;
+  readonly resourceId: string;
+
+  constructor(resourceType: string, resourceId: string) {
+    super(
+      `[MastraFGAWorkos] Resource '${resourceType}/${resourceId}' is not registered in WorkOS. ` +
+        `Create the '${resourceType}' resource type in your WorkOS dashboard, ` +
+        `then register '${resourceId}' using MastraFGAWorkos.createResource() or your seed script. ` +
+        `See https://workos.com/docs/fga for setup instructions.`,
+    );
+    this.name = 'WorkOSFGAResourceNotFoundError';
+    this.resourceType = resourceType;
+    this.resourceId = resourceId;
+  }
+}
+
 export class WorkOSFGAMembershipResolutionError extends Error {
   readonly status = 500;
   readonly userId?: string;
@@ -116,8 +134,15 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   async check(user: WorkOSUser, params: FGACheckParams): Promise<boolean> {
     const checkOptions = this.buildCheckOptions(user, params);
     if (!checkOptions) return false;
-    const result = await this.workos.authorization.check(checkOptions);
-    return result.authorized;
+    try {
+      const result = await this.workos.authorization.check(checkOptions);
+      return result.authorized;
+    } catch (error: any) {
+      if (error?.status === 404 || error?.code === 'entity_not_found') {
+        throw new WorkOSFGAResourceNotFoundError(params.resource.type, params.resource.id);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -129,9 +154,17 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       throw new FGADeniedError(user, params.resource, params.permission);
     }
 
-    const result = await this.workos.authorization.check(checkOptions);
-    if (!result.authorized) {
-      throw new FGADeniedError(user, params.resource, params.permission);
+    try {
+      const result = await this.workos.authorization.check(checkOptions);
+      if (!result.authorized) {
+        throw new FGADeniedError(user, params.resource, params.permission);
+      }
+    } catch (error: any) {
+      if (error instanceof FGADeniedError) throw error;
+      if (error?.status === 404 || error?.code === 'entity_not_found') {
+        throw new WorkOSFGAResourceNotFoundError(params.resource.type, params.resource.id);
+      }
+      throw error;
     }
   }
 
