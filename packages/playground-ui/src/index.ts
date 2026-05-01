@@ -68,7 +68,6 @@ export * from './ds/components/FormFields';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
-export * from './ds/components/Notification';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SelectElement';
