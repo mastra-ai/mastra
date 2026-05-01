@@ -7,7 +7,8 @@ import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
-import type { AgentChannels } from '../channels/agent-channels';
+import { AgentChannels } from '../channels';
+import type { ChannelProvider } from '../channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -35,7 +36,7 @@ import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../obs
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
@@ -127,6 +128,7 @@ export interface Config<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -312,6 +314,26 @@ export interface Config<
   backgroundTasks?: BackgroundTaskManagerConfig;
 
   /**
+   * Platform channels for messaging integrations (Slack, Discord, etc.).
+   * Routes are automatically registered and agents can reference channel configs.
+   *
+   * @example
+   * ```typescript
+   * import { SlackProvider } from '@mastra/slack';
+   *
+   * new Mastra({
+   *   channels: {
+   *     slack: new SlackProvider({
+   *       configToken: process.env.SLACK_APP_CONFIG_TOKEN,
+   *       refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  channels?: TChannels;
+
+  /**
    * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
    * When set, the value is automatically attached to all observability signals
    * so they can be filtered by environment without passing
@@ -380,6 +402,7 @@ export class Mastra<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -411,6 +434,7 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
+  #channels?: TChannels;
   #environment?: string;
 
   #events: {
@@ -479,6 +503,34 @@ export class Mastra<
    */
   public getEditor() {
     return this.#editor;
+  }
+
+  /**
+   * Gets a registered channel provider by its key.
+   *
+   * @example
+   * ```typescript
+   * import { SlackProvider } from '@mastra/slack';
+   * const slack = mastra.getChannelProvider<SlackProvider>('slack');
+   * ```
+   */
+  public getChannelProvider<T extends ChannelProvider = ChannelProvider>(key: string): T | undefined {
+    return this.#channels?.[key] as T | undefined;
+  }
+
+  /**
+   * Gets all registered channel providers.
+   */
+  public getChannelProviders(): Record<string, ChannelProvider> | undefined {
+    return this.#channels;
+  }
+
+  /**
+   * Shorthand getter for platform channels.
+   * Usage: `mastra.channels.slack.connect(agentId)`
+   */
+  public get channels(): TChannels {
+    return (this.#channels ?? {}) as TChannels;
   }
 
   /**
@@ -658,7 +710,19 @@ export class Mastra<
    * ```
    */
   constructor(
-    config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
+    config?: Config<
+      TAgents,
+      TWorkflows,
+      TVectors,
+      TTTS,
+      TLogger,
+      TMCPServers,
+      TScorers,
+      TTools,
+      TProcessors,
+      TMemory,
+      TChannels
+    >,
   ) {
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
     // can correlate logs to the active span. Must happen before any agent runs.
@@ -873,6 +937,34 @@ export class Mastra<
       this.#server = config.server;
     }
 
+    // Register channels and merge their routes into server config
+    if (config?.channels) {
+      this.#channels = config.channels;
+      const channelRoutes: ApiRoute[] = [];
+
+      for (const [, channel] of Object.entries(config.channels)) {
+        if (channel == null) continue;
+
+        // Attach the channel to this Mastra instance
+        if (channel.__attach) {
+          channel.__attach(this);
+        }
+
+        // Collect routes from the channel
+        const routes = channel.getRoutes();
+        channelRoutes.push(...routes);
+      }
+
+      // Merge channel routes into server config
+      if (channelRoutes.length > 0) {
+        const existingRoutes = this.#server?.apiRoutes ?? [];
+        this.#server = {
+          ...this.#server,
+          apiRoutes: [...existingRoutes, ...channelRoutes],
+        };
+      }
+    }
+
     // Agents must be added after server config so that channel webhook routes
     // are appended to (not replaced by) the server config.
     if (config?.agents) {
@@ -891,6 +983,22 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+
+    // Initialize channels asynchronously (auto-provision apps, etc.)
+    // This runs after all agents are registered so configs are available
+    if (this.#channels) {
+      void Promise.resolve().then(async () => {
+        for (const [key, channel] of Object.entries(this.#channels ?? {})) {
+          if (channel.initialize) {
+            try {
+              await channel.initialize();
+            } catch (err) {
+              console.error(`[Mastra] Failed to initialize channel "${key}":`, err);
+            }
+          }
+        }
+      });
+    }
   }
 
   #ensureBackgroundTaskManager(): void {
@@ -994,7 +1102,7 @@ export class Mastra<
     const result: Record<string, AgentChannels> = {};
     for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
       const agentChannels = agent.getChannels();
-      if (agentChannels) {
+      if (agentChannels instanceof AgentChannels) {
         result[agentKey] = agentChannels;
       }
     }
@@ -1286,18 +1394,18 @@ export class Mastra<
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
 
-    // Register webhook routes and initialize channels
-    const agentChannels = mastraAgent.getChannels();
-    if (agentChannels) {
-      agentChannels.__setLogger(this.#logger);
-      const channelRoutes = agentChannels.getWebhookRoutes();
+    // Set up AgentChannels for manual adapter configurations
+    const agentChannelsInstance = mastraAgent.getChannels();
+    if (agentChannelsInstance) {
+      agentChannelsInstance.__setLogger(this.#logger);
+      const channelRoutes = agentChannelsInstance.getWebhookRoutes();
       if (channelRoutes.length > 0) {
         this.#server = {
           ...this.#server,
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannels.initialize(this);
+      void agentChannelsInstance.initialize(this);
     }
   }
 

@@ -71,6 +71,7 @@ function createMockSettings() {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    observability: { resources: {}, localTracing: false },
   };
 }
 

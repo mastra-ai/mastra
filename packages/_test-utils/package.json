@@ -1,6 +1,6 @@
 {
   "name": "@internal/test-utils",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Mastra-specific test helpers - version-agnostic agent wrappers, dummy API keys",
   "type": "module",
   "private": true,

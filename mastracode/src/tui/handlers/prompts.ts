@@ -47,10 +47,14 @@ export async function handleAskQuestion(
           let questionComponent: AskQuestionInlineComponent;
 
           if (askUserComponent) {
-            // Activate the existing streaming component with interactive elements
+            // Activate the existing streaming component with interactive elements.
+            // ask_user is the agent's free-text channel — opt into multiline so users
+            // can paste logs / write paragraph-length replies.
             askUserComponent.activate({
               question,
               options,
+              multiline: true,
+              tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.harness.respondToQuestion({ questionId, answer });
@@ -66,11 +70,13 @@ export async function handleAskQuestion(
             });
             questionComponent = askUserComponent;
           } else {
-            // Fallback: create a new component if no streaming one exists
+            // Fallback: create a new component if no streaming one exists.
+            // Multiline opt-in matches the streaming branch above.
             questionComponent = new AskQuestionInlineComponent(
               {
                 question,
                 options,
+                multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.harness.respondToQuestion({ questionId, answer });
@@ -115,10 +121,12 @@ export async function handleAskQuestion(
         activate();
       }
     } else {
-      // Dialog mode: Show overlay
+      // Dialog mode: Show overlay. Multiline opt-in matches the inline branch.
       const dialog = new AskQuestionDialogComponent({
         question,
         options,
+        multiline: true,
+        tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.harness.respondToQuestion({ questionId, answer });

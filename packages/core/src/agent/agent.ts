@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -391,13 +392,20 @@ export class Agent<
     if (config.channels) {
       if (config.channels instanceof AgentChannels) {
         this.#agentChannels = config.channels;
-      } else if (config.channels.adapters && Object.keys(config.channels.adapters).length > 0) {
+        this.#agentChannels.__setAgent(this);
+      } else if (
+        'adapters' in config.channels &&
+        config.channels.adapters &&
+        Object.keys(config.channels.adapters).length > 0
+      ) {
+        // ChannelConfig with adapters — direct adapter configuration
+        const channelConfig = config.channels as ChannelConfig;
         this.#agentChannels = new AgentChannels({
-          ...config.channels,
-          userName: config.channels.userName ?? config.name,
+          ...channelConfig,
+          userName: channelConfig.userName ?? config.name,
         });
+        this.#agentChannels.__setAgent(this);
       }
-      this.#agentChannels?.__setAgent(this);
     }
 
     if (config.browser) {
@@ -565,6 +573,19 @@ export class Agent<
    */
   getChannels(): AgentChannels | null {
     return this.#agentChannels;
+  }
+
+  /**
+   * Sets the AgentChannels instance for this agent.
+   * Used by ChannelProvider implementations to inject the channels they create.
+   * @internal
+   */
+  setChannels(agentChannels: AgentChannels): void {
+    if (this.#agentChannels && this.#agentChannels !== agentChannels) {
+      this.logger?.debug(`Replacing existing AgentChannels on agent "${this.name}"`);
+    }
+    this.#agentChannels = agentChannels;
+    agentChannels.__setAgent(this);
   }
 
   /**
