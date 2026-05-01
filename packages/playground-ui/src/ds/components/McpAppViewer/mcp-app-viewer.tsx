@@ -111,14 +111,41 @@ export function McpAppViewer({
         if (method === 'tools/call' && onToolCall) {
           const { name, arguments: args } = data.params ?? {};
           try {
-            const result = await onToolCall(name, args ?? {});
+            const raw = await onToolCall(name, args ?? {});
+
+            // Detect if the result is already a CallToolResult (has content array with typed items)
+            // or wrapped in an API envelope { result: CallToolResult }
+            const isCtResult = (obj: unknown): boolean =>
+              !!obj &&
+              typeof obj === 'object' &&
+              Array.isArray((obj as Record<string, unknown>).content) &&
+              ((obj as Record<string, unknown>).content as unknown[]).length > 0 &&
+              typeof ((obj as Record<string, unknown>).content as Record<string, unknown>[])[0]?.type === 'string';
+
+            let callToolResult;
+            if (
+              raw &&
+              typeof raw === 'object' &&
+              'result' in raw &&
+              isCtResult((raw as Record<string, unknown>).result)
+            ) {
+              // API envelope: { result: CallToolResult }
+              callToolResult = (raw as Record<string, unknown>).result;
+            } else if (isCtResult(raw)) {
+              // Already a CallToolResult
+              callToolResult = raw;
+            } else {
+              // Simple value — wrap it
+              callToolResult = {
+                content: [{ type: 'text', text: typeof raw === 'string' ? raw : JSON.stringify(raw) }],
+                structuredContent: typeof raw === 'object' ? raw : { result: raw },
+              };
+            }
+
             postToIframe({
               jsonrpc: '2.0',
               id: data.id,
-              result: {
-                content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
-                structuredContent: typeof result === 'object' ? result : { result },
-              },
+              result: callToolResult,
             });
           } catch (err) {
             postToIframe({
