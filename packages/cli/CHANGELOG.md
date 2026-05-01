@@ -1,5 +1,13 @@
 # mastra
 
+## 1.7.3-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/deployer@1.31.0-alpha.5
+  - @mastra/core@1.31.0-alpha.5
+
 ## 1.7.3-alpha.5
 
 ### Patch Changes

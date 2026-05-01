@@ -155,6 +155,7 @@
     "fix-batch-parts-processor-id",
     "fix-dataset-experiment-compare-row-click",
     "fix-pg-sanitize-surrogate-escape-15920",
+    "fix-tool-execute-dynamic-resolver",
     "fix-toolcallfilter-per-step",
     "fix-workspace-search-mode-fallback",
     "fix-workspace-tools-relative-paths",

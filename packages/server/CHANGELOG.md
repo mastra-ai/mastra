@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.31.0-alpha.5
+
+### Patch Changes
+
+- Fix `GET /tools/:toolId` and `POST /tools/:toolId/execute` to find dynamically-resolved agent tools (provided via `toolsResolver` / function-based `tools`) when they are not in the static tool registry. Errors thrown by an individual agent's `listTools()` during the lookup are now logged as warnings instead of being silently swallowed. ([#13989](https://github.com/mastra-ai/mastra/pull/13989))
+
+- Updated dependencies:
+  - @mastra/core@1.31.0-alpha.5
+
 ## 1.31.0-alpha.4
 
 ### Patch Changes
