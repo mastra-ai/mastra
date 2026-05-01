@@ -214,7 +214,16 @@
                           },
                           "environment": "test"
                         },
-                        "input": {},
+                        "input": [
+                          {
+                            "role": "system",
+                            "content": "You are an agent in a workflow"
+                          },
+                          {
+                            "role": "user",
+                            "content": "test query"
+                          }
+                        ],
                         "output": {
                           "text": "Test response from agent",
                           "toolCalls": []

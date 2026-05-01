@@ -141,7 +141,16 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You can execute workflows that exist in your config"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Execute the simpleWorkflow with test input"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -344,7 +353,24 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You can execute workflows that exist in your config"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Execute the simpleWorkflow with test input"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: workflow-simpleWorkflow]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: workflow-simpleWorkflow]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
