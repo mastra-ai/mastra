@@ -88,34 +88,59 @@ Visit [MCPServer reference](/reference/tools/mcp-server#mcp-apps-appresources) f
 
 ## Connecting MCP Apps to agents
 
-Add the MCP server to an agent's `mcpServers` config. The agent automatically gets all tools from its declared MCP servers, and Studio scopes app resource lookups to those servers.
+Agents consume tools — they do not need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
-import { myAppServer } from '../mcp/server'
+import { calculatorTool } from '../mcp/tools'
 
 export const myAgent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You have access to interactive UI tools.',
   model: 'openai/gpt-5-mini',
-  mcpServers: {
-    myAppServer,
-  },
+  tools: { calculatorTool },
 })
 ```
 
-You do not need to extract tools from the MCP server and add them to the agent's `tools` config. The `mcpServers` config handles tool resolution automatically. The MCP server is also auto-registered at the Mastra instance level so Studio can access its resources.
+Register the MCP server at the Mastra level. Studio scans registered MCP servers to map tools to their app resources.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { myAgent } from './agents'
+import { myAppServer } from './mcp/server'
 
 export const mastra = new Mastra({
   agents: { myAgent },
-  // myAppServer is auto-registered through the agent — no need to list it here
+  mcpServers: { myAppServer },
 })
 ```
+
+For remote MCP servers, use `MCPClient.listTools()` to get tools and `toMCPServerProxies()` to register the server:
+
+```typescript title="src/mastra/index.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const mcpClient = new MCPClient({
+  servers: {
+    remoteApp: { url: new URL('https://remote-mcp-server.example.com/mcp') },
+  },
+})
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  model: 'openai/gpt-5-mini',
+  tools: await mcpClient.listTools(),
+})
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: { ...mcpClient.toMCPServerProxies() },
+})
+```
+
+When tools come from `MCPClient.listTools()`, each tool's `_meta.ui` is automatically stamped with a `serverId` so Studio can resolve its app resources without scanning all servers.
 
 ## How MCP Apps work
 
@@ -186,11 +211,12 @@ window.__mcpApp.ontoolinput = function (input) {
 
 ## Using external MCP servers with apps
 
-External (non-Mastra) MCP servers that implement the MCP Apps extension can be connected to Mastra using `MCPClient`. Use `toMCPServerProxies()` to expose them in Studio.
+External (non-Mastra) MCP servers that implement the MCP Apps extension work with Mastra via `MCPClient`. Use `listTools()` for agent tools and `toMCPServerProxies()` to register them in Studio.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { MCPClient } from '@mastra/mcp'
+import { Agent } from '@mastra/core/agent'
 
 const mcpClient = new MCPClient({
   servers: {
@@ -201,9 +227,17 @@ const mcpClient = new MCPClient({
   },
 })
 
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  model: 'openai/gpt-5-mini',
+  tools: await mcpClient.listTools(),
+})
+
 export const mastra = new Mastra({
+  agents: { myAgent },
   mcpServers: {
-    ...(await mcpClient.toMCPServerProxies()),
+    ...mcpClient.toMCPServerProxies(),
   },
 })
 ```

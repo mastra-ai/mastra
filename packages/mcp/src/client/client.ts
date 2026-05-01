@@ -765,7 +765,10 @@ export class InternalMastraMCPClient extends MastraBase {
         // When requireToolApproval is false/undefined, requireApproval stays undefined
         // and createTool defaults it to false
 
-        const toolMeta = (tool as { _meta?: Record<string, unknown> })._meta;
+        const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
+        // Stamp serverId into _meta.ui so consumers can resolve app resources
+        // back to the originating MCP server without scanning all servers.
+        const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -885,5 +888,14 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     return toolsRes;
+  }
+
+  private stampServerIdInMeta(meta: Record<string, unknown>): Record<string, unknown> {
+    const ui = meta.ui as Record<string, unknown> | undefined;
+    if (!ui?.resourceUri) return meta;
+    return {
+      ...meta,
+      ui: { ...ui, serverId: this.name },
+    };
   }
 }

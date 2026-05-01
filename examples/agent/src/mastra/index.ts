@@ -22,7 +22,7 @@ import {
   slackDemoAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
-import { myMcpServer, myMcpServerTwo } from './mcp/server';
+import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
 
 // Non-Mastra MCP server — uses @modelcontextprotocol/sdk directly via stdio.
 // toMCPServerProxies() wraps each MCPClient connection as an MCPServerBase so
@@ -136,7 +136,7 @@ export const mastra = new Mastra({
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,
-    // mcpAppsServer is auto-registered through mcpAppsAgent's mcpServers config
+    mcpAppsServer,
     ...externalMcpClient.toMCPServerProxies(),
   },
   workflows: {

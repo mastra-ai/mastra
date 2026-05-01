@@ -39,7 +39,6 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
-import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
@@ -260,7 +259,6 @@ export class Agent<
   #browser?: MastraBrowser;
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
-  #mcpServers?: Record<string, MCPServerBase>;
   #backgroundTasks?: AgentBackgroundConfig;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
@@ -359,7 +357,6 @@ export class Agent<
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
-    this.#mcpServers = config.mcpServers;
 
     if (config.mastra) {
       this.__registerMastra(config.mastra);
@@ -1762,13 +1759,6 @@ export class Agent<
 
       return ensureToolProperties(tools) as TTools;
     });
-  }
-
-  /**
-   * Returns the MCP servers configured on this agent, if any.
-   */
-  public getMcpServers(): Record<string, MCPServerBase> | undefined {
-    return this.#mcpServers;
   }
 
   /**
@@ -4733,8 +4723,6 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
-    const mcpServerTools = this.listMcpServerTools();
-
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -4746,26 +4734,8 @@ export class Agent<
       ...skillTools,
       ...channelTools,
       ...browserTools,
-      ...mcpServerTools,
     };
     return this.formatTools(allTools);
-  }
-
-  /**
-   * Collects converted tools from the agent's declared MCP servers.
-   * @internal
-   */
-  private listMcpServerTools(): Record<string, CoreTool> {
-    if (!this.#mcpServers) return {};
-    const tools: Record<string, CoreTool> = {};
-    for (const server of Object.values(this.#mcpServers)) {
-      if (server.convertedTools) {
-        for (const [name, tool] of Object.entries(server.convertedTools)) {
-          tools[name] = tool;
-        }
-      }
-    }
-    return tools;
   }
 
   /**

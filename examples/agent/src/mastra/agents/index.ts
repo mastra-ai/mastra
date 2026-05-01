@@ -6,7 +6,7 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
-import { mcpAppsServer } from '../mcp/server';
+import { calculatorWithUI, greetUserWithUI } from '../mcp/app-tools';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { requestContextDemoAgent } from './request-context-demo-agent';
@@ -243,9 +243,10 @@ export const evalAgent = new Agent({
 
 export { requestContextDemoAgent };
 
-// MCP Apps Demo Agent — uses mcpServers to get tools with interactive MCP App UIs.
-// The agent automatically gets all tools from its declared MCP servers,
-// and Studio can resolve app resources (ui:// URIs) from those servers.
+// MCP Apps Demo Agent — tools are passed directly, not via mcpServers/mcpClients.
+// The MCPServer is registered at the Mastra level for Studio resource resolution,
+// while the agent simply consumes tools. Studio resolves ui:// app resources by
+// scanning registered MCP servers and matching tool names.
 export const mcpAppsAgent = new Agent({
   id: 'mcp-apps-agent',
   name: 'MCP Apps Agent',
@@ -260,7 +261,8 @@ Available tools:
 - calculatorWithUI: Opens an interactive calculator. Use when asked to do math.
 - greetUserWithUI: Opens an interactive greeting app. Use when asked to greet someone.`,
   model: 'openai/gpt-5-mini',
-  mcpServers: {
-    mcpAppsServer,
+  tools: {
+    calculatorWithUI,
+    greetUserWithUI,
   },
 });

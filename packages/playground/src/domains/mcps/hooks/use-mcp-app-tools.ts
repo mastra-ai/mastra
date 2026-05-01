@@ -8,27 +8,27 @@ export interface McpAppToolInfo {
 }
 
 /**
- * Builds a map of tool names → MCP App info for tools across MCP servers
- * that have `_meta.ui.resourceUri` (i.e., tools with interactive MCP App UIs).
+ * Builds a map of tool names → MCP App info for tools across all registered
+ * MCP servers that have `_meta.ui.resourceUri` (i.e., tools with interactive
+ * MCP App UIs).
  *
- * When `mcpServerIds` is provided, only those servers are scanned.
- * This allows scoping app resource lookups to an agent's declared MCP servers.
+ * For each app tool, entries are created under both the original tool name
+ * and the namespaced name (`${serverId}_${toolName}`) so that agent tools
+ * sourced via `MCPClient.listTools()` (which namespaces) can be resolved.
  */
-export function useMcpAppTools(mcpServerIds?: string[]) {
+export function useMcpAppTools() {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['mcp-app-tools', mcpServerIds ?? 'all'],
+    queryKey: ['mcp-app-tools'],
     queryFn: async () => {
       const map: Record<string, McpAppToolInfo> = {};
 
       const { servers } = await client.getMcpServers();
       if (!servers?.length) return map;
 
-      const filteredServers = mcpServerIds ? servers.filter(s => mcpServerIds.includes(s.id)) : servers;
-
       const results = await Promise.allSettled(
-        filteredServers.map(async server => {
+        servers.map(async server => {
           const { tools } = await client.getMcpServerTools(server.id);
           return { serverId: server.id, tools };
         }),
@@ -42,10 +42,13 @@ export function useMcpAppTools(mcpServerIds?: string[]) {
           const resourceUri = meta?.ui?.resourceUri;
           if (resourceUri) {
             const toolId = tool.id ?? tool.name;
-            map[toolId] = { serverId, toolId, resourceUri };
+            const info: McpAppToolInfo = { serverId, toolId, resourceUri };
+            map[toolId] = info;
             if (tool.name !== toolId) {
-              map[tool.name] = { serverId, toolId, resourceUri };
+              map[tool.name] = info;
             }
+            // Also map the namespaced name used by MCPClient.listTools()
+            map[`${serverId}_${tool.name}`] = info;
           }
         }
       }
