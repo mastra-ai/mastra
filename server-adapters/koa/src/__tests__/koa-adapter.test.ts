@@ -150,6 +150,89 @@ describe('Koa Server Adapter', () => {
     },
   });
 
+  describe('Route dispatcher', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('registers a single dispatcher middleware for built-in routes', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      await adapter.init();
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+    });
+
+    it('preserves route registration order with static and parameterized paths', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/special',
+          responseType: 'json',
+          handler: async () => ({ route: 'static' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/:id',
+          responseType: 'json',
+          handler: async ({ id }) => ({ route: 'param', id }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const staticResponse = await fetch(`http://localhost:${port}/items/special`);
+      expect(staticResponse.status).toBe(200);
+      await expect(staticResponse.json()).resolves.toEqual({ route: 'static' });
+
+      const paramResponse = await fetch(`http://localhost:${port}/items/42`);
+      expect(paramResponse.status).toBe(200);
+      await expect(paramResponse.json()).resolves.toEqual({ route: 'param', id: '42' });
+    });
+  });
+
   describe('Stream Data Redaction', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;
