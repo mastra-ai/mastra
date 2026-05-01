@@ -8,7 +8,6 @@ const meta: Meta<typeof TextAndIcon> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

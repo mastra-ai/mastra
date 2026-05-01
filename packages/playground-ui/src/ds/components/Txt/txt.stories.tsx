@@ -7,7 +7,6 @@ const meta: Meta<typeof Txt> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     as: {
       control: { type: 'select' },

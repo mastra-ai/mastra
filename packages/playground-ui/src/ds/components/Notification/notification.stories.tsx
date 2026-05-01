@@ -8,7 +8,6 @@ const meta: Meta<typeof Notification> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     type: {
       control: { type: 'select' },
