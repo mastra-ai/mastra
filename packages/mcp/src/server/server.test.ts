@@ -2122,7 +2122,22 @@ describe('MCPServer - Elicitation', () => {
   let elicitationServer: MCPServer;
   let elicitationClient: InternalMastraMCPClient;
   let elicitationHttpServer: http.Server;
-  const ELICITATION_PORT = 9600 + Math.floor(Math.random() * 1000);
+  let ELICITATION_PORT: number;
+
+  // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
+  // Avoids the random-port collisions that were flaking these tests on CI.
+  const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+    new Promise<number>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, () => {
+        const address = server.address();
+        if (address && typeof address === 'object') {
+          resolve(address.port);
+        } else {
+          reject(new Error('Failed to obtain ephemeral port'));
+        }
+      });
+    });
 
   beforeAll(async () => {
     elicitationServer = new MCPServer({
@@ -2185,7 +2200,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    await new Promise<void>(resolve => elicitationHttpServer.listen(ELICITATION_PORT, () => resolve()));
+    ELICITATION_PORT = await listenOnEphemeralPort(elicitationHttpServer);
   });
 
   afterAll(async () => {
