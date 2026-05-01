@@ -1304,6 +1304,10 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
+      if (msg.role === 'system') {
+        continue;
+      }
+
       // First check: skip if this message ID was already observed (safeguard against re-observation)
       if (observedMessageIds?.has(msg.id)) {
         continue;
@@ -1733,7 +1737,7 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages;
+    return result.messages.filter(msg => msg.role !== 'system');
   }
 
   /**

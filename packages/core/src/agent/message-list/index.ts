@@ -42,7 +42,6 @@ export type { AIV4AdapterContext, AIV5AdapterContext, AdapterContext } from './a
 export {
   ensureGeminiCompatibleMessages,
   ensureAnthropicCompatibleMessages,
-  ensureSystemMessagesAtStart,
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
   findToolCallArgs,
