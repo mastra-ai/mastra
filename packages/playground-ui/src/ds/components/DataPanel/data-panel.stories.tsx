@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DataPanel } from './data-panel';
 import { TooltipProvider } from '../Tooltip';
+import { DataPanel } from './data-panel';
 import type { DataPanelProps } from './data-panel-root';
 
 const meta: Meta<typeof DataPanel> = {

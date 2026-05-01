@@ -30,7 +30,8 @@
         "metadata": {
           "runId": "<runId-1>",
           "id1": 123,
-          "id2": "tacos"
+          "id2": "tacos",
+          "environment": "test"
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
@@ -57,9 +58,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -78,7 +77,8 @@
             "metadata": {
               "runId": "<runId-1>",
               "id1": 123,
-              "id2": "tacos"
+              "id2": "tacos",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -144,7 +144,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -183,7 +184,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "id1": 123,
-                      "id2": "tacos"
+                      "id2": "tacos",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "workflowExecutor",
@@ -217,7 +219,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "id1": 123,
-                      "id2": "tacos"
+                      "id2": "tacos",
+                      "environment": "test"
                     },
                     "input": {
                       "workflowId": "simpleWorkflow",
@@ -250,7 +253,8 @@
                         "metadata": {
                           "runId": "<runId-2>",
                           "id1": 123,
-                          "id2": "tacos"
+                          "id2": "tacos",
+                          "environment": "test"
                         },
                         "input": {
                           "input": "test input"
@@ -278,7 +282,8 @@
                             "metadata": {
                               "runId": "<runId-2>",
                               "id1": 123,
-                              "id2": "tacos"
+                              "id2": "tacos",
+                              "environment": "test"
                             },
                             "input": {
                               "input": "test input"
@@ -313,7 +318,8 @@
                       "id1": 123,
                       "id2": "tacos",
                       "toolCallId": "call-workflow-1",
-                      "toolName": "workflowExecutor"
+                      "toolName": "workflowExecutor",
+                      "environment": "test"
                     }
                   }
                 }
@@ -355,7 +361,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -385,7 +392,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "id1": 123,
-                      "id2": "tacos"
+                      "id2": "tacos",
+                      "environment": "test"
                     },
                     "output": {
                       "text": {

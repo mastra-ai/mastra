@@ -84,6 +84,7 @@ import {
   ProcessorProvider,
   Workspace,
   Responses,
+  Channels,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -181,11 +182,13 @@ export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
   public readonly responses: Responses;
+  public readonly channels: Channels;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
     this.conversations = new Conversations(options);
     this.responses = new Responses(options);
+    this.channels = new Channels(options);
   }
 
   /**
@@ -1886,6 +1889,7 @@ export class MastraClient extends BaseResource {
     if (params.runId) searchParams.set('runId', params.runId);
     if (params.threadId) searchParams.set('threadId', params.threadId);
     if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.taskId) searchParams.set('taskId', params.taskId);
     const qs = searchParams.toString();
     const response: Response = await this.request(`/background-tasks/stream${qs ? `?${qs}` : ''}`, { stream: true });
 

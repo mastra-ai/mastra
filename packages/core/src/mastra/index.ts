@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import type { DurableAgentLike } from '../agent/types';
+import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
-import type { AgentChannels } from '../channels/agent-channels';
+import { AgentChannels } from '../channels';
+import type { ChannelProvider } from '../channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -33,7 +36,7 @@ import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../obs
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
@@ -125,13 +128,15 @@ export interface Config<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
-   * Accepts both Mastra Agent instances and AI SDK v6 ToolLoopAgent instances.
-   * ToolLoopAgent instances are automatically converted to Mastra Agents.
+   * Accepts Mastra Agent instances, AI SDK v6 ToolLoopAgent instances,
+   * and durable agent wrappers (e.g., InngestAgent from createInngestAgent).
+   * ToolLoopAgent and durable agents are automatically handled during registration.
    */
-  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike };
+  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike | DurableAgentLike };
 
   /**
    * Storage provider for persisting data, conversation history, and workflow state.
@@ -220,6 +225,18 @@ export interface Config<
   pubsub?: PubSub;
 
   /**
+   * Server cache for storing stream events and other temporary data.
+   * Used by durable agents for resumable streams - clients can disconnect
+   * and reconnect without missing events.
+   *
+   * When provided, durable agents created without their own cache will
+   * inherit this cache instance.
+   *
+   * @default InMemoryServerCache
+   */
+  cache?: MastraServerCache;
+
+  /**
    * Scorers help assess the quality of agent responses and workflow outputs.
    */
   scorers?: TScorers;
@@ -295,6 +312,47 @@ export interface Config<
    * while the conversation continues.
    */
   backgroundTasks?: BackgroundTaskManagerConfig;
+
+  /**
+   * Platform channels for messaging integrations (Slack, Discord, etc.).
+   * Routes are automatically registered and agents can reference channel configs.
+   *
+   * @example
+   * ```typescript
+   * import { SlackProvider } from '@mastra/slack';
+   *
+   * new Mastra({
+   *   channels: {
+   *     slack: new SlackProvider({
+   *       configToken: process.env.SLACK_APP_CONFIG_TOKEN,
+   *       refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  channels?: TChannels;
+
+  /**
+   * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
+   * When set, the value is automatically attached to all observability signals
+   * so they can be filtered by environment without passing
+   * `tracingOptions.metadata.environment` on every call.
+   *
+   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
+   * is left undefined rather than guessed.
+   *
+   * Per-call `tracingOptions.metadata.environment` always takes precedence.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   environment: 'production',
+   *   observability: new Observability({ ... }),
+   * })
+   * ```
+   */
+  environment?: string;
 }
 
 /**
@@ -344,6 +402,7 @@ export class Mastra<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -375,12 +434,14 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
+  #channels?: TChannels;
+  #environment?: string;
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #internalMastraWorkflows: Record<string, Workflow> = {};
-  // This is only used internally for server handlers that require temporary persistence
+  // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
@@ -445,11 +506,52 @@ export class Mastra<
   }
 
   /**
+   * Gets a registered channel provider by its key.
+   *
+   * @example
+   * ```typescript
+   * import { SlackProvider } from '@mastra/slack';
+   * const slack = mastra.getChannelProvider<SlackProvider>('slack');
+   * ```
+   */
+  public getChannelProvider<T extends ChannelProvider = ChannelProvider>(key: string): T | undefined {
+    return this.#channels?.[key] as T | undefined;
+  }
+
+  /**
+   * Gets all registered channel providers.
+   */
+  public getChannelProviders(): Record<string, ChannelProvider> | undefined {
+    return this.#channels;
+  }
+
+  /**
+   * Shorthand getter for platform channels.
+   * Usage: `mastra.channels.slack.connect(agentId)`
+   */
+  public get channels(): TChannels {
+    return (this.#channels ?? {}) as TChannels;
+  }
+
+  /**
    * Returns the global version overrides configured on this Mastra instance.
    * These are used as defaults when resolving sub-agent versions during delegation.
    */
   public getVersionOverrides(): VersionOverrides | undefined {
     return this.#versions;
+  }
+
+  /**
+   * Returns the deployment environment name configured on this Mastra instance,
+   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
+   * is provided.
+   *
+   * Observability automatically reads this and attaches it to all signals so
+   * consumers can filter by environment without passing
+   * `tracingOptions.metadata.environment` on each call.
+   */
+  public getEnvironment(): string | undefined {
+    return this.#environment;
   }
 
   /**
@@ -608,14 +710,26 @@ export class Mastra<
    * ```
    */
   constructor(
-    config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
+    config?: Config<
+      TAgents,
+      TWorkflows,
+      TVectors,
+      TTTS,
+      TLogger,
+      TMCPServers,
+      TScorers,
+      TTools,
+      TProcessors,
+      TMemory,
+      TChannels
+    >,
   ) {
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
     // can correlate logs to the active span. Must happen before any agent runs.
     initContextStorage();
 
-    // This is only used internally for server handlers that require temporary persistence
-    this.#serverCache = new InMemoryServerCache();
+    // Server cache for temporary persistence and durable agent resumable streams
+    this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
     // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
@@ -625,6 +739,10 @@ export class Mastra<
 
     // Store global version overrides
     this.#versions = config?.versions;
+
+    // Resolve deployment environment: explicit config wins, else fall back to
+    // NODE_ENV. Leave undefined if neither is set rather than guessing.
+    this.#environment = config?.environment ?? process.env.NODE_ENV;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -819,6 +937,34 @@ export class Mastra<
       this.#server = config.server;
     }
 
+    // Register channels and merge their routes into server config
+    if (config?.channels) {
+      this.#channels = config.channels;
+      const channelRoutes: ApiRoute[] = [];
+
+      for (const [, channel] of Object.entries(config.channels)) {
+        if (channel == null) continue;
+
+        // Attach the channel to this Mastra instance
+        if (channel.__attach) {
+          channel.__attach(this);
+        }
+
+        // Collect routes from the channel
+        const routes = channel.getRoutes();
+        channelRoutes.push(...routes);
+      }
+
+      // Merge channel routes into server config
+      if (channelRoutes.length > 0) {
+        const existingRoutes = this.#server?.apiRoutes ?? [];
+        this.#server = {
+          ...this.#server,
+          apiRoutes: [...existingRoutes, ...channelRoutes],
+        };
+      }
+    }
+
     // Agents must be added after server config so that channel webhook routes
     // are appended to (not replaced by) the server config.
     if (config?.agents) {
@@ -837,10 +983,26 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+
+    // Initialize channels asynchronously (auto-provision apps, etc.)
+    // This runs after all agents are registered so configs are available
+    if (this.#channels) {
+      void Promise.resolve().then(async () => {
+        for (const [key, channel] of Object.entries(this.#channels ?? {})) {
+          if (channel.initialize) {
+            try {
+              await channel.initialize();
+            } catch (err) {
+              console.error(`[Mastra] Failed to initialize channel "${key}":`, err);
+            }
+          }
+        }
+      });
+    }
   }
 
   #ensureBackgroundTaskManager(): void {
-    if (!this.#backgroundTaskConfig?.enabled || !this.#storage) {
+    if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
       return;
     }
 
@@ -850,6 +1012,31 @@ export class Mastra<
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
     });
+  }
+
+  /**
+   * Auto-enables the background task manager when an agent with sub-agents is
+   * registered. Sub-agent delegation runs in the background by default so the
+   * parent stream stays responsive; that requires the manager to be available.
+   * No-op when the user explicitly opted out via `backgroundTasks.enabled: false`.
+   *
+   * Eligible agents: any agent whose `agents` field is either a static record
+   * with at least one entry OR a dynamic (function-based) resolver. Function
+   * resolvers are evaluated per request, so we can't inspect their contents
+   * here — but if the caller bothered to wire one up, we enable defensively
+   * so those resolved sub-agents also dispatch in the background.
+   */
+  #maybeEnableBackgroundTasksForAgent(agent: Agent<any>): void {
+    // Already running — nothing to do
+    if (this.#backgroundTaskManager) return;
+
+    // Explicit opt-out
+    if (this.#backgroundTaskConfig?.enabled === false) return;
+
+    if (!agent.__hasSubAgentsConfigured?.()) return;
+
+    this.#backgroundTaskConfig = { ...(this.#backgroundTaskConfig ?? {}), enabled: true };
+    this.#ensureBackgroundTaskManager();
   }
 
   /**
@@ -915,7 +1102,7 @@ export class Mastra<
     const result: Record<string, AgentChannels> = {};
     for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
       const agentChannels = agent.getChannels();
-      if (agentChannels) {
+      if (agentChannels instanceof AgentChannels) {
         result[agentKey] = agentChannels;
       }
     }
@@ -1071,9 +1258,13 @@ export class Mastra<
    * mastra.addAgent(newAgent); // Uses agent.id as key
    * // or
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
+   *
+   * // Durable agents (e.g., InngestAgent) are also supported:
+   * const durableAgent = createInngestAgent({ agent: newAgent, inngest });
+   * mastra.addAgent(durableAgent); // Auto-registers required workflows
    * ```
    */
-  public addAgent<A extends Agent | ToolLoopAgentLike>(
+  public addAgent<A extends Agent | ToolLoopAgentLike | DurableAgentLike>(
     agent: A,
     key?: string,
     options?: { source?: DefinitionSource },
@@ -1081,12 +1272,57 @@ export class Mastra<
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
+
+    // Handle durable agent wrappers (e.g., InngestAgent)
+    // These wrap a regular Agent with execution engine-specific capabilities
+    if (isDurableAgentLike(agent)) {
+      const durableAgent = agent as DurableAgentLike;
+      const underlyingAgent = durableAgent.agent;
+      const agentKey = key || durableAgent.id;
+
+      // Check if already registered
+      const agents = this.#agents as Record<string, Agent<any>>;
+      if (agents[agentKey]) {
+        const logger = this.getLogger();
+        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
+        return;
+      }
+
+      // Set the Mastra instance on the durable agent for observability
+      durableAgent.__setMastra?.(this);
+
+      // Initialize the underlying agent (needed for tools, memory, etc.)
+      underlyingAgent.__setLogger(this.#logger);
+      underlyingAgent.__registerMastra(this);
+      underlyingAgent.__registerPrimitives({
+        logger: this.getLogger(),
+        storage: this.getStorage(),
+        agents: agents,
+        tts: this.#tts,
+        vectors: this.#vectors,
+      });
+
+      // Store the durable wrapper in #agents (not the underlying agent)
+      // This ensures getAgentById returns the wrapper so .stream() uses durable execution.
+      // The cast is safe because DurableAgent extends Agent directly, and InngestAgent uses
+      // a Proxy that forwards all Agent method calls to the underlying agent.
+      agents[agentKey] = durableAgent as unknown as Agent<any>;
+
+      // Register durable workflows if the wrapper provides them
+      const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];
+      for (const workflow of durableWorkflows) {
+        this.addWorkflow(workflow, workflow.id);
+      }
+
+      return;
+    }
+
     let mastraAgent: Agent<any, any, any>;
     if (isToolLoopAgentLike(agent)) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
       mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
     } else {
-      mastraAgent = agent;
+      mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
@@ -1158,18 +1394,18 @@ export class Mastra<
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
 
-    // Register webhook routes and initialize channels
-    const agentChannels = mastraAgent.getChannels();
-    if (agentChannels) {
-      agentChannels.__setLogger(this.#logger);
-      const channelRoutes = agentChannels.getWebhookRoutes();
+    // Set up AgentChannels for manual adapter configurations
+    const agentChannelsInstance = mastraAgent.getChannels();
+    if (agentChannelsInstance) {
+      agentChannelsInstance.__setLogger(this.#logger);
+      const channelRoutes = agentChannelsInstance.getWebhookRoutes();
       if (channelRoutes.length > 0) {
         this.#server = {
           ...this.#server,
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannels.initialize(this);
+      void agentChannelsInstance.initialize(this);
     }
   }
 

@@ -1,5 +1,5 @@
-import type { MastraUnion } from '@mastra/core/action';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MastraUnion } from '@mastra/core/tools';
 import type { MastraVector, MastraEmbeddingModel, MastraEmbeddingOptions } from '@mastra/core/vector';
 
 import type { RerankConfig } from '../rerank';

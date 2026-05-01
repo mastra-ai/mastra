@@ -3,6 +3,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import {
   detectPackageManager,
+  fetchChangelog,
   fetchLatestVersion,
   getInstallCommand,
   isNewerVersion,
@@ -31,7 +32,7 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
     return;
   }
 
-  const pm = await detectPackageManager();
+  const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
 
   // Clear any previously dismissed version so the prompt always shows
   const settings = loadSettings();
@@ -40,11 +41,18 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
     saveSettings(settings);
   }
 
+  // Build question text with optional changelog
+  let question = `A new version is available: v${latestVersion} (current: v${currentVersion}).`;
+  if (changelog) {
+    question += `\n\nWhat's new:\n${changelog}`;
+  }
+  question += `\n\nWould you like to update now?`;
+
   // Show interactive prompt
   return new Promise<void>(resolve => {
     const questionComponent = new AskQuestionInlineComponent(
       {
-        question: `A new version is available: v${latestVersion} (current: v${currentVersion}). Would you like to update now?`,
+        question,
         options: [
           { label: 'Yes', description: 'Update and restart' },
           { label: 'No', description: 'Skip this version' },

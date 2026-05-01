@@ -265,8 +265,10 @@ const { messages, sendMessage } = useChat({
       return {
         body: {
           messages: [messages[messages.length - 1]],
-          threadId: 'user-thread-123',
-          resourceId: 'user-123',
+          memory: {
+            thread: 'user-thread-123',
+            resource: 'user-123',
+          },
         },
       }
     },
@@ -274,7 +276,7 @@ const { messages, sendMessage } = useChat({
 })
 ```
 
-Set `threadId` and `resourceId` from your app's own state, such as URL params, auth context, or your database.
+Set `memory.thread` and `memory.resource` from your app's own state, such as URL params, auth context, or your database.
 
 See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
 

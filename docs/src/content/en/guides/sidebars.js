@@ -243,6 +243,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'guide/slack-assistant',
+          label: 'Channels: Slack Assistant',
+        },
+        {
+          type: 'doc',
           id: 'guide/publishing-mcp-server',
           label: 'Publishing an MCP Server',
         },

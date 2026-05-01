@@ -174,6 +174,27 @@ describe('createTool type improvements', () => {
     expect(output.result).toBe(8);
     expect(output.operation).toBe('add');
   });
+
+  it('should accept a function for requireApproval and type the predicate input', () => {
+    const tool = createTool({
+      id: 'conditional-approval',
+      description: 'Tool with conditional approval',
+      inputSchema: z.object({
+        isDryRun: z.boolean(),
+        target: z.string(),
+      }),
+      requireApproval: async ({ isDryRun, target }) => {
+        // TypeScript should infer these from inputSchema
+        expectTypeOf(isDryRun).toEqualTypeOf<boolean>();
+        expectTypeOf(target).toEqualTypeOf<string>();
+        return !isDryRun;
+      },
+      execute: async () => ({ ok: true }),
+    });
+
+    expect(tool.requireApproval).toBeDefined();
+    expect(typeof tool.requireApproval).toBe('function');
+  });
 });
 
 /**

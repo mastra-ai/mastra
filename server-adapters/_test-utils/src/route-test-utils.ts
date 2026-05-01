@@ -407,6 +407,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':providerId')) params.providerId = 'test-provider';
   if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
 
+  // Channel route params
+  if (route.path.includes(':platform')) params.platform = 'test-platform';
+
   return params;
 }
 

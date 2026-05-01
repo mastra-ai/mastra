@@ -4,6 +4,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
+import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -113,6 +114,23 @@ export interface HarnessSubagent {
    * tools are visible.
    */
   allowedWorkspaceTools?: string[];
+
+  /**
+   * Default "forked" mode for this subagent type. When `true`, invocations
+   * inherit the parent agent's conversation context: the parent thread is
+   * cloned and the subagent runs on the fork with the parent agent's
+   * instructions and tools, preserving prompt-cache prefix.
+   *
+   * The parent's `instructions`, `tools`, `allowedHarnessTools`,
+   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
+   * are ignored when a run is forked — the parent agent is used as-is.
+   *
+   * Callers can override per-invocation by passing `forked` in the tool
+   * input. Forked subagents require memory to be configured on the Harness.
+   *
+   * @default false
+   */
+  forked?: boolean;
 }
 
 /**
@@ -256,6 +274,13 @@ export interface HarnessConfig<TState = {}> {
     acquire: (threadId: string) => void | Promise<void>;
     release: (threadId: string) => void | Promise<void>;
   };
+
+  /**
+   * Observability entrypoint for tracing, scoring, and feedback.
+   * When provided, the internal Mastra instance is configured with this
+   * observability backend so that agent runs produce trace spans.
+   */
+  observability?: ObservabilityEntrypoint;
 }
 
 /**
@@ -474,6 +499,7 @@ export interface ActiveSubagentState {
   agentType: string;
   task: string;
   modelId?: string;
+  forked?: boolean;
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
@@ -812,7 +838,7 @@ export type HarnessEvent =
       plan: string;
     }
   | { type: 'plan_approved' }
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
+  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
       type: 'subagent_tool_start';
@@ -852,6 +878,27 @@ export type HarnessEvent =
  * Listener function for harness events.
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
+
+/**
+ * Listener function for coalesced harness display state snapshots.
+ */
+export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
+
+export interface HarnessDisplayStateSubscriptionOptions {
+  /**
+   * Minimum quiet window before non-critical display state callbacks.
+   *
+   * @default 250
+   */
+  windowMs?: number;
+
+  /**
+   * Maximum time a pending display state snapshot may wait while updates continue.
+   *
+   * @default 500
+   */
+  maxWaitMs?: number;
+}
 
 // =============================================================================
 // Messages

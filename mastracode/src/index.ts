@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { Agent } from '@mastra/core/agent';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
@@ -10,8 +12,17 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import { AgentsMDInjector, PrefillErrorHandler } from '@mastra/core/processors';
+import {
+  AgentsMDInjector,
+  PrefillErrorHandler,
+  ProviderHistoryCompat,
+  StreamErrorRetryProcessor,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { DuckDBStore } from '@mastra/duckdb';
+
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -24,6 +35,7 @@ import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
+import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -33,8 +45,9 @@ import {
   getCustomProviderId,
   loadSettings,
   MEMORY_GATEWAY_PROVIDER,
+  OBSERVABILITY_AUTH_PREFIX,
   resolveModelDefaults,
-  resolveOmModel,
+  resolveOmRoleModel,
   saveSettings,
   toCustomProviderModelId,
 } from './onboarding/settings.js';
@@ -46,7 +59,12 @@ import { stateSchema } from './schema.js';
 
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
+import {
+  detectProject,
+  getObservabilityDatabasePath,
+  getStorageConfig,
+  getResourceIdOverride,
+} from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
@@ -106,8 +124,38 @@ export function createAuthStorage() {
   return authStorage;
 }
 
+/**
+ * Resolve cloud observability credentials for the CloudExporter.
+ * Priority: per-resource settings > environment variables > disabled.
+ */
+function resolveCloudObservabilityConfig(
+  settings: ReturnType<typeof loadSettings>,
+  authStorage: AuthStorage,
+  resourceId: string,
+): { accessToken?: string; projectId?: string } {
+  const resourceConfig = settings.observability.resources[resourceId];
+  if (resourceConfig) {
+    const token = authStorage.getStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`);
+    if (token) {
+      return { accessToken: token, projectId: resourceConfig.projectId };
+    }
+  }
+  // Fall back to environment variables for backwards compatibility
+  return {
+    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+    projectId: process.env.MASTRA_PROJECT_ID,
+  };
+}
+
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
+
+  // Load .env file from cwd if present (for observability API keys, etc.)
+  try {
+    process.loadEnvFile(path.join(cwd, '.env'));
+  } catch {
+    // No .env file — that's fine, keys may be in shell environment
+  }
 
   const gatewayRegistry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
@@ -168,8 +216,94 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
   const storageResult = await createStorage(storageConfig);
-  const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
+
+  // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
+  // Local tracing is opt-in to avoid writing gigabytes of trace data to disk without the
+  // user's knowledge. Enable via `/observability local on`.
+  let observabilityDomain: DuckDBStore['observability'] | undefined;
+  let observabilityWarning: string | undefined;
+  if (globalSettings.observability.localTracing) {
+    try {
+      const observabilityDuckDB = new DuckDBStore({
+        id: 'mastra-code-observability',
+        path: getObservabilityDatabasePath(),
+      });
+      // Force an early connection attempt so the lock error surfaces now, not mid-session.
+      await observabilityDuckDB.db.getConnection();
+      observabilityDomain = observabilityDuckDB.observability;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isLockError = /lock|locked|busy/i.test(message);
+      if (isLockError) {
+        observabilityWarning =
+          'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
+      } else {
+        observabilityWarning = `Observability unavailable — DuckDB initialization failed: ${message}`;
+      }
+    }
+  }
+
+  // Compose the main storage with the DuckDB observability domain (if available)
+  const storage = new MastraCompositeStore({
+    id: 'mastra-code-storage',
+    default: storageResult.storage,
+    domains: {
+      ...(observabilityDomain ? { observability: observabilityDomain } : {}),
+    },
+  });
+
+  // Observability (tracing, scoring, feedback)
+  const observability = new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastracode',
+        // Only these requestContext keys are stored on spans — prevents leaking
+        // large objects (harness state, workspace, env vars) into trace data.
+        // Use dot-notation because these are nested inside the 'harness' key.
+        //
+        // Session identifiers:
+        //   threadId, resourceId, modeId, harnessId
+        // Environment & project:
+        //   state.projectName, state.gitBranch
+        // Model configuration:
+        //   state.currentModelId, state.subagentModelId
+        // Agent settings:
+        //   state.yolo, state.thinkingLevel, state.smartEditing
+        // Observational memory settings:
+        //   state.omScope, state.observerModelId, state.reflectorModelId,
+        //   state.observationThreshold, state.reflectionThreshold
+        requestContextKeys: [
+          // Session identifiers
+          'harness.threadId',
+          'harness.resourceId',
+          'harness.modeId',
+          'harness.harnessId',
+          // Environment & project
+          'harness.state.projectName',
+          'harness.state.gitBranch',
+          // Model configuration
+          'harness.state.currentModelId',
+          'harness.state.subagentModelId',
+          // Agent settings
+          'harness.state.yolo',
+          'harness.state.thinkingLevel',
+          'harness.state.smartEditing',
+          // Observational memory settings
+          'harness.state.omScope',
+          'harness.state.observerModelId',
+          'harness.state.reflectorModelId',
+          'harness.state.observationThreshold',
+          'harness.state.reflectionThreshold',
+        ],
+        exporters: [
+          new DefaultExporter({ strategy: 'event-sourced' }),
+          new CloudExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+        ],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  });
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
@@ -188,6 +322,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     console.info(`Hooks: ${hookCount} hook(s) configured`);
   }
 
+  // Scorers (live evaluation with sampling)
+  const outcomeScorer = createOutcomeScorer();
+  const efficiencyScorer = createEfficiencyScorer();
+
   // Agent
   const codeAgent = new Agent({
     id: 'code-agent',
@@ -195,6 +333,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
+    scorers: {
+      outcome: {
+        scorer: outcomeScorer,
+        sampling: { type: 'none' },
+      },
+      efficiency: {
+        scorer: efficiencyScorer,
+        sampling: { type: 'ratio', rate: 0.3 },
+      },
+    },
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -207,7 +355,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
     ],
-    errorProcessors: [new PrefillErrorHandler()],
+    errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
@@ -290,7 +438,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
-  const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks);
+  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
 
@@ -327,9 +476,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Build initial state with global preferences
   const globalInitialState: Record<string, unknown> = {};
-  if (effectiveOmModel) {
-    globalInitialState.observerModelId = effectiveOmModel;
-    globalInitialState.reflectorModelId = effectiveOmModel;
+  if (effectiveObserverModel) {
+    globalInitialState.observerModelId = effectiveObserverModel;
+  }
+  if (effectiveReflectorModel) {
+    globalInitialState.reflectorModelId = effectiveReflectorModel;
   }
   if (effectiveObservationThreshold !== undefined) {
     globalInitialState.observationThreshold = effectiveObservationThreshold;
@@ -356,6 +507,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
+    observability,
     memory,
     stateSchema,
     subagents,
@@ -461,6 +613,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     authStorage,
     resolveModel,
     storageWarning,
+    observabilityWarning,
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "1.5.1",
+  "version": "1.6.0-alpha.0",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db clickhouse-client --query 'SELECT 1'  && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "pretest": "docker compose up -d --wait",
     "test": "vitest run",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { JsonSchema } from '@/lib/json-schema';
-import { CodeEditor } from './code-editor';
 import { TooltipProvider } from '../Tooltip';
+import { CodeEditor } from './code-editor';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof CodeEditor> = {
   title: 'Composite/CodeEditor',

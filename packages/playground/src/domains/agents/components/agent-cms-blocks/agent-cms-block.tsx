@@ -4,7 +4,6 @@ import {
   Button,
   CodeEditor,
   ContentBlock,
-  IconButton,
   Input,
   Label,
   Tooltip,
@@ -218,20 +217,20 @@ const InlineBlockContent = ({
           />
 
           {onConvertToRef && block.content.trim().length > 0 && (
-            <IconButton
+            <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={() => setSaveDialogOpen(true)}
               tooltip="Save as prompt block"
             >
               <BookmarkPlus />
-            </IconButton>
+            </Button>
           )}
 
           {onDelete && (
-            <IconButton variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
+            <Button variant="ghost" size="icon-sm" onClick={onDelete} tooltip="Delete block">
               <X />
-            </IconButton>
+            </Button>
           )}
         </div>
 

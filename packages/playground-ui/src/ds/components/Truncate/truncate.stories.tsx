@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Truncate } from './truncate';
 import { TooltipProvider } from '../Tooltip';
+import { Truncate } from './truncate';
 
 const meta: Meta<typeof Truncate> = {
   title: 'Elements/Truncate',

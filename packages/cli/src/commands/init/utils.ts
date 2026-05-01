@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
-import type { ModelRouterModelId } from '@mastra/core/llm/model';
+import type { ModelRouterModelId } from '@mastra/core/llm';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import shellQuote from 'shell-quote';

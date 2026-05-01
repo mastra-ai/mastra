@@ -24,6 +24,8 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
+      observerModelOverride: null,
+      reflectorModelOverride: null,
       omObservationThreshold: null,
       omReflectionThreshold: null,
       subagentModels: {},

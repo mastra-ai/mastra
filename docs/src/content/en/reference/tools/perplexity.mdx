@@ -1,0 +1,205 @@
+---
+title: "Reference: Perplexity tools | Tools & MCP"
+description: "API reference for @mastra/perplexity, which provides a Perplexity Search tool for Mastra agents."
+packages:
+  - "@mastra/perplexity"
+  - "@mastra/core"
+---
+
+# Perplexity tools
+
+Added in: `@mastra/perplexity@0.1.0-alpha.0`
+
+The `@mastra/perplexity` package wraps the [Perplexity Search API](https://docs.perplexity.ai/docs/search/quickstart) as a Mastra-compatible tool. It exposes a factory function that returns a tool created with [`createTool()`](./create-tool) and full Zod input/output schemas.
+
+For chat completions or agentic workflows powered by Perplexity, use Mastra's built-in [Perplexity model provider](/models/providers/perplexity) or [Perplexity Agent provider](/models/providers/perplexity-agent). Those are separate from this Search tool.
+
+## Installation
+
+Install the package alongside Zod:
+
+```sh npm2yarn
+npm install @mastra/perplexity zod
+```
+
+## Usage example
+
+The following example creates the search tool with the default configuration. By default, the tool reads `PERPLEXITY_API_KEY` (with `PPLX_API_KEY` as a fallback) from the environment. Pass `{ apiKey }` explicitly to override.
+
+```typescript title="src/mastra/tools/index.ts"
+import { createPerplexitySearchTool } from '@mastra/perplexity'
+
+const searchTool = createPerplexitySearchTool()
+```
+
+To pass an API key explicitly:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createPerplexitySearchTool } from '@mastra/perplexity'
+
+const searchTool = createPerplexitySearchTool({ apiKey: 'pplx-...' })
+```
+
+## Configuration
+
+All factory functions accept a `PerplexityClientOptions` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description:
+      'Perplexity API key. Falls back to the `PERPLEXITY_API_KEY` then `PPLX_API_KEY` environment variables.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Override the API base URL.',
+    isOptional: true,
+    defaultValue: "'https://api.perplexity.ai'",
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Custom `fetch` implementation. Useful for tests, retries, or instrumentation.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Methods
+
+### Factory functions
+
+#### `createPerplexityTools(config?)`
+
+Returns an object containing all Perplexity tools that share the supplied configuration.
+
+```typescript
+import { createPerplexityTools } from '@mastra/perplexity'
+
+const tools = createPerplexityTools({ apiKey: 'pplx-...' })
+// tools.perplexitySearch
+```
+
+Returns: `{ perplexitySearch }`
+
+#### `createPerplexitySearchTool(config?)`
+
+Creates a tool that searches the web using the Perplexity Search API. Returns ranked results with titles, URLs, snippets, and optional publication dates.
+
+The tool is registered with the ID `perplexity-search`.
+
+```typescript
+import { createPerplexitySearchTool } from '@mastra/perplexity'
+
+const searchTool = createPerplexitySearchTool()
+```
+
+##### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The search query.',
+  },
+  {
+    name: 'maxResults',
+    type: 'number',
+    description: 'Maximum number of results to return (1-20).',
+    isOptional: true,
+  },
+  {
+    name: 'searchDomainFilter',
+    type: 'string[]',
+    description:
+      'Restrict (or exclude) results by domain. Prefix a domain with `-` to exclude it (for example, `-pinterest.com`). Do not mix allow- and deny-list entries in the same call.',
+    isOptional: true,
+  },
+  {
+    name: 'searchRecencyFilter',
+    type: "'hour' | 'day' | 'week' | 'month' | 'year'",
+    description: 'Only return results from within the given recency window.',
+    isOptional: true,
+  },
+  {
+    name: 'searchAfterDateFilter',
+    type: 'string',
+    description: 'Only return results published on or after this date. Format: m/d/yyyy.',
+    isOptional: true,
+  },
+  {
+    name: 'searchBeforeDateFilter',
+    type: 'string',
+    description: 'Only return results published on or before this date. Format: m/d/yyyy.',
+    isOptional: true,
+  },
+]}
+/>
+
+##### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The original search query.',
+  },
+  {
+    name: 'results',
+    type: 'SearchResult[]',
+    description: 'Array of search results.',
+    properties: [
+      {
+        type: 'SearchResult',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Result title.' },
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'snippet', type: 'string', description: 'Content snippet.' },
+          { name: 'date', type: 'string', description: 'Publication date when available.', isOptional: true },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Agent example
+
+The following example registers the search tool on an agent so it can fetch fresh web results before answering.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createPerplexitySearchTool } from '@mastra/perplexity'
+
+const agent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: 'anthropic/claude-sonnet-4-6',
+  instructions:
+    'You are a research assistant. Use the perplexity-search tool to find up-to-date information from the web before answering.',
+  tools: {
+    search: createPerplexitySearchTool(),
+  },
+})
+```
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `PERPLEXITY_API_KEY` | Your Perplexity API key. Used as the default when `apiKey` is not passed to a factory function. |
+| `PPLX_API_KEY` | Fallback used when `PERPLEXITY_API_KEY` is unset. |
+
+## Related
+
+- [`createTool()`](./create-tool)
+- [Perplexity Search quickstart](https://docs.perplexity.ai/docs/search/quickstart)
+- [Perplexity Agent quickstart](https://docs.perplexity.ai/docs/agent/quickstart)
+- [Perplexity model provider](/models/providers/perplexity)
+- [Perplexity Agent provider](/models/providers/perplexity-agent)

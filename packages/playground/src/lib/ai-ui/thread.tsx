@@ -1,7 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, Badge, IconButton, useAutoscroll } from '@mastra/playground-ui';
-import { ArrowUp, CheckCircleIcon, Loader2Icon, Mic, PlusIcon, XCircleIcon } from 'lucide-react';
+import { Avatar, Button, useAutoscroll } from '@mastra/playground-ui';
+import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
@@ -14,7 +14,7 @@ import { ComposerModelSwitcher } from '@/domains/agents/components/composer-mode
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
-import { useBackgroundTaskStream } from '@/hooks';
+// import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
   agentName?: string;
@@ -114,20 +114,20 @@ interface ComposerProps {
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ threadId, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
-  const { runningTasks, completedTasks, failedTasks, clearCompletedAndFailedTasks } = useBackgroundTaskStream({
-    threadId,
-    agentId,
-  });
+  // const { runningTasks, completedTasks, failedTasks, clearCompletedAndFailedTasks } = useBackgroundTaskStream({
+  //   threadId,
+  //   agentId,
+  // });
 
   return (
     <div className="mx-4">
-      <div className="flex gap-2 items-center">
+      {/* <div className="flex gap-2 items-center">
         {runningTasks.length > 0 ? (
           <div className="pt-2">
             <Badge variant="info" icon={<Loader2Icon className="animate-spin" />}>
@@ -150,8 +150,9 @@ const Composer = ({ threadId, agentId, hasModelList, hideModelSwitcher }: Compos
             </Badge>
           </div>
         ) : null}
-      </div>
-      <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}>
+      </div> */}
+      {/* <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}> */}
+      <ComposerPrimitive.Root>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
@@ -193,16 +194,16 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   }, [composerRuntime, transcript]);
 
   return (
-    <IconButton
-      variant="light"
-      size="md"
+    <Button
+      variant="default"
+      size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
       {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
-    </IconButton>
+    </Button>
   );
 };
 
@@ -216,38 +217,38 @@ const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
   return (
     <>
       {canExecute && (
-        <IconButton
-          variant="light"
-          size="md"
+        <Button
+          variant="default"
+          size="icon-md"
           type="button"
           tooltip="Add attachment"
           className="rounded-full"
           onClick={() => setIsAddAttachmentDialogOpen(true)}
         >
           <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-        </IconButton>
+        </Button>
       )}
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild disabled={!canExecute}>
-          <IconButton
-            variant="light"
-            size="md"
+          <Button
+            variant="default"
+            size="icon-md"
             tooltip={canExecute ? 'Send' : 'No permission to execute'}
             className="rounded-full border border-border1 bg-surface5"
             disabled={!canExecute}
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-          </IconButton>
+          </Button>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running>
         <ComposerPrimitive.Cancel asChild>
-          <IconButton variant="light" size="md" tooltip="Cancel">
+          <Button variant="default" size="icon-md" tooltip="Cancel">
             <CircleStopIcon />
-          </IconButton>
+          </Button>
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
     </>

@@ -1,5 +1,54 @@
 # @mastra/clickhouse
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added ClickhouseStoreVNext, a ClickHouse storage adapter that uses the vNext observability domain by default. Equivalent to constructing a ClickhouseStore and overriding the observability domain manually, but exposed as a single class for new projects. ([#15984](https://github.com/mastra-ai/mastra/pull/15984))
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { ClickhouseStoreVNext } from '@mastra/clickhouse';
+
+  export const mastra = new Mastra({
+    storage: new ClickhouseStoreVNext({
+      id: 'clickhouse-storage',
+      url: process.env.CLICKHOUSE_URL!,
+      username: process.env.CLICKHOUSE_USERNAME!,
+      password: process.env.CLICKHOUSE_PASSWORD!,
+    }),
+  });
+  ```
+
+  ClickhouseStoreVNext accepts the same configuration as ClickhouseStore and reuses the same ClickHouse client across every domain. ClickhouseStore continues to work for projects on the legacy observability schema.
+
+### Patch Changes
+
+- Updated dependencies [[`1723e09`](https://github.com/mastra-ai/mastra/commit/1723e099829892419ddbfe49287acfeac2522724), [`629f9e9`](https://github.com/mastra-ai/mastra/commit/629f9e9a7e56aa8f129515a3923c5813298790c7), [`25168fb`](https://github.com/mastra-ai/mastra/commit/25168fb9c1de9db7f8171df4f58ceb842c53aa29), [`ab34b5a`](https://github.com/mastra-ai/mastra/commit/ab34b5a2191b8e4353df1dbf7b9155e7d6628d79), [`5fb6c2a`](https://github.com/mastra-ai/mastra/commit/5fb6c2a95c1843cc231704b91354311fc1f34a71), [`394f0cf`](https://github.com/mastra-ai/mastra/commit/394f0cfc31e6b4d801219fdef2e9cc69e5bc8682), [`3d7f709`](https://github.com/mastra-ai/mastra/commit/3d7f709b615e588050bb6283c4ee5cfe2978cbde), [`48a42f1`](https://github.com/mastra-ai/mastra/commit/48a42f114a4006a95e0b7a1b5ad1a24815a175c2), [`2c83efc`](https://github.com/mastra-ai/mastra/commit/2c83efc4482b3efe50830e3b8b4ba9a8d219edff), [`282a10c`](https://github.com/mastra-ai/mastra/commit/282a10c9446e9922afe80e10e3770481c8ac8a28)]:
+  - @mastra/core@1.31.0-alpha.0
+
+## 1.5.2
+
+### Patch Changes
+
+- Changed ClickHouse background task deletes to use lightweight `DELETE FROM` instead of `ALTER TABLE ... DELETE` mutations with `mutations_sync`. This makes deleted rows immediately invisible to subsequent reads without forcing part rewrites for each delete. ([#15902](https://github.com/mastra-ai/mastra/pull/15902))
+
+  Improved bulk background task deletion to push filtering into ClickHouse instead of fetching all matching task IDs into Node.js memory first. This avoids unnecessary network transfer and out-of-memory risk when deleting large result sets. As a safety guard, calling `deleteTasks` with no filters is now a no-op — use `dangerouslyClearAll` to wipe the table.
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+
+## 1.5.2-alpha.0
+
+### Patch Changes
+
+- Changed ClickHouse background task deletes to use lightweight `DELETE FROM` instead of `ALTER TABLE ... DELETE` mutations with `mutations_sync`. This makes deleted rows immediately invisible to subsequent reads without forcing part rewrites for each delete. ([#15902](https://github.com/mastra-ai/mastra/pull/15902))
+
+  Improved bulk background task deletion to push filtering into ClickHouse instead of fetching all matching task IDs into Node.js memory first. This avoids unnecessary network transfer and out-of-memory risk when deleting large result sets. As a safety guard, calling `deleteTasks` with no filters is now a no-op — use `dangerouslyClearAll` to wipe the table.
+
+- Updated dependencies [[`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1-alpha.1
+
 ## 1.5.1
 
 ### Patch Changes

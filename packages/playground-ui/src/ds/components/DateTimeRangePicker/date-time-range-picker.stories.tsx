@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { TooltipProvider } from '../Tooltip';
 import { DateTimeRangePicker } from './date-time-range-picker';
 import type { DateRangePreset, DateTimeRangePickerProps } from './date-time-range-picker';
-import { TooltipProvider } from '../Tooltip';
 
 const meta: Meta<typeof DateTimeRangePicker> = {
   title: 'Composite/DateTimeRangePicker',
