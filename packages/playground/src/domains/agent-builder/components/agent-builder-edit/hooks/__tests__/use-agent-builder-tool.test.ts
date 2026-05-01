@@ -31,6 +31,7 @@ const features = {
   skills: true,
   model: true,
   stars: false,
+  browser: false,
 };
 
 const renderBuilderTool = (
@@ -180,6 +181,6 @@ describe('useAgentBuilderTool execute routing', () => {
       model: { provider: 'gateway/openai', name: 'gpt-4o' },
     } as any);
 
-    expect(form().getValues('model')).toEqual({ provider: 'openai', name: 'gpt-4o' });
+    expect(form().getValues('model')).toEqual({ provider: 'gateway/openai', name: 'gpt-4o' });
   });
 });

@@ -17,6 +17,8 @@ describe('storedAgentToFormValues', () => {
       workspaceId: undefined,
       visibility: 'private',
       avatarUrl: undefined,
+      browserEnabled: false,
+      model: undefined,
     };
 
     expect(fromNull).toEqual(expected);
@@ -46,6 +48,8 @@ describe('storedAgentToFormValues', () => {
       workspaceId: 'ws-1',
       visibility: 'private',
       avatarUrl: undefined,
+      browserEnabled: false,
+      model: undefined,
     });
   });
 

@@ -32,6 +32,9 @@ const builderFeatures = {
   agents: false,
   skills: false,
   avatarUpload: false,
+  model: false,
+  stars: false,
+  browser: false,
 };
 
 vi.mock('@/domains/agent-builder', () => ({
@@ -71,8 +74,8 @@ vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
   useWorkflows: () => ({ data: {}, isPending: false }),
 }));
 
-vi.mock('@/domains/workspace/hooks', () => ({
-  useWorkspaces: () => ({ data: { workspaces: [] } }),
+vi.mock('@/domains/workspace/hooks/use-stored-workspaces', () => ({
+  useStoredWorkspaces: () => ({ data: { workspaces: [] } }),
 }));
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({

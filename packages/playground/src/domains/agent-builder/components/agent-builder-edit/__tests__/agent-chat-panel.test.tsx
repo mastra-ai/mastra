@@ -29,6 +29,10 @@ vi.mock('@/hooks/use-agent-messages', () => ({
   },
 }));
 
+vi.mock('@/domains/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ data: undefined, isLoading: false }),
+}));
+
 const renderPanel = () =>
   render(
     <TooltipProvider>

@@ -73,9 +73,11 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/prompts', permission: P('stored-prompt-blocks:read'), name: 'Prompts' },
   { route: '/workspaces', permission: P('workspaces:read'), name: 'Workspaces' },
 
+  // Admin-only pages
+  { route: '/request-context', permission: P('*'), name: 'Request Context' },
+
   // UI-only pages (no corresponding API resource) - marked as public
   // These pages don't fetch protected data, so they're accessible to all authenticated users
-  { route: '/request-context', permission: 'public', name: 'Request Context' },
   { route: '/settings', permission: 'public', name: 'Settings' },
   { route: '/resources', permission: 'public', name: 'Resources' },
 ];

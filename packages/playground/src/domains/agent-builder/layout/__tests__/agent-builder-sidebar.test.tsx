@@ -2,9 +2,23 @@
 import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
 import { cleanup, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentBuilderSidebar } from '../agent-builder-sidebar';
 import { LinkComponentProvider } from '@/lib/framework';
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
+  useBuilderAgentFeatures: () => ({
+    tools: true,
+    memory: false,
+    workflows: false,
+    agents: false,
+    avatarUpload: false,
+    skills: false,
+    model: false,
+    stars: false,
+    browser: false,
+  }),
+}));
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a {...props}>{children}</a>
