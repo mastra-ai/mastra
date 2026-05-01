@@ -1,8 +1,6 @@
 import {
   AgentIcon,
-  Alert,
-  AlertDescription,
-  AlertTitle,
+  Notice,
   Badge,
   Button,
   Header,
@@ -64,16 +62,15 @@ function EditFormContent({
   const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
 
   const banner = isViewingPreviousVersion ? (
-    <Alert variant="info" className="mb-4">
-      <AlertTitle>This is a previous version</AlertTitle>
-      <AlertDescription as="p">You are seeing a specific version of the agent.</AlertDescription>
-      <div className="pt-2 flex items-center gap-2">
-        <Button type="button" variant="light" size="sm" onClick={() => setSearchParams({})}>
+    <Notice variant="info" title="This is a previous version" className="mb-4">
+      <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
         <Button
           type="button"
-          variant="light"
+          variant="default"
           size="sm"
           onClick={() => void handlePublish(selectedVersionId ?? undefined)}
           disabled={selectedVersionId === activeVersionId}
@@ -81,7 +78,7 @@ function EditFormContent({
           Publish This Version
         </Button>
       </div>
-    </Alert>
+    </Notice>
   ) : undefined;
 
   const rightPanel = hideVersionPanel ? undefined : (

@@ -1871,6 +1871,18 @@ export type StorageContentSource =
   | { type: 'managed'; mastraPath: string };
 
 /**
+ * A node in the skill file tree (folder or file with inline content).
+ * Used for round-tripping the full file structure through the UI.
+ */
+export interface StorageSkillFileNode {
+  id?: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: StorageSkillFileNode[];
+}
+
+/**
  * Skill version snapshot type containing ALL skill definition fields.
  * These fields live exclusively in version snapshot rows, not on the skill record.
  */
@@ -1895,6 +1907,8 @@ export interface StorageSkillSnapshotType {
   assets?: string[];
   /** Optional arbitrary metadata */
   metadata?: Record<string, unknown>;
+  /** Full file tree structure (folders, files with content) for round-tripping in the UI */
+  files?: StorageSkillFileNode[];
   /** Content-addressable file tree manifest for this skill version */
   tree?: SkillVersionTree;
 }

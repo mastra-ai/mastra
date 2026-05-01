@@ -51,12 +51,6 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
     <MetricsCard>
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Scores" description="Evaluation scorer performance." />
-        {hasData && (
-          <MetricsCard.Summary
-            value={data?.avgScore != null ? `avg ${data.avgScore}` : '—'}
-            label="Across all scorers"
-          />
-        )}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />

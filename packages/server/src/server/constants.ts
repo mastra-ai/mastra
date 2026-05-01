@@ -16,6 +16,8 @@ export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
 
 export const MASTRA_USER_ROLES_KEY = 'mastra__userRoles';
 
+export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
+
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 
 export const WORKSPACE_TOOLS = {

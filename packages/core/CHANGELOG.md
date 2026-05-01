@@ -1,5 +1,309 @@
 # @mastra/core
 
+## 1.31.0-alpha.1
+
+### Patch Changes
+
+- Fixed `SkillSearchProcessor` so agents use it as the on-demand skill discovery path without also adding eager skill context. ([#15916](https://github.com/mastra-ai/mastra/pull/15916))
+
+  When `SkillSearchProcessor` is configured, agents no longer auto-add the eager `SkillsProcessor`, and they hide the overlapping `skill` and `skill_search` tools while keeping `skill_read` available for supporting skill files. Workspace file tools can still read `SKILL.md` files during explicit file inspection or editing workflows.
+
+## 1.31.0-alpha.0
+
+### Minor Changes
+
+- Added Microsoft Entra ID authentication support for Azure OpenAI gateways, so Azure deployments can call models without API keys when using Azure SDK credentials. ([#15983](https://github.com/mastra-ai/mastra/pull/15983))
+
+- Added top-level `environment` config on `Mastra` to tag observability signals with the deployment environment. ([#15956](https://github.com/mastra-ai/mastra/pull/15956))
+
+  Set it once on the `Mastra` instance and it will be attached to all observability signals automatically. Falls back to `process.env.NODE_ENV` when unset; per-call `tracingOptions.metadata.environment` still takes precedence.
+
+  **Before**
+
+  ```ts
+  await agent.generate('hello', {
+    tracingOptions: { metadata: { environment: process.env.NODE_ENV } },
+  });
+  ```
+
+  **After**
+
+  ```ts
+  new Mastra({
+    environment: 'production',
+    observability: new Observability({ ... }),
+  })
+  ```
+
+  `mastra.getEnvironment()` returns the resolved value.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`1723e09`](https://github.com/mastra-ai/mastra/commit/1723e099829892419ddbfe49287acfeac2522724))
+
+- Fixed workflow runs not being cancellable when steps or conditions ignored the abort signal. Cancelling a run now correctly stops `dountil`, `dowhile`, and `foreach` loops at every cancellation boundary — between iterations, after a step returns, after the loop condition is evaluated, and (for `foreach`) between concurrency chunks and after the final chunk. Previously, long-running loops (e.g. a `dountil` with a `setTimeout` inside the step) would keep running and eventually emit `success` even after the run was cancelled. Closes #15990. ([#15994](https://github.com/mastra-ai/mastra/pull/15994))
+
+- Fixed type inference on workflow loop helpers (`foreach`, `dowhile`, `dountil`) so a step's `requestContextSchema` correctly aligns with the workflow's `requestContextSchema`. Previously these methods dropped the workflow's `TRequestContext` from the step parameter, causing TypeScript to reject typed-context steps even when the workflow declared a matching schema. Steps without a `requestContextSchema` are still accepted; steps whose schema does not match the workflow's now produce a type error. Fixes [#15989](https://github.com/mastra-ai/mastra/issues/15989). ([#15995](https://github.com/mastra-ai/mastra/pull/15995))
+
+- Fixed sub-agent delegation so nested tool results stay out of the parent model context by default while remaining available to application code. Set `delegation.includeSubAgentToolResultsInModelContext` to include the full subagent result in the parent model context. ([#15832](https://github.com/mastra-ai/mastra/pull/15832))
+
+- Added a coalesced display state subscription API for Harness. ([#15974](https://github.com/mastra-ai/mastra/pull/15974))
+
+  This helps UI clients render fewer updates while still receiving the latest state. The example below renders the initial state, then subscribes to coalesced updates with the default `windowMs` and `maxWaitMs` timing options.
+
+  ```ts
+  render(harness.getDisplayState());
+
+  const unsubscribe = harness.subscribeDisplayState(render, {
+    windowMs: 250,
+    maxWaitMs: 500,
+  });
+  ```
+
+- Add `filterAfterToolSteps` to `ToolCallFilter` so tool calls can be filtered during agentic loops after they are no longer recent. By default, `ToolCallFilter` keeps its previous behavior and only filters the initial input. ([#15795](https://github.com/mastra-ai/mastra/pull/15795))
+
+- Fixed tool calls to run in parallel when active tools exclude approval or suspending tools. ([#15978](https://github.com/mastra-ai/mastra/pull/15978))
+
+- Fix semantic recall indexing to honor read-only memory mode. ([#15949](https://github.com/mastra-ai/mastra/pull/15949))
+
+## 1.30.0
+
+### Minor Changes
+
+- Add durable agents with resumable streams ([#12557](https://github.com/mastra-ai/mastra/pull/12557))
+
+  Durable agents make agent execution resilient to disconnections, crashes, and long-running operations.
+
+  ### The Problem
+
+  Standard agent streaming has two fragility points:
+  1. **Connection drops** - If a client disconnects mid-stream (network blip, browser refresh, mobile app backgrounded), all subsequent events are lost. The client has no way to "catch up" on what they missed.
+  2. **Long-running operations** - Agent loops with tool calls can take minutes. Holding an HTTP connection open that long is unreliable. If the server restarts or the connection times out, the work is lost.
+
+  ### The Solution
+
+  **Resumable streams** solve connection drops. Every event is cached with a sequential index. If a client disconnects at event 5, they can reconnect and request events starting from index 6. They receive cached events immediately, then continue with live events as they arrive.
+
+  **Durable execution** solves long-running operations. Instead of executing the agent loop directly in the HTTP request, execution happens in a workflow engine (built-in evented engine or Inngest). The HTTP request just subscribes to events. If the connection drops, execution continues. The client can reconnect anytime to observe progress.
+
+  ### Usage
+
+  Wrap any existing `Agent` with durability using factory functions:
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { createDurableAgent } from '@mastra/core/agent/durable';
+
+  const agent = new Agent({
+    id: 'my-agent',
+    model: openai('gpt-4'),
+    instructions: 'You are helpful',
+  });
+
+  const durableAgent = createDurableAgent({ agent });
+  ```
+
+  **Factory functions for different execution strategies:**
+
+  | Factory                                  | Execution                           | Use Case                        |
+  | ---------------------------------------- | ----------------------------------- | ------------------------------- |
+  | `createDurableAgent({ agent })`          | Local, synchronous                  | Development, simple deployments |
+  | `createEventedAgent({ agent })`          | Fire-and-forget via workflow engine | Long-running operations         |
+  | `createInngestAgent({ agent, inngest })` | Inngest-powered                     | Production, distributed systems |
+
+  ### Resumable Streams
+
+  ```typescript
+  // Start streaming
+  const { runId, output } = await durableAgent.stream('Analyze this data...');
+
+  // Client disconnects at event 5...
+
+  // Reconnect and resume from where we left off
+  const { output: resumed } = await durableAgent.observe(runId, { offset: 6 });
+  // Receives events 6, 7, 8... from cache, then continues with live events
+  ```
+
+  ### PubSub and Cache
+
+  Durable agents use two infrastructure components:
+
+  | Component  | Purpose                                   | Default               |
+  | ---------- | ----------------------------------------- | --------------------- |
+  | **PubSub** | Real-time event delivery during streaming | `EventEmitterPubSub`  |
+  | **Cache**  | Stores events for replay on reconnection  | `InMemoryServerCache` |
+
+  When `stream()` is called, events flow through pubsub in real-time. The cache stores each event with a sequential index. When `observe()` is called, missed events replay from cache before continuing with live events.
+
+  **Configure via Mastra instance (recommended):**
+
+  ```typescript
+  const mastra = new Mastra({
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+    agents: {
+      // Inherits cache and pubsub from Mastra
+      myAgent: createDurableAgent({ agent }),
+    },
+  });
+  ```
+
+  **Configure per-agent (overrides Mastra):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({
+    agent,
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+  });
+  ```
+
+  **Disable caching (streams won't be resumable):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({ agent, cache: false });
+  ```
+
+  For single-instance deployments, the defaults work fine. For multi-instance deployments (load balancer, horizontal scaling), use Redis-backed implementations so any instance can serve reconnection requests.
+
+  ### Class Hierarchy
+  - `DurableAgent` extends `Agent` - base class with resumable streams
+  - `EventedAgent` extends `DurableAgent` - fire-and-forget execution
+  - `InngestAgent` extends `DurableAgent` - Inngest-powered execution
+
+### Patch Changes
+
+- Fixed a regression in 1.29.0 where configuring an agent with channel adapters (e.g. `channels.adapters.slack`) caused server startup to crash with a "Custom API route ... must not start with /api" error. The custom-route prefix validation now skips framework-generated webhook routes. ([#15952](https://github.com/mastra-ai/mastra/pull/15952))
+
+- Update provider registry and model documentation with latest models and providers ([`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443))
+
+- Fix MCP client support in the agent editor: ([#15945](https://github.com/mastra-ai/mastra/pull/15945))
+  - MCP client form dirty state: Save button now enables after adding/removing MCP clients
+  - MCP tool name matching: Both bare and namespaced tool names are matched correctly
+  - Auth token forwarding: Token from cookie or header is forwarded to auth-protected MCP servers
+  - String interpolation: Request context variables in system prompts now resolve correctly
+
+## 1.30.0-alpha.1
+
+### Minor Changes
+
+- Add durable agents with resumable streams ([#12557](https://github.com/mastra-ai/mastra/pull/12557))
+
+  Durable agents make agent execution resilient to disconnections, crashes, and long-running operations.
+
+  ### The Problem
+
+  Standard agent streaming has two fragility points:
+  1. **Connection drops** - If a client disconnects mid-stream (network blip, browser refresh, mobile app backgrounded), all subsequent events are lost. The client has no way to "catch up" on what they missed.
+  2. **Long-running operations** - Agent loops with tool calls can take minutes. Holding an HTTP connection open that long is unreliable. If the server restarts or the connection times out, the work is lost.
+
+  ### The Solution
+
+  **Resumable streams** solve connection drops. Every event is cached with a sequential index. If a client disconnects at event 5, they can reconnect and request events starting from index 6. They receive cached events immediately, then continue with live events as they arrive.
+
+  **Durable execution** solves long-running operations. Instead of executing the agent loop directly in the HTTP request, execution happens in a workflow engine (built-in evented engine or Inngest). The HTTP request just subscribes to events. If the connection drops, execution continues. The client can reconnect anytime to observe progress.
+
+  ### Usage
+
+  Wrap any existing `Agent` with durability using factory functions:
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { createDurableAgent } from '@mastra/core/agent/durable';
+
+  const agent = new Agent({
+    id: 'my-agent',
+    model: openai('gpt-4'),
+    instructions: 'You are helpful',
+  });
+
+  const durableAgent = createDurableAgent({ agent });
+  ```
+
+  **Factory functions for different execution strategies:**
+
+  | Factory                                  | Execution                           | Use Case                        |
+  | ---------------------------------------- | ----------------------------------- | ------------------------------- |
+  | `createDurableAgent({ agent })`          | Local, synchronous                  | Development, simple deployments |
+  | `createEventedAgent({ agent })`          | Fire-and-forget via workflow engine | Long-running operations         |
+  | `createInngestAgent({ agent, inngest })` | Inngest-powered                     | Production, distributed systems |
+
+  ### Resumable Streams
+
+  ```typescript
+  // Start streaming
+  const { runId, output } = await durableAgent.stream('Analyze this data...');
+
+  // Client disconnects at event 5...
+
+  // Reconnect and resume from where we left off
+  const { output: resumed } = await durableAgent.observe(runId, { offset: 6 });
+  // Receives events 6, 7, 8... from cache, then continues with live events
+  ```
+
+  ### PubSub and Cache
+
+  Durable agents use two infrastructure components:
+
+  | Component  | Purpose                                   | Default               |
+  | ---------- | ----------------------------------------- | --------------------- |
+  | **PubSub** | Real-time event delivery during streaming | `EventEmitterPubSub`  |
+  | **Cache**  | Stores events for replay on reconnection  | `InMemoryServerCache` |
+
+  When `stream()` is called, events flow through pubsub in real-time. The cache stores each event with a sequential index. When `observe()` is called, missed events replay from cache before continuing with live events.
+
+  **Configure via Mastra instance (recommended):**
+
+  ```typescript
+  const mastra = new Mastra({
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+    agents: {
+      // Inherits cache and pubsub from Mastra
+      myAgent: createDurableAgent({ agent }),
+    },
+  });
+  ```
+
+  **Configure per-agent (overrides Mastra):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({
+    agent,
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+  });
+  ```
+
+  **Disable caching (streams won't be resumable):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({ agent, cache: false });
+  ```
+
+  For single-instance deployments, the defaults work fine. For multi-instance deployments (load balancer, horizontal scaling), use Redis-backed implementations so any instance can serve reconnection requests.
+
+  ### Class Hierarchy
+  - `DurableAgent` extends `Agent` - base class with resumable streams
+  - `EventedAgent` extends `DurableAgent` - fire-and-forget execution
+  - `InngestAgent` extends `DurableAgent` - Inngest-powered execution
+
+### Patch Changes
+
+- Fixed a regression in 1.29.0 where configuring an agent with channel adapters (e.g. `channels.adapters.slack`) caused server startup to crash with a "Custom API route ... must not start with /api" error. The custom-route prefix validation now skips framework-generated webhook routes. ([#15952](https://github.com/mastra-ai/mastra/pull/15952))
+
+- Fix MCP client support in the agent editor: ([#15945](https://github.com/mastra-ai/mastra/pull/15945))
+  - MCP client form dirty state: Save button now enables after adding/removing MCP clients
+  - MCP tool name matching: Both bare and namespaced tool names are matched correctly
+  - Auth token forwarding: Token from cookie or header is forwarded to auth-protected MCP servers
+  - String interpolation: Request context variables in system prompts now resolve correctly
+
+## 1.29.2-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443))
+
 ## 1.29.1
 
 ### Patch Changes

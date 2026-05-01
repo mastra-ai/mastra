@@ -554,7 +554,6 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 
       // Handle auto-versioning with retry logic for race conditions
       // This creates a new version if there are meaningful config changes.
-      // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       const autoVersionResult = await handleAutoVersioning(
         agentsStore as unknown as VersionedStoreInterface,
         storedAgentId,
@@ -570,13 +569,29 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new Error('handleAutoVersioning returned undefined');
       }
 
+      // Auto-publish: activate the latest version so the update is immediately
+      // visible in list views. The Agent Builder UI has no separate "Publish"
+      // button, so without this every edit after creation would create orphaned
+      // draft versions that never surface in the list.
+      // When a proper publish flow ships, this block can be removed.
+      if (autoVersionResult.versionCreated) {
+        const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
+        const latestVersion = versions[0];
+        if (latestVersion) {
+          await agentsStore.update({
+            id: storedAgentId,
+            activeVersionId: latestVersion.id,
+          });
+        }
+      }
+
       // Clear the cached agent instance so the next request gets the updated config
       const editor = mastra.getEditor();
       if (editor) {
         editor.agent.clearCache(storedAgentId);
       }
 
-      // Return the resolved agent with the latest (draft) version so the UI sees its edits
+      // Return the resolved agent with the latest version
       const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });

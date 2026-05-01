@@ -3570,10 +3570,10 @@
         "kimi-k2.5",
         "kimi-k2.6",
         "llama-3.1-405b-instruct",
-        "minimax-M2.7",
         "minimax-m2",
         "minimax-m2.1",
         "minimax-m2.5",
+        "minimax-m2.7",
         "nova-pro-v1",
         "qwen3-32b",
         "qwen3-coder-480b-a35b-instruct",
@@ -4322,6 +4322,7 @@
       "models": [
         "google/gemma-4-31B-it",
         "meta-llama/Llama-3.3-70B-Instruct",
+        "mistralai/Mistral-Medium-3.5-128B",
         "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
         "openai/gpt-oss-120b",
         "zai-org/GLM-4.7"
@@ -7666,10 +7667,10 @@
       "kimi-k2.5",
       "kimi-k2.6",
       "llama-3.1-405b-instruct",
-      "minimax-M2.7",
       "minimax-m2",
       "minimax-m2.1",
       "minimax-m2.5",
+      "minimax-m2.7",
       "nova-pro-v1",
       "qwen3-32b",
       "qwen3-coder-480b-a35b-instruct",
@@ -8307,6 +8308,7 @@
     "berget": [
       "google/gemma-4-31B-it",
       "meta-llama/Llama-3.3-70B-Instruct",
+      "mistralai/Mistral-Medium-3.5-128B",
       "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
       "openai/gpt-oss-120b",
       "zai-org/GLM-4.7"

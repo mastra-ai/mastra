@@ -786,7 +786,7 @@ describe('auth helpers', () => {
       expect(result.action).toBe('next');
       expect(result).toHaveProperty('headers');
       expect((result as any).headers['Set-Cookie']).toContain('wos-session=refreshed-token');
-      expect(requestContext.get('user')).toBe(user);
+      expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
       expect(callCount).toBe(2); // authenticateToken called twice
     });
 

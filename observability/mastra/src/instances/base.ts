@@ -60,6 +60,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected cardinalityFilter: CardinalityFilter;
 
+  /**
+   * Deployment environment propagated from the parent Mastra instance.
+   * Set by `Observability.setMastraContext`, read by spans as a fallback when
+   * a span's `metadata.environment` isn't set.
+   */
+  #mastraEnvironment?: string;
+
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
@@ -191,6 +198,20 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
 
+    // Inject the Mastra-level environment into root-span metadata when nothing
+    // upstream provided one. Root-only is sufficient because BaseSpan inherits
+    // parent metadata, so descendants pick the value up automatically.
+    // Persisting it on metadata (rather than only computing it in
+    // getCorrelationContext) is what lets the storage record-builders populate
+    // the `environment` column on SpanRecord, which is then read by stored
+    // score/feedback events via RecordedSpan / RecordedTrace.addScore.
+    const finalMetadata =
+      !options.parent &&
+      this.#mastraEnvironment !== undefined &&
+      (enrichedMetadata === undefined || enrichedMetadata.environment === undefined)
+        ? { ...(enrichedMetadata ?? {}), environment: this.#mastraEnvironment }
+        : enrichedMetadata;
+
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
@@ -205,7 +226,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       ...rest,
       traceId,
       parentSpanId,
-      metadata: enrichedMetadata,
+      metadata: finalMetadata,
       traceState,
       tags,
       requestContext,
@@ -287,6 +308,22 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getConfig(): Readonly<ObservabilityInstanceConfig> {
     return { ...this.config };
+  }
+
+  /**
+   * Returns the deployment environment propagated from the parent Mastra instance.
+   * Spans use this as a fallback when `metadata.environment` isn't set.
+   */
+  getMastraEnvironment(): string | undefined {
+    return this.#mastraEnvironment;
+  }
+
+  /**
+   * Internal hook used by `Observability.setMastraContext` to push the
+   * resolved Mastra-level environment into this instance.
+   */
+  __setMastraEnvironment(environment: string | undefined): void {
+    this.#mastraEnvironment = environment;
   }
 
   // ============================================================================

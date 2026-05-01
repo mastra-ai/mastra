@@ -88,6 +88,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       'references',
       'scripts',
       'assets',
+      'files',
       'metadata',
       'tree',
     ];

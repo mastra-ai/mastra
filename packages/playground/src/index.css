@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /* Scan playground-ui package for Tailwind classes */
 @source '../../node_modules/@mastra/playground-ui';
@@ -200,24 +201,6 @@ html::-webkit-scrollbar-thumb:hover {
   margin-bottom: 5px;
 }
 
-@keyframes slideDown {
-  from {
-    height: 0;
-  }
-  to {
-    height: var(--radix-collapsible-content-height);
-  }
-}
-
-@keyframes slideUp {
-  from {
-    height: var(--radix-collapsible-content-height);
-  }
-  to {
-    height: 0;
-  }
-}
-
 @keyframes shimmer-text {
   0% {
     background-position: 200% 0;
@@ -290,7 +273,15 @@ th:has(header) {
   }
 
   .agent-builder-detail-pane {
-    transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (min-width: 1024px) {
+    .agent-builder-detail-pane {
+      transition:
+        width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

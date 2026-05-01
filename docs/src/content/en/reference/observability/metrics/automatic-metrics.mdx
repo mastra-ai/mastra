@@ -22,7 +22,7 @@ Metrics are routed through an internal event bus to the `DefaultExporter`, which
 Two conditions must be true for a metric to reach storage:
 
 1. `DefaultExporter` is configured as an exporter.
-1. The storage backend supports metrics (ClickHouse, DuckDB, or in-memory).
+1. The storage backend supports metrics (ClickHouse or DuckDB).
 
 If metrics aren't appearing, see [troubleshooting](#troubleshooting).
 
@@ -125,7 +125,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 - **Observability is configured**: Verify that your `Mastra` instance has an `observability` config with at least one exporter.
 - **`DefaultExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't persist metrics to Mastra storage. `DefaultExporter` is required for the Studio dashboard.
-- **Storage supports metrics**: Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
+- **Storage supports metrics**: Metrics require an OLAP-capable store (ClickHouse or DuckDB). Row-oriented databases (PostgreSQL, LibSQL, MSSQL) and document stores (MongoDB) are not supported for metrics.
 - **Sampling isn't 0%**: If sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
 
 ### Duration metrics are missing

@@ -2058,6 +2058,80 @@ export interface DeleteStoredSkillResponse {
 }
 
 // ============================================================================
+// Stored Workspace Types
+// ============================================================================
+
+/**
+ * Filesystem configuration in a stored workspace
+ */
+export interface StoredFilesystemConfig {
+  provider: string;
+  config: Record<string, unknown>;
+  readOnly?: boolean;
+}
+
+/**
+ * Sandbox configuration in a stored workspace
+ */
+export interface StoredSandboxConfig {
+  provider: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Stored workspace data returned from API
+ */
+export interface StoredWorkspaceResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  filesystem?: StoredFilesystemConfig;
+  sandbox?: StoredSandboxConfig;
+  mounts?: Record<string, StoredFilesystemConfig>;
+  skills?: string[];
+  tools?: {
+    enabled?: boolean;
+    requireApproval?: boolean;
+    tools?: Record<string, { enabled?: boolean; requireApproval?: boolean }>;
+  };
+  autoSync?: boolean;
+  operationTimeout?: number;
+  /** Whether this workspace is registered at runtime (only present in list responses) */
+  runtimeRegistered?: boolean;
+}
+
+/**
+ * Parameters for listing stored workspaces
+ */
+export interface ListStoredWorkspacesParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored workspaces
+ */
+export interface ListStoredWorkspacesResponse {
+  workspaces: StoredWorkspaceResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+// ============================================================================
 // Processor Types
 // ============================================================================
 

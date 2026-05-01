@@ -23,7 +23,7 @@ export interface LLMProvidersProps {
 export const LLMProviders = ({
   value,
   onValueChange,
-  variant = 'inputLike',
+  variant = 'default',
   size = 'default',
   className,
   open,

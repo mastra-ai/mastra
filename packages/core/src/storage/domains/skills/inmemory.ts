@@ -111,6 +111,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       'references',
       'scripts',
       'assets',
+      'files',
       'metadata',
       'tree',
     ];

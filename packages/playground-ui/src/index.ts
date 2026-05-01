@@ -4,7 +4,6 @@ import './index.css';
 export * from './ds/components/Threads';
 
 // DS Components - Existing
-export * from './ds/components/Alert';
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Breadcrumb/index';
@@ -33,7 +32,6 @@ export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
-export * from './ds/components/IconButton';
 export * from './ds/components/Input';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';

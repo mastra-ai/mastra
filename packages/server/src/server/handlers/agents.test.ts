@@ -17,6 +17,7 @@ import {
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
   isProviderConnected,
+  extractVersionOptions,
 } from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
@@ -1110,5 +1111,68 @@ describe('GENERATE_AGENT_ROUTE stored-agent visibility', () => {
         messages: [{ role: 'user', content: 'hi' }],
       } as any),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('extractVersionOptions', () => {
+  it('should return undefined when no requestContext or bodyRequestContext', () => {
+    expect(extractVersionOptions()).toBeUndefined();
+    expect(extractVersionOptions(undefined, undefined)).toBeUndefined();
+  });
+
+  it('should extract agentVersionId from server RequestContext', () => {
+    const ctx = new RequestContext();
+    ctx.set('agentVersionId', 'version-from-server');
+    expect(extractVersionOptions(ctx)).toEqual({ versionId: 'version-from-server' });
+  });
+
+  it('should extract agentVersionId from body requestContext', () => {
+    const bodyCtx = { agentVersionId: 'version-from-body' };
+    expect(extractVersionOptions(undefined, bodyCtx)).toEqual({ versionId: 'version-from-body' });
+  });
+
+  it('should prefer server RequestContext over body requestContext', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', 'server-version');
+    const bodyCtx = { agentVersionId: 'body-version' };
+    expect(extractVersionOptions(serverCtx, bodyCtx)).toEqual({ versionId: 'server-version' });
+  });
+
+  it('should fall back to body when server RequestContext has no agentVersionId', () => {
+    const serverCtx = new RequestContext();
+    const bodyCtx = { agentVersionId: 'body-version' };
+    expect(extractVersionOptions(serverCtx, bodyCtx)).toEqual({ versionId: 'body-version' });
+  });
+
+  it('should return undefined for empty string agentVersionId in server context', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', '');
+    expect(extractVersionOptions(serverCtx)).toBeUndefined();
+  });
+
+  it('should return undefined for empty string agentVersionId in body context', () => {
+    expect(extractVersionOptions(undefined, { agentVersionId: '' })).toBeUndefined();
+  });
+
+  it('should return undefined for non-string agentVersionId values', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', 42);
+    expect(extractVersionOptions(serverCtx)).toBeUndefined();
+
+    expect(extractVersionOptions(undefined, { agentVersionId: 42 })).toBeUndefined();
+    expect(extractVersionOptions(undefined, { agentVersionId: true })).toBeUndefined();
+    expect(extractVersionOptions(undefined, { agentVersionId: null })).toBeUndefined();
+  });
+
+  it('should skip empty server context and use body when server value is non-string', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', 123);
+    const bodyCtx = { agentVersionId: 'valid-body-version' };
+    expect(extractVersionOptions(serverCtx, bodyCtx)).toEqual({ versionId: 'valid-body-version' });
+  });
+
+  it('should handle body requestContext without agentVersionId key', () => {
+    expect(extractVersionOptions(undefined, { otherKey: 'value' })).toBeUndefined();
+    expect(extractVersionOptions(undefined, {})).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import type { ListStoredAgentsParams } from '@mastra/client-js';
+import type { ListStoredAgentsParams, StoredAgentResponse } from '@mastra/client-js';
 import {
   AgentIcon,
   Button,
@@ -9,11 +9,16 @@ import {
   PageHeader,
   PermissionDenied,
   SessionExpired,
+  Tab,
+  TabContent,
+  TabList,
+  Tabs,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
@@ -22,25 +27,27 @@ import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
+type Scope = 'mine' | 'all';
+
 export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
-
-  const listParams = useMemo<ListStoredAgentsParams>(() => {
-    const params: ListStoredAgentsParams = {};
-    if (currentUser?.id) {
-      params.authorId = currentUser.id;
-    }
-    return params;
-  }, [currentUser?.id]);
-
-  const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isCurrentUserLoading });
+  const [scope, setScope] = useState<Scope>('mine');
   const [search, setSearch] = useState('');
   const { Link: FrameworkLink } = useLinkComponent();
 
+  const listParams = useMemo<ListStoredAgentsParams>(() => {
+    const params: ListStoredAgentsParams = {};
+    if (scope === 'mine' && currentUser?.id) {
+      params.authorId = currentUser.id;
+    }
+    return params;
+  }, [scope, currentUser?.id]);
+
+  const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isCurrentUserLoading });
   const agents = data?.agents ?? [];
 
-  const body = (() => {
-    if (isCurrentUserLoading || isLoading || (!data && !error)) {
+  function renderAgentList(agentList: StoredAgentResponse[]) {
+    if (isCurrentUserLoading || isLoading) {
       return <AgentBuilderListSkeleton />;
     }
 
@@ -61,44 +68,57 @@ export default function AgentBuilderAgentsPage() {
       }
       return (
         <div className="flex items-center justify-center pt-10">
-          <ErrorState title="Failed to load your agents" message={error.message} />
+          <ErrorState title="Failed to load agents" message={error.message} />
         </div>
       );
     }
 
-    if (agents.length === 0) {
+    if (agentList.length === 0) {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
             iconSlot={<AgentIcon className="h-8 w-8 text-neutral3" />}
-            titleSlot="No agents yet"
-            descriptionSlot="Start building your first agent with the Agent Builder."
+            titleSlot={scope === 'mine' ? 'No agents yet' : 'No agents available'}
+            descriptionSlot={
+              scope === 'mine'
+                ? 'Start building your first agent with the Agent Builder.'
+                : 'No public agents are available yet.'
+            }
             actionSlot={
-              <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
-                <PlusIcon /> Create an agent
-              </Button>
+              scope === 'mine' ? (
+                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
+                  <PlusIcon /> Create an agent
+                </Button>
+              ) : undefined
             }
           />
         </div>
       );
     }
 
-    return <AgentBuilderList agents={agents} search={search} />;
-  })();
+    return <AgentBuilderList agents={agentList} search={search} />;
+  }
 
   return (
-    <EntityListPageLayout>
+    <EntityListPageLayout className="px-4 md:px-10">
       <EntityListPageLayout.Top>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>
             <PageHeader.Title>
-              <AgentIcon /> My agents
+              <AgentIcon /> Agents
             </PageHeader.Title>
-            <PageHeader.Description>Agents you've created in Agent Builder.</PageHeader.Description>
+            <PageHeader.Description>
+              {scope === 'mine' ? "Agents you've created." : 'All agents available to you.'}
+            </PageHeader.Description>
           </PageHeader>
           {agents.length > 0 && (
-            <div className="shrink-0">
-              <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
+            <div className="w-full shrink-0 md:w-auto">
+              <Button
+                as={FrameworkLink}
+                to="/agent-builder/agents/create"
+                variant="primary"
+                className="w-full justify-center md:w-auto"
+              >
                 <PlusIcon /> New agent
               </Button>
             </div>
@@ -109,7 +129,14 @@ export default function AgentBuilderAgentsPage() {
         </div>
       </EntityListPageLayout.Top>
 
-      {body}
+      <Tabs defaultTab="mine" value={scope} onValueChange={setScope}>
+        <TabList>
+          <Tab value="mine">My agents</Tab>
+          <Tab value="all">All agents</Tab>
+        </TabList>
+        <TabContent value="mine">{renderAgentList(agents)}</TabContent>
+        <TabContent value="all">{renderAgentList(agents)}</TabContent>
+      </Tabs>
     </EntityListPageLayout>
   );
 }

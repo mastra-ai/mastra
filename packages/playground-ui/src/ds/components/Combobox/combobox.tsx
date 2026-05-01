@@ -24,7 +24,7 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: Extract<ButtonProps['variant'], 'inputLike' | 'ghost' | 'link'>;
+  variant?: Extract<ButtonProps['variant'], 'default' | 'ghost' | 'link'>;
   size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -41,7 +41,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
   size = 'default',
   open,
   onOpenChange,

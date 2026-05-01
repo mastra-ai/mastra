@@ -1,34 +1,59 @@
 import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
-import { LibraryIcon, StarIcon } from 'lucide-react';
+import { Blocks, LibraryIcon, StarIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useLocation } from 'react-router';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useLinkComponent } from '@/lib/framework';
 
-const links: NavLink[] = [
+const baseLinks: NavLink[] = [
   { name: 'My agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
   { name: 'Favorites', url: '/agent-builder/favorite', icon: <StarIcon />, isOnMastraPlatform: true },
   { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon />, isOnMastraPlatform: true },
 ];
 
-export function AgentBuilderSidebar() {
+const skillsLink: NavLink = {
+  name: 'Skills',
+  url: '/agent-builder/skills',
+  icon: <Blocks className="h-4 w-4" />,
+  isOnMastraPlatform: true,
+};
+
+type AgentBuilderSidebarProps = {
+  forceExpanded?: boolean;
+};
+
+export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSidebarProps = {}) {
   const { Link } = useLinkComponent();
-  const { state } = useMainSidebar();
+  const { state: contextState } = useMainSidebar();
   const { pathname } = useLocation();
+  const features = useBuilderAgentFeatures();
+  const state = forceExpanded ? 'default' : contextState;
+
+  const links = useMemo(() => {
+    const result = [...baseLinks];
+    if (features.skills) {
+      result.splice(1, 0, skillsLink); // Insert after "My agents", before "Favorites"
+    }
+    return result;
+  }, [features.skills]);
 
   return (
     <MainSidebar className="h-full">
-      <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
-        {state === 'collapsed' ? (
-          <div className="flex flex-col gap-3 items-center">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
-          </div>
-        ) : (
-          <span className="flex items-center gap-2 pl-3">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-serif text-sm">Mastra Studio</span>
-          </span>
-        )}
-      </div>
+      {!forceExpanded && (
+        <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
+          {state === 'collapsed' ? (
+            <div className="flex flex-col gap-3 items-center">
+              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+            </div>
+          ) : (
+            <span className="flex items-center gap-2 pl-3">
+              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+              <span className="font-serif text-sm">Mastra Studio</span>
+            </span>
+          )}
+        </div>
+      )}
 
       <MainSidebar.Nav>
         <MainSidebar.NavSection>
@@ -50,12 +75,14 @@ export function AgentBuilderSidebar() {
         </MainSidebar.NavSection>
       </MainSidebar.Nav>
 
-      <MainSidebar.Bottom>
-        <MainSidebar.NavSeparator />
-        <div className="flex justify-end pb-3">
-          <MainSidebar.Trigger />
-        </div>
-      </MainSidebar.Bottom>
+      {!forceExpanded && (
+        <MainSidebar.Bottom>
+          <MainSidebar.NavSeparator />
+          <div className="flex justify-end pb-3">
+            <MainSidebar.Trigger />
+          </div>
+        </MainSidebar.Bottom>
+      )}
     </MainSidebar>
   );
 }

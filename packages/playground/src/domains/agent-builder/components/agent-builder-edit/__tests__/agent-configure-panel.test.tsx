@@ -506,3 +506,34 @@ describe('AgentConfigurePanel inline model section', () => {
     expect(screen.getByTestId('llm-models').dataset.disabled).toBe('true');
   });
 });
+
+describe('AgentConfigurePanel config row chevron removal', () => {
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: true,
+      skills: true,
+      memory: false,
+      workflows: false,
+      agents: false,
+      avatarUpload: false,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const rowTestIds = [
+    'agent-preview-edit-system-prompt',
+    'agent-preview-tools-button',
+    'agent-preview-skills-button',
+  ] as const;
+
+  it.each(rowTestIds)('does not render a chevron inside the %s row', testId => {
+    renderPanel();
+
+    const button = screen.getByTestId(testId);
+    expect(button.querySelector('svg.lucide-chevron-left')).toBeNull();
+    expect(button.querySelector('svg.lucide-chevron-right')).toBeNull();
+  });
+});

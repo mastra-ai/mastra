@@ -51,7 +51,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
-import { Workspace } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';
 import { StagehandBrowser } from '@mastra/stagehand';
 
@@ -72,6 +72,7 @@ const storage = new MastraCompositeStore({
 
 const workspace = new Workspace({
   id: 'builder-workspace',
+  // filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
   sandbox: new DaytonaSandbox(),
 });
 
@@ -144,11 +145,25 @@ export const mastra = new Mastra({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },
+    sandboxes: {
+      daytona: {
+        id: 'daytona',
+        name: 'Daytona Sandbox',
+        description: 'Remote sandbox powered by Daytona',
+        createSandbox: () => new DaytonaSandbox(),
+      },
+    },
     browsers: {
       stagehand: {
         id: 'stagehand',
         name: 'Stagehand Browser',
-        createBrowser: config => new StagehandBrowser(config),
+        createBrowser: config =>
+          new StagehandBrowser({
+            ...config,
+            apiKey: process.env.BROWSERBASE_API_KEY ?? '',
+            env: 'BROWSERBASE',
+            projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
+          }),
       },
     },
     builder: {
@@ -159,13 +174,25 @@ export const mastra = new Mastra({
           agents: true,
           workflows: true,
           stars: true,
+          skills: true,
           model: true,
           browser: true,
+        },
+        skill: {
+          stars: true,
         },
       },
       configuration: {
         agent: {
-          workspace: { type: 'id', workspaceId: 'builder-workspace' },
+          // workspace: { type: 'id', workspaceId: 'builder-workspace' },
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'builder-workspace',
+              filesystem: { provider: 'local', config: { basePath: '.mastra/workspace' } },
+              sandbox: { provider: 'daytona', config: {} },
+            },
+          },
           memory: {
             options: {
               lastMessages: 10,

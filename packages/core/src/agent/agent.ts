@@ -39,7 +39,7 @@ import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfigInternal } from '../memory/types';
+import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
@@ -69,7 +69,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isProviderTool } from '../tools/toolchecks';
+import { isMastraTool, isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -139,6 +139,67 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
   }
 
   return cb(value as T);
+}
+
+function hasConfiguredProcessor(
+  processors: InputProcessorOrWorkflow[],
+  predicate: (processor: Processor) => boolean,
+): boolean {
+  return processors.some(processor => {
+    const maybeWorkflow = processor as {
+      steps?: Record<string, unknown>;
+      stepGraph?: Array<{ type: string; step?: unknown; steps?: Array<{ step?: unknown }> }>;
+    };
+    const isWorkflowLike = isProcessorWorkflow(processor);
+
+    const workflowSteps = [
+      ...Object.values(maybeWorkflow.steps ?? {}),
+      ...(maybeWorkflow.stepGraph ?? []).flatMap(entry => {
+        if (entry.type === 'step') {
+          return entry.step ? [entry.step] : [];
+        }
+        return entry.steps?.map(stepEntry => stepEntry.step).filter(Boolean) ?? [];
+      }),
+    ];
+
+    if (!isWorkflowLike || workflowSteps.length === 0) {
+      const processorId =
+        typeof (processor as Processor).id === 'string' && (processor as Processor).id.startsWith('processor:')
+          ? (processor as Processor).id.slice('processor:'.length)
+          : (processor as Processor).id;
+      return predicate({
+        ...(processor as Processor),
+        id: processorId,
+        providesSkillDiscovery: (processor as Processor).providesSkillDiscovery,
+      } as Processor);
+    }
+
+    return workflowSteps.some(step => {
+      if (isProcessorWorkflow(step)) {
+        return hasConfiguredProcessor([step], predicate);
+      }
+
+      const stepId = typeof (step as { id?: unknown }).id === 'string' ? (step as { id: string }).id : undefined;
+      if (!stepId?.startsWith('processor:')) {
+        return false;
+      }
+
+      const processorId = stepId.slice('processor:'.length);
+      const workflowStep = step as { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
+      return predicate({
+        id: processorId,
+        providesSkillDiscovery: workflowStep.providesSkillDiscovery,
+      } as Processor);
+    });
+  });
+}
+
+function hasEagerSkillsProcessor(processors: InputProcessorOrWorkflow[]): boolean {
+  return hasConfiguredProcessor(processors, processor => processor.id === 'skills-processor');
+}
+
+function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow[]): boolean {
+  return hasConfiguredProcessor(processors, processor => processor.providesSkillDiscovery === 'on-demand');
 }
 
 /**
@@ -553,10 +614,9 @@ export class Agent<
     }
 
     // Check for existing SkillsProcessor in configured processors to avoid duplicates
-    const hasSkillsProcessor = configuredProcessors.some(
-      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'skills-processor',
-    );
-    if (hasSkillsProcessor) {
+    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredProcessors);
+    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredProcessors);
+    if (hasSkillsProcessor || hasOnDemandProcessor) {
       return [];
     }
 
@@ -884,6 +944,16 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Returns the error processors for this agent, resolving function-based processors if necessary.
+   */
+  public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
+    if (!this.#errorProcessors) return [];
+    return typeof this.#errorProcessors === 'function'
+      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+      : this.#errorProcessors;
   }
 
   /**
@@ -2584,6 +2654,7 @@ export class Agent<
     mastraProxy,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    suppressEagerSkillTools,
     ...rest
   }: {
     runId?: string;
@@ -2593,6 +2664,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    suppressEagerSkillTools: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -2612,6 +2684,9 @@ export class Agent<
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
 
       for (const [toolName, tool] of Object.entries(skillTools)) {
+        if (suppressEagerSkillTools && (toolName === 'skill' || toolName === 'skill_search')) {
+          continue;
+        }
         const toolObj = tool;
         const options: ToolOptions = {
           name: toolName,
@@ -2803,10 +2878,19 @@ export class Agent<
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
+      inputProcessorOverrides?: InputProcessorOrWorkflow[];
       processorStates?: Map<string, ProcessorState>;
+      tools?: Record<string, CoreTool>;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      outputWriter?: OutputWriter;
+      autoResumeSuspendedTools?: boolean;
+      backgroundTaskEnabled?: boolean;
     },
   ): Promise<{
     messageList: MessageList;
+    tools?: Record<string, CoreTool>;
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2814,20 +2898,36 @@ export class Agent<
       processorId?: string;
     };
   }> {
-    const { requestContext, messageList, stepNumber = 0, processorStates, ...rest } = args;
+    const {
+      requestContext,
+      messageList,
+      stepNumber = 0,
+      inputProcessorOverrides,
+      processorStates,
+      tools,
+      runId,
+      threadId,
+      resourceId,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+      ...rest
+    } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+    let nextTools = tools;
 
-    if (this.#inputProcessors || this.#memory) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
         requestContext,
+        inputProcessorOverrides,
         processorStates,
       });
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
-        await runner.runProcessInputStep({
+        const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
           steps: [],
@@ -2836,8 +2936,51 @@ export class Agent<
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
+          tools,
           retryCount: 0,
         });
+        if (result.tools) {
+          const workspace = await this.getWorkspace({ requestContext });
+          const memory = await this.getMemory({ requestContext });
+          const mastraProxy = this.#mastra
+            ? createMastraProxy({ mastra: this.#mastra, logger: this.logger })
+            : undefined;
+          const convertedTools: Record<string, CoreTool> = {};
+
+          for (const [name, tool] of Object.entries(result.tools)) {
+            if (isMastraTool(tool) || isProviderTool(tool)) {
+              convertedTools[name] = makeCoreTool(
+                tool as unknown as ToolToConvert,
+                {
+                  name,
+                  runId,
+                  threadId,
+                  resourceId,
+                  logger: this.logger,
+                  mastra: mastraProxy as MastraUnion | undefined,
+                  memory,
+                  agentName: this.name,
+                  agentId: this.id,
+                  requestContext,
+                  ...observabilityContext,
+                  model: await this.getModel({ requestContext }),
+                  outputWriter,
+                  tracingPolicy: this.#options?.tracingPolicy,
+                  requireApproval: (tool as any).requireApproval,
+                  backgroundConfig: (tool as any).background,
+                  workspace,
+                },
+                undefined,
+                autoResumeSuspendedTools,
+                backgroundTaskEnabled,
+              );
+            } else {
+              convertedTools[name] = tool as CoreTool;
+            }
+          }
+
+          nextTools = convertedTools;
+        }
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2868,6 +3011,7 @@ export class Agent<
 
     return {
       messageList,
+      tools: nextTools,
       tripwire,
     };
   }
@@ -3271,8 +3415,8 @@ export class Agent<
               z.object({
                 toolName: z.string().describe('The name of the tool'),
                 toolCallId: z.string().describe('The ID of the tool call'),
-                result: z.any().describe('The result of the tool call'),
-                args: z.any().describe('The arguments of the tool call').optional(),
+                result: z.unknown().describe('The result of the tool call'),
+                args: z.unknown().describe('The arguments of the tool call').optional(),
                 isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
               }),
             )
@@ -3280,12 +3424,20 @@ export class Agent<
             .optional(),
         });
 
+        const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
+          ? undefined
+          : (output: z.infer<typeof agentOutputSchema>) => ({
+              type: 'text' as const,
+              value: output.text,
+            });
+
         const toolObj = createTool({
           id: `agent-${agentName}`,
           description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
+          ...(toModelOutput ? { toModelOutput } : {}),
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
@@ -4372,6 +4524,36 @@ export class Agent<
   }
 
   /**
+   * Get tools for execution.
+   *
+   * This method assembles all tools from various sources (assigned tools, memory tools,
+   * toolsets, client tools, agent tools, workflow tools) into a unified CoreTool dictionary.
+   *
+   * This is useful for durable execution where tools need to be reconstructed from
+   * serialized state rather than stored in a registry.
+   *
+   * @param options - Options for tool assembly
+   * @returns A record of tool names to CoreTool instances
+   */
+  async getToolsForExecution(options: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    requestContext?: RequestContext;
+    memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
+  }): Promise<Record<string, CoreTool>> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    return this.convertTools({
+      ...options,
+      requestContext,
+      methodType: 'stream',
+    });
+  }
+
+  /**
    * Assembles all tools from various sources into a unified CoreTool dictionary.
    * @internal
    */
@@ -4388,6 +4570,7 @@ export class Agent<
     autoResumeSuspendedTools,
     delegation,
     backgroundTaskEnabled,
+    inputProcessors,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -4402,6 +4585,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
+    inputProcessors?: InputProcessorOrWorkflow[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -4491,6 +4675,10 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
+    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
+    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
+
     const skillTools = await this.listSkillTools({
       runId,
       resourceId,
@@ -4500,6 +4688,7 @@ export class Agent<
       mastraProxy,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
     const channelTools = await this.listChannelTools({

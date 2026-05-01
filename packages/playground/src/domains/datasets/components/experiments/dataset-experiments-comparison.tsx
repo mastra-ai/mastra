@@ -11,7 +11,6 @@ import {
   TooltipTrigger,
   cn,
 } from '@mastra/playground-ui';
-import { AlertTriangleIcon } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import { useDatasetExperiment } from '../../hooks/use-dataset-experiments';
@@ -149,12 +148,8 @@ export function DatasetExperimentsComparison({
 
   if (error) {
     return (
-      <Notice variant="warning">
-        <AlertTriangleIcon />
-        <Notice.Column>
-          <Notice.Title>Error loading comparison</Notice.Title>
-          <Notice.Message>{error instanceof Error ? error.message : 'Unknown error'}</Notice.Message>
-        </Notice.Column>
+      <Notice variant="warning" title="Error loading comparison">
+        <Notice.Message>{error instanceof Error ? error.message : 'Unknown error'}</Notice.Message>
       </Notice>
     );
   }
@@ -188,11 +183,10 @@ export function DatasetExperimentsComparison({
       )}
 
       {versionMismatch && (
-        <Notice variant="warning">
-          <AlertTriangleIcon />
+        <Notice variant="warning" title="Version mismatch">
           <Notice.Message>
-            <strong>Version mismatch!</strong> These experiments used different dataset versions (v
-            {expA.datasetVersion} vs v{expB.datasetVersion}). Results may not be directly comparable.
+            These experiments used different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}).
+            Results may not be directly comparable.
           </Notice.Message>
         </Notice>
       )}

@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle, Button } from '@mastra/playground-ui';
+import { Notice, Button } from '@mastra/playground-ui';
 import { Save } from 'lucide-react';
 
 import { useFormState } from 'react-hook-form';
@@ -26,21 +26,24 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
   if (!isDirty) return null;
 
   return (
-    <Alert variant="warning" className="mx-4 mt-3 mb-0">
-      <AlertTitle>Unsaved changes</AlertTitle>
-      <AlertDescription as="p">
-        You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest
-        changes.
-      </AlertDescription>
-      {handleSaveDraft && (
-        <div className="pt-2">
-          <Button type="button" variant="light" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
+    <Notice
+      variant="warning"
+      title="Unsaved changes"
+      className="mx-4 mt-3 mb-0"
+      action={
+        handleSaveDraft && (
+          <Button type="button" variant="default" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
             <Save className="h-3.5 w-3.5" />
             {isSavingDraft ? 'Saving...' : 'Save draft'}
           </Button>
-        </div>
-      )}
-    </Alert>
+        )
+      }
+    >
+      <Notice.Message>
+        You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest
+        changes.
+      </Notice.Message>
+    </Notice>
   );
 }
 

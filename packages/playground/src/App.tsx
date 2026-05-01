@@ -36,6 +36,7 @@ import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import AgentBuilderFavorite from './pages/agent-builder/favorite';
 import AgentBuilderLibrary from './pages/agent-builder/library';
+import AgentBuilderSkills from './pages/agent-builder/skills';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -231,6 +232,16 @@ const routes = [
           { path: 'create', element: <AgentBuilderCreate /> },
           { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
           { path: ':id/view', element: <AgentBuilderAgentView /> },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderSkills />,
+          },
         ],
       },
       {

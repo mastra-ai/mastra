@@ -339,6 +339,7 @@ export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   references: { type: 'jsonb', nullable: true },
   scripts: { type: 'jsonb', nullable: true },
   assets: { type: 'jsonb', nullable: true },
+  files: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   tree: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },

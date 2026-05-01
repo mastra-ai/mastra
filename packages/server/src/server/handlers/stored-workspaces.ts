@@ -53,7 +53,14 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
         metadata,
       });
 
-      return result;
+      // Annotate each workspace with whether it's registered at runtime
+      const runtimeWorkspaces = mastra.listWorkspaces();
+      const workspaces = result.workspaces.map(ws => ({
+        ...ws,
+        runtimeRegistered: ws.id in runtimeWorkspaces,
+      }));
+
+      return { ...result, workspaces };
     } catch (error) {
       return handleError(error, 'Error listing stored workspaces');
     }

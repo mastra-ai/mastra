@@ -17,11 +17,11 @@ export default function AgentBuilderCreate() {
   useTools({ enabled: features.tools });
   useAgents({ enabled: features.agents });
   useWorkflows({ enabled: features.workflows });
-  useStoredSkills({ enabled: features.skills });
+  useStoredSkills(undefined, { enabled: features.skills });
   const navigate = useNavigate();
   return (
     <>
-      <div className="absolute top-6 left-6 z-10">
+      <div className="absolute top-3 left-3 md:top-6 md:left-6 z-10">
         <IconButton
           variant="ghost"
           onClick={() =>

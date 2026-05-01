@@ -61,6 +61,18 @@
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);
+
+  /* Notice admonition colors — bg uses /20 alpha overlay; fg is the on-surface text/icon color */
+  --notice-success: oklch(0.92 0.27 138);
+  --notice-success-fg: oklch(0.96 0.025 145);
+  --notice-destructive: oklch(0.69 0.24 22);
+  --notice-destructive-fg: oklch(0.95 0.014 18);
+  --notice-warning: oklch(0.91 0.16 105);
+  --notice-warning-fg: oklch(0.97 0.025 100);
+  --notice-info: oklch(0.81 0.12 230);
+  --notice-info-fg: oklch(0.97 0.013 224);
+  --notice-note: oklch(0.18 0 0);
+  --notice-note-fg: oklch(0.99 0.001 230);
 }
 
 html.light {
@@ -106,6 +118,18 @@ html.light {
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);
+
+  /* Notice admonition colors — bg keeps saturation, fg flips to deep tint for contrast on light surface */
+  --notice-success: oklch(0.55 0.2 140);
+  --notice-success-fg: oklch(0.32 0.1 145);
+  --notice-destructive: oklch(0.55 0.22 22);
+  --notice-destructive-fg: oklch(0.36 0.18 22);
+  --notice-warning: oklch(0.65 0.16 95);
+  --notice-warning-fg: oklch(0.36 0.1 95);
+  --notice-info: oklch(0.55 0.15 230);
+  --notice-info-fg: oklch(0.36 0.13 225);
+  --notice-note: oklch(0.97 0 0);
+  --notice-note-fg: oklch(0.18 0 0);
 }
 
 @utility container {
@@ -187,6 +211,7 @@ html.light {
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 6px;
+  --radius-xl: 12px;
 
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
@@ -288,6 +313,17 @@ html.light {
   --color-positive1: var(--positive1);
   --color-negative1: var(--negative1);
 
+  --color-notice-success: var(--notice-success);
+  --color-notice-success-fg: var(--notice-success-fg);
+  --color-notice-destructive: var(--notice-destructive);
+  --color-notice-destructive-fg: var(--notice-destructive-fg);
+  --color-notice-warning: var(--notice-warning);
+  --color-notice-warning-fg: var(--notice-warning-fg);
+  --color-notice-info: var(--notice-info);
+  --color-notice-info-fg: var(--notice-info-fg);
+  --color-notice-note: var(--notice-note);
+  --color-notice-note-fg: var(--notice-note-fg);
+
   --font-serif: var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   --font-mono:
     var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
@@ -307,7 +343,8 @@ html.light {
   --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
-  --shadow-dialog: 0 16px 48px oklch(0 0 0 / 0.6);
+  --shadow-dialog:
+    0 0 0 1px oklch(0 0 0 / 0.04), 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);

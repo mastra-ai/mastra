@@ -50,6 +50,22 @@ const sourceSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+export interface FileNode {
+  id?: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: FileNode[];
+}
+
+const fileNodeSchema: z.ZodType<FileNode> = z.object({
+  id: z.string().optional(),
+  name: z.string(),
+  type: z.enum(['file', 'folder']),
+  content: z.string().optional(),
+  children: z.lazy(() => z.array(fileNodeSchema)).optional(),
+});
+
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the skill'),
   description: z.string().describe('Description of what the skill does and when to use it'),
@@ -60,6 +76,7 @@ const snapshotConfigSchema = z.object({
   references: z.array(z.string()).optional().describe('List of reference file paths'),
   scripts: z.array(z.string()).optional().describe('List of script file paths'),
   assets: z.array(z.string()).optional().describe('List of asset file paths'),
+  files: z.array(fileNodeSchema).optional().describe('Full file tree structure for the skill'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the skill'),
 });
 
@@ -108,6 +125,7 @@ export const storedSkillSchema = z.object({
   references: z.array(z.string()).optional().describe('List of reference file paths'),
   scripts: z.array(z.string()).optional().describe('List of script file paths'),
   assets: z.array(z.string()).optional().describe('List of asset file paths'),
+  files: z.array(fileNodeSchema).optional().describe('Full file tree structure for the skill'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the skill'),
 });
 
