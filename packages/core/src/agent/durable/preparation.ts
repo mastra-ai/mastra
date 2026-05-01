@@ -164,9 +164,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       messageList.addSystem(instructions);
     }
   }
-
-  // Add workspace instructions (matches WorkspaceInstructionsProcessor behavior)
   const workspace = await typedAgent.getWorkspace({ requestContext });
+
+  // Durable preparation runs processInput processors below, but workspace
+  // instructions are a processInputStep concern in the non-durable path.
+  // Add them here once so durable runs get the same workspace context.
   if (workspace) {
     const hasFs =
       typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
