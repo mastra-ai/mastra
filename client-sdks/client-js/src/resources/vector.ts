@@ -1,9 +1,9 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { QueryResult } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
   GetVectorIndexResponse,
   QueryVectorParams,
-  QueryVectorResponse,
   ClientOptions,
   UpsertVectorParams,
 } from '../types';
@@ -47,7 +47,7 @@ export class Vector extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing array of index names
    */
-  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<{ indexes: string[] }> {
+  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<string[]> {
     return this.request(
       `/vector/${encodeURIComponent(this.vectorName)}/indexes${requestContextQueryString(requestContext)}`,
     );
@@ -68,9 +68,9 @@ export class Vector extends BaseResource {
   /**
    * Upserts vectors into an index
    * @param params - Parameters containing vectors, metadata, and optional IDs
-   * @returns Promise containing array of vector IDs
+   * @returns Promise containing the inserted vector IDs
    */
-  upsert(params: UpsertVectorParams): Promise<string[]> {
+  upsert(params: UpsertVectorParams): Promise<{ ids: string[] }> {
     return this.request(`/vector/${encodeURIComponent(this.vectorName)}/upsert`, {
       method: 'POST',
       body: params,
@@ -82,7 +82,7 @@ export class Vector extends BaseResource {
    * @param params - Query parameters including query vector and search options
    * @returns Promise containing query results
    */
-  query(params: QueryVectorParams): Promise<QueryVectorResponse> {
+  query(params: QueryVectorParams): Promise<QueryResult[]> {
     return this.request(`/vector/${encodeURIComponent(this.vectorName)}/query`, {
       method: 'POST',
       body: params,

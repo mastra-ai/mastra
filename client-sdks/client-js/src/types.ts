@@ -542,9 +542,7 @@ export interface QueryVectorParams {
   includeVector?: boolean;
 }
 
-export interface QueryVectorResponse {
-  results: QueryResult[];
-}
+export type QueryVectorResponse = QueryResult[];
 
 export interface GetVectorIndexResponse {
   dimension: number;
