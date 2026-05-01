@@ -7,8 +7,8 @@
  *
  * Inspired by Hermes /goal and Codex /goal (Ralph loop pattern).
  */
-import { generateText } from 'ai';
-import type { LanguageModel } from 'ai';
+import { Agent } from '@mastra/core/agent';
+import { z } from 'zod';
 
 import { resolveModel } from '../agents/model.js';
 
@@ -47,20 +47,14 @@ const THREAD_GOAL_KEY = 'goal';
 
 const JUDGE_SYSTEM_PROMPT = `You are a goal completion judge. Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied.
 
-Think step by step:
-1. What does the goal require? Break it into concrete deliverables or success criteria.
-2. What has the assistant actually produced or accomplished in this response?
-3. Are all requirements met?
+Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
 
-Then respond with exactly one of these two words on the FIRST line: "done" or "continue"
-On the SECOND line, provide a brief reason explaining what was accomplished or what remains.
+Your "reason" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished.`;
 
-Guidelines:
-- Focus on the substance of the goal — compare what was asked vs what was delivered.
-- If the goal asks for N items and N items have been produced, say "done".
-- If the assistant's output satisfies the goal's intent even if phrased differently, say "done".
-- Say "continue" with specific feedback about what is still missing or incomplete.
-- Your reason on the "continue" line will be sent back to the assistant as guidance, so be specific about what still needs to be done.`;
+const judgeSchema = z.object({
+  decision: z.enum(['done', 'continue']).describe('Whether the goal has been fully achieved'),
+  reason: z.string().describe('Brief explanation of what was accomplished or what remains to be done'),
+});
 
 // =============================================================================
 // GoalManager
@@ -220,9 +214,8 @@ export class GoalManager {
 
   private async callJudge(assistantContent: string): Promise<GoalJudgeResult> {
     try {
-      const model = this.resolveJudgeModel();
-      if (!model) {
-        // No model available — fail OPEN (continue)
+      const judgeAgent = this.createJudgeAgent();
+      if (!judgeAgent) {
         return { decision: 'continue', reason: 'No judge model available.' };
       }
 
@@ -230,56 +223,36 @@ export class GoalManager {
       const truncated =
         assistantContent.length > 4000 ? assistantContent.slice(0, 4000) + '\n...[truncated]' : assistantContent;
 
-      const { text } = await generateText({
-        model,
-        system: JUDGE_SYSTEM_PROMPT,
-        prompt: `Goal: ${this.goal!.objective}\n\nAssistant's last response:\n${truncated}`,
-        maxOutputTokens: 300,
-        temperature: 0,
-      });
+      const result = await judgeAgent.generate(
+        `Goal: ${this.goal!.objective}\n\nAssistant's last response:\n${truncated}`,
+        {
+          structuredOutput: {
+            schema: judgeSchema,
+          },
+        },
+      );
 
-      return this.parseJudgeResponse(text);
+      const output = result.object as z.infer<typeof judgeSchema>;
+      return { decision: output.decision, reason: output.reason };
     } catch {
       // Judge failure — fail OPEN (continue so progress isn't blocked)
       return { decision: 'continue', reason: 'Judge call failed, continuing.' };
     }
   }
 
-  private resolveJudgeModel(): LanguageModel | null {
+  private createJudgeAgent(): Agent | null {
     if (!this.goal?.judgeModelId) return null;
     try {
-      return resolveModel(this.goal.judgeModelId) as LanguageModel;
+      const model = resolveModel(this.goal.judgeModelId);
+      return new Agent({
+        id: 'goal-judge',
+        name: 'Goal Judge',
+        instructions: JUDGE_SYSTEM_PROMPT,
+        model,
+      });
     } catch {
       return null;
     }
-  }
-
-  private parseJudgeResponse(text: string): GoalJudgeResult {
-    const lines = text.trim().split('\n');
-
-    // Scan for the first line that is a decision keyword
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]!.toLowerCase().trim();
-      if (line === 'done' || line.startsWith('done')) {
-        const reason =
-          lines
-            .slice(i + 1)
-            .join(' ')
-            .trim() || 'Goal completed.';
-        return { decision: 'done', reason };
-      }
-      if (line === 'continue' || line.startsWith('continue')) {
-        const reason =
-          lines
-            .slice(i + 1)
-            .join(' ')
-            .trim() || 'Continuing.';
-        return { decision: 'continue', reason };
-      }
-    }
-
-    // If no clear decision found, default to continue (fail OPEN)
-    return { decision: 'continue', reason: text.trim().split('\n').pop() || 'No clear decision from judge.' };
   }
 
   private buildContinuationPrompt(judgeReason: string): string {
