@@ -14,6 +14,11 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
+import {
+  CRITICAL_DISPLAY_STATE_EVENT_TYPES,
+  DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS,
+  DisplayStateScheduler,
+} from './display-state-scheduler';
 import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
 import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
@@ -21,6 +26,8 @@ import type {
   HeartbeatHandler,
   HarnessConfig,
   HarnessDisplayState,
+  HarnessDisplayStateListener,
+  HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -73,6 +80,7 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
+  private displayStateSchedulers = new Set<DisplayStateScheduler>();
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
@@ -2553,6 +2561,29 @@ export class Harness<TState = {}> {
     };
   }
 
+  /**
+   * Subscribe to coalesced display state snapshots.
+   *
+   * Use this for UI rendering paths that only need the latest display state.
+   * Raw event consumers should continue to use `subscribe()`.
+   */
+  subscribeDisplayState(
+    listener: HarnessDisplayStateListener,
+    options: HarnessDisplayStateSubscriptionOptions = {},
+  ): () => void {
+    const scheduler = new DisplayStateScheduler(
+      listener,
+      options.windowMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.windowMs,
+      options.maxWaitMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.maxWaitMs,
+    );
+    this.displayStateSchedulers.add(scheduler);
+
+    return () => {
+      this.displayStateSchedulers.delete(scheduler);
+      scheduler.dispose();
+    };
+  }
+
   private emit(event: HarnessEvent): void {
     // Update display state based on the event (before dispatching to listeners)
     this.applyDisplayStateUpdate(event);
@@ -2567,6 +2598,13 @@ export class Harness<TState = {}> {
         type: 'display_state_changed',
         displayState: this.displayState,
       });
+    }
+
+    if (event.type !== 'display_state_changed' && this.displayStateSchedulers.size > 0) {
+      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
+      for (const scheduler of Array.from(this.displayStateSchedulers)) {
+        scheduler.notify(this.displayState, isCritical);
+      }
     }
   }
 
@@ -3282,6 +3320,10 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
+    for (const scheduler of this.displayStateSchedulers) {
+      scheduler.dispose();
+    }
+    this.displayStateSchedulers.clear();
     await this.stopHeartbeats();
     await this.destroyWorkspace();
   }

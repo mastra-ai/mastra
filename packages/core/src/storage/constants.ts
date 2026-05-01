@@ -36,6 +36,10 @@ export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 
+// Channel tables
+export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
+export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -65,7 +69,9 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
-  | typeof TABLE_BACKGROUND_TASKS;
+  | typeof TABLE_BACKGROUND_TASKS
+  | typeof TABLE_CHANNEL_INSTALLATIONS
+  | typeof TABLE_CHANNEL_CONFIG;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -561,6 +567,23 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     startedAt: { type: 'timestamp', nullable: true },
     completedAt: { type: 'timestamp', nullable: true },
+  },
+  [TABLE_CHANNEL_INSTALLATIONS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    platform: { type: 'text', nullable: false },
+    agentId: { type: 'text', nullable: false },
+    status: { type: 'text', nullable: false },
+    webhookId: { type: 'text', nullable: true },
+    data: { type: 'jsonb', nullable: false },
+    configHash: { type: 'text', nullable: true },
+    error: { type: 'text', nullable: true },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
+  },
+  [TABLE_CHANNEL_CONFIG]: {
+    platform: { type: 'text', nullable: false, primaryKey: true },
+    data: { type: 'jsonb', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
   },
 };
 

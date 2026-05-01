@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.9.4-alpha.0
+
+### Patch Changes
+
+- Fixed workflow snapshot sanitization in `@mastra/pg` for strings containing escaped surrogate patterns like `[^\ud800-\udfff]`. This prevents invalid JSON escape sequences that caused PostgreSQL `jsonb` writes to fail with error `22P02`. ([#15923](https://github.com/mastra-ai/mastra/pull/15923))
+
+  Fixes #15920
+
+- Updated dependencies [[`e109607`](https://github.com/mastra-ai/mastra/commit/e10960749251e34d46b480a20648c490fd30381b)]:
+  - @mastra/core@1.31.0-alpha.1
+
 ## 1.9.3
 
 ### Patch Changes

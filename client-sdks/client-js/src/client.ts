@@ -84,6 +84,7 @@ import {
   ProcessorProvider,
   Workspace,
   Responses,
+  Channels,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -181,11 +182,13 @@ export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
   public readonly responses: Responses;
+  public readonly channels: Channels;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
     this.conversations = new Conversations(options);
     this.responses = new Responses(options);
+    this.channels = new Channels(options);
   }
 
   /**

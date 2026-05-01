@@ -10,6 +10,8 @@ export type {
   CustomModelCatalogProvider,
   HarnessConfig,
   HarnessDisplayState,
+  HarnessDisplayStateListener,
+  HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
