@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { forwardRef } from 'react';
 import { DataKeysAndValues } from './data-keys-and-values';
 import type { DataKeysAndValuesProps } from './data-keys-and-values-root';
-import { forwardRef } from 'react';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
@@ -131,11 +131,11 @@ export const ValueLink: Story = {
   render: () => (
     <DataKeysAndValues>
       <DataKeysAndValues.Key>Agent</DataKeysAndValues.Key>
-      <DataKeysAndValues.ValueLink href="/agents/my-agent" LinkComponent={StoryLink}>
+      <DataKeysAndValues.ValueLink href="/agents/my-agent" as={StoryLink}>
         my-agent
       </DataKeysAndValues.ValueLink>
       <DataKeysAndValues.Key>Workflow</DataKeysAndValues.Key>
-      <DataKeysAndValues.ValueLink href="/workflows/data-pipeline" LinkComponent={StoryLink}>
+      <DataKeysAndValues.ValueLink href="/workflows/data-pipeline" as={StoryLink}>
         data-pipeline
       </DataKeysAndValues.ValueLink>
     </DataKeysAndValues>
@@ -201,7 +201,7 @@ export const MixedValueTypes: Story = {
       <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
       <DataKeysAndValues.Value>Running</DataKeysAndValues.Value>
       <DataKeysAndValues.Key>Agent</DataKeysAndValues.Key>
-      <DataKeysAndValues.ValueLink href="/agents/my-agent" LinkComponent={StoryLink}>
+      <DataKeysAndValues.ValueLink href="/agents/my-agent" as={StoryLink}>
         my-agent
       </DataKeysAndValues.ValueLink>
       <DataKeysAndValues.Key>Trace ID</DataKeysAndValues.Key>

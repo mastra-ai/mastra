@@ -251,6 +251,38 @@ describe('MCPServer', () => {
       // @ts-expect-error - accessing internal for testing - accessing private property for testing
       expect(sdkServer._instructions).toBe(instructions);
     });
+
+    it('should forward jsonSchemaValidator to underlying SDK Server', () => {
+      const customValidator = {
+        getValidator: vi.fn(() => (input: unknown) => ({
+          valid: true as const,
+          data: input,
+          errorMessage: undefined,
+        })),
+      };
+
+      const server = new MCPServer({
+        ...minimalConfig,
+        jsonSchemaValidator: customValidator,
+      });
+
+      const sdkServer = server.getServer();
+
+      // @ts-expect-error - accessing internal SDK property for testing
+      expect(sdkServer._jsonSchemaValidator).toBe(customValidator);
+    });
+
+    it('should not set jsonSchemaValidator on the SDK Server when omitted', () => {
+      const server = new MCPServer(minimalConfig);
+      const sdkServer = server.getServer();
+
+      // When omitted, the SDK falls back to its default (AJV) validator. The
+      // important assertion is that we do not pass undefined through, which
+      // would force a default-import of the AJV provider in environments
+      // (Cloudflare Workers) that cannot evaluate it.
+      // @ts-expect-error - accessing internal SDK property for testing
+      expect(sdkServer._jsonSchemaValidator).not.toBeUndefined();
+    });
   });
 
   describe('getServerInfo()', () => {

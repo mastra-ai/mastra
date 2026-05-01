@@ -90,8 +90,11 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   state.pendingTools.clear();
   state.allToolComponents = [];
   state.allSystemReminderComponents = [];
+  state.messageComponentsById.clear();
   state.allShellComponents = [];
   state.harness.getDisplayState().modifiedFiles.clear();
+  // Clear per-thread ephemeral state from the global harness state
+  await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }

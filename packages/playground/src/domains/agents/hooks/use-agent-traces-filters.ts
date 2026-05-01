@@ -1,5 +1,5 @@
+import type { TraceStatus } from '@internal-temp/core/index';
 import { EntityType } from '@mastra/core/observability';
-import type { TraceStatus } from '@mastra/core/storage';
 import { useState, useCallback, useMemo } from 'react';
 
 export type AgentTracesFilterState = {

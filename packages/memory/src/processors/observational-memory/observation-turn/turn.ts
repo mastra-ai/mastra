@@ -6,6 +6,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import type { ObservationModelContext } from '../types';
 
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
@@ -55,8 +56,11 @@ export class ObservationTurn {
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
 
-  /** Optional processor-provided hooks for turn/step lifecycle integration. */
-  readonly hooks?: ObservationTurnHooks;
+  /** Current actor model for this step. Updated by the processor before prepare(). */
+  actorModelContext?: ObservationModelContext;
+
+  /** Processor-provided hooks for turn/step lifecycle integration. */
+  readonly hooks: ObservationTurnHooks;
 
   constructor(opts: {
     om: ObservationalMemory;
@@ -71,7 +75,7 @@ export class ObservationTurn {
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
     this.observabilityContext = opts.observabilityContext;
-    this.hooks = opts.hooks;
+    this.hooks = opts.hooks ?? {};
   }
 
   readonly om: ObservationalMemory;
@@ -94,6 +98,11 @@ export class ObservationTurn {
   /** The current step, if one exists. */
   get currentStep(): ObservationStep | undefined {
     return this._currentStep;
+  }
+
+  addHooks(hooks?: ObservationTurnHooks): void {
+    if (!hooks) return;
+    Object.assign(this.hooks, hooks);
   }
 
   /**

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "1.2.8-alpha.0",
+  "version": "1.2.9",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -107,9 +107,9 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.64",
-    "@ai-sdk/google": "^3.0.53",
-    "@ai-sdk/openai": "^3.0.48",
+    "@ai-sdk/anthropic": "^3.0.71",
+    "@ai-sdk/google": "^3.0.64",
+    "@ai-sdk/openai": "^3.0.53",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -124,7 +124,7 @@
     "@vitest/ui": "catalog:",
     "ajv": "^8.18.0",
     "arktype": "^2.2.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "json-schema-traverse": "^1.0.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

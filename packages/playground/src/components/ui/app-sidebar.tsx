@@ -36,6 +36,7 @@ type SidebarLink = NavLink & {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
   requiresExperimentalFeatures?: boolean;
+  activePaths?: string[];
 };
 
 type SidebarSection = Omit<NavSection, 'links'> & {
@@ -159,6 +160,7 @@ const mainNavigation: SidebarSection[] = [
       {
         name: 'Traces',
         url: '/observability',
+        activePaths: ['/traces'],
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
         indent: true,
@@ -203,7 +205,9 @@ declare global {
 
 function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
   // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
-  return pathname === link.url || pathname.startsWith(link.url + '/');
+  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
+  if (matches(link.url)) return true;
+  return link.activePaths?.some(matches) ?? false;
 }
 
 export function AppSidebar() {

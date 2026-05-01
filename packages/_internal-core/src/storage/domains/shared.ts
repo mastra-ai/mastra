@@ -6,6 +6,8 @@ export enum EntityType {
   AGENT = 'agent',
   /** Scorer definition/execution */
   SCORER = 'scorer',
+  /** RAG ingestion pipeline execution */
+  RAG_INGESTION = 'rag_ingestion',
   /** Trajectory evaluation target */
   TRAJECTORY = 'trajectory',
   /** Input Processor */

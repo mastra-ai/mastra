@@ -1,0 +1,571 @@
+---
+title: "Reference: Tavily tools | Tools & MCP"
+description: "API reference for @mastra/tavily, which provides web search, extract, crawl, and map tools for Mastra agents."
+packages:
+  - "@mastra/tavily"
+  - "@mastra/core"
+---
+
+# Tavily tools
+
+**Added in:** `@mastra/tavily@0.1.0-alpha.0`
+
+The `@mastra/tavily` package wraps the [Tavily](https://app.tavily.com) API as Mastra-compatible tools. It exposes factory functions for search, extract, crawl, and map — each returning a tool created with [`createTool()`](./create-tool) that includes full Zod input/output schemas.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/tavily @tavily/core zod
+```
+
+## Quick start
+
+Use `createTavilyTools()` to get all four tools with shared configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createTavilyTools } from '@mastra/tavily'
+
+const tools = createTavilyTools()
+// Or pass an explicit API key:
+// const tools = createTavilyTools({ apiKey: 'tvly-...' })
+```
+
+Each tool can also be created individually:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily'
+
+const searchTool = createTavilySearchTool()
+const extractTool = createTavilyExtractTool({ apiKey: 'tvly-...' })
+```
+
+By default, all tools read `TAVILY_API_KEY` from the environment. You can pass `{ apiKey }` explicitly to override.
+
+## Configuration
+
+All factory functions accept `TavilyClientOptions` from `@tavily/core`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Tavily API key. Falls back to the `TAVILY_API_KEY` environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'clientSource',
+    type: 'string',
+    description: 'Attribution string sent with each request.',
+    isOptional: true,
+    defaultValue: "'mastra'",
+  },
+  {
+    name: 'apiBaseURL',
+    type: 'string',
+    description: 'Base URL for the Tavily API.',
+    isOptional: true,
+  },
+  {
+    name: 'proxies',
+    type: 'object',
+    description: 'Proxy configuration passed to the underlying HTTP client.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'Tavily project ID for request scoping.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `createTavilyTools()`
+
+Returns an object containing all four tools with a shared configuration.
+
+```typescript
+import { createTavilyTools } from '@mastra/tavily'
+
+const tools = createTavilyTools({ apiKey: 'tvly-...' })
+// tools.tavilySearch, tools.tavilyExtract, tools.tavilyCrawl, tools.tavilyMap
+```
+
+**Returns:** `{ tavilySearch, tavilyExtract, tavilyCrawl, tavilyMap }`
+
+## `createTavilySearchTool()`
+
+Creates a tool that searches the web using Tavily. Returns relevant results with content snippets, optional AI-generated answers, and images.
+
+**Tool ID:** `tavily-search`
+
+```typescript
+import { createTavilySearchTool } from '@mastra/tavily'
+
+const searchTool = createTavilySearchTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The search query.',
+  },
+  {
+    name: 'searchDepth',
+    type: "'basic' | 'advanced' | 'fast' | 'ultra-fast'",
+    description:
+      "Search depth. Use 'basic' for standard results, 'advanced' for more thorough results, or 'fast'/'ultra-fast' for low latency.",
+    isOptional: true,
+  },
+  {
+    name: 'maxResults',
+    type: 'number',
+    description: 'Maximum number of results to return (1-20).',
+    isOptional: true,
+  },
+  {
+    name: 'includeAnswer',
+    type: "boolean | 'basic' | 'advanced'",
+    description: 'Include an AI-generated answer summary.',
+    isOptional: true,
+  },
+  {
+    name: 'includeImages',
+    type: 'boolean',
+    description: 'Include query-related images in the response.',
+    isOptional: true,
+  },
+  {
+    name: 'includeImageDescriptions',
+    type: 'boolean',
+    description: 'Include descriptions for returned images.',
+    isOptional: true,
+  },
+  {
+    name: 'includeRawContent',
+    type: "false | 'markdown' | 'text'",
+    description: "Include cleaned HTML content of each result. Pass false to disable, or 'markdown'/'text' for format.",
+    isOptional: true,
+  },
+  {
+    name: 'includeDomains',
+    type: 'string[]',
+    description: 'Restrict results to these domains.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Exclude results from these domains.',
+    isOptional: true,
+  },
+  {
+    name: 'timeRange',
+    type: "'day' | 'week' | 'month' | 'year'",
+    description: 'Filter results by recency.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The original search query.',
+  },
+  {
+    name: 'answer',
+    type: 'string',
+    description: 'AI-generated answer summary.',
+    isOptional: true,
+  },
+  {
+    name: 'images',
+    type: '{ url: string; description?: string }[]',
+    description: 'Related images.',
+    isOptional: true,
+  },
+  {
+    name: 'results',
+    type: 'SearchResult[]',
+    description: 'Array of search results.',
+    properties: [
+      {
+        type: 'SearchResult',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Result title.' },
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'content', type: 'string', description: 'Content snippet.' },
+          { name: 'score', type: 'number', description: 'Relevance score.' },
+          { name: 'rawContent', type: 'string', description: 'Full-page content (when requested).', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'responseTime',
+    type: 'number',
+    description: 'Server response time in seconds.',
+  },
+]}
+/>
+
+## `createTavilyExtractTool()`
+
+Creates a tool that extracts content from one or more URLs. Returns raw page content in markdown or text format with up to 20 URLs per request.
+
+**Tool ID:** `tavily-extract`
+
+```typescript
+import { createTavilyExtractTool } from '@mastra/tavily'
+
+const extractTool = createTavilyExtractTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'urls',
+    type: 'string[]',
+    description: 'URLs to extract content from (1-20).',
+  },
+  {
+    name: 'extractDepth',
+    type: "'basic' | 'advanced'",
+    description: "Extraction depth. Use 'advanced' to retrieve tables and embedded content.",
+    isOptional: true,
+  },
+  {
+    name: 'query',
+    type: 'string',
+    description: 'User intent for reranking extracted content chunks by relevance.',
+    isOptional: true,
+  },
+  {
+    name: 'includeImages',
+    type: 'boolean',
+    description: 'Include images extracted from the pages.',
+    isOptional: true,
+  },
+  {
+    name: 'format',
+    type: "'markdown' | 'text'",
+    description: 'Output format for extracted content.',
+    isOptional: true,
+    defaultValue: "'markdown'",
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'results',
+    type: 'ExtractResult[]',
+    description: 'Successfully extracted pages.',
+    properties: [
+      {
+        type: 'ExtractResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Page URL.' },
+          { name: 'rawContent', type: 'string', description: 'Extracted page content.' },
+          { name: 'images', type: 'string[]', description: 'Extracted image URLs.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'failedResults',
+    type: 'FailedResult[]',
+    description: 'URLs that failed extraction.',
+    properties: [
+      {
+        type: 'FailedResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Failed URL.' },
+          { name: 'error', type: 'string', description: 'Error message.' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'responseTime',
+    type: 'number',
+    description: 'Server response time in seconds.',
+  },
+]}
+/>
+
+## `createTavilyCrawlTool()`
+
+Creates a tool that crawls a website starting from a URL. Extracts content from discovered pages with configurable depth, breadth, and domain constraints.
+
+**Tool ID:** `tavily-crawl`
+
+```typescript
+import { createTavilyCrawlTool } from '@mastra/tavily'
+
+const crawlTool = createTavilyCrawlTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'The root URL to begin the crawl.',
+  },
+  {
+    name: 'maxDepth',
+    type: 'number',
+    description: 'Maximum depth of the crawl from the base URL.',
+    isOptional: true,
+  },
+  {
+    name: 'maxBreadth',
+    type: 'number',
+    description: 'Maximum number of links to follow per page.',
+    isOptional: true,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Total number of pages the crawler processes before stopping.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'Natural language instructions for the crawler.',
+    isOptional: true,
+  },
+  {
+    name: 'selectPaths',
+    type: 'string[]',
+    description: 'Regex patterns to select specific URL paths.',
+    isOptional: true,
+  },
+  {
+    name: 'selectDomains',
+    type: 'string[]',
+    description: 'Regex patterns to restrict to specific domains.',
+    isOptional: true,
+  },
+  {
+    name: 'excludePaths',
+    type: 'string[]',
+    description: 'Regex patterns to exclude specific URL paths.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Regex patterns to exclude specific domains.',
+    isOptional: true,
+  },
+  {
+    name: 'allowExternal',
+    type: 'boolean',
+    description: 'Whether to follow links to external domains.',
+    isOptional: true,
+  },
+  {
+    name: 'extractDepth',
+    type: "'basic' | 'advanced'",
+    description: "Extraction depth. Use 'advanced' to retrieve tables and embedded content.",
+    isOptional: true,
+  },
+  {
+    name: 'includeImages',
+    type: 'boolean',
+    description: 'Include images from crawled pages.',
+    isOptional: true,
+  },
+  {
+    name: 'format',
+    type: "'markdown' | 'text'",
+    description: 'Output format for extracted content.',
+    isOptional: true,
+    defaultValue: "'markdown'",
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'The root URL that was crawled.',
+  },
+  {
+    name: 'results',
+    type: 'CrawlResult[]',
+    description: 'Content extracted from discovered pages.',
+    properties: [
+      {
+        type: 'CrawlResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Page URL.' },
+          { name: 'rawContent', type: 'string', description: 'Extracted page content.' },
+          { name: 'images', type: 'string[]', description: 'Image URLs found on the page.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'responseTime',
+    type: 'number',
+    description: 'Server response time in seconds.',
+  },
+]}
+/>
+
+## `createTavilyMapTool()`
+
+Creates a tool that maps a website's structure starting from a URL. Discovers and returns a list of URLs without extracting page content. Use this to understand site structure before targeted extraction.
+
+**Tool ID:** `tavily-map`
+
+```typescript
+import { createTavilyMapTool } from '@mastra/tavily'
+
+const mapTool = createTavilyMapTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'The root URL to begin mapping.',
+  },
+  {
+    name: 'maxDepth',
+    type: 'number',
+    description: 'Maximum depth of the mapping from the base URL.',
+    isOptional: true,
+  },
+  {
+    name: 'maxBreadth',
+    type: 'number',
+    description: 'Maximum number of links to follow per page.',
+    isOptional: true,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Total number of links the mapper processes before stopping.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'Natural language instructions for the mapper.',
+    isOptional: true,
+  },
+  {
+    name: 'selectPaths',
+    type: 'string[]',
+    description: 'Regex patterns to select specific URL paths.',
+    isOptional: true,
+  },
+  {
+    name: 'selectDomains',
+    type: 'string[]',
+    description: 'Regex patterns to restrict to specific domains.',
+    isOptional: true,
+  },
+  {
+    name: 'excludePaths',
+    type: 'string[]',
+    description: 'Regex patterns to exclude specific URL paths.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Regex patterns to exclude specific domains.',
+    isOptional: true,
+  },
+  {
+    name: 'allowExternal',
+    type: 'boolean',
+    description: 'Whether to include external domain links.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'The root URL that was mapped.',
+  },
+  {
+    name: 'results',
+    type: 'string[]',
+    description: 'Discovered URLs.',
+  },
+  {
+    name: 'responseTime',
+    type: 'number',
+    description: 'Server response time in seconds.',
+  },
+]}
+/>
+
+## Agent example
+
+The following example demonstrates a research agent that combines search and extract:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily'
+
+const agent = new Agent({
+  id: 'web-search-agent',
+  name: 'Web Search Agent',
+  model: 'anthropic/claude-sonnet-4-6',
+  instructions:
+    'You are a web search assistant. Use search tool to find relevant pages, then use extract tool to get full content from the best results.',
+  tools: {
+    search: createTavilySearchTool(),
+    extract: createTavilyExtractTool(),
+  },
+})
+```
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `TAVILY_API_KEY` | Your Tavily API key. Used as the default when `apiKey` is not passed to a factory function. |
+
+## Related
+
+- [`createTool()`](./create-tool)
+- [Tavily API documentation](https://docs.tavily.com)

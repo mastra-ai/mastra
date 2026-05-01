@@ -178,7 +178,7 @@ export class StagehandBrowser extends MastraBrowser {
       const wsUrl = await this.resolveWebSocketUrl(resolvedUrl);
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
-        headless: config.headless,
+        headless: this.headless,
         viewport: config.viewport,
         userDataDir: config.profile,
         executablePath: config.executablePath,
@@ -186,7 +186,7 @@ export class StagehandBrowser extends MastraBrowser {
       };
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
-        headless: config.headless,
+        headless: this.headless,
         viewport: config.viewport,
         userDataDir: config.profile,
         executablePath: config.executablePath,

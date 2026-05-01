@@ -2594,6 +2594,53 @@ describe('MessageList', () => {
         },
       ]);
     });
+
+    it('preserves incoming assistant metadata when merging a post-tool continuation', () => {
+      const latestMessage = {
+        id: 'msg-1b',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1b', toolName: 'foo', args: {} },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      } satisfies MastraDBMessage;
+
+      const messageV2 = {
+        ...latestMessage,
+        content: {
+          ...latestMessage.content,
+          metadata: {
+            modelId: 'gpt-5.4',
+            provider: 'openai.responses',
+          },
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call-1b', toolName: 'foo', args: {}, result: 42 },
+            },
+            { type: 'text', text: 'Done.' },
+          ],
+        },
+      } satisfies MastraDBMessage;
+
+      const list = new MessageList({ threadId, resourceId });
+      list.add(latestMessage, 'memory');
+      list.add(messageV2, 'response');
+
+      expect(list.get.all.db()[0].content.metadata).toEqual({
+        modelId: 'gpt-5.4',
+        provider: 'openai.responses',
+      });
+    });
     it('inserts step-start and upgrades tool-invocation', () => {
       const latestMessage = {
         id: 'msg-2',

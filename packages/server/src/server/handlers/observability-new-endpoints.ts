@@ -57,6 +57,7 @@ import {
   paginationArgsSchema,
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
+import { generateSignalId } from '@mastra/core/observability';
 import type { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
@@ -150,7 +151,9 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   responseSchema: createScoreResponseSchema,
   handler: async ({ mastra, score }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.createScore({ score: { ...score, timestamp: new Date() } });
+    await observabilityStore.createScore({
+      score: { ...score, scoreId: score.scoreId ?? generateSignalId(), timestamp: new Date() },
+    });
     return { success: true };
   },
 });
@@ -219,7 +222,9 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   responseSchema: createFeedbackResponseSchema,
   handler: async ({ mastra, feedback }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.createFeedback({ feedback: { ...feedback, timestamp: new Date() } });
+    await observabilityStore.createFeedback({
+      feedback: { ...feedback, feedbackId: feedback.feedbackId ?? generateSignalId(), timestamp: new Date() },
+    });
     return { success: true };
   },
 });

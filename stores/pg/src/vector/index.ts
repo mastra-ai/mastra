@@ -549,7 +549,31 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      const query = `
+      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
+      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
+      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
+      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
+      // vectors in other clusters, returning fewer results than expected.
+      const hasFilter = filterQuery.trim().length > 0;
+      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
+
+      const query = useIndexedOrder
+        ? `
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            ${scoreExpr} as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ORDER BY ${distanceExpr}
+          LIMIT $2
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC`
+        : `
         WITH vector_scores AS (
           SELECT
             vector_id as id,

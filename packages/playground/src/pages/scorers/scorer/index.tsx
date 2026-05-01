@@ -1,46 +1,34 @@
-import type { ClientScoreRowData } from '@mastra/client-js';
-import type { ScoreRowData } from '@mastra/core/evals';
 import {
   Breadcrumb,
   Button,
+  ButtonWithTooltip,
   Crumb,
-  DocsIcon,
-  Header,
-  HeaderAction,
-  Icon,
-  KeyValueList,
-  MainContentLayout,
+  ErrorState,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  Spinner,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
   is401UnauthorizedError,
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
-import { GaugeIcon, PencilIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router';
+import { BookIcon, GaugeIcon, PencilIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useScorer, useScoresByScorerId } from '@/domains/scores';
-import { ScoreDialog } from '@/domains/scores/components/score-dialog';
+import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
 import { ScorerCombobox } from '@/domains/scores/components/scorer-combobox';
 import { ScoresList } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
+import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { cn } from '@/lib/utils';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
-  const [scoresPage, setScoresPage] = useState<number>(0);
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(!!scoreIdFromUrl);
-
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
     label: 'All Entities',
@@ -48,15 +36,18 @@ export default function Scorer() {
   });
 
   const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
+
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
-  const { data: workflows, isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
+  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
   const {
-    data: scoresData,
+    data: scores = [],
     isLoading: isLoadingScores,
     error: scoresError,
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
   } = useScoresByScorerId({
     scorerId,
-    page: scoresPage,
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
@@ -84,8 +75,8 @@ export default function Scorer() {
     [agentOptions, workflowOptions],
   );
 
-  // Sync URL entity to state
-  const entityName = searchParams.get('entity');
+  // Sync URL entity to state (treat missing ?entity as 'all' so browser back/forward resets the filter)
+  const entityName = searchParams.get('entity') ?? 'all';
   const matchedEntityOption = entityOptions.find(option => option.value === entityName);
   if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
     setSelectedEntityOption(matchedEntityOption);
@@ -112,42 +103,6 @@ export default function Scorer() {
     }
   }, [workflowsError]);
 
-  const scores = useMemo(() => scoresData?.scores || [], [scoresData?.scores]);
-  const pagination = scoresData?.pagination;
-
-  const scorerAgents =
-    scorer?.agentIds?.map(agentId => {
-      return {
-        name: agentId,
-        id: Object.entries(agents).find(([, value]) => value.name === agentId)?.[0],
-      };
-    }) || [];
-
-  const scorerWorkflows =
-    scorer?.workflowIds?.map(workflowId => {
-      return {
-        name: workflowId,
-        id: Object.entries(workflows || {}).find(([, value]) => value.name === workflowId)?.[0],
-      };
-    }) || [];
-
-  const scorerEntities = [
-    ...scorerAgents.map(agent => ({ id: agent.id, name: agent.name, type: 'AGENT' })),
-    ...scorerWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name, type: 'WORKFLOW' })),
-  ];
-
-  const scoreInfo = [
-    {
-      key: 'entities',
-      label: 'Entities',
-      value: (scorerEntities || []).map(entity => ({
-        id: entity.id,
-        name: entity.name || entity.id,
-        path: `${entity.type === 'AGENT' ? '/agents' : '/workflows'}/${entity.name}`,
-      })),
-    },
-  ];
-
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
     if (!option?.value) return;
 
@@ -166,7 +121,6 @@ export default function Scorer() {
 
     if (!urlScoreId) {
       setSelectedScoreId(undefined);
-      setDialogIsOpen(false);
       return;
     }
 
@@ -174,199 +128,137 @@ export default function Scorer() {
     if (!matchingScore) return;
 
     setSelectedScoreId(urlScoreId);
-    setDialogIsOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, scores]);
 
-  if (
+  const handleScoreClick = useCallback(
+    (id: string) => {
+      setSelectedScoreId(id || undefined);
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        if (id) {
+          next.set('scoreId', id);
+        } else {
+          next.delete('scoreId');
+        }
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  if (!scorer) {
+    return null;
+  }
+
+  const isUnauthorized =
     is401UnauthorizedError(scorerError) ||
     is401UnauthorizedError(agentsError) ||
-    is401UnauthorizedError(workflowsError)
-  ) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
-              <Icon>
-                <GaugeIcon />
-              </Icon>
-              Scorers
-            </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              {scorerId}
-            </Crumb>
-          </Breadcrumb>
-        </Header>
+    is401UnauthorizedError(workflowsError);
 
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
-    );
-  }
+  const isForbidden = scorerError && is403ForbiddenError(scorerError);
 
-  if (scorerError && is403ForbiddenError(scorerError)) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
-              <Icon>
-                <GaugeIcon />
-              </Icon>
-              Scorers
-            </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              {scorerId}
-            </Crumb>
-          </Breadcrumb>
-        </Header>
+  const hasOtherError = !isUnauthorized && !isForbidden && (scorerError || agentsError || workflowsError);
 
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="scorers" />
-        </div>
-      </MainContentLayout>
-    );
-  }
+  const hasNoScores = !isLoadingScores && scores.length === 0;
+  const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
-  if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
-
-  const handleScoreClick = (id: string) => {
-    setSelectedScoreId(id);
-    setDialogIsOpen(true);
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set('scoreId', id);
-      return next;
-    });
-  };
-
-  const updateSelectedScoreId = (id: string | undefined) => {
-    setSelectedScoreId(id);
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      if (id) {
-        next.set('scoreId', id);
-      } else {
-        next.delete('scoreId');
-      }
-      return next;
-    });
-  };
-
-  const toNextScore = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: updateSelectedScoreId });
-  const toPreviousScore = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: updateSelectedScoreId });
-
-  return (
+  const scorerTopAreaSharedContent = (
     <>
-      <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
-              <Icon>
-                <GaugeIcon />
-              </Icon>
-              Scorers
-            </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              <ScorerCombobox value={scorerId} variant="ghost" />
-            </Crumb>
-          </Breadcrumb>
-
-          <HeaderAction>
-            {scorer?.scorer?.source === 'stored' && (
-              <Button variant="light" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
-                <Icon>
-                  <PencilIcon />
-                </Icon>
-                Edit
-              </Button>
-            )}
-            <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" variant="ghost" size="md">
-              <DocsIcon />
-              Scorers documentation
+      <Breadcrumb>
+        <Crumb as={Link} to={`/scorers`}>
+          Scorers
+        </Crumb>
+        <ScorerCombobox value={scorerId} variant="link" />
+      </Breadcrumb>
+      <PageLayout.Row>
+        <PageHeader>
+          <PageHeader.Title isLoading={isScorerLoading}>
+            <GaugeIcon /> {scorer?.scorer?.config?.name || scorerId}
+          </PageHeader.Title>
+          {(isScorerLoading || scorer?.scorer?.config?.description) && (
+            <PageHeader.Description isLoading={isScorerLoading}>
+              {scorer?.scorer?.config?.description}
+            </PageHeader.Description>
+          )}
+        </PageHeader>
+        <div className="flex justify-end gap-2">
+          <ButtonWithTooltip
+            as="a"
+            href="https://mastra.ai/en/docs/evals/overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Scorers documentation"
+            tooltipContent="Go to Scorers documentation"
+          >
+            <BookIcon />
+          </ButtonWithTooltip>
+          {scorer?.scorer?.source === 'stored' && (
+            <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
+              <PencilIcon /> Edit
             </Button>
-          </HeaderAction>
-        </Header>
-
-        <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-400 w-full px-12 mx-auto grid content-start gap-8 h-full')}>
-            <PageHeader>
-              <PageHeader.Title isLoading={isScorerLoading}>
-                <GaugeIcon /> {scorer?.scorer?.config?.name}
-              </PageHeader.Title>
-              {(isScorerLoading || scorer?.scorer?.config?.description) && (
-                <PageHeader.Description isLoading={isScorerLoading}>
-                  {scorer?.scorer?.config?.description}
-                </PageHeader.Description>
-              )}
-            </PageHeader>
-
-            <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
-
-            <ScoresTools
-              selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onEntityChange={handleSelectedEntityChange}
-              onReset={() => {
-                setSearchParams(prev => {
-                  const next = new URLSearchParams(prev);
-                  next.set('entity', 'all');
-                  return next;
-                });
-              }}
-              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-            />
-
-            {isLoadingScores ? (
-              <div className="h-full w-full flex items-center justify-center">
-                <Spinner />
-              </div>
-            ) : (
-              <ScoresList
-                scores={scores}
-                selectedScoreId={selectedScoreId}
-                pagination={{
-                  total: pagination?.total || 0,
-                  hasMore: pagination?.hasMore || false,
-                  perPage: pagination?.perPage || 0,
-                  page: pagination?.page || 0,
-                }}
-                onScoreClick={handleScoreClick}
-                onPageChange={setScoresPage}
-                errorMsg={scoresError?.message}
-              />
-            )}
-          </div>
+          )}
         </div>
-      </MainContentLayout>
-      <ScoreDialog
-        scorerName={scorer?.scorer?.config?.name}
-        score={mapScore(scores.find(s => s.id === selectedScoreId))}
-        isOpen={dialogIsOpen}
-        onClose={() => {
-          setDialogIsOpen(false);
-          setSelectedScoreId(undefined);
-          setSearchParams(prev => {
-            const next = new URLSearchParams(prev);
-            next.delete('scoreId');
-            return next;
-          });
-        }}
-        onNext={toNextScore}
-        onPrevious={toPreviousScore}
-        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
-      />
+      </PageLayout.Row>
     </>
   );
-}
 
-const mapScore = (score?: ClientScoreRowData): ScoreRowData | undefined => {
-  if (!score) return undefined;
-  return {
-    ...score,
-    createdAt: new Date(score.createdAt),
-    updatedAt: new Date(score.updatedAt),
-  };
-};
+  const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
+
+  if (showEmptyState) {
+    const errorMessage =
+      (scorerError instanceof Error ? scorerError.message : undefined) ??
+      (agentsError instanceof Error ? agentsError.message : undefined) ??
+      (workflowsError instanceof Error ? workflowsError.message : undefined) ??
+      'An unexpected error occurred';
+
+    return (
+      <PageLayout width="wide" height="full">
+        <PageLayout.TopArea>{scorerTopAreaSharedContent}</PageLayout.TopArea>
+        <PageLayout.MainArea isCentered>
+          {isUnauthorized ? (
+            <SessionExpired />
+          ) : isForbidden ? (
+            <PermissionDenied resource="scorers" />
+          ) : hasOtherError ? (
+            <ErrorState title="Failed to load scorer" message={errorMessage} />
+          ) : (
+            <NoScoresInfo />
+          )}
+        </PageLayout.MainArea>
+      </PageLayout>
+    );
+  }
+
+  return (
+    <PageLayout width="wide">
+      <PageLayout.TopArea>
+        {scorerTopAreaSharedContent}
+        <ScoresTools
+          selectedEntity={selectedEntityOption}
+          entityOptions={entityOptions}
+          onEntityChange={handleSelectedEntityChange}
+          onReset={() => {
+            setSearchParams(prev => {
+              const next = new URLSearchParams(prev);
+              next.set('entity', 'all');
+              return next;
+            });
+          }}
+          isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
+        />
+      </PageLayout.TopArea>
+
+      <ScoresList
+        scores={scores}
+        isLoading={isLoadingScores}
+        selectedScoreId={selectedScoreId}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        onScoreClick={handleScoreClick}
+        errorMsg={scoresError?.message}
+      />
+    </PageLayout>
+  );
+}

@@ -1,4 +1,4 @@
-import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
 import type { TracingEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
@@ -263,6 +263,195 @@ describe('Span Filtering', () => {
       const spanNames = testExporter.events.map(e => e.exportedSpan.name);
       expect(spanNames).toContain('prod-agent');
       expect(spanNames).not.toContain('dev-agent');
+    });
+  });
+
+  describe('heavy-field short-circuit for filtered spans', () => {
+    // Spans that will be dropped by excludeSpanTypes or the internal-span
+    // filter skip attaching attributes/input/output/errorInfo/requestContext
+    // entirely. Metadata is still attached (it is read in-process by
+    // correlation/logger/metrics contexts). This avoids both the deepClean
+    // cost and retention of large payload references for the lifetime of
+    // the span -- important for per-chunk MODEL_CHUNK spans on streaming.
+
+    it('should not attach input/attributes on excluded span types', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+        input: { fn: () => 'raw', nested: { deep: 'value' } },
+        attributes: { chunkType: 'tool-result', sequenceNumber: 1 },
+      });
+
+      expect((chunk as any).input).toBeUndefined();
+      expect((chunk as any).output).toBeUndefined();
+      expect((chunk as any).errorInfo).toBeUndefined();
+      expect((chunk as any).requestContext).toBeUndefined();
+      // attributes shape is kept stable for live-span readers.
+      expect((chunk as any).attributes).toEqual({});
+
+      parent.end();
+    });
+
+    it('should still attach metadata on excluded spans for correlation context', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        metadata: { runId: 'run-1', userId: 'u-1' },
+      });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+      });
+
+      // Metadata is inherited from the parent even on filtered spans so that
+      // getCorrelationContext and getLoggerContext/getMetricsContext still work.
+      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1' });
+      expect(chunk.getCorrelationContext().runId).toBe('run-1');
+      expect(chunk.getCorrelationContext().userId).toBe('u-1');
+
+      parent.end();
+    });
+
+    it('should not attach input on internal spans when includeInternalSpans is false', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        includeInternalSpans: false,
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+        input: { fn: () => 'raw' },
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+
+      expect(span.isInternal).toBe(true);
+      expect((span as any).input).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should still attach + deepClean fields on internal spans when includeInternalSpans is true', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        includeInternalSpans: true,
+      });
+
+      const payload = { fn: () => 'raw' };
+
+      const span = tracing.startSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+        input: payload,
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+
+      expect(span.isInternal).toBe(true);
+      // deepClean replaces functions with '[Function]'
+      expect((span as any).input).not.toBe(payload);
+      expect((span as any).input.fn).toBe('[Function]');
+
+      span.end();
+    });
+
+    it('should still attach + deepClean fields on non-excluded spans', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const payload = { fn: () => 'raw' };
+
+      const span = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        input: payload,
+      });
+
+      expect((span as any).input).not.toBe(payload);
+      expect((span as any).input.fn).toBe('[Function]');
+
+      span.end();
+    });
+
+    it('should not attach updates via end()/update() on excluded spans', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+      });
+
+      chunk.update({ output: { fn: () => 'update' }, attributes: { x: 1 } });
+      expect((chunk as any).output).toBeUndefined();
+      expect((chunk as any).attributes).toEqual({});
+
+      chunk.end({ output: { fn: () => 'end' } });
+      expect((chunk as any).output).toBeUndefined();
+
+      parent.end();
+    });
+
+    it('should still apply metadata updates via end()/update() on excluded spans', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+        metadata: { runId: 'run-1' },
+      });
+
+      chunk.update({ metadata: { userId: 'u-1' } });
+      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1' });
+
+      chunk.end({ metadata: { threadId: 't-1' } });
+      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1', threadId: 't-1' });
+
+      parent.end();
     });
   });
 

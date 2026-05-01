@@ -12,6 +12,7 @@ import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
@@ -61,6 +62,16 @@ export type StreamInternal = {
   _delegationBailed?: boolean;
   // Stream transport reference (e.g., WebSocket) for stream lifecycle management
   transportRef?: StreamTransportRef;
+  // Background task manager for dispatching tools to run asynchronously
+  backgroundTaskManager?: BackgroundTaskManager;
+  // Agent-level background task config
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  // Manager-level background task config
+  backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
+  // When true, backgroundTaskCheckStep returns immediately without waiting for
+  // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
+  // continuation from the outside — the inner loop shouldn't also wait.
+  skipBgTaskWait?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

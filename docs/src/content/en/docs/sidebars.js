@@ -101,6 +101,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/background-tasks',
+          label: 'Background Tasks',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/processors',
           label: 'Processors',
         },
@@ -281,6 +289,14 @@ const sidebars = {
           id: 'streaming/workflow-streaming',
           label: 'Workflow Streaming',
         },
+        {
+          type: 'doc',
+          id: 'streaming/background-task-streaming',
+          label: 'Background Task Streaming',
+          customProps: {
+            tags: ['new'],
+          },
+        },
       ],
     },
     {
@@ -292,11 +308,6 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/overview',
           label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
         },
       ],
     },
@@ -357,6 +368,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser/stagehand',
           label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/browser-viewer',
+          label: 'BrowserViewer',
         },
       ],
     },

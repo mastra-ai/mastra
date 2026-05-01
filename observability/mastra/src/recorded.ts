@@ -1,3 +1,4 @@
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   AnyRecordedSpan,
   CorrelationContext,
@@ -99,6 +100,7 @@ export function buildScoreEvent(args: {
   return {
     type: 'score',
     score: {
+      scoreId: generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,
@@ -128,6 +130,7 @@ export function buildFeedbackEvent(args: {
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,

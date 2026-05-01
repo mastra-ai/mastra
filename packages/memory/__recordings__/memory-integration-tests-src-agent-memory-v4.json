@@ -5,7 +5,7 @@
     "testName": "V4",
     "model": "gpt-4o-mini",
     "createdAt": "2026-04-02T11:19:27.634Z",
-    "updatedAt": "2026-04-08T08:10:41.060Z"
+    "updatedAt": "2026-04-22T16:28:42.647Z"
   },
   "recordings": [
     {
@@ -27,7 +27,7 @@
             }
           ]
         },
-        "timestamp": 1773147360060
+        "timestamp": 1773176160060
       },
       "response": {
         "status": 200,
@@ -36,37 +36,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fca48c9085631-BRU",
+          "cf-ray": "9f05ff437a0158f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:40 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "10404",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:27:51 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "10554",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "199985",
-          "x-ratelimit-reset-requests": "8.64s",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_9ba5c54d7e6a433094e3e1fdbc9748e1"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c6f9965effa24533a598b990d5eff319"
         },
         "body": {
-          "id": "chatcmpl-DSIGYUN3ypnPEpUbKRUidawHC4gHN",
+          "id": "chatcmpl-DXUiKxQAGRkL1jtj7yVIAiIepwVhw",
           "object": "chat.completion",
-          "created": 1775635770,
+          "created": 1776875260,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "Cats, scientifically known as Felis catus, are small, domesticated mammals that belong to the family Felidae. They are one of the most popular pets worldwide, known for their companionship, playful behavior, and independent nature. Here are some key points about cats:\n\n### Physical Characteristics\n- **Size and Weight**: Domestic cats typically weigh between 5 to 20 pounds, with an average length of about 9 to 10 inches (not including the tail).\n- **Fur and Colors**: Cats come in a variety of colors and patterns, including solid, tabby, calico, and more. Their fur can be short, medium, or long, depending on the breed.\n- **Eyes**: Cats have excellent night vision and can see in low light. Their eyes come in various colors, including green, blue, yellow, and amber.\n\n### Behavior\n- **Social Structure**: While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n- **Playfulness**: Cats are playful creatures, often engaging in activities that mimic hunting behavior, such as stalking and pouncing on toys.\n- **Grooming**: Cats are known for their grooming habits, spending a significant amount of time cleaning themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients found in animal tissues, such as taurine, arachidonic acid, and vitamin A.\n- **Feeding**: Commercial cat food is available in dry, wet, and raw forms, and it's important to provide a balanced diet to ensure their health.\n\n### Health\n- **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n- **Common Health Issues**: Cats can be prone to various health issues, including dental disease, obesity, kidney disease, and diabetes. Regular veterinary check-ups are essential for maintaining their health.\n\n### Breeds\nThere are numerous cat breeds, each with unique characteristics. Some popular breeds include:\n- **Siamese**: Known for their striking blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest domesticated breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures throughout history. In ancient Egypt, they were considered sacred and were often associated with the goddess Bastet. Today, cats are celebrated in literature, art, and internet culture, often depicted as symbols of independence and mystery.\n\n### Conclusion\nCats are fascinating creatures that have adapted well to living alongside humans. Their unique personalities, playful behavior, and affectionate nature make them beloved companions for millions of people around the world.",
+                "content": "Cats, scientifically known as Felis catus, are small, domesticated mammals that belong to the family Felidae. They are one of the most popular pets worldwide, known for their companionship, playful behavior, and independent nature. Here are some key points about cats:\n\n### Physical Characteristics\n- **Size**: Domestic cats typically weigh between 5 to 20 pounds, with an average length of about 9 to 10 inches at the shoulder.\n- **Fur**: Cats come in a variety of colors and patterns, including solid, tabby, calico, and more. Their fur can be short, medium, or long, depending on the breed.\n- **Eyes**: Cats have excellent night vision and can see in low light. Their eyes come in various colors, including green, blue, yellow, and amber.\n\n### Behavior\n- **Social Structure**: While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n- **Playfulness**: Cats are playful creatures, often engaging in activities that mimic hunting behaviors, such as stalking and pouncing on toys.\n- **Grooming**: Cats are known for their grooming habits, spending a significant amount of time cleaning themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients found in animal tissues, such as taurine, arachidonic acid, and vitamin A.\n- **Feeding**: Commercial cat food is available in dry, wet, and raw forms, and it's important to provide a balanced diet to ensure their health.\n\n### Health\n- **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n- **Common Health Issues**: Cats can be prone to various health issues, including dental disease, obesity, kidney disease, and diabetes. Regular veterinary check-ups are essential for maintaining their health.\n\n### Breeds\nThere are numerous cat breeds, each with unique characteristics. Some popular breeds include:\n- **Siamese**: Known for their striking blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest domesticated breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures throughout history. In ancient Egypt, they were considered sacred and were often associated with the goddess Bastet. Today, cats are celebrated in literature, art, and internet culture, often depicted as symbols of independence and mystery.\n\n### Conclusion\nCats are fascinating creatures that bring joy and companionship to millions of people around the world. Their unique behaviors, diverse breeds, and independent nature make them beloved pets for many households.",
                 "refusal": null,
                 "annotations": []
               },
@@ -76,8 +76,8 @@
           ],
           "usage": {
             "prompt_tokens": 20,
-            "completion_tokens": 634,
-            "total_tokens": 654,
+            "completion_tokens": 628,
+            "total_tokens": 648,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -90,13 +90,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_262a1aea33"
+          "system_fingerprint": "fp_0542ea89f6"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "260670452710c076",
+      "hash": "75c1dd1b3b8b255e",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -110,7 +110,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 12:56 PM: User: Tell me about catsMessage from previous conversation at 12:56 PM: Assistant: Cats, scientifically known as Felis catus, are small, domesticated mammals that belong to the family Felidae. They are one of the most popular pets worldwide, known for their companionship, playful behavior, and independent nature. Here are some key points about cats:\n\n### Physical Characteristics\n- **Size and Weight**: Domestic cats typically weigh between 5 to 20 pounds, with an average length of about 9 to 10 inches (not including the tail).\n- **Fur and Colors**: Cats come in a variety of colors and patterns, including solid, tabby, calico, and more. Their fur can be short, medium, or long, depending on the breed.\n- **Eyes**: Cats have excellent night vision and can see in low light. Their eyes come in various colors, including green, blue, yellow, and amber.\n\n### Behavior\n- **Social Structure**: While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n- **Playfulness**: Cats are playful creatures, often engaging in activities that mimic hunting behavior, such as stalking and pouncing on toys.\n- **Grooming**: Cats are known for their grooming habits, spending a significant amount of time cleaning themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients found in animal tissues, such as taurine, arachidonic acid, and vitamin A.\n- **Feeding**: Commercial cat food is available in dry, wet, and raw forms, and it's important to provide a balanced diet to ensure their health.\n\n### Health\n- **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n- **Common Health Issues**: Cats can be prone to various health issues, including dental disease, obesity, kidney disease, and diabetes. Regular veterinary check-ups are essential for maintaining their health.\n\n### Breeds\nThere are numerous cat breeds, each with unique characteristics. Some popular breeds include:\n- **Siamese**: Known for their striking blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest domesticated breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures throughout history. In ancient Egypt, they were considered sacred and were often associated with the goddess Bastet. Today, cats are celebrated in literature, art, and internet culture, often depicted as symbols of independence and mystery.\n\n### Conclusion\nCats are fascinating creatures that have adapted well to living alongside humans. Their unique personalities, playful behavior, and affectionate nature make them beloved companions for millions of people around the world.\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Tell me about catsMessage from previous conversation at 8:56 PM: Assistant: Cats, scientifically known as Felis catus, are small, domesticated mammals that belong to the family Felidae. They are one of the most popular pets worldwide, known for their companionship, playful behavior, and independent nature. Here are some key points about cats:\n\n### Physical Characteristics\n- **Size**: Domestic cats typically weigh between 5 to 20 pounds, with an average length of about 9 to 10 inches at the shoulder.\n- **Fur**: Cats come in a variety of colors and patterns, including solid, tabby, calico, and more. Their fur can be short, medium, or long, depending on the breed.\n- **Eyes**: Cats have excellent night vision and can see in low light. Their eyes come in various colors, including green, blue, yellow, and amber.\n\n### Behavior\n- **Social Structure**: While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n- **Playfulness**: Cats are playful creatures, often engaging in activities that mimic hunting behaviors, such as stalking and pouncing on toys.\n- **Grooming**: Cats are known for their grooming habits, spending a significant amount of time cleaning themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients found in animal tissues, such as taurine, arachidonic acid, and vitamin A.\n- **Feeding**: Commercial cat food is available in dry, wet, and raw forms, and it's important to provide a balanced diet to ensure their health.\n\n### Health\n- **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n- **Common Health Issues**: Cats can be prone to various health issues, including dental disease, obesity, kidney disease, and diabetes. Regular veterinary check-ups are essential for maintaining their health.\n\n### Breeds\nThere are numerous cat breeds, each with unique characteristics. Some popular breeds include:\n- **Siamese**: Known for their striking blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest domesticated breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures throughout history. In ancient Egypt, they were considered sacred and were often associated with the goddess Bastet. Today, cats are celebrated in literature, art, and internet culture, often depicted as symbols of independence and mystery.\n\n### Conclusion\nCats are fascinating creatures that bring joy and companionship to millions of people around the world. Their unique behaviors, diverse breeds, and independent nature make them beloved pets for many households.\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -118,7 +118,7 @@
             }
           ]
         },
-        "timestamp": 1773147370460
+        "timestamp": 1773176171380
       },
       "response": {
         "status": 200,
@@ -127,37 +127,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fca8d5dd25631-BRU",
+          "cf-ray": "9f05ff8e1cbf58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:49 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "9105",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:27:56 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "5254",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "199155",
-          "x-ratelimit-reset-requests": "8.64s",
-          "x-ratelimit-reset-tokens": "253ms",
-          "x-request-id": "req_5fbc5963681e4fd39a1be9db1bb0bde3"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999165",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_4e28076d11234d72b95f948741781848"
         },
         "body": {
-          "id": "chatcmpl-DSIGiIQMT8dBfdoUFtEjz2AFLdFi8",
+          "id": "chatcmpl-DXUiVkN3YDrIxyKbx1xZIRqAkFSzo",
           "object": "chat.completion",
-          "created": 1775635780,
+          "created": 1776875271,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "We discussed various aspects of cats, including their physical characteristics, behavior, diet, health, breeds, and cultural significance. Here are the key points:\n\n### Physical Characteristics\n- **Size and Weight**: Domestic cats typically weigh between 5 to 20 pounds and have an average length of about 9 to 10 inches (excluding the tail).\n- **Fur and Colors**: They come in various colors and patterns, with different fur lengths depending on the breed.\n- **Eyes**: Cats have excellent night vision and their eyes can be various colors.\n\n### Behavior\n- **Social Structure**: Cats can form strong bonds with humans and other pets, communicating through vocalizations and body language.\n- **Playfulness**: They engage in playful activities that mimic hunting behavior.\n- **Grooming**: Cats spend a lot of time grooming themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, requiring a diet primarily composed of meat.\n- **Feeding**: It's important to provide a balanced diet through commercial cat food available in various forms.\n\n### Health\n- **Lifespan**: The average lifespan is around 12 to 15 years, with many living into their 20s with proper care.\n- **Common Health Issues**: They can be prone to dental disease, obesity, kidney disease, and diabetes, making regular veterinary check-ups essential.\n\n### Breeds\nSome popular breeds include:\n- **Siamese**: Known for their blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures, especially in ancient Egypt, where they were considered sacred. Today, they are celebrated in literature, art, and internet culture.\n\nOverall, cats are fascinating creatures that have adapted well to living alongside humans, making them beloved companions.",
+                "content": "We discussed various aspects of cats, including their physical characteristics, behavior, diet, health, breeds, and cultural significance. Here are the key points:\n\n### Physical Characteristics\n- Size: Domestic cats typically weigh between 5 to 20 pounds and are about 9 to 10 inches tall at the shoulder.\n- Fur: They come in various colors and patterns, with different fur lengths depending on the breed.\n- Eyes: Cats have excellent night vision and their eyes can be green, blue, yellow, or amber.\n\n### Behavior\n- Social Structure: Cats can form strong bonds with humans and other pets, communicating through vocalizations and body language.\n- Playfulness: They engage in playful activities that mimic hunting behaviors.\n- Grooming: Cats spend a lot of time grooming themselves to maintain their fur and skin health.\n\n### Diet\n- Carnivorous: Cats are obligate carnivores, requiring a diet primarily composed of meat.\n- Feeding: It's important to provide a balanced diet through commercial cat food available in various forms.\n\n### Health\n- Lifespan: The average lifespan is around 12 to 15 years, with many living into their 20s with proper care.\n- Common Health Issues: They can face health issues like dental disease, obesity, and kidney disease, making regular veterinary check-ups essential.\n\n### Breeds\nSome popular breeds include:\n- Siamese: Known for their blue eyes and vocal nature.\n- Persian: Recognized for their long fur and flat faces.\n- Maine Coon: One of the largest breeds, known for their friendly disposition.\n- Bengal: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures, especially in ancient Egypt, where they were considered sacred. Today, they are celebrated in literature, art, and internet culture.\n\nOverall, cats are fascinating creatures that bring joy and companionship to many people.",
                 "refusal": null,
                 "annotations": []
               },
@@ -166,9 +166,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 733,
-            "completion_tokens": 427,
-            "total_tokens": 1160,
+            "prompt_tokens": 727,
+            "completion_tokens": 383,
+            "total_tokens": 1110,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -181,7 +181,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_87ea66f7b4"
+          "system_fingerprint": "fp_0b42d8f1f6"
         },
         "isStreaming": false
       }
@@ -250,7 +250,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360060
+        "timestamp": 1773176160060
       },
       "response": {
         "status": 200,
@@ -259,37 +259,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcaca795a5631-BRU",
+          "cf-ray": "9f05ffb30ab758f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:51 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1000",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:27:58 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1016",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "199957",
-          "x-ratelimit-reset-requests": "8.64s",
-          "x-ratelimit-reset-tokens": "12ms",
-          "x-request-id": "req_893535e2dbc348b49d2f2c1165a62da9"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999957",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f5f55b618bb84708bd0959a17e6f9766"
         },
         "body": {
-          "id": "chatcmpl-DSIGsxxEWmbd8mE0DQyF9M1Zs0RSp",
+          "id": "chatcmpl-DXUibCSwvm6Zi3FvZAxSt5SsP4hpX",
           "object": "chat.completion",
-          "created": 1775635790,
+          "created": 1776875277,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "It seems like you might be looking for weather information. Please provide the name of the city you'd like to know the weather for!",
+                "content": "It seems like you might be trying to communicate something specific. How can I assist you today? If you have a question about the weather in a particular city, feel free to ask!",
                 "refusal": null,
                 "annotations": []
               },
@@ -299,8 +299,8 @@
           ],
           "usage": {
             "prompt_tokens": 123,
-            "completion_tokens": 27,
-            "total_tokens": 150,
+            "completion_tokens": 38,
+            "total_tokens": 161,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -313,7 +313,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_aac876239c"
         },
         "isStreaming": false
       }
@@ -378,7 +378,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -387,30 +387,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcad47fb45631-BRU",
+          "cf-ray": "9f05ffbc6f2b58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:52 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "409",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:27:59 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "374",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9998",
-          "x-ratelimit-remaining-tokens": "199962",
-          "x-ratelimit-reset-requests": "15.67s",
-          "x-ratelimit-reset-tokens": "11ms",
-          "x-request-id": "req_3c7434aac6724f6ea4a9cdeddccc13ef"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999962",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_72e5f6d51880456981c82cc112f006a5"
         },
         "body": {
-          "id": "chatcmpl-DSIGueqjHjXLADj5aPWHhWMY3CcgP",
+          "id": "chatcmpl-DXUide1fvwtdnMmNXGOaFPIX3Ueri",
           "object": "chat.completion",
-          "created": 1775635792,
+          "created": 1776875279,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -441,7 +441,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_aac876239c"
         },
         "isStreaming": false
       }
@@ -499,7 +499,7 @@
             }
           ]
         },
-        "timestamp": 1773147360820
+        "timestamp": 1773176160940
       },
       "response": {
         "status": 200,
@@ -508,30 +508,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcad9ffb45631-BRU",
+          "cf-ray": "9f05ffc2ca1258f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:53 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "547",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:00 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "520",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9997",
-          "x-ratelimit-remaining-tokens": "199952",
-          "x-ratelimit-reset-requests": "23.428s",
-          "x-ratelimit-reset-tokens": "14ms",
-          "x-request-id": "req_3328f8d7e5e745da9c928ddadf0a854f"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999952",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_4623bf61a7a744e985796b463eaa7065"
         },
         "body": {
-          "id": "chatcmpl-DSIGvErdQ7wC1ZYq9kUNAnZYzOrOR",
+          "id": "chatcmpl-DXUid5zWqhXwcuz3PHnLajQIuVKx6",
           "object": "chat.completion",
-          "created": 1775635793,
+          "created": 1776875279,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -541,7 +541,7 @@
                 "content": null,
                 "tool_calls": [
                   {
-                    "id": "call_JfVt3VSqHk565Qs2KCfLOqoy",
+                    "id": "call_3t4MxgPCOnrp9a05IbD0Zj3M",
                     "type": "function",
                     "function": {
                       "name": "json",
@@ -572,7 +572,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_9a00d2658e"
+          "system_fingerprint": "fp_0b42d8f1f6"
         },
         "isStreaming": false
       }
@@ -645,7 +645,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -654,37 +654,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcae08c915631-BRU",
+          "cf-ray": "9f05ffc85a1658f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:55 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1386",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:01 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "646",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9996",
-          "x-ratelimit-remaining-tokens": "199940",
-          "x-ratelimit-reset-requests": "31.037s",
-          "x-ratelimit-reset-tokens": "18ms",
-          "x-request-id": "req_5e58e4e6c10a47b7aa7fdf9154a8ac7d"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999940",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_667d7d1c73e39195b8dcd7861afc3549"
         },
         "body": {
-          "id": "chatcmpl-DSIGwuLRzj0c3d1fkQSICrDdn2whb",
+          "id": "chatcmpl-DXUie2HWWZyGipbJoIxuJm8NaEUwY",
           "object": "chat.completion",
-          "created": 1775635794,
+          "created": 1776875280,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "How can I assist you today? If you need information about the weather in a specific city, just let me know the city name!",
+                "content": "How can I assist you today? If you need information about the weather in a specific city, just let me know!",
                 "refusal": null,
                 "annotations": []
               },
@@ -694,8 +694,8 @@
           ],
           "usage": {
             "prompt_tokens": 143,
-            "completion_tokens": 28,
-            "total_tokens": 171,
+            "completion_tokens": 25,
+            "total_tokens": 168,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -708,7 +708,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_91c8a2e5b1"
+          "system_fingerprint": "fp_aac876239c"
         },
         "isStreaming": false
       }
@@ -777,7 +777,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -786,37 +786,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcaec2fc45631-BRU",
+          "cf-ray": "9f05ffcecd4758f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:56 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "788",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:02 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "730",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9995",
-          "x-ratelimit-remaining-tokens": "199950",
-          "x-ratelimit-reset-requests": "37.796s",
-          "x-ratelimit-reset-tokens": "15ms",
-          "x-request-id": "req_7108347ba84944a891cf413298f31062"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999950",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c6657859d7d24f16baaf68d96cb9e924"
         },
         "body": {
-          "id": "chatcmpl-DSIGyVqpB4yZK2iKovbDscLGDB817",
+          "id": "chatcmpl-DXUifxkBR5Z9Ck55vPtq2TFUckap1",
           "object": "chat.completion",
-          "created": 1775635796,
+          "created": 1776875281,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "It seems like you're testing different messages. How can I assist you today? If you have any questions about the weather in a specific city, feel free to ask!",
+                "content": "It seems like you're testing different messages. How can I assist you today? If you have any questions about the weather or anything else, feel free to ask!",
                 "refusal": null,
                 "annotations": []
               },
@@ -826,8 +826,8 @@
           ],
           "usage": {
             "prompt_tokens": 127,
-            "completion_tokens": 34,
-            "total_tokens": 161,
+            "completion_tokens": 33,
+            "total_tokens": 160,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -840,7 +840,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_aac876239c"
         },
         "isStreaming": false
       }
@@ -905,7 +905,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360080
+        "timestamp": 1773176160080
       },
       "response": {
         "status": 200,
@@ -914,30 +914,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcaf60d0e5631-BRU",
+          "cf-ray": "9f05ffd71c2e58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:58 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "597",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:03 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "462",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9994",
-          "x-ratelimit-remaining-tokens": "199985",
-          "x-ratelimit-reset-requests": "44.858s",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_433e09d0d87a414e892b43a668decdfc"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_379d2c42f91a47e0913f63898e65c817"
         },
         "body": {
-          "id": "chatcmpl-DSIGzx6lgpRQzY5YGhfgGI4YIpesg",
+          "id": "chatcmpl-DXUihlUgX1UYGujRJ2EXn7TMVE8zN",
           "object": "chat.completion",
-          "created": 1775635797,
+          "created": 1776875283,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -968,13 +968,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_8b6cd59583"
+          "system_fingerprint": "fp_f1791ef38a"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "ba6c2d797c44325b",
+      "hash": "75686791d02556a7",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -988,11 +988,11 @@
             },
             {
               "role": "user",
-              "content": "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]"
+              "content": "[{\"type\":\"text\",\"text\":\"Hello, world!\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
             }
           ]
         },
-        "timestamp": 1773147360920
+        "timestamp": 1773176160680
       },
       "response": {
         "status": 200,
@@ -1001,37 +1001,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcafc898a5631-BRU",
+          "cf-ray": "9f05ffdb6ff558f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:59 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "490",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:04 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "444",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9994",
-          "x-ratelimit-remaining-tokens": "199909",
-          "x-ratelimit-reset-requests": "43.83s",
-          "x-ratelimit-reset-tokens": "27ms",
-          "x-request-id": "req_c0b58bd9bd7d422a9f4b91ed4d35480d"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999895",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_28264ed96d234287980e22d4619ea12e"
         },
         "body": {
-          "id": "chatcmpl-DSIH0aOqPTwO1b0VXGUz2u3nAzFAW",
+          "id": "chatcmpl-DXUihAqr1hwzVApNqMugIkZVn05Qh",
           "object": "chat.completion",
-          "created": 1775635798,
+          "created": 1776875283,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "Greeting the world",
+                "content": "Greeting the world with a hello message",
                 "refusal": null,
                 "annotations": []
               },
@@ -1040,9 +1040,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 94,
-            "completion_tokens": 3,
-            "total_tokens": 97,
+            "prompt_tokens": 110,
+            "completion_tokens": 7,
+            "total_tokens": 117,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -1055,7 +1055,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_262a1aea33"
+          "system_fingerprint": "fp_23d0326066"
         },
         "isStreaming": false
       }
@@ -1128,7 +1128,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147361760
+        "timestamp": 1773176161320
       },
       "response": {
         "status": 200,
@@ -1137,30 +1137,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb00eee55631-BRU",
+          "cf-ray": "9f05ffdf198a58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:09:59 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "544",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:05 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1266",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9993",
-          "x-ratelimit-remaining-tokens": "199971",
-          "x-ratelimit-reset-requests": "1m0.405s",
-          "x-ratelimit-reset-tokens": "8ms",
-          "x-request-id": "req_3d5db9e625854abdb54fbef0279340ec"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999972",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_742ddeee9bc144589a70fc5d44955692"
         },
         "body": {
-          "id": "chatcmpl-DSIH1PD9O1mL6TKfNyTjd6jJBO45z",
+          "id": "chatcmpl-DXUiiDENg159hIMs781L3hZqNiIQY",
           "object": "chat.completion",
-          "created": 1775635799,
+          "created": 1776875284,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1191,7 +1191,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_8b6cd59583"
+          "system_fingerprint": "fp_998d5473a0"
         },
         "isStreaming": false
       }
@@ -1211,7 +1211,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 12:56 PM: User: Hello, world!Message from previous conversation at 12:56 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 12:56 PM: User: Hello, world!Message from previous conversation at 12:56 PM: Assistant: Hello again! What would you like to talk about or do today?\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Hello, world!Message from previous conversation at 8:56 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 8:56 PM: User: Hello, world!Message from previous conversation at 8:56 PM: Assistant: Hello again! What would you like to talk about or do today?\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -1260,7 +1260,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360000
+        "timestamp": 1773176160000
       },
       "response": {
         "status": 200,
@@ -1269,30 +1269,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb0678e25631-BRU",
+          "cf-ray": "9f05ffe88ad058f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:00 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "435",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:06 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "529",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9992",
-          "x-ratelimit-remaining-tokens": "199849",
-          "x-ratelimit-reset-requests": "1m8.152s",
-          "x-ratelimit-reset-tokens": "45ms",
-          "x-request-id": "req_381bf657196a4e5e9b6250d1f6e9f840"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999850",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_1afa0a68151c4d46b923423bfbbca660"
         },
         "body": {
-          "id": "chatcmpl-DSIH2nZZtL8P5EdpS0FGSQhngWxCJ",
+          "id": "chatcmpl-DXUijHNIteTKWr1gzCFltabO8iD6H",
           "object": "chat.completion",
-          "created": 1775635800,
+          "created": 1776875285,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1323,7 +1323,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_8b6cd59583"
+          "system_fingerprint": "fp_998d5473a0"
         },
         "isStreaming": false
       }
@@ -1388,7 +1388,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360060
+        "timestamp": 1773176160040
       },
       "response": {
         "status": 200,
@@ -1397,30 +1397,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb0f4cd05631-BRU",
+          "cf-ray": "9f05fff20b0e58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:02 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "484",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:08 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "544",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9990",
-          "x-ratelimit-remaining-tokens": "199985",
-          "x-ratelimit-reset-requests": "1m24.014s",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_ccaecd0bf13a45c6a0d7d7f826e438da"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f05bd8012743492bb0f97bf589b486a8"
         },
         "body": {
-          "id": "chatcmpl-DSIH3kCIl4AAdcAlXrvIMD867817F",
+          "id": "chatcmpl-DXUilLuOIY7QNsqDeAdMAWchVf2nz",
           "object": "chat.completion",
-          "created": 1775635801,
+          "created": 1776875287,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1451,7 +1451,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_3743ed1177"
+          "system_fingerprint": "fp_706e12e8ed"
         },
         "isStreaming": false
       }
@@ -1524,7 +1524,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360840
+        "timestamp": 1773176160780
       },
       "response": {
         "status": 200,
@@ -1533,30 +1533,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb13cb365631-BRU",
+          "cf-ray": "9f05fff64dcf58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:02 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "586",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:08 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "520",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9989",
-          "x-ratelimit-remaining-tokens": "199971",
-          "x-ratelimit-reset-requests": "1m31.939s",
-          "x-ratelimit-reset-tokens": "8ms",
-          "x-request-id": "req_e1ce8f02360f404e90cc5d3f77ce7258"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999970",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_7ce68094eb7e421692d3713328c30fc9"
         },
         "body": {
-          "id": "chatcmpl-DSIH4kGyo4paMwx795DwkTfJWl0BR",
+          "id": "chatcmpl-DXUim1V3JIa0GwOZ9MgQqa5HpAQRL",
           "object": "chat.completion",
-          "created": 1775635802,
+          "created": 1776875288,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1587,7 +1587,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_3743ed1177"
+          "system_fingerprint": "fp_706e12e8ed"
         },
         "isStreaming": false
       }
@@ -1652,7 +1652,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360060
+        "timestamp": 1773176160080
       },
       "response": {
         "status": 200,
@@ -1661,30 +1661,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb1a4ff25631-BRU",
+          "cf-ray": "9f05fffbdd5258f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:04 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "587",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:09 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "783",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9989",
-          "x-ratelimit-remaining-tokens": "199968",
-          "x-ratelimit-reset-requests": "1m30.9s",
-          "x-ratelimit-reset-tokens": "9ms",
-          "x-request-id": "req_5be3c584efe04ae78447ca5cdc8d5c29"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999967",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_467b9fac34d7431a955a7a5cf5845743"
         },
         "body": {
-          "id": "chatcmpl-DSIH5WKa9phdBO9BWOFLD9th8o2o3",
+          "id": "chatcmpl-DXUinZIjtNoRIelXx7ARhbVXdUTwq",
           "object": "chat.completion",
-          "created": 1775635803,
+          "created": 1776875289,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1694,7 +1694,7 @@
                 "content": null,
                 "tool_calls": [
                   {
-                    "id": "call_kM49ND0FljFBKcC77Z0oIYTC",
+                    "id": "call_ceJkupkfVNMwj5dh0BMgFP9c",
                     "type": "function",
                     "function": {
                       "name": "get_weather_city",
@@ -1725,7 +1725,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_34e6d0d598"
+          "system_fingerprint": "fp_38babba494"
         },
         "isStreaming": false
       }
@@ -1752,7 +1752,7 @@
               "content": "",
               "tool_calls": [
                 {
-                  "id": "call_kM49ND0FljFBKcC77Z0oIYTC",
+                  "id": "call_ceJkupkfVNMwj5dh0BMgFP9c",
                   "type": "function",
                   "function": {
                     "name": "get_weather_city",
@@ -1763,7 +1763,7 @@
             },
             {
               "role": "tool",
-              "tool_call_id": "call_kM49ND0FljFBKcC77Z0oIYTC",
+              "tool_call_id": "call_ceJkupkfVNMwj5dh0BMgFP9c",
               "content": "\"The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees.\""
             }
           ],
@@ -1809,7 +1809,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360840
+        "timestamp": 1773176160960
       },
       "response": {
         "status": 200,
@@ -1818,30 +1818,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb1f4f2d5631-BRU",
+          "cf-ray": "9f0600018bd558f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:05 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "882",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:10 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "681",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9987",
-          "x-ratelimit-remaining-tokens": "199945",
-          "x-ratelimit-reset-requests": "1m47.395s",
-          "x-ratelimit-reset-tokens": "16ms",
-          "x-request-id": "req_a7b6a387dd3e48f6b0ac8cc76c8ddf77"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999945",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_1d22d3cb76a14068ad89d4b007f4f0cd"
         },
         "body": {
-          "id": "chatcmpl-DSIH6KeI4LPBL32p0hvihooXtf1lk",
+          "id": "chatcmpl-DXUinPS2TfLvyO4h02mG4AOVyUY7V",
           "object": "chat.completion",
-          "created": 1775635804,
+          "created": 1776875289,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1872,13 +1872,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_34e6d0d598"
+          "system_fingerprint": "fp_38babba494"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "301ebe78aa1ffa1c",
+      "hash": "8f3ff4c97ea191f1",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -1892,11 +1892,11 @@
             },
             {
               "role": "user",
-              "content": "[{\"type\":\"text\",\"text\":\"What is the weather in London?\"}]"
+              "content": "[{\"type\":\"text\",\"text\":\"What is the weather in London?\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
             }
           ]
         },
-        "timestamp": 1773147361880
+        "timestamp": 1773176161780
       },
       "response": {
         "status": 200,
@@ -1905,30 +1905,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb2728aa5631-BRU",
+          "cf-ray": "9f0600074c7e58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:05 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "335",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:11 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "314",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9986",
-          "x-ratelimit-remaining-tokens": "199904",
-          "x-ratelimit-reset-requests": "1m54.766s",
-          "x-ratelimit-reset-tokens": "28ms",
-          "x-request-id": "req_4c31800eaaba4ce9953b54ea306f983e"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999890",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8a58a61584a4468da174a3a0d6c87353"
         },
         "body": {
-          "id": "chatcmpl-DSIH70ynLy7rjx0YIoyBJvAGVdB2G",
+          "id": "chatcmpl-DXUiojcpNWfhN0i07UnhwarivxGLl",
           "object": "chat.completion",
-          "created": 1775635805,
+          "created": 1776875290,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -1944,9 +1944,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 97,
+            "prompt_tokens": 113,
             "completion_tokens": 5,
-            "total_tokens": 102,
+            "total_tokens": 118,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -1959,7 +1959,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_4181e24c46"
         },
         "isStreaming": false
       }
@@ -2032,7 +2032,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147362620
+        "timestamp": 1773176162320
       },
       "response": {
         "status": 200,
@@ -2041,30 +2041,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb2b5e955631-BRU",
+          "cf-ray": "9f06000aae0958f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:06 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "590",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:12 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "462",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9985",
-          "x-ratelimit-remaining-tokens": "199935",
-          "x-ratelimit-reset-requests": "2m2.742s",
-          "x-ratelimit-reset-tokens": "19ms",
-          "x-request-id": "req_6e9f410b3c0e4965a0893e5c41e8f165"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999935",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_238aea4474844a17b156c91d14f868fb"
         },
         "body": {
-          "id": "chatcmpl-DSIH8CDLQrij4s7Khc03bhJB94npw",
+          "id": "chatcmpl-DXUiqDchSmkcXuaKOXXB0czhdPfSC",
           "object": "chat.completion",
-          "created": 1775635806,
+          "created": 1776875292,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -2095,7 +2095,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_34e6d0d598"
+          "system_fingerprint": "fp_a7190374f3"
         },
         "isStreaming": false
       }
@@ -2145,7 +2145,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360000
+        "timestamp": 1773176160000
       },
       "response": {
         "status": 200,
@@ -2154,30 +2154,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb3129ef5631-BRU",
+          "cf-ray": "9f06001539fd58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:07 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "438",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:13 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "343",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9984",
-          "x-ratelimit-remaining-tokens": "199445",
-          "x-ratelimit-reset-requests": "2m10.461s",
-          "x-ratelimit-reset-tokens": "166ms",
-          "x-request-id": "req_7f5b9ca6ab964039920aef9c37ced74a"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999445",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_90acd7c18c4441f1a936a8c3d3476bee"
         },
         "body": {
-          "id": "chatcmpl-DSIH9Bp5r5MrHJRxE7d986KHhXVyi",
+          "id": "chatcmpl-DXUirv4hAjiNaeu0i06r2LjMlhKCC",
           "object": "chat.completion",
-          "created": 1775635807,
+          "created": 1776875293,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -2208,7 +2208,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_8b6cd59583"
+          "system_fingerprint": "fp_4181e24c46"
         },
         "isStreaming": false
       }
@@ -2273,7 +2273,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360000
+        "timestamp": 1773176160000
       },
       "response": {
         "status": 200,
@@ -2282,30 +2282,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb350df75631-BRU",
+          "cf-ray": "9f0600197d2658f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:08 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "724",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:18 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "4345",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9984",
-          "x-ratelimit-remaining-tokens": "199963",
-          "x-ratelimit-reset-requests": "2m9.819s",
-          "x-ratelimit-reset-tokens": "11ms",
-          "x-request-id": "req_91a9497c75bb48b486fe790164058387"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999962",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8fd8e91674134c70bd219c99f61a0b80"
         },
         "body": {
-          "id": "chatcmpl-DSIH9WTg3tcO92alThbPjTV1hhmyz",
+          "id": "chatcmpl-DXUirGKm0KPAiG9OBKA5iKLwErjxq",
           "object": "chat.completion",
-          "created": 1775635807,
+          "created": 1776875293,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -2315,7 +2315,7 @@
                 "content": null,
                 "tool_calls": [
                   {
-                    "id": "call_DVkjWgbdiFOaH0fyEje3p5B9",
+                    "id": "call_4bmRWYfgKXabTTvHAP8vHPTD",
                     "type": "function",
                     "function": {
                       "name": "get_weather_city",
@@ -2346,7 +2346,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_e155db4643"
+          "system_fingerprint": "fp_fe7a5277a8"
         },
         "isStreaming": false
       }
@@ -2373,7 +2373,7 @@
               "content": "",
               "tool_calls": [
                 {
-                  "id": "call_DVkjWgbdiFOaH0fyEje3p5B9",
+                  "id": "call_4bmRWYfgKXabTTvHAP8vHPTD",
                   "type": "function",
                   "function": {
                     "name": "get_weather_city",
@@ -2384,7 +2384,7 @@
             },
             {
               "role": "tool",
-              "tool_call_id": "call_DVkjWgbdiFOaH0fyEje3p5B9",
+              "tool_call_id": "call_4bmRWYfgKXabTTvHAP8vHPTD",
               "content": "\"The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees.\""
             }
           ],
@@ -2430,7 +2430,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360880
+        "timestamp": 1773176164260
       },
       "response": {
         "status": 200,
@@ -2439,37 +2439,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb3aefb55631-BRU",
+          "cf-ray": "9f0600354edb58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:09 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "853",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:18 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "695",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9983",
-          "x-ratelimit-remaining-tokens": "199939",
-          "x-ratelimit-reset-requests": "2m26.181s",
-          "x-ratelimit-reset-tokens": "18ms",
-          "x-request-id": "req_f73dc7831dae41538d18f64643d655f2"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999937",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c69b4e7faae948b7a892e928fe6ceeab"
         },
         "body": {
-          "id": "chatcmpl-DSIHAT0TzfhyzOrb7VyAvt6sLnbeL",
+          "id": "chatcmpl-DXUiwTsUURKtQTMPFmbkphKLaRir4",
           "object": "chat.completion",
-          "created": 1775635808,
+          "created": 1776875298,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, and it feels like 65 degrees.",
+                "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, feeling like 65 degrees.",
                 "refusal": null,
                 "annotations": []
               },
@@ -2479,8 +2479,8 @@
           ],
           "usage": {
             "prompt_tokens": 161,
-            "completion_tokens": 25,
-            "total_tokens": 186,
+            "completion_tokens": 23,
+            "total_tokens": 184,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -2493,13 +2493,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_e155db4643"
+          "system_fingerprint": "fp_95c773cefe"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "43e2112aa6f9a836",
+      "hash": "769fd4d60e43dd87",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -2517,7 +2517,7 @@
             },
             {
               "role": "assistant",
-              "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, and it feels like 65 degrees."
+              "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, feeling like 65 degrees."
             },
             {
               "role": "user",
@@ -2566,7 +2566,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147363140
+        "timestamp": 1773176166040
       },
       "response": {
         "status": 200,
@@ -2575,30 +2575,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb4319715631-BRU",
+          "cf-ray": "9f06003a785658f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:10 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "689",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:19 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "509",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9982",
-          "x-ratelimit-remaining-tokens": "199928",
-          "x-ratelimit-reset-requests": "2m33.491s",
-          "x-ratelimit-reset-tokens": "21ms",
-          "x-request-id": "req_2ffc4811f39f420bb2445b8a116d0fdc"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999930",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_72557cf494b342c385ab357f519c64db"
         },
         "body": {
-          "id": "chatcmpl-DSIHBdgYvaxJNAq8uWBZkLD2CPjHg",
+          "id": "chatcmpl-DXUixLl4WxYwiWsqlY1vief2IvBPl",
           "object": "chat.completion",
-          "created": 1775635809,
+          "created": 1776875299,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -2608,7 +2608,7 @@
                 "content": null,
                 "tool_calls": [
                   {
-                    "id": "call_PFVyVBLLGfR2GK3AP6pey4Sm",
+                    "id": "call_g98FrJhns6IloVoKTdabUgeb",
                     "type": "function",
                     "function": {
                       "name": "get_weather_city",
@@ -2624,9 +2624,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 155,
+            "prompt_tokens": 153,
             "completion_tokens": 15,
-            "total_tokens": 170,
+            "total_tokens": 168,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -2639,13 +2639,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_e155db4643"
+          "system_fingerprint": "fp_95c773cefe"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "611e61d645262e15",
+      "hash": "ee1f94e67d91b25b",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -2663,7 +2663,7 @@
             },
             {
               "role": "assistant",
-              "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, and it feels like 65 degrees."
+              "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, feeling like 65 degrees."
             },
             {
               "role": "user",
@@ -2674,7 +2674,7 @@
               "content": "",
               "tool_calls": [
                 {
-                  "id": "call_PFVyVBLLGfR2GK3AP6pey4Sm",
+                  "id": "call_g98FrJhns6IloVoKTdabUgeb",
                   "type": "function",
                   "function": {
                     "name": "get_weather_city",
@@ -2685,7 +2685,7 @@
             },
             {
               "role": "tool",
-              "tool_call_id": "call_PFVyVBLLGfR2GK3AP6pey4Sm",
+              "tool_call_id": "call_g98FrJhns6IloVoKTdabUgeb",
               "content": "\"The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees.\""
             }
           ],
@@ -2731,7 +2731,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147364020
+        "timestamp": 1773176166660
       },
       "response": {
         "status": 200,
@@ -2740,37 +2740,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb48cd555631-BRU",
+          "cf-ray": "9f06003e7c1658f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:11 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "972",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:20 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1096",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9982",
-          "x-ratelimit-remaining-tokens": "199903",
-          "x-ratelimit-reset-requests": "2m32.585s",
-          "x-ratelimit-reset-tokens": "28ms",
-          "x-request-id": "req_c7e8d7ba0fc743b3bd76f7856d4fdbdc"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999907",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_65579df3ab414c1fbfb7c5991da8e5e3"
         },
         "body": {
-          "id": "chatcmpl-DSIHCP5ck56n4fT7LyX3oIZfH8Ipw",
+          "id": "chatcmpl-DXUixDw8BcJjXz4dO9NG9peSFdlSR",
           "object": "chat.completion",
-          "created": 1775635810,
+          "created": 1776875299,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "The weather in London is sunny, with a current temperature of 70 degrees, and it feels like 65 degrees.",
+                "content": "The weather in London is sunny, with a current temperature of 70 degrees, feeling like 65 degrees.",
                 "refusal": null,
                 "annotations": []
               },
@@ -2779,9 +2779,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 199,
-            "completion_tokens": 25,
-            "total_tokens": 224,
+            "prompt_tokens": 197,
+            "completion_tokens": 23,
+            "total_tokens": 220,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -2794,7 +2794,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_e155db4643"
+          "system_fingerprint": "fp_95c773cefe"
         },
         "isStreaming": false
       }
@@ -2818,7 +2818,7 @@
             }
           ]
         },
-        "timestamp": 1773147360000
+        "timestamp": 1773176160000
       },
       "response": {
         "status": 200,
@@ -2827,30 +2827,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb503b085631-BRU",
+          "cf-ray": "9f060046191158f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:12 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "849",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:21 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "601",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9980",
-          "x-ratelimit-remaining-tokens": "199986",
-          "x-ratelimit-reset-requests": "2m48.686s",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_67d45e89876f48bd98930d28bb1f2761"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999987",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b9a5dd89603147d9b0bab9035bb17054"
         },
         "body": {
-          "id": "chatcmpl-DSIHETcKtnGOUk7Z8OIw7C8cwc99c",
+          "id": "chatcmpl-DXUiyYSgN1SXLJxHffVgM87YZAMq4",
           "object": "chat.completion",
-          "created": 1775635812,
+          "created": 1776875300,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -2881,7 +2881,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_262a1aea33"
+          "system_fingerprint": "fp_0542ea89f6"
         },
         "isStreaming": false
       }
@@ -2913,7 +2913,7 @@
             }
           ]
         },
-        "timestamp": 1773147361100
+        "timestamp": 1773176160800
       },
       "response": {
         "status": 200,
@@ -2922,30 +2922,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb56debc5631-BRU",
+          "cf-ray": "9f06004abd8958f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:13 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "591",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:22 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "630",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9979",
-          "x-ratelimit-remaining-tokens": "199970",
-          "x-ratelimit-reset-requests": "2m56.257s",
-          "x-ratelimit-reset-tokens": "9ms",
-          "x-request-id": "req_9f8c938f14b24f4e8d23d6757ab17f62"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999970",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_238e89eec7f3433d8fa8f4d8052a648e"
         },
         "body": {
-          "id": "chatcmpl-DSIHFk4UNLIWXzW72IQC2dgw2Hyup",
+          "id": "chatcmpl-DXUiznYBIXcBxwUsU5qdWcEGKi4Qq",
           "object": "chat.completion",
-          "created": 1775635813,
+          "created": 1776875301,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -2976,7 +2976,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_262a1aea33"
+          "system_fingerprint": "fp_df1291c4ff"
         },
         "isStreaming": false
       }
@@ -3000,7 +3000,7 @@
             }
           ]
         },
-        "timestamp": 1773147360000
+        "timestamp": 1773176160000
       },
       "response": {
         "status": 200,
@@ -3009,37 +3009,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb5c18b05631-BRU",
+          "cf-ray": "9f06004f7a8a58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:16 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1773",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:23 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "722",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9979",
-          "x-ratelimit-remaining-tokens": "199984",
-          "x-ratelimit-reset-requests": "2m55.427s",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_126c53d9f132494b9b917b469d7839e0"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_fb9113569e3641d8b6358bdc4c49eb5c"
         },
         "body": {
-          "id": "chatcmpl-DSIHG3iuQ2iRRErrLO2JLbIRj4JTx",
+          "id": "chatcmpl-DXUj0BtHv1YZAWYlc5ZcWvgi1hquH",
           "object": "chat.completion",
-          "created": 1775635814,
+          "created": 1776875302,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "I'm sorry, but I can't save messages or store personal data. However, I can help you with any information or questions you have! What would you like to discuss?",
+                "content": "I'm sorry, but I can't save messages or store information. However, I can help you with any questions or information you need! What would you like to discuss?",
                 "refusal": null,
                 "annotations": []
               },
@@ -3049,8 +3049,8 @@
           ],
           "usage": {
             "prompt_tokens": 22,
-            "completion_tokens": 34,
-            "total_tokens": 56,
+            "completion_tokens": 33,
+            "total_tokens": 55,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -3063,7 +3063,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_262a1aea33"
+          "system_fingerprint": "fp_48d0a22f61"
         },
         "isStreaming": false
       }
@@ -3128,7 +3128,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360060
+        "timestamp": 1773176160060
       },
       "response": {
         "status": 200,
@@ -3137,30 +3137,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb782a305631-BRU",
+          "cf-ray": "9f06005c4eb958f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:19 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "640",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:25 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "572",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9977",
-          "x-ratelimit-remaining-tokens": "199977",
-          "x-ratelimit-reset-requests": "3m16.65s",
-          "x-ratelimit-reset-tokens": "6ms",
-          "x-request-id": "req_819377d6c418463b82faed523799d450"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999977",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b3f01f8f8f74471986a1d00c02987264"
         },
         "body": {
-          "id": "chatcmpl-DSIHKC5M2uvEl4Y1OjLnJb8K9AzlO",
+          "id": "chatcmpl-DXUj2Yy7rBmo7T4in6odaLGqIiqZS",
           "object": "chat.completion",
-          "created": 1775635818,
+          "created": 1776875304,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -3191,7 +3191,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -3264,7 +3264,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147361220
+        "timestamp": 1773176160920
       },
       "response": {
         "status": 200,
@@ -3273,37 +3273,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb808da75631-BRU",
+          "cf-ray": "9f0600623f7258f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:20 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "736",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:26 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1127",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9976",
-          "x-ratelimit-remaining-tokens": "199960",
-          "x-ratelimit-reset-requests": "3m24.164s",
-          "x-ratelimit-reset-tokens": "12ms",
-          "x-request-id": "req_8db37d5a500846a9b5605a863bc63aca"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999960",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_2d6cca638f1f4f0fa16cad5a6cd83d40"
         },
         "body": {
-          "id": "chatcmpl-DSIHLU1yiAcXGXbsHRYbNwjuh9gLI",
+          "id": "chatcmpl-DXUj3mKVcn30CS31uALFGIKECqkxW",
           "object": "chat.completion",
-          "created": 1775635819,
+          "created": 1776875305,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "That's great! New York is a vibrant city with so much to offer. Is there something specific you would like to know or discuss about New York?",
+                "content": "That's great! New York is a vibrant city with so much to offer. Is there something specific you would like to know or do related to New York? For example, would you like to know the weather there?",
                 "refusal": null,
                 "annotations": []
               },
@@ -3313,8 +3313,8 @@
           ],
           "usage": {
             "prompt_tokens": 128,
-            "completion_tokens": 31,
-            "total_tokens": 159,
+            "completion_tokens": 44,
+            "total_tokens": 172,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -3327,7 +3327,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -3392,7 +3392,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -3401,30 +3401,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb8aaded5631-BRU",
+          "cf-ray": "9f06006e6aea58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:22 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "824",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:27 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "451",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9975",
-          "x-ratelimit-remaining-tokens": "199977",
-          "x-ratelimit-reset-requests": "3m31.173s",
-          "x-ratelimit-reset-tokens": "6ms",
-          "x-request-id": "req_7280e9637a804c9697642afca34d3bc8"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999977",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_55e4f8ec3fd24a69946ccafed0f4d564"
         },
         "body": {
-          "id": "chatcmpl-DSIHNd4m99VVvFlyl7LoeobI6ibOk",
+          "id": "chatcmpl-DXUj5Svj9BnZILuDg2gnx6VlfV13E",
           "object": "chat.completion",
-          "created": 1775635821,
+          "created": 1776875307,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -3455,7 +3455,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -3520,7 +3520,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -3529,30 +3529,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb93ea235631-BRU",
+          "cf-ray": "9f060074cb0958f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:24 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1353",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:28 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "533",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9974",
-          "x-ratelimit-remaining-tokens": "199979",
-          "x-ratelimit-reset-requests": "3m38.316s",
-          "x-ratelimit-reset-tokens": "6ms",
-          "x-request-id": "req_3630722a16ca4b39bf152920fc3ab362"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999980",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_961e8b62832a4fc9b6521eb3aa77acaf"
         },
         "body": {
-          "id": "chatcmpl-DSIHORxl0s1sm28UMCerM7eO1tSrK",
+          "id": "chatcmpl-DXUj6TiFLnjafNtdWeL8IZh1O8cZh",
           "object": "chat.completion",
-          "created": 1775635822,
+          "created": 1776875308,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -3583,7 +3583,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -3656,7 +3656,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147362600
+        "timestamp": 1773176161700
       },
       "response": {
         "status": 200,
@@ -3665,30 +3665,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcb9f9e2c5631-BRU",
+          "cf-ray": "9f06007a78f758f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:25 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "802",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:29 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "590",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9973",
-          "x-ratelimit-remaining-tokens": "199955",
-          "x-ratelimit-reset-requests": "3m45.096s",
-          "x-ratelimit-reset-tokens": "13ms",
-          "x-request-id": "req_6bda628ff70b41c594fdd733dd114db3"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999955",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_ba2f011b7f5f49a3a92e7200a1526e83"
         },
         "body": {
-          "id": "chatcmpl-DSIHQ7O6d6M5eedeVLjTstOBE4TOe",
+          "id": "chatcmpl-DXUj7sj6zTWDE2Cf7CaSHhVdaQgoc",
           "object": "chat.completion",
-          "created": 1775635824,
+          "created": 1776875309,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -3719,7 +3719,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -3800,7 +3800,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147364520
+        "timestamp": 1773176163440
       },
       "response": {
         "status": 200,
@@ -3809,30 +3809,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcba78dc15631-BRU",
+          "cf-ray": "9f06008078c258f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:26 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "787",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:31 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "797",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9973",
-          "x-ratelimit-remaining-tokens": "199925",
-          "x-ratelimit-reset-requests": "3m52.476s",
-          "x-ratelimit-reset-tokens": "22ms",
-          "x-request-id": "req_59a071a2c2444bc99bdcd6ca1b32b072"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999925",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8a617f2dd0f44db8b678f5f6e2f6d196"
         },
         "body": {
-          "id": "chatcmpl-DSIHSVcmAD3T1XQ4nbfqQLhpXgoZ6",
+          "id": "chatcmpl-DXUj8hU14BXex1R9WURmaXzxee5Q0",
           "object": "chat.completion",
-          "created": 1775635826,
+          "created": 1776875310,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -3863,7 +3863,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -3928,7 +3928,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160040
       },
       "response": {
         "status": 200,
@@ -3937,37 +3937,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcbb1085d5631-BRU",
+          "cf-ray": "9f06008998e758f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:28 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "915",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:32 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "877",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9972",
-          "x-ratelimit-remaining-tokens": "199976",
-          "x-ratelimit-reset-requests": "3m59.603s",
-          "x-ratelimit-reset-tokens": "7ms",
-          "x-request-id": "req_d3f4bdde2fa04f5aa6e58636c465b596"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999975",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b5f8d65360ce458bbc8adff17bc270ef"
         },
         "body": {
-          "id": "chatcmpl-DSIHTS4MWf7mpR3Py3QXDX1VRvGIr",
+          "id": "chatcmpl-DXUj9RZ9H8cnjPEnEVbEIQftvt1wO",
           "object": "chat.completion",
-          "created": 1775635827,
+          "created": 1776875311,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like the most?",
+                "content": "That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like, or do you enjoy all shades?",
                 "refusal": null,
                 "annotations": []
               },
@@ -3977,8 +3977,8 @@
           ],
           "usage": {
             "prompt_tokens": 103,
-            "completion_tokens": 35,
-            "total_tokens": 138,
+            "completion_tokens": 40,
+            "total_tokens": 143,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -3991,13 +3991,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "954609ada563d017",
+      "hash": "249b297e38076573",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -4011,7 +4011,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 12:56 PM: User: My favorite color is blue.Message from previous conversation at 12:56 PM: Assistant: That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like the most?\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: My favorite color is blue.Message from previous conversation at 8:56 PM: Assistant: That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like, or do you enjoy all shades?\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -4019,7 +4019,7 @@
             },
             {
               "role": "assistant",
-              "content": "That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like the most?"
+              "content": "That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like, or do you enjoy all shades?"
             },
             {
               "role": "user",
@@ -4068,7 +4068,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147361340
+        "timestamp": 1773176161200
       },
       "response": {
         "status": 200,
@@ -4077,30 +4077,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcbbadddc5631-BRU",
+          "cf-ray": "9f06009278ea58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:29 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "841",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:33 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "750",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9971",
-          "x-ratelimit-remaining-tokens": "199804",
-          "x-ratelimit-reset-requests": "4m6.629s",
-          "x-ratelimit-reset-tokens": "58ms",
-          "x-request-id": "req_f19003603f664eb881696bab50f80383"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999795",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_e1778602561a4972a46e53adecf3de3a"
         },
         "body": {
-          "id": "chatcmpl-DSIHVbZXsnYczgZkdQZg82daRuZje",
+          "id": "chatcmpl-DXUjBVK708FPBeCuI5v7FLKICD2rQ",
           "object": "chat.completion",
-          "created": 1775635829,
+          "created": 1776875313,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -4116,9 +4116,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 264,
+            "prompt_tokens": 274,
             "completion_tokens": 29,
-            "total_tokens": 293,
+            "total_tokens": 303,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -4131,7 +4131,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -4196,7 +4196,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -4205,30 +4205,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcbc30ea55631-BRU",
+          "cf-ray": "9f0600997bce58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:31 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "801",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:34 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "446",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9970",
-          "x-ratelimit-remaining-tokens": "199980",
-          "x-ratelimit-reset-requests": "4m13.99s",
-          "x-ratelimit-reset-tokens": "6ms",
-          "x-request-id": "req_c2e7170e69cf4844a86723025fbafec5"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999980",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f1224899bc5c4628b6de4967f1788460"
         },
         "body": {
-          "id": "chatcmpl-DSIHWdaqYkohVu2f9vyL3jD19mqSu",
+          "id": "chatcmpl-DXUjCei4GFrdWCJRs5OTga03fbppy",
           "object": "chat.completion",
-          "created": 1775635830,
+          "created": 1776875314,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -4259,7 +4259,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -4324,7 +4324,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -4333,37 +4333,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcbd9ba365631-BRU",
+          "cf-ray": "9f0600a92fdd58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:35 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "938",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:37 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "759",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9968",
-          "x-ratelimit-remaining-tokens": "199979",
-          "x-ratelimit-reset-requests": "4m36.267s",
-          "x-ratelimit-reset-tokens": "6ms",
-          "x-request-id": "req_2ebc71c89a7d4b9dbe2dbf7b7fd8d8d4"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999977",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f95ff5f665454f0aa638e85d92cc5319"
         },
         "body": {
-          "id": "chatcmpl-DSIHaoyKPE1DONV1rkNpRSc9okjKp",
+          "id": "chatcmpl-DXUjE8XW3zYlPZeBsMmoANrHpzJAb",
           "object": "chat.completion",
-          "created": 1775635834,
+          "created": 1776875316,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "It seems like you might want to send or refer to an original message, but I don't have the context or content of that message. Could you please provide more details or clarify what you need?",
+                "content": "It seems like you might want to share or refer to an original message, but I don't have that information. Could you please provide more details or clarify what you need?",
                 "refusal": null,
                 "annotations": []
               },
@@ -4373,8 +4373,8 @@
           ],
           "usage": {
             "prompt_tokens": 99,
-            "completion_tokens": 40,
-            "total_tokens": 139,
+            "completion_tokens": 35,
+            "total_tokens": 134,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -4387,7 +4387,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c6fb6f9a92"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }
@@ -4452,7 +4452,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773147360020
+        "timestamp": 1773176160020
       },
       "response": {
         "status": 200,
@@ -4461,37 +4461,37 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e8fcbe3e81e5631-BRU",
+          "cf-ray": "9f0600b1897c58f2-YVR",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 08 Apr 2026 08:10:39 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "3773",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 22 Apr 2026 16:28:41 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "3161",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9967",
-          "x-ratelimit-remaining-tokens": "199964",
-          "x-ratelimit-reset-requests": "4m43.283s",
-          "x-ratelimit-reset-tokens": "10ms",
-          "x-request-id": "req_ffdd1f4ad2e8456f9f5ddd209d32de00"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999962",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_62df33320e504ca6a1c7a12978ce797c"
         },
         "body": {
-          "id": "chatcmpl-DSIHbFd2BsUWsrIJrQamMDLzeObyu",
+          "id": "chatcmpl-DXUjGjuD2cuc6cM0DW2KQ4QIWPCez",
           "object": "chat.completion",
-          "created": 1775635835,
+          "created": 1776875318,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "The ancient Library of Alexandria, located in Egypt, was one of the most significant libraries of the ancient world. It was established in the 3rd century BCE and aimed to collect all the knowledge of the world. Scholars from various cultures and backgrounds came to study there, contributing to advancements in various fields such as mathematics, astronomy, medicine, and philosophy.\n\nThe library housed a vast collection of scrolls, many of which were lost over time due to various factors, including fires, neglect, and the decline of the city. The loss of these scrolls is often seen as a significant cultural tragedy, as they contained works of literature, scientific treatises, and historical records that could have provided invaluable insights into ancient civilizations.\n\nThe legacy of the Library of Alexandria continues to inspire modern libraries and institutions of learning, symbolizing the pursuit of knowledge and the importance of preserving cultural heritage.",
+                "content": "The ancient Library of Alexandria, located in Egypt, was one of the most significant libraries of the ancient world. It was established in the 3rd century BCE and aimed to collect all the knowledge of the world. Scholars from various cultures and backgrounds came to study there, contributing to advancements in various fields such as mathematics, astronomy, medicine, and philosophy.\n\nThe library is often associated with the figure of Euclid, who made significant contributions to geometry, and other notable scholars like Archimedes and Eratosthenes. Unfortunately, the library suffered several incidents of destruction over the centuries, leading to the loss of many scrolls and texts, which has left a significant gap in our understanding of ancient knowledge.\n\nThe legacy of the Library of Alexandria continues to inspire modern libraries and institutions dedicated to the preservation and dissemination of knowledge.",
                 "refusal": null,
                 "annotations": []
               },
@@ -4501,8 +4501,8 @@
           ],
           "usage": {
             "prompt_tokens": 109,
-            "completion_tokens": 176,
-            "total_tokens": 285,
+            "completion_tokens": 166,
+            "total_tokens": 275,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -4515,7 +4515,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_a5086b7b9a"
+          "system_fingerprint": "fp_fb9b28ef06"
         },
         "isStreaming": false
       }

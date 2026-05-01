@@ -72,6 +72,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     metadata,
     requestContext: globalRequestContext,
     agentVersion,
+    versions,
   } = config;
 
   const startedAt = new Date();
@@ -197,10 +198,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       };
     } else if (targetType && targetId) {
       // Registry-based target path (existing)
-      const target = await resolveTarget(mastra, targetType, targetId, agentVersion);
-      if (!target) {
+      const resolved = await resolveTarget(mastra, targetType, targetId, agentVersion);
+      if (!resolved) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
+      const { target } = resolved;
       execFn = (item, itemSignal) => {
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =
@@ -209,6 +211,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           signal: itemSignal,
           requestContext: mergedRequestContext,
           experimentId,
+          versions,
         });
       };
     } else {
@@ -342,6 +345,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         };
 
         // Run scorers (inline, after target completes)
+        const workflowData =
+          execResult.stepResults || execResult.stepExecutionPath
+            ? {
+                stepResults: execResult.stepResults,
+                stepExecutionPath: execResult.stepExecutionPath,
+                spanId: execResult.spanId,
+              }
+            : undefined;
+
         const itemScores = await runScorersForItem(
           scorers,
           item,
@@ -354,6 +366,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           execResult.scorerInput,
           execResult.scorerOutput,
           execResult.traceId ?? undefined,
+          workflowData,
         );
 
         // Persist result with scores (if storage available)
@@ -465,16 +478,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
  * Resolve a target from Mastra's registries by type and ID.
  * When `agentVersion` is provided for an agent target, the returned agent
  * will have the versioned config applied (via `applyStoredOverrides`).
+ *
+ * The result is wrapped in `{ target }` because `Workflow` has a `.then`
+ * method for step chaining, which makes it thenable. Returning a thenable
+ * from an async function causes the Promise machinery to attempt to unwrap
+ * it, which hangs forever since the builder `.then` never invokes its
+ * callbacks. Wrapping in a plain object avoids the unwrap.
  */
 async function resolveTarget(
   mastra: Mastra,
   targetType: string,
   targetId: string,
   agentVersion?: string,
-): Promise<Target | null> {
-  // NOTE: Workflow is thenable, so we must never return one directly from an
-  // async function — TypeScript would try to unwrap it.  We collect into a
-  // local variable and return once at the end.
+): Promise<{ target: Target } | null> {
   let resolved: Target | null = null;
 
   switch (targetType) {
@@ -524,5 +540,5 @@ async function resolveTarget(
       break;
   }
 
-  return resolved;
+  return resolved ? { target: resolved } : null;
 }

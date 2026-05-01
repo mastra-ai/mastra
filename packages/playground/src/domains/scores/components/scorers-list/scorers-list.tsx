@@ -11,12 +11,6 @@ export interface ScorersListProps {
   sourceFilter?: string;
 }
 
-export const SCORER_SOURCE_OPTIONS = [
-  { value: 'all', label: 'All sources' },
-  { value: 'code', label: 'Code' },
-  { value: 'stored', label: 'Stored' },
-] as const;
-
 const COLUMNS = 'auto 1fr auto auto auto';
 
 export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'all' }: ScorersListProps) {
@@ -87,7 +81,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
               </span>
             </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-            <EntityList.Cell>
+            <EntityList.Cell className="py-0">
               <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
             </EntityList.Cell>
             <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>

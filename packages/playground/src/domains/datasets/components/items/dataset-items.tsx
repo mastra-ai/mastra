@@ -2,7 +2,7 @@
 
 import type { DatasetItem } from '@mastra/client-js';
 import { Columns, Column, Notice, toast, cn } from '@mastra/playground-ui';
-import { AlertTriangleIcon, ArrowRightToLineIcon } from 'lucide-react';
+import { ArrowRightToLineIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { useItemSelection } from '../../hooks/use-item-selection';
@@ -94,6 +94,7 @@ export function DatasetItems({
       selection.clearSelection();
       setSelectionMode('idle');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearSelectionTrigger]);
 
   // Check if viewing an old version
@@ -197,12 +198,16 @@ export function DatasetItems({
         />
 
         {isViewingOldVersion && activeDatasetVersion != null && (
-          <Notice variant="warning">
-            <AlertTriangleIcon />
+          <Notice
+            variant="warning"
+            title="Previous version"
+            action={
+              <Notice.Button onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}>
+                <ArrowRightToLineIcon /> Return to the latest version
+              </Notice.Button>
+            }
+          >
             <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
-            <Notice.Button onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}>
-              <ArrowRightToLineIcon /> Return to the latest version
-            </Notice.Button>
           </Notice>
         )}
 

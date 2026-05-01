@@ -6,6 +6,8 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
@@ -103,6 +105,42 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('requestContext')}
   FROM span_events
 `;
+
+/** Lightweight variant — only timeline-relevant columns. */
+const SPAN_RECONSTRUCT_SELECT_LIGHT = `
+  SELECT
+    traceId, spanId,
+    ${argMaxNonNull('name')},
+    ${argMaxNonNull('spanType')},
+    ${argMaxNonNull('parentSpanId')},
+    ${argMaxNonNull('isEvent')},
+    coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
+    ${argMaxNonNull('endedAt')},
+    ${argMaxNonNull('entityType')},
+    ${argMaxNonNull('entityId')},
+    ${argMaxNonNull('entityName')},
+    ${argMaxNonNull('error')}
+  FROM span_events
+`;
+
+function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
+  return {
+    traceId: row.traceId as string,
+    spanId: row.spanId as string,
+    name: row.name as string,
+    spanType: row.spanType as LightSpanRecord['spanType'],
+    parentSpanId: (row.parentSpanId as string) ?? null,
+    isEvent: row.isEvent as boolean,
+    startedAt: toDate(row.startedAt),
+    endedAt: toDateOrNull(row.endedAt),
+    entityType: (row.entityType as LightSpanRecord['entityType']) ?? null,
+    entityId: (row.entityId as string) ?? null,
+    entityName: (row.entityName as string) ?? null,
+    error: parseJson(row.error),
+    createdAt: toDate(row.startedAt), // DuckDB event-sourced — use startedAt as proxy
+    updatedAt: toDateOrNull(row.endedAt),
+  };
+}
 
 function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
   return {
@@ -383,6 +421,18 @@ export async function getTrace(db: DuckDBConnection, args: GetTraceArgs): Promis
   return {
     traceId: args.traceId,
     spans: rows.map(row => rowToSpanRecord(row as Record<string, unknown>)),
+  };
+}
+
+/** Reconstruct lightweight spans belonging to a trace (timeline fields only). */
+export async function getTraceLight(db: DuckDBConnection, args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+  const rows = await db.query(`${SPAN_RECONSTRUCT_SELECT_LIGHT} WHERE traceId = ? GROUP BY traceId, spanId`, [
+    args.traceId,
+  ]);
+  if (rows.length === 0) return null;
+  return {
+    traceId: args.traceId,
+    spans: rows.map(row => rowToLightSpanRecord(row as Record<string, unknown>)),
   };
 }
 

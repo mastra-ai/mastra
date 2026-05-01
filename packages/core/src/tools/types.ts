@@ -10,7 +10,9 @@ import type {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { MastraUnion } from '../action';
+import type { MastraPrimitives, MastraUnion } from '../action';
+export type { MastraPrimitives, MastraUnion };
+import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
@@ -46,6 +48,12 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
+
+  /**
+   * Flushes the parent stream's pending messages to persistent storage.
+   * See `MastraToolInvocationOptions.flushMessages` for details.
+   */
+  flushMessages?: () => Promise<void>;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
@@ -104,6 +112,19 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * their requestContext (e.g., authenticated API clients, feature flags) to tools.
      */
     requestContext?: RequestContext;
+    /**
+     * Flushes the parent stream's pending messages to persistent storage.
+     *
+     * The agent stream batches message saves through a `SaveQueueManager`
+     * (100ms debounce). Tools that read the thread's persisted history
+     * mid-stream (e.g. cloning the thread, exporting it, handing off to a
+     * sibling agent) must call this first, otherwise the store will be
+     * missing the latest user / assistant messages.
+     *
+     * Populated automatically by the agent tool-call step. No-op when the
+     * stream is not memory-backed.
+     */
+    flushMessages?: () => Promise<void>;
   };
 
 /**
@@ -236,6 +257,8 @@ export type CoreTool = {
   onOutput?: (
     options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /** Background task configuration for this tool. */
+  background?: ToolBackgroundConfig;
 } & (
   | {
       type?: 'function' | undefined;
@@ -291,6 +314,8 @@ export type InternalCoreTool = {
   onOutput?: (
     options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /** Background task configuration for this tool. */
+  background?: ToolBackgroundConfig;
 } & (
   | {
       type?: 'function' | undefined;
@@ -388,7 +413,18 @@ export interface ToolAction<
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
   mastra?: Mastra;
-  requireApproval?: boolean;
+  /**
+   * Whether the tool requires explicit user approval before execution.
+   * Pass `true` to always require approval, or a function evaluated per-call
+   * with the tool input (and optional request context/workspace) to require
+   * approval conditionally.
+   */
+  requireApproval?:
+    | boolean
+    | ((
+        input: TSchemaIn,
+        ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
+      ) => boolean | Promise<boolean>);
   /**
    * Enables strict tool input generation for providers that support it.
    * When enabled, supported providers will attempt to generate arguments
@@ -438,4 +474,9 @@ export interface ToolAction<
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /**
+   * Background task configuration for this tool.
+   * When enabled, the tool can be executed in the background while the agent conversation continues.
+   */
+  background?: ToolBackgroundConfig;
 }

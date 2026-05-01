@@ -4,10 +4,12 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../../agent/message-list';
+import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
@@ -28,7 +30,6 @@ import type {
   ModelManagerModelConfig,
   StreamTransport,
   StreamTransportRef,
-  TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
@@ -40,6 +41,10 @@ import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
+import { buildMessagesFromChunks } from './build-messages-from-chunks';
+import type { CollectedChunk } from './build-messages-from-chunks';
+import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
+import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
@@ -60,41 +65,22 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   transportResolver?: () => StreamTransport | undefined;
 };
 
-function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
-  const modelId = runState.state.responseMetadata?.modelId;
-  return modelId ? { metadata: { modelId } } : undefined;
-}
+function buildResponseModelMetadata(
+  runState: AgenticRunState,
+  model?: { provider?: string; modelId?: string },
+): { metadata: Record<string, unknown> } | undefined {
+  const metadata: Record<string, unknown> = {};
+  const modelId = model?.modelId ?? runState.state.responseMetadata?.modelId;
 
-function flushReasoningBuffer({
-  buffer,
-  messageId,
-  messageList,
-  runState,
-}: {
-  buffer: { deltas: string[]; providerMetadata: Record<string, any> | undefined };
-  messageId: string;
-  messageList: MessageList;
-  runState: AgenticRunState;
-}) {
-  const message: MastraDBMessage = {
-    id: messageId,
-    role: 'assistant',
-    content: {
-      format: 2,
-      parts: [
-        {
-          type: 'reasoning' as const,
-          reasoning: '',
-          details: [{ type: 'text', text: buffer.deltas.join('') }],
-          providerMetadata: buffer.providerMetadata,
-        },
-      ],
-      ...buildResponseModelMetadata(runState),
-    },
-    createdAt: new Date(),
-  };
+  if (modelId) {
+    metadata.modelId = modelId;
+  }
 
-  messageList.add(message, 'response');
+  if (model?.provider) {
+    metadata.provider = model.provider;
+  }
+
+  return Object.keys(metadata).length > 0 ? { metadata } : undefined;
 }
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -110,8 +96,9 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
-}: ProcessOutputStreamOptions<OUTPUT>) {
+}: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
   let transportSet = false;
+  const collectedChunks: CollectedChunk[] = [];
 
   for await (const chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
@@ -139,87 +126,8 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    // Streaming
-    if (
-      chunk.type !== 'text-delta' &&
-      // not 100% sure about this being the right fix.
-      // basically for some llm providers they add response-metadata after each text-delta
-      // we then flush the chunks by calling messageList.add (a few lines down)
-      // this results in a bunch of weird separated text chunks on the message instead of combined chunks
-      // easiest solution here is to just not flush for response-metadata
-      // BUT does this cause other issues?
-      // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
-      // simple solution for now is to not flush text deltas on response-metadata
-      chunk.type !== 'response-metadata' &&
-      // Don't flush on source chunks - OpenAI web search interleaves source citations
-      // with text-deltas, all sharing the same itemId. Flushing creates multiple parts
-      // with duplicate itemIds, causing "Duplicate item found" errors on the next request.
-      chunk.type !== 'source' &&
-      runState.state.isStreaming
-    ) {
-      if (runState.state.textDeltas.length) {
-        const textStartPayload = chunk.payload as TextStartPayload;
-        const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
-
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'text' as const,
-                text: runState.state.textDeltas.join(''),
-                ...(providerMetadata ? { providerMetadata } : {}),
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
-      }
-
-      runState.setState({
-        isStreaming: false,
-        textDeltas: [],
-      });
-    }
-
-    // Only reset reasoning state for truly unexpected chunk types.
-    // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
-    // so we must allow text-start to pass through without clearing buffered reasoning deltas.
-    if (
-      chunk.type !== 'reasoning-start' &&
-      chunk.type !== 'reasoning-delta' &&
-      chunk.type !== 'reasoning-end' &&
-      chunk.type !== 'redacted-reasoning' &&
-      chunk.type !== 'reasoning-signature' &&
-      chunk.type !== 'response-metadata' &&
-      chunk.type !== 'text-start' &&
-      runState.state.isReasoning
-    ) {
-      // Flush reasoning deltas before clearing, same pattern as textDeltas above.
-      // Some providers (e.g., OpenAI-compatible reasoning models like kimi-k2.5, DeepSeek-R1)
-      // emit tool-input-start before reasoning-end (which arrives from flush()).
-      // Without this flush, reasoning_content becomes empty, causing 400 errors on
-      // subsequent turns that require reasoning_content echo-back.
-      // See: https://github.com/mastra-ai/mastra/issues/13635
-      for (const buffer of runState.state.reasoningBuffers.values()) {
-        flushReasoningBuffer({
-          buffer,
-          messageId,
-          messageList,
-          runState,
-        });
-      }
-
-      runState.setState({
-        isReasoning: false,
-        reasoningBuffers: new Map(),
-        providerOptions: undefined,
-      });
-    }
+    // Collect every chunk for post-stream message building
+    collectedChunks.push({ type: chunk.type, payload: chunk.payload });
 
     switch (chunk.type) {
       case 'response-metadata':
@@ -232,42 +140,6 @@ async function processOutputStream<OUTPUT = undefined>({
           },
         });
         break;
-
-      case 'text-start': {
-        // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
-        // This is needed because, for example, OpenAI reasoning models send separate itemIds for
-        // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
-        // preserved so that when memory is replayed, OpenAI sees the required
-        // following item for the reasoning part.
-        if (chunk.payload.providerMetadata) {
-          runState.setState({
-            providerOptions: chunk.payload.providerMetadata,
-          });
-        }
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'text-delta': {
-        const textDeltasFromState = runState.state.textDeltas;
-        textDeltasFromState.push(chunk.payload.text);
-        runState.setState({
-          textDeltas: textDeltasFromState,
-          isStreaming: true,
-        });
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'text-end': {
-        // Clear providerOptions to prevent text's providerMetadata from leaking
-        // into subsequent parts (similar to reasoning-end clearing)
-        runState.setState({
-          providerOptions: undefined,
-        });
-        safeEnqueue(controller, chunk);
-        break;
-      }
 
       case 'tool-call-input-streaming-start': {
         const tool =
@@ -287,7 +159,6 @@ async function processOutputStream<OUTPUT = undefined>({
         }
 
         safeEnqueue(controller, chunk);
-
         break;
       }
 
@@ -311,166 +182,6 @@ async function processOutputStream<OUTPUT = undefined>({
         safeEnqueue(controller, chunk);
         break;
       }
-
-      case 'tool-call-input-streaming-end': {
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'reasoning-start': {
-        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
-        reasoningBuffers.set(chunk.payload.id, {
-          deltas: reasoningBuffers.get(chunk.payload.id)?.deltas ?? [],
-          providerMetadata: chunk.payload.providerMetadata ?? reasoningBuffers.get(chunk.payload.id)?.providerMetadata,
-        });
-
-        runState.setState({
-          isReasoning: true,
-          reasoningBuffers,
-          providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-        });
-
-        if (Object.values(chunk.payload.providerMetadata || {}).find((v: any) => v?.redactedData)) {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'reasoning' as const,
-                  reasoning: '',
-                  details: [{ type: 'redacted', data: '' }],
-                  providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-                },
-              ],
-              ...buildResponseModelMetadata(runState),
-            },
-            createdAt: new Date(),
-          };
-          messageList.add(message, 'response');
-          safeEnqueue(controller, chunk);
-          break;
-        }
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'reasoning-delta': {
-        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
-        const existingBuffer = reasoningBuffers.get(chunk.payload.id);
-        const buffer = {
-          deltas: [...(existingBuffer?.deltas ?? []), chunk.payload.text],
-          providerMetadata: chunk.payload.providerMetadata ?? existingBuffer?.providerMetadata,
-        };
-
-        reasoningBuffers.set(chunk.payload.id, buffer);
-        runState.setState({
-          isReasoning: true,
-          reasoningBuffers,
-          providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-        });
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'reasoning-end': {
-        // If reasoning was already flushed by the guard (e.g. tool-input-start arrived
-        // before reasoning-end from provider flush), skip the duplicate empty message.
-        // This only affects OpenAI-compatible providers; the native OpenAI Responses API
-        // sends reasoning-end in order, so the item_reference fix (#9005) is unaffected.
-        if (!runState.state.isReasoning) {
-          safeEnqueue(controller, chunk);
-          break;
-        }
-
-        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
-        const buffer = reasoningBuffers.get(chunk.payload.id);
-
-        if (!buffer) {
-          safeEnqueue(controller, chunk);
-          break;
-        }
-
-        // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
-        // See: https://github.com/mastra-ai/mastra/issues/9005
-        flushReasoningBuffer({
-          buffer: {
-            deltas: buffer.deltas,
-            providerMetadata: chunk.payload.providerMetadata ?? buffer.providerMetadata,
-          },
-          messageId,
-          messageList,
-          runState,
-        });
-
-        reasoningBuffers.delete(chunk.payload.id);
-        const nextProviderOptions = Array.from(reasoningBuffers.values()).at(-1)?.providerMetadata;
-
-        // Reset reasoning state - clear providerOptions to prevent reasoning metadata
-        // (like openai.itemId) from leaking into subsequent text parts
-        runState.setState({
-          isReasoning: reasoningBuffers.size > 0,
-          reasoningBuffers,
-          providerOptions: nextProviderOptions,
-        });
-
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'file':
-        {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant' as const,
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'file' as const,
-                  // @ts-expect-error - data type mismatch, see TODO
-                  data: chunk.payload.data, // TODO: incorrect string type
-                  mimeType: chunk.payload.mimeType,
-                  ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
-                },
-              ],
-              ...buildResponseModelMetadata(runState),
-            },
-            createdAt: new Date(),
-          };
-          messageList.add(message, 'response');
-          safeEnqueue(controller, chunk);
-        }
-        break;
-
-      case 'source':
-        {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant' as const,
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'source',
-                  source: {
-                    sourceType: 'url',
-                    id: chunk.payload.id,
-                    url: chunk.payload.url || '',
-                    title: chunk.payload.title,
-                    providerMetadata: chunk.payload.providerMetadata,
-                  },
-                },
-              ],
-              ...buildResponseModelMetadata(runState),
-            },
-            createdAt: new Date(),
-          };
-          messageList.add(message, 'response');
-          safeEnqueue(controller, chunk);
-        }
-        break;
 
       case 'finish':
         runState.setState({
@@ -513,9 +224,15 @@ async function processOutputStream<OUTPUT = undefined>({
         });
         break;
 
-      // Provider-executed tool results (e.g. web_search). Client tool results
-      // are handled by llm-mapping-step after execution.
       case 'tool-result': {
+        // Patch deferred provider-executed tool results inline.
+        // When a provider tool is deferred (e.g., Anthropic web_search called alongside
+        // a client tool), the tool-call arrives in step N and is added to messageList as
+        // state:'call' by buildMessagesFromChunks. The tool-result arrives in step N+1's
+        // stream. We patch the existing call part to state:'result' with real data here
+        // so the messageList is up-to-date as early as possible.
+        // For same-stream results (call + result in one step), no matching part exists yet
+        // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
         if (chunk.payload.result != null) {
           const resultToolDef =
             tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
@@ -536,37 +253,6 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
-      case 'tool-call': {
-        const toolDef = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
-        const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, toolDef);
-
-        const toolCallPart: MastraMessagePart = {
-          type: 'tool-invocation' as const,
-          toolInvocation: {
-            state: 'call' as const,
-            toolCallId: chunk.payload.toolCallId,
-            toolName: chunk.payload.toolName,
-            args: chunk.payload.args,
-          },
-          providerMetadata: chunk.payload.providerMetadata,
-          providerExecuted: inferredProviderExecuted,
-        };
-
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: [toolCallPart],
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
-
-        safeEnqueue(controller, chunk);
-        break;
-      }
       default:
         safeEnqueue(controller, chunk);
     }
@@ -594,6 +280,8 @@ async function processOutputStream<OUTPUT = undefined>({
       break;
     }
   }
+
+  return collectedChunks;
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -667,13 +355,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   processorStates,
   requestContext,
   methodType,
+  requireToolApproval,
+  toolCallConcurrency,
+  toolCallForeachOptions,
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
   outputWriter,
-}: OuterLLMRun<TOOLS, OUTPUT>) {
+}: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialSystemMessages = messageList.getAllSystemMessages();
+  const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
 
@@ -703,6 +395,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
+      let executedStepModel: string | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -720,6 +413,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
           const modelHeaders = modelConfig.headers;
+
+          // Re-stamp MODEL_GENERATION span with the fallback model so that downstream
+          // exporters (Langfuse, etc.) attribute usage and cost to the model that
+          // actually served the request instead of the first model in the list.
+          if (modelSpanTracker && activeFallbackModelIndex > 0) {
+            modelSpanTracker.updateGeneration({
+              name: `llm: '${model.modelId}'`,
+              attributes: {
+                model: model.modelId,
+                provider: model.provider,
+              },
+            });
+          }
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
           // don't persist across steps - each step starts fresh with original system messages
@@ -770,9 +476,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
               const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
-              // Create a ProcessorStreamWriter from outputWriter if available
+              // Create a ProcessorStreamWriter from outputWriter if available.
+              // Forward any processor-supplied options (e.g. a future `transient`
+              // flag) and override messageId so the step always owns the
+              // response id for persisted data-* chunks.
               const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+                ? {
+                    custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                      outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
+                  }
                 : undefined;
 
               const processInputStepResult = await processorRunner.runProcessInputStep({
@@ -799,6 +511,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
               });
               Object.assign(currentStep, processInputStepResult);
+              executedStepModel =
+                currentStep.model.provider && currentStep.model.modelId
+                  ? `${currentStep.model.provider}/${currentStep.model.modelId}`
+                  : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
               const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
@@ -859,6 +575,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         requestContext: requestContext || new RequestContext(),
                         outputWriter,
                         workspace: currentStep.workspace,
+                        requireApproval: (tool as any).requireApproval,
+                        backgroundConfig: (tool as any).background,
                       },
                       undefined,
                       autoResumeSuspendedTools,
@@ -926,6 +644,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // Store activeTools on _internal so toolCallStep can enforce them
           if (_internal) {
             _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
+          }
+
+          if (toolCallForeachOptions) {
+            updateToolCallForeachConcurrency(toolCallForeachOptions, {
+              requireToolApproval,
+              tools: currentStep.tools,
+              activeTools: currentStep.activeTools as string[] | undefined,
+              configuredConcurrency: configuredToolCallConcurrency,
+            });
           }
 
           const runState = new AgenticRunState({
@@ -1017,6 +744,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
+          if (_internal?.backgroundTaskManager && currentStep.tools) {
+            const bgPrompt = generateBackgroundTaskSystemPrompt(currentStep.tools, _internal?.agentBackgroundConfig);
+            inputMessages = inputMessages.map((message, index) => {
+              if (message.role === 'system' && index === 0) {
+                message.content = message.content + `\n\n${bgPrompt}`;
+              }
+              return message;
+            });
+          }
+
           if (isSupportedLanguageModel(currentStep.model)) {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1024,15 +761,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 execute({
                   runId,
                   model: currentStep.model,
-                  providerOptions: currentStep.providerOptions,
+                  // Per-model providerOptions deep-merge per provider key on top of call-time providerOptions
+                  providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions),
                   inputMessages,
                   tools: currentStep.tools,
                   toolChoice: currentStep.toolChoice,
                   activeTools: currentStep.activeTools as string[] | undefined,
                   options,
-                  // Per-model maxRetries takes precedence over global modelSettings.maxRetries
-                  // This ensures p-retry uses the correct retry count for each model in the fallback chain
-                  modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
+                  // Per-model modelSettings shallow-merge on top of call-time modelSettings.
+                  // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
+                  modelSettings: {
+                    ...currentStep.modelSettings,
+                    ...modelConfig.modelSettings,
+                    maxRetries: modelConfig.maxRetries,
+                  },
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
                   // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
@@ -1108,7 +850,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            await processOutputStream({
+            const collectedChunks = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
@@ -1126,9 +868,55 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               transportRef: _internal?.transportRef,
               transportResolver,
             });
+
+            // Build messages from the full chunk sequence and add to messageList.
+            // This replaces the old inline flush approach — all parts are built in
+            // correct stream order with proper providerMetadata attribution.
+            const builtMessages = buildMessagesFromChunks({
+              chunks: collectedChunks,
+              messageId: currentStep.messageId,
+              responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
+              tools: currentStep.tools,
+            });
+            for (const msg of builtMessages) {
+              messageList.add(msg, 'response');
+            }
+
+            // Apply structuredOutput metadata to the assistant message.
+            // MastraModelOutput's finish handler runs during the stream before messages
+            // are added to messageList, so it can't find the message. We apply it here.
+            const bufferedObject = outputStream._getImmediateObject();
+            if (bufferedObject !== undefined) {
+              const responseMessages = messageList.get.response.db();
+              const lastAssistant = [...responseMessages].reverse().find(m => m.role === 'assistant');
+              if (lastAssistant) {
+                if (!lastAssistant.content.metadata) {
+                  lastAssistant.content.metadata = {};
+                }
+                lastAssistant.content.metadata.structuredOutput = bufferedObject;
+              }
+            }
           } catch (error) {
             const provider = model?.provider;
             const modelIdStr = model?.modelId;
+
+            // Handle abort first — a client-disconnect mid-stream is the
+            // expected exit path, not an error. Logging it at error level
+            // pollutes monitoring (see #15844 for the production
+            // numbers). Bail out with a debug log before the upstream /
+            // generic error branches so we never emit an
+            // `error`-level entry for an AbortError.
+            if (isAbortError(error) && options?.abortSignal?.aborted) {
+              logger?.debug?.('LLM execution aborted', { runId });
+              await options?.onAbort?.({
+                steps: inputData?.output?.steps ?? [],
+              });
+
+              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            }
+
             const isUpstreamError = APICallError.isInstance(error);
 
             if (isUpstreamError) {
@@ -1147,16 +935,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...(provider && { provider }),
                 ...(modelIdStr && { modelId: modelIdStr }),
               });
-            }
-
-            if (isAbortError(error) && options?.abortSignal?.aborted) {
-              await options?.onAbort?.({
-                steps: inputData?.output?.steps ?? [],
-              });
-
-              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-
-              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
             }
 
             if (isLastModel) {
@@ -1192,7 +970,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const canRetryError =
                 maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
               const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+                ? {
+                    custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                      outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
+                  }
                 : undefined;
 
               const errorResult = await processorRunner.runProcessAPIError({
@@ -1208,6 +989,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
                   currentMessageId = _internal?.generateId?.() ?? generateId();
+                  // Keep the active output stream in sync so bail/retry paths
+                  // below report the rotated id instead of the stale one, and so
+                  // any subsequent chunks the stream writes itself use the new id.
+                  outputStream.messageId = currentMessageId;
                   return currentMessageId;
                 },
               });
@@ -1258,6 +1043,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             stepWorkspace: currentStep.workspace,
           };
         });
+
+      if (executedStepModel) {
+        messageList.enrichLastStepStart(executedStepModel);
+      }
 
       // Store modified tools and workspace in _internal so toolCallStep can access them
       // without going through workflow serialization (which would lose execute functions)
@@ -1318,7 +1107,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
 
         const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
-          ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+          ? {
+              custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
+            }
           : undefined;
 
         const errorResult = await processorRunner.runProcessAPIError({
@@ -1334,6 +1126,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
             currentMessageId = _internal?.generateId?.() ?? generateId();
+            // Keep the active output stream in sync so the retry payload and
+            // any downstream chunks use the rotated id.
+            outputStream.messageId = currentMessageId;
             return currentMessageId;
           },
         });
@@ -1358,9 +1153,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const messages = {
           all: messageList.get.all.aiV5.model(),
           user: messageList.get.input.aiV5.model(),
-          // Keep assistant messages out of the retry payload so agentic-execution/index.ts
-          // does not replay failed step output back into messageList. Error processors own
-          // any cleanup or replacement of assistant responses before the next attempt.
+          // Do not return failed assistant output as new response messages for this retry step.
+          // That output was already added to messageList while processing the failed stream;
+          // returning it in messages.nonUser would make agentic-execution/index.ts append it again.
           nonUser: [],
         };
 
@@ -1451,9 +1246,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
-          // Create a ProcessorStreamWriter from outputWriter if available
+          // Create a ProcessorStreamWriter from outputWriter if available.
+          // Forward any processor-supplied options and override messageId so
+          // the step always owns the response id for persisted data-* chunks.
           const processorWriter: ProcessorStreamWriter | undefined = outputWriter
-            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            ? {
+                custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                  outputWriter(data as ChunkType, { ...options, messageId: outputStream.messageId }),
+              }
             : undefined;
 
           await processorRunner.runProcessOutputStep({
@@ -1464,6 +1264,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
+            usage: outputStream._getImmediateUsage(),
             ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,
@@ -1582,7 +1383,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // - OR finishReason indicates more work (e.g., tool-use)
       // Provider-executed tools (e.g. web_search) are handled server-side — the response already
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
-      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted);
+      //
+      // NOTE: hasPendingToolCalls must NOT override finishReason='length'.
+      // When the provider hits max_tokens mid-generation, it returns finishReason='length' and
+      // may also emit a partial/truncated tool call. Retrying with the same parameters produces
+      // the same truncation → infinite loop until maxSteps. PR #13861 / issue #13012 explicitly
+      // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
+      // inadvertently re-enabling it.
+      // See: https://github.com/mastra-ai/mastra/issues/15717
+      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted) && finishReason !== 'length';
       const shouldContinue =
         shouldRetry ||
         (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));

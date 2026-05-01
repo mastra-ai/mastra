@@ -217,5 +217,9 @@ export function sortThreadsByOldestMessage(messagesByThread: Map<string, MastraD
  * Thread attribution is handled externally by the system, not by the Observer.
  */
 export function stripThreadTags(observations: string): string {
-  return observations.replace(/<thread[^>]*>|<\/thread>/gi, '').trim();
+  // Match <thread ...> and </thread> via a single bounded pattern. Using
+  // a \b word boundary after "thread" prevents the engine from starting
+  // a hot path at every "<thread..." position in the input, which is how
+  // the polynomial worst case materialises on attacker-crafted strings.
+  return observations.replace(/<\/?thread\b[^>]{0,1024}>/gi, '').trim();
 }

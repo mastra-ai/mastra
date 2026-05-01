@@ -1,5 +1,37 @@
 # @mastra/schema-compat
 
+## 1.2.9
+
+### Patch Changes
+
+- Fixed MCP tool validation failures when tools use JSON Schema draft 2020-12. Tools from providers like Firecrawl that declare `$schema: "https://json-schema.org/draft/2020-12/schema"` now validate correctly instead of throwing "no schema with key or ref" errors. ([#14530](https://github.com/mastra-ai/mastra/pull/14530))
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
+## 1.2.9-alpha.1
+
+### Patch Changes
+
+- Fixed MCP tool validation failures when tools use JSON Schema draft 2020-12. Tools from providers like Firecrawl that declare `$schema: "https://json-schema.org/draft/2020-12/schema"` now validate correctly instead of throwing "no schema with key or ref" errors. ([#14530](https://github.com/mastra-ai/mastra/pull/14530))
+
+## 1.2.9-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
+## 1.2.8
+
+### Patch Changes
+
+- --- ([#14624](https://github.com/mastra-ai/mastra/pull/14624))
+  `@mastra/schema-compat`: patch
+
+  ***
+
+  Improved provider schema compatibility for structured outputs and tool calls.
+  Fixed validation for optional, nullable, and defaulted fields, and for ISO date strings returned for date fields.
+
 ## 1.2.8-alpha.0
 
 ### Patch Changes

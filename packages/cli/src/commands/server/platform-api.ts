@@ -1,19 +1,8 @@
+import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
-import { createApiClient, throwApiError } from '../auth/client.js';
+import { createApiClient, extractApiErrorDetail, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { paths } from '../platform-api.js';
-
-function apiErrorDetail(error: unknown): string | undefined {
-  if (
-    error &&
-    typeof error === 'object' &&
-    'detail' in error &&
-    typeof (error as { detail: unknown }).detail === 'string'
-  ) {
-    return (error as { detail: string }).detail;
-  }
-  return undefined;
-}
 
 type ServerProjectsResponse = paths['/v1/server/projects']['get'] extends {
   responses: { 200: { content: { 'application/json': infer T } } };
@@ -75,52 +64,69 @@ export async function uploadServerDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { projectName?: string; envVars?: Record<string, string> },
+  meta?: { projectName?: string; envVars?: Record<string, string>; disablePlatformObservability?: boolean },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
   // Step 1: Create the deploy — returns upload URL
   const { data, error, response } = await client.POST('/v1/server/deploys', {
-    body: { projectId, projectName: meta?.projectName, envVars: meta?.envVars },
+    body: {
+      projectId,
+      projectName: meta?.projectName,
+      envVars: meta?.envVars,
+      ...(meta?.disablePlatformObservability !== undefined
+        ? { disablePlatformObservability: meta.disablePlatformObservability }
+        : {}),
+    },
   });
 
   if (error) {
-    throwApiError('Deploy failed', response.status);
+    throwApiError('Deploy failed', response.status, extractApiErrorDetail(error));
   }
 
-  const { id, uploadUrl } = data;
+  const { id, status, uploadUrl } = data;
 
   if (!uploadUrl) {
     throw new Error('No upload URL returned');
   }
 
-  // Step 2: Upload artifact to the signed URL
-  if (uploadUrl.startsWith('file://')) {
-    const { writeFile } = await import('node:fs/promises');
-    const { fileURLToPath } = await import('node:url');
-    await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
-  } else {
-    const uploadResp = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/zip' },
-      body: new Uint8Array(zipBuffer),
+  const cancel = (c: ReturnType<typeof createApiClient>) =>
+    bestEffortCancel({
+      postCancel: c2 => c2.POST('/v1/server/deploys/{id}/cancel', { params: { path: { id } } }),
+      client: c,
+      deployId: id,
     });
-    if (!uploadResp.ok) {
-      throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+
+  // Step 2: Upload artifact to the signed URL
+  try {
+    if (uploadUrl.startsWith('file://')) {
+      const { writeFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
+    } else {
+      const uploadResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/zip' },
+        body: new Uint8Array(zipBuffer),
+      });
+      if (!uploadResp.ok) {
+        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+      }
     }
+  } catch (uploadError) {
+    await cancel(client);
+    throw uploadError;
   }
 
   // Step 3: Notify API that upload is complete → triggers build pipeline
-  const { error: completeError, response: completeResponse } = await client.POST(
-    '/v1/server/deploys/{id}/upload-complete',
-    { params: { path: { id } } },
-  );
+  await confirmUploadWithRetry({
+    postUploadComplete: c => c.POST('/v1/server/deploys/{id}/upload-complete', { params: { path: { id } } }),
+    cancelDeploy: cancel,
+    client,
+    orgId,
+  });
 
-  if (completeError) {
-    throwApiError('Upload confirmation failed', completeResponse.status);
-  }
-
-  return { id, status: 'queued' };
+  return { id, status };
 }
 
 export async function pollServerDeploy(
@@ -235,10 +241,10 @@ export async function pauseServerProject(token: string, orgId: string, projectId
 
   if (error) {
     if (response.status === 409) {
-      const detail = apiErrorDetail(error);
+      const detail = extractApiErrorDetail(error);
       throwApiError('Failed to pause server', response.status, detail ?? 'Pause failed: the server is not running.');
     }
-    const detail = apiErrorDetail(error);
+    const detail = extractApiErrorDetail(error);
     throwApiError('Failed to pause server', response.status, detail);
   }
 }
@@ -259,8 +265,8 @@ export async function restartServerProject(token: string, orgId: string, project
   });
 
   if (error) {
+    const detail = extractApiErrorDetail(error);
     if (response.status === 409) {
-      const detail = apiErrorDetail(error);
       throwApiError(
         'Failed to restart server',
         response.status,
@@ -268,7 +274,6 @@ export async function restartServerProject(token: string, orgId: string, project
           'Restart failed: a deployment for this project is currently active. Run `mastra server pause` to pause the server before restarting.',
       );
     }
-    const detail = apiErrorDetail(error);
     throwApiError('Failed to restart server', response.status, detail);
   }
 
@@ -295,7 +300,7 @@ export async function restartServerProject(token: string, orgId: string, project
         pollClient = createApiClient(currentToken, orgId);
         continue;
       }
-      throwApiError('Failed to fetch server project', snapResponse.status, apiErrorDetail(snapError));
+      throwApiError('Failed to fetch server project', snapResponse.status, extractApiErrorDetail(snapError));
     }
 
     const latest = snap.project.latestDeployId;
@@ -316,7 +321,11 @@ export async function restartServerProject(token: string, orgId: string, project
           continue;
         }
         if (statusResponse.status !== 404) {
-          throwApiError('Failed to fetch server deploy status', statusResponse.status, apiErrorDetail(statusError));
+          throwApiError(
+            'Failed to fetch server deploy status',
+            statusResponse.status,
+            extractApiErrorDetail(statusError),
+          );
         }
       } else if (deployIndicatesAcceptedRestart(st?.status)) {
         return latest;

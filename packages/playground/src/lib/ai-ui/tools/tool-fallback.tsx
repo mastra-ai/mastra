@@ -69,11 +69,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
   }
 
-  // Hide browser tools from chat when context is available
-  if (isBrowser && browserCtx) {
-    return null;
-  }
-
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
@@ -101,6 +96,27 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
 
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
+
+  const isBackgroundTaskResult =
+    result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
+
+  if (isBackgroundTaskResult) {
+    return (
+      <ToolBadge
+        toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
+        args={args}
+        result={result}
+        toolOutput={[]}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+        withoutArgs={isAgent || isWorkflow}
+      />
+    );
+  }
 
   if (isAgent) {
     return (
