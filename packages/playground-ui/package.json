@@ -117,11 +117,12 @@
     "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",
     "@storybook/addon-docs": "^10.3.5",
+    "@storybook/addon-mcp": "^0.6.0",
     "@storybook/react-vite": "^10.3.5",
-    "@tanstack/react-query": "^5.90.21",
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "4.2.2",
+    "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
@@ -133,6 +134,7 @@
     "clsx": "^2.1.1",
     "eslint-plugin-react-hooks": "^7.1.0",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-storybook": "^10.3.5",
     "jsdom": "^26.1.0",
     "rollup-plugin-node-externals": "^8.1.2",
     "storybook": "^10.3.5",
@@ -143,8 +145,7 @@
     "vite": "^7.3.1",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2",
-    "vitest": "catalog:",
-    "eslint-plugin-storybook": "^10.3.5"
+    "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {
