@@ -30,6 +30,16 @@ describe('MastraAuthAgentLair', () => {
       const auth = new MastraAuthAgentLair({ issuer: 'https://agentlair.dev' });
       expect(auth).toBeDefined();
     });
+
+    test('throws when requiredTrustScore is out of range', () => {
+      expect(() => new MastraAuthAgentLair({ requiredTrustScore: -1 })).toThrow();
+      expect(() => new MastraAuthAgentLair({ requiredTrustScore: 1001 })).toThrow();
+    });
+
+    test('throws when requiredTrustScore is not finite', () => {
+      expect(() => new MastraAuthAgentLair({ requiredTrustScore: Number.NaN })).toThrow();
+      expect(() => new MastraAuthAgentLair({ requiredTrustScore: Number.POSITIVE_INFINITY })).toThrow();
+    });
   });
 
   describe('authenticateToken', () => {
