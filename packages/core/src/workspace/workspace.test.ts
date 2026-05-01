@@ -2312,6 +2312,34 @@ Line 3 conclusion`;
       // Should not throw — no static filesystem instance to set logger on
       expect(() => workspace.__setLogger(mockLogger)).not.toThrow();
     });
+
+    it('should resolve filesystem instructions asynchronously from requestContext', async () => {
+      const dirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-fs-instructions-a-'));
+      const dirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-fs-instructions-b-'));
+      try {
+        const workspace = new Workspace({
+          filesystem: ({ requestContext }) => {
+            return requestContext.get('role') === 'admin'
+              ? new LocalFilesystem({ basePath: dirA })
+              : new LocalFilesystem({ basePath: dirB });
+          },
+        });
+
+        const instructions = await workspace.getInstructionsAsync({
+          requestContext: new RequestContext([['role', 'admin']]),
+        });
+        const pathContext = await workspace.getPathContextAsync({
+          requestContext: new RequestContext([['role', 'user']]),
+        });
+
+        expect(instructions).toContain(dirA);
+        expect(pathContext.filesystem?.basePath).toBe(dirB);
+        expect(pathContext.instructions).toContain(dirB);
+      } finally {
+        await fs.rm(dirA, { recursive: true, force: true });
+        await fs.rm(dirB, { recursive: true, force: true });
+      }
+    });
   });
 
   // ===========================================================================
@@ -2460,6 +2488,26 @@ Line 3 conclusion`;
 
       // Resolver is only called when a tool runs, not by lifecycle.
       expect(resolverCalls).toBe(0);
+    });
+
+    it('should resolve sandbox instructions asynchronously from requestContext', async () => {
+      const workspace = new Workspace({
+        sandbox: ({ requestContext }) => {
+          const role = requestContext.get('role') as string;
+          return new LocalSandbox({ workingDirectory: path.join(tempDir, role) });
+        },
+      });
+
+      const instructions = await workspace.getInstructionsAsync({
+        requestContext: new RequestContext([['role', 'admin']]),
+      });
+      const pathContext = await workspace.getPathContextAsync({
+        requestContext: new RequestContext([['role', 'user']]),
+      });
+
+      expect(instructions).toContain(path.join(tempDir, 'admin'));
+      expect(pathContext.sandbox?.workingDirectory).toBe(path.join(tempDir, 'user'));
+      expect(pathContext.instructions).toContain(path.join(tempDir, 'user'));
     });
   });
 

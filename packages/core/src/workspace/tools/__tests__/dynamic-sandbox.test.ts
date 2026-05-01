@@ -142,6 +142,32 @@ describe('dynamic sandbox tools', () => {
     expect(String(output)).toContain('done');
   });
 
+  it('should throw a clear error when the resolved sandbox lacks process support', async () => {
+    const sandbox = {
+      id: 'minimal-sandbox',
+      name: 'MinimalSandbox',
+      provider: 'minimal',
+      status: 'running' as const,
+      executeCommand: async () => ({
+        command: 'echo ok',
+        stdout: 'ok',
+        stderr: '',
+        exitCode: 0,
+        success: true,
+        executionTimeMs: 1,
+      }),
+    };
+    const workspace = new Workspace({ sandbox: () => sandbox });
+    const tools = await createWorkspaceTools(workspace);
+
+    await expect(
+      tools[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT].execute(
+        { pid: 'missing' },
+        { requestContext: new RequestContext() },
+      ),
+    ).rejects.toThrow('Sandbox does not support processes');
+  });
+
   it('should not invoke the sandbox resolver when only filesystem tools execute', async () => {
     let resolverCalls = 0;
     const workspace = new Workspace({

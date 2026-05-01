@@ -84,7 +84,7 @@ const agent = new Agent({
 })
 ```
 
-Each request resolves its own sandbox at tool execution time:
+Each request resolves its own sandbox for workspace tools and workspace instructions:
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -97,6 +97,8 @@ await agent.generate('List files in cwd', { requestContext: aliceCtx })
 const bobCtx = new RequestContext([['user-id', 'bob']])
 await agent.generate('List files in cwd', { requestContext: bobCtx })
 ```
+
+Workspace instructions use the same `requestContext`, so the agent sees the execution context for the resolved sandbox.
 
 The resolver can also be asynchronous — for example to look up tenant configuration from a database:
 
@@ -113,7 +115,7 @@ const workspace = new Workspace({
 
 When the sandbox is a static instance, `workspace.init()` calls its `start()` method and `workspace.destroy()` calls its `destroy()` method. With a resolver, the workspace has no instance to manage at construction time — the caller owns the returned sandbox's lifecycle.
 
-The resolver must return a sandbox that is ready to use (already started, or able to handle calls without explicit startup), and must clean it up when the request finishes.
+The resolver must return a sandbox that is ready to use, either already started or able to handle calls without explicit startup. The caller also owns cleanup timing for returned sandboxes. Cleanup might happen per request, per tenant, per user, or as part of a long-lived sandbox pool; `workspace.destroy()` does not destroy resolver-returned sandboxes.
 
 :::note
 

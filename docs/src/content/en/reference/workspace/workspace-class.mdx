@@ -373,6 +373,30 @@ const instructions = workspace.getInstructions({ requestContext })
 
 **Returns:** `string`
 
+#### `getInstructionsAsync(opts?)`
+
+Returns combined instructions from static or dynamic filesystem and sandbox providers. Use this when the workspace uses resolver-backed providers.
+
+```typescript
+const instructions = await workspace.getInstructionsAsync({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'opts.requestContext',
+    type: 'RequestContext',
+    description:
+      'Passed to dynamic filesystem or sandbox resolvers, and forwarded to provider `instructions` functions.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<string>`
+
 To override the default output, pass an `instructions` option to [LocalFilesystem](/reference/workspace/local-filesystem#constructor-parameters) or [LocalSandbox](/reference/workspace/local-sandbox#constructor-parameters).
 
 #### `getToolsConfig()`

@@ -738,7 +738,11 @@ export class Agent<
     if (!workspace) return [];
 
     // Skip if workspace has no filesystem or sandbox (nothing to describe)
-    if (!workspace.filesystem && !workspace.sandbox) return [];
+    const hasFilesystemConfig =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSandboxConfig =
+      typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (!hasFilesystemConfig && !hasSandboxConfig) return [];
 
     // Check for existing processor to avoid duplicates
     const hasProcessor = configuredProcessors.some(

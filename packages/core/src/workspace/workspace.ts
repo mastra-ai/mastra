@@ -1253,19 +1253,23 @@ export class Workspace<
    * @param opts - Optional options including request context for per-request customisation
    * @returns Combined instructions string (may be empty)
    */
-  getInstructions(opts?: { requestContext?: RequestContext }): string {
+  private getInstructionsForProviders(
+    filesystem: WorkspaceFilesystem | undefined,
+    sandbox: WorkspaceSandbox | undefined,
+    opts?: { requestContext?: RequestContext },
+  ): string {
     const parts: string[] = [];
 
     // Sandbox-level instructions (working directory, provider type)
-    const sandboxInstructions = this._sandbox?.getInstructions?.(opts);
+    const sandboxInstructions = sandbox?.getInstructions?.(opts);
     if (sandboxInstructions) parts.push(sandboxInstructions);
 
     // Mount state overlay: check actual MountManager state
-    const mountEntries = this._sandbox?.mounts?.entries;
+    const mountEntries = sandbox?.mounts?.entries;
     if (mountEntries && mountEntries.size > 0) {
       const sandboxAccessible: string[] = [];
       const workspaceOnly: string[] = [];
-      const workingDir = this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined;
+      const workingDir = sandbox instanceof LocalSandbox ? sandbox.workingDirectory : undefined;
 
       for (const [mountPath, entry] of mountEntries) {
         const fsName = entry.filesystem.displayName || entry.filesystem.provider;
@@ -1295,11 +1299,29 @@ export class Workspace<
       }
     } else {
       // No mounts or no sandbox — fall back to filesystem-level instructions
-      const fsInstructions = this._fs?.getInstructions?.(opts);
+      const fsInstructions = filesystem?.getInstructions?.(opts);
       if (fsInstructions) parts.push(fsInstructions);
     }
 
     return parts.join('\n\n');
+  }
+
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    return this.getInstructionsForProviders(this._fs, this._sandbox, opts);
+  }
+
+  /**
+   * Get human-readable instructions describing the workspace environment.
+   *
+   * Resolves dynamic providers with requestContext so request-scoped
+   * filesystem and sandbox instructions match the providers used by tools.
+   */
+  async getInstructionsAsync(opts?: { requestContext?: RequestContext }): Promise<string> {
+    const requestContext = opts?.requestContext ?? new RequestContext();
+    const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
+    const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
+
+    return this.getInstructionsForProviders(filesystem, sandbox, opts);
   }
 
   /**
@@ -1313,27 +1335,44 @@ export class Workspace<
    * @returns PathContext with paths and instructions from providers
    */
   getPathContext(): PathContext {
-    // Get instructions from providers
-    const fsInstructions = this._fs?.getInstructions?.();
-    const sandboxInstructions = this._sandbox?.getInstructions?.();
+    return this.getPathContextForProviders(this._fs, this._sandbox);
+  }
 
-    // Combine instructions from both providers
-    const instructions = [fsInstructions, sandboxInstructions].filter(Boolean).join(' ');
+  /**
+   * Async variant of getPathContext that resolves dynamic providers.
+   *
+   * @deprecated Use {@link getInstructionsAsync} instead.
+   */
+  async getPathContextAsync(opts?: { requestContext?: RequestContext }): Promise<PathContext> {
+    const requestContext = opts?.requestContext ?? new RequestContext();
+    const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
+    const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
+
+    return this.getPathContextForProviders(filesystem, sandbox, opts);
+  }
+
+  private getPathContextForProviders(
+    filesystem: WorkspaceFilesystem | undefined,
+    sandbox: WorkspaceSandbox | undefined,
+    opts?: { requestContext?: RequestContext },
+  ): PathContext {
+    const fsInstructions = filesystem?.getInstructions?.(opts);
+    const sandboxInstructions = sandbox?.getInstructions?.(opts);
 
     return {
-      filesystem: this._fs
+      filesystem: filesystem
         ? {
-            provider: this._fs.provider,
-            basePath: this._fs.basePath,
+            provider: filesystem.provider,
+            basePath: filesystem.basePath,
           }
         : undefined,
-      sandbox: this._sandbox
+      sandbox: sandbox
         ? {
-            provider: this._sandbox.provider,
-            workingDirectory: this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined,
+            provider: sandbox.provider,
+            workingDirectory: sandbox instanceof LocalSandbox ? sandbox.workingDirectory : undefined,
           }
         : undefined,
-      instructions,
+      instructions: [fsInstructions, sandboxInstructions].filter(Boolean).join(' '),
     };
   }
 
