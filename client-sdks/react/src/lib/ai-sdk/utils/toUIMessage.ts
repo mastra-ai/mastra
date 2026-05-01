@@ -757,6 +757,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
                 suspendPayload: chunk.payload.suspendPayload,
+                runId: chunk.runId,
               },
             },
           },

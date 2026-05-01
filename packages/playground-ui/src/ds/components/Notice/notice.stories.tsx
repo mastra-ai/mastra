@@ -8,7 +8,6 @@ const meta: Meta<typeof Notice> = {
   parameters: {
     layout: 'padded',
   },
-  tags: ['autodocs'],
   argTypes: {
     variant: {
       control: { type: 'select' },
@@ -101,6 +100,25 @@ export const Note: Story = {
 
 export const TitleOnly: Story = {
   render: () => <Notice variant="warning" title="Action required" />,
+};
+
+export const MessageOnly: Story = {
+  render: () => <Notice variant="info">No eligible scorers have been defined to run.</Notice>,
+};
+
+export const MessageOnlyWithAction: Story = {
+  render: () => (
+    <Notice
+      variant="destructive"
+      action={
+        <Notice.Button>
+          Retry <RefreshCwIcon />
+        </Notice.Button>
+      }
+    >
+      Failed to load scorers.
+    </Notice>
+  ),
 };
 
 export const CustomIcon: Story = {

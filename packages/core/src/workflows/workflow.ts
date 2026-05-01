@@ -345,7 +345,11 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    return createStepFromProcessor(params);
+    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
+      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+    };
+    step.providesSkillDiscovery = params.providesSkillDiscovery;
+    return step;
   }
 
   throw new Error('Invalid input: expected StepParams, Agent, ToolStep, or Processor');
@@ -2077,8 +2081,19 @@ export class Workflow<
     >;
   }
 
-  dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      TStepInputSchema,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType,
+      // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+      // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+      unknown extends TStepRC ? unknown : TRequestContext
+    >,
     condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
@@ -2101,7 +2116,7 @@ export class Workflow<
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dowhile',
     });
-    this.steps[step.id] = step;
+    this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2114,8 +2129,19 @@ export class Workflow<
     >;
   }
 
-  dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      TStepInputSchema,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType,
+      // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+      // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+      unknown extends TStepRC ? unknown : TRequestContext
+    >,
     condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
@@ -2138,7 +2164,7 @@ export class Workflow<
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dountil',
     });
-    this.steps[step.id] = step;
+    this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2157,9 +2183,21 @@ export class Workflow<
     TStepInputSchema extends TPrevSchema extends (infer TElement)[] ? TElement : never,
     TStepId extends string,
     TSchemaOut,
+    TStepRC,
   >(
     step: TPrevIsArray extends true
-      ? Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>
+      ? Step<
+          TStepId,
+          SubsetOf<TStepState, TState>,
+          TStepInputSchema,
+          TSchemaOut,
+          any,
+          any,
+          TEngineType,
+          // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+          // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+          unknown extends TStepRC ? unknown : TRequestContext
+        >
       : 'Previous step must return an array type',
     opts?: {
       concurrency: number;

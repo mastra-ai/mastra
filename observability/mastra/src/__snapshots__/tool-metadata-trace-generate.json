@@ -26,7 +26,8 @@
           "availableTools": ["metadataTool"]
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Use metadata tool to process some data",
         "output": {
@@ -70,7 +71,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -135,9 +137,19 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You use tools and add metadata"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Use metadata tool to process some data"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -169,7 +181,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "metadataTool",
@@ -202,7 +215,8 @@
                       "toolOperation": "metadata-processing",
                       "inputValue": "some data",
                       "customFlag": true,
-                      "timestamp": "<date>"
+                      "timestamp": "<date>",
+                      "environment": "test"
                     },
                     "input": {
                       "input": "some data"
@@ -231,7 +245,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "toolCallId": "call-metadata-1",
-                      "toolName": "metadataTool"
+                      "toolName": "metadataTool",
+                      "environment": "test"
                     }
                   }
                 }
@@ -272,9 +287,27 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You use tools and add metadata"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Use metadata tool to process some data"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: metadataTool]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: metadataTool]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
@@ -300,7 +333,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": {

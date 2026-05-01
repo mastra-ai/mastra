@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, CodeEditor, IconButton, Label, SideDialog, Txt, toast } from '@mastra/playground-ui';
+import { Button, CodeEditor, Label, SideDialog, Txt, toast } from '@mastra/playground-ui';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -130,32 +130,32 @@ export function BulkTraceReviewDialog({
       <SideDialog.Content>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <IconButton
+            <Button
               tooltip="Previous item"
               variant="outline"
-              size="sm"
+              size="icon-sm"
               disabled={currentIndex === 0}
               onClick={() => setCurrentIndex(prev => prev - 1)}
             >
               <ChevronLeftIcon />
-            </IconButton>
+            </Button>
             <Txt variant="ui-sm" className="text-icon3 tabular-nums">
               {currentIndex + 1} / {total}
             </Txt>
-            <IconButton
+            <Button
               tooltip="Next item"
               variant="outline"
-              size="sm"
+              size="icon-sm"
               disabled={currentIndex === total - 1}
               onClick={() => setCurrentIndex(prev => prev + 1)}
             >
               <ChevronRightIcon />
-            </IconButton>
+            </Button>
           </div>
 
-          <IconButton tooltip="Remove this item" variant="ghost" size="sm" onClick={removeCurrentItem}>
+          <Button tooltip="Remove this item" variant="ghost" size="icon-sm" onClick={removeCurrentItem}>
             <TrashIcon />
-          </IconButton>
+          </Button>
         </div>
 
         <div className="grid gap-4">
@@ -193,7 +193,7 @@ export function BulkTraceReviewDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="light" disabled={batchInsertItems.isPending} onClick={handleSubmit}>
+            <Button variant="default" disabled={batchInsertItems.isPending} onClick={handleSubmit}>
               {batchInsertItems.isPending ? (
                 <>
                   <Loader2Icon className="size-4 animate-spin" />

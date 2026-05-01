@@ -1,5 +1,5 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
-import { IconButton, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { ToolFallback } from '../tools/tool-fallback';
@@ -77,32 +77,32 @@ const AssistantActionBar = () => {
     >
       <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
-          <IconButton tooltip="Read aloud">
+          <Button size="icon-md" tooltip="Read aloud">
             <AudioLinesIcon />
-          </IconButton>
+          </Button>
         </ActionBarPrimitive.Speak>
       </MessagePrimitive.If>
       <MessagePrimitive.If speaking>
         <ActionBarPrimitive.StopSpeaking asChild>
-          <IconButton tooltip="Stop">
+          <Button size="icon-md" tooltip="Stop">
             <StopCircleIcon />
-          </IconButton>
+          </Button>
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
-        <IconButton tooltip="Copy">
+        <Button size="icon-md" tooltip="Copy">
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>
           <MessagePrimitive.If copied={false}>
             <CopyIcon />
           </MessagePrimitive.If>
-        </IconButton>
+        </Button>
       </ActionBarPrimitive.Copy>
       {/* <ActionBarPrimitive.Reload asChild>
-        <IconButton variant="light" size="md" tooltip="Refresh">
+        <Button variant="default" size="icon-md" tooltip="Refresh">
           <RefreshCwIcon />
-        </IconButton>
+        </Button>
       </ActionBarPrimitive.Reload> */}
     </ActionBarPrimitive.Root>
   );

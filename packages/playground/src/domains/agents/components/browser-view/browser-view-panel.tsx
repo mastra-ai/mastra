@@ -1,4 +1,4 @@
-import { IconButton, StatusBadge, cn } from '@mastra/playground-ui';
+import { Button, StatusBadge, cn } from '@mastra/playground-ui';
 import { X, Minimize2, ExternalLink, Globe, PanelRight } from 'lucide-react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
@@ -167,20 +167,20 @@ export function BrowserViewPanel() {
             {statusConfig.label}
           </StatusBadge>
           <div className="flex items-center gap-1 ml-2">
-            <IconButton variant="ghost" size="sm" tooltip="Open in sidebar" onClick={handleOpenSidebar}>
+            <Button variant="ghost" size="icon-sm" tooltip="Open in sidebar" onClick={handleOpenSidebar}>
               <PanelRight className="h-4 w-4" />
-            </IconButton>
-            <IconButton variant="ghost" size="sm" tooltip="Minimize to chat" onClick={handleMinimize}>
+            </Button>
+            <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={handleMinimize}>
               <Minimize2 className="h-4 w-4" />
-            </IconButton>
+            </Button>
             {currentUrl && (
-              <IconButton variant="ghost" size="sm" tooltip="Open in new tab" onClick={handleOpenExternal}>
+              <Button variant="ghost" size="icon-sm" tooltip="Open in new tab" onClick={handleOpenExternal}>
                 <ExternalLink className="h-4 w-4" />
-              </IconButton>
+              </Button>
             )}
-            <IconButton variant="ghost" size="sm" tooltip="Close browser" onClick={handleClose}>
+            <Button variant="ghost" size="icon-sm" tooltip="Close browser" onClick={handleClose}>
               <X className="h-4 w-4" />
-            </IconButton>
+            </Button>
           </div>
         </div>
 

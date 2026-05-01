@@ -842,6 +842,7 @@ export interface IModelSpanTracker {
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
+  updateStep?(payload?: StepStartPayload): void;
 
   /**
    * Enable or disable deferred step closing for durable execution.
