@@ -65,10 +65,25 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: "'thread'",
   },
   {
+    name: 'activateAfterIdle',
+    type: 'number | string',
+    description:
+      'Time before buffered observations or buffered reflections are forced to activate after inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. When the gap between the current time and the last assistant message part timestamp exceeds this value, buffered observational memory activates before the next prompt. Useful for aligning with prompt cache TTLs.',
+    isOptional: true,
+  },
+  {
     name: 'shareTokenBudget',
     type: 'boolean',
     description:
       'Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'temporalMarkers',
+    type: 'boolean',
+    description:
+      'Insert temporal-gap reminder markers before new user messages when the previous message in the thread is at least 10 minutes older. The marker is persisted in memory, emitted as an inline reminder event so clients can render it specially, and shown to the observer so it can anchor observations to when events occurred.',
     isOptional: true,
     defaultValue: 'false',
   },

@@ -22,7 +22,8 @@ import { createTokenAction, listTokensAction, revokeTokenAction } from './comman
 import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
-import { envListAction, envSetAction, envUnsetAction, envImportAction } from './commands/server/env';
+import { envListAction, envSetAction, envUnsetAction, envImportAction, envPullAction } from './commands/server/env';
+import { serverPauseAction, serverRestartAction } from './commands/server/lifecycle';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
@@ -191,7 +192,9 @@ const deployCommand = studioCommand
   .option('--project <id>', 'Project ID')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(deployAction));
 
 deployCommand.command('list').description('List deployed studios').action(wrapAction(deploysAction));
@@ -267,7 +270,26 @@ serverCommand
   .option('--project <id>', 'Project ID')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
+  .option('--skip-build', 'Skip the build step and deploy the existing .mastra/output directory')
+  .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));
+
+serverCommand
+  .command('pause')
+  .description('Pause the linked Mastra Server project instance')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverPauseAction));
+
+serverCommand
+  .command('restart')
+  .description('Restart the linked Mastra Server project instance')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverRestartAction));
 
 const serverEnvCommand = serverCommand.command('env').description('Manage server environment variables');
 
@@ -294,6 +316,13 @@ serverEnvCommand
   .description('Import environment variables from a .env file')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(envImportAction));
+
+serverEnvCommand
+  .command('pull [file]')
+  .description('Pull environment variables into a local .env file (default: .env)')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .action(wrapAction(envPullAction));
 
 program.parse(process.argv);
 

@@ -1152,7 +1152,7 @@ export const recallTool = (
   const isResourceScope = retrievalScope === 'resource';
 
   const description = isResourceScope
-    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. If you pass only a cursor, it must belong to the current thread. Use mode="search" to find messages by content across all threads.'
+    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread. Use mode="search" to find messages by content across all threads.'
     : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
 
   return createTool({
@@ -1205,7 +1205,7 @@ export const recallTool = (
         .min(1)
         .optional()
         .describe(
-          'A message ID to use as the pagination cursor. For mode="messages", provide either cursor or threadId. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
+          'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
         ),
       anchor: z
         .enum(['start', 'end'])
@@ -1357,7 +1357,13 @@ export const recallTool = (
         });
       }
 
-      const hasExplicitThreadId = typeof resolvedExplicitThreadId === 'string' && resolvedExplicitThreadId.length > 0;
+      const usedDefaultThreadId = isResourceScope && !explicitThreadId && !cursor && Boolean(currentThreadId);
+      const defaultThreadNote = usedDefaultThreadId
+        ? `threadId wasn't passed so used default ${currentThreadId}.\n\n`
+        : '';
+      const effectiveThreadId = explicitThreadId || (usedDefaultThreadId ? 'current' : undefined);
+      const resolvedThreadId = effectiveThreadId === 'current' ? currentThreadId : effectiveThreadId;
+      const hasExplicitThreadId = typeof resolvedThreadId === 'string' && resolvedThreadId.length > 0;
       const hasCursor = typeof cursor === 'string' && cursor.length > 0;
 
       if (!hasExplicitThreadId && !hasCursor) {
@@ -1378,7 +1384,7 @@ export const recallTool = (
           throw new Error('Memory instance cannot verify thread access for recall');
         }
 
-        const thread = await memory.getThreadById({ threadId: resolvedExplicitThreadId! });
+        const thread = await memory.getThreadById({ threadId: resolvedThreadId! });
         if (!thread || thread.resourceId !== resourceId) {
           throw new Error('Thread does not belong to the active resource');
         }
@@ -1420,7 +1426,7 @@ export const recallTool = (
 
       // No cursor — read from the start of the thread
       if (!cursor) {
-        return recallThreadFromStart({
+        const result = await recallThreadFromStart({
           memory,
           threadId: targetThreadId,
           resourceId: isResourceScope ? resourceId : undefined,
@@ -1431,6 +1437,12 @@ export const recallTool = (
           toolName,
           anchor: anchor ?? 'start',
         });
+
+        if (defaultThreadNote) {
+          return { ...result, messages: `${defaultThreadNote}${result.messages}` };
+        }
+
+        return result;
       }
 
       // Single-part fetch mode

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Checkbox } from './checkbox';
 import { Label } from '../Label';
+import { Checkbox } from './checkbox';
 
 const meta: Meta<typeof Checkbox> = {
   title: 'Elements/Checkbox',
@@ -8,7 +8,6 @@ const meta: Meta<typeof Checkbox> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },

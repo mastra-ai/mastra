@@ -1,24 +1,38 @@
 import type { JSONSchema7 } from 'json-schema';
-import traverse from 'json-schema-traverse';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { Schema } from '../json-schema';
 import { jsonSchema } from '../json-schema';
-import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
-import { transformNullToUndefined } from '../null-to-undefined';
+import {
+  isAllOfSchema,
+  isArraySchema,
+  isNumberSchema,
+  isObjectSchema,
+  isStringSchema,
+  isUnionSchema,
+} from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
-import type { ZodType } from '../schema.types';
-import type { ModelInformation } from '../types';
-import { ensureAllPropertiesRequired, zodToJsonSchema } from '../zod-to-json';
+import type { PublicSchema, ZodType } from '../schema.types';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema/standard-schema';
+import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.types';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault, isIntersection } from '../zodTypes';
 
-export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: ModelInformation) {
-    super(model);
-  }
+// @see https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas
+const allowedStringFormats = [
+  'date-time',
+  'time',
+  'date',
+  'duration',
+  'email',
+  'hostname',
+  'ipv4',
+  'ipv6',
+  'uuid',
+] as const;
 
+export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `jsonSchema7`;
   }
@@ -132,52 +146,52 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   /**
-   * Override to fix additionalProperties: {} which OpenAI doesn't support.
-   * Converts empty object {} to true to preserve passthrough intent.
-   */
-  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
-    const jsonSchema = super.processToJSONSchema(zodSchema);
-    const fixedSchema = this.fixAdditionalProperties(jsonSchema);
-    return ensureAllPropertiesRequired(fixedSchema);
-  }
-
-  /**
    * Override to apply the same JSON Schema fixes (additionalProperties, required fields)
    * that processToJSONSchema applies. The base implementation skips JSON Schema traversal,
    * which causes OpenAI strict mode to reject tool schemas missing additionalProperties: false.
    */
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
-    // Convert to JSON Schema from the original Zod schema
-    const jsonSchemaResult = zodToJsonSchema(zodSchema, this.getSchemaTarget());
-
-    // Capture the original JSON Schema (before OpenAI fixes) for null→undefined transform.
-    // This tells us which properties were originally optional (not in `required`).
-    const originalJsonSchema = JSON.parse(JSON.stringify(jsonSchemaResult));
+    const compat = this.processToCompatSchema(zodSchema);
 
     // Apply the same JSON Schema fixes as processToJSONSchema
-    traverse(jsonSchemaResult, {
-      cb: {
-        pre: (schema: JSONSchema7) => {
-          this.preProcessJSONNode(schema);
-        },
-        post: (schema: JSONSchema7) => {
-          this.postProcessJSONNode(schema);
-        },
-      },
-    });
+    const transformedJsonSchema = standardSchemaToJSONSchema(compat);
 
-    const fixedSchema = this.fixAdditionalProperties(jsonSchemaResult);
-    const finalSchema = ensureAllPropertiesRequired(fixedSchema);
-
-    // Use a null→undefined transform in validate so OpenAI's null values for
-    // optional fields are accepted by schemas that reject null (e.g., Zod .optional()).
-    return jsonSchema(finalSchema, {
+    // Post-process the raw LLM value: strip falsy optional fields and convert
+    // date strings back to Date objects, then validate against the original Zod schema.
+    return jsonSchema(transformedJsonSchema, {
       validate: (value: unknown) => {
-        const transformed = transformNullToUndefined(value, originalJsonSchema);
+        const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
         const result = zodSchema.safeParse(transformed);
         return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
       },
     });
+  }
+
+  public processToCompatSchema<T>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
+    const originalStandardSchema = toStandardSchema(schema);
+
+    return {
+      '~standard': {
+        version: 1,
+        vendor: 'mastra',
+        validate: (value: unknown) => {
+          const transformedJsonSchema = this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
+          // Apply OpenAI-specific transforms: null→undefined for optional fields, date string→Date
+          const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
+
+          // Then validate against the original schema
+          return originalStandardSchema['~standard'].validate(transformed);
+        },
+        jsonSchema: {
+          input: () => {
+            return this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
+          },
+          output: () => {
+            return this.processToJSONSchema(schema, 'output') as Record<string, unknown>;
+          },
+        },
+      },
+    };
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
@@ -189,24 +203,16 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {
       this.defaultArrayHandler(schema);
+    } else if (isNumberSchema(schema)) {
+      this.defaultNumberHandler(schema);
     } else if (isStringSchema(schema)) {
-      const model = this.getModel();
-      // gpt-4o-mini doesn't respect emoji and regex constraints
-      if (model.modelId?.includes('gpt-4o-mini')) {
-        // Remove emoji format if present
-        if (schema.format === 'emoji') {
+      if (schema.format) {
+        if (!(allowedStringFormats as readonly string[]).includes(schema.format as string)) {
           delete schema.format;
-        }
-        // Remove pattern (regex) if present
-        if (schema.pattern) {
           delete schema.pattern;
         }
-      } else {
-        // Other OpenAI models only have issues with emoji
-        // if (schema.format === 'emoji') {
-        //   delete schema.format;
-        // }
       }
+
       this.defaultStringHandler(schema);
     }
   }
@@ -236,102 +242,119 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
     // Ensure bare {"type":"object"} nodes (e.g., inside anyOf) have additionalProperties: false.
     // OpenAI strict mode requires this on every object-type node, even without properties.
-    if (schema.type === 'object' && schema.additionalProperties === undefined) {
-      schema.additionalProperties = false;
-    }
-
-    // Fix v4-specific issues in post-processing
     if (isObjectSchema(schema)) {
-      // force all keys to be required
-      const keys = Object.keys(schema.properties || {});
-      if (keys.length) {
-        for (const key of keys) {
-          // @ts-expect-error - type is a valid property for JSON Schema
-          if (!schema.required?.includes(key) && schema.properties?.[key]?.type) {
-            const prop = schema.properties[key]!;
-            // Move the entire property schema into anyOf (not just type),
-            // preserving additionalProperties, properties, items, etc.
-            const subSchema: Record<string, unknown> = {};
-            for (const propKey of Object.keys(prop)) {
-              if (propKey !== 'anyOf') {
-                // @ts-expect-error - copying all props
-                subSchema[propKey] = prop[propKey];
+      schema.additionalProperties = false;
+
+      if (schema.properties) {
+        for (const key of Object.keys(schema.properties)) {
+          const prop = schema.properties[key] as JSONSchema7;
+
+          if (!schema.required) {
+            schema.required = [];
+          }
+
+          if (!schema.required?.includes(key)) {
+            // @ts-expect-error - x-optional is a custom property
+            schema['x-optional'] = [...(schema['x-optional'] || []), key];
+            schema.required?.push(key);
+            if (prop.type) {
+              if (Array.isArray(prop.type)) {
+                const types = [...prop.type];
+                if (!types.includes('null')) {
+                  types.push('null');
+                }
+
+                const propSchema = { ...prop } as JSONSchema7;
+                delete propSchema.anyOf;
+                delete propSchema.type;
+                delete prop.type;
+
+                prop.anyOf = types.map(type =>
+                  type === 'null'
+                    ? { type: 'null' }
+                    : {
+                        ...propSchema,
+                        type,
+                      },
+                );
+              } else if (prop.type !== 'null') {
+                const originalType = prop.type;
+                const propSchema = { ...prop } as JSONSchema7;
+                delete propSchema.anyOf;
+                delete propSchema.type;
+                delete prop.type;
+                prop.anyOf = [
+                  {
+                    ...propSchema,
+                    type: originalType,
+                  },
+                  { type: 'null' },
+                ];
               }
-            }
-            // @ts-expect-error - nullable is a valid property for JSON Schema
-            prop.anyOf = [subSchema, { type: 'null' }];
-            // Remove moved properties from the parent prop (keep only anyOf and non-type metadata)
-            for (const propKey of Object.keys(subSchema)) {
-              // @ts-expect-error - deleting copied props
-              delete prop[propKey];
             }
           }
         }
-        schema.required = keys;
-      }
-
-      // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
-      if ('propertyNames' in schema) {
-        delete (schema as Record<string, unknown>).propertyNames;
       }
     }
+  }
+
+  #traverse(value: unknown, schema: Record<string, unknown>): unknown {
+    // If schema uses anyOf, find the non-null variant for traversal
+    const resolved = this.#resolveAnyOf(schema);
+
+    if ((isDateFormat(resolved) || resolved['x-date'] === true) && typeof value === 'string') {
+      return new Date(value);
+    }
+
+    const isArrayType =
+      resolved.type === 'array' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('array'));
+    if (isArrayType) {
+      if (!Array.isArray(value)) {
+        return value;
+      }
+      return value.map(item => this.#traverse(item, resolved.items as Record<string, unknown>));
+    }
+
+    const isObjectType =
+      resolved.type === 'object' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('object'));
+    if (!isObjectType) {
+      return value;
+    }
+
+    const properties = resolved.properties as Record<string, Record<string, unknown>> | undefined;
+    if (!properties || !value) {
+      return value;
+    }
+
+    const obj = value as Record<string, unknown>;
+    const optionalProperties = (resolved['x-optional'] ?? []) as string[];
+    for (const key in obj) {
+      if (optionalProperties.includes(key) && obj[key] === null) {
+        obj[key] = undefined;
+      } else if (properties[key]) {
+        obj[key] = this.#traverse(obj[key], properties[key]);
+      }
+    }
+
+    return obj;
   }
 
   /**
-   * Recursively fixes additionalProperties: {} to additionalProperties: true.
-   * OpenAI requires additionalProperties to be either:
-   * - false (no additional properties allowed)
-   * - true (any additional properties allowed)
-   * - an object with a "type" key (typed additional properties)
-   * An empty object {} is NOT valid.
+   * If schema has anyOf, return the first non-null variant for traversal.
+   * Otherwise return the schema itself.
    */
-  private fixAdditionalProperties(schema: JSONSchema7): JSONSchema7 {
-    if (typeof schema !== 'object' || schema === null) {
-      return schema;
-    }
-
-    const result = { ...schema };
-
-    // Fix additionalProperties if it's an empty object
-    if (
-      result.additionalProperties !== undefined &&
-      typeof result.additionalProperties === 'object' &&
-      result.additionalProperties !== null &&
-      !Array.isArray(result.additionalProperties) &&
-      Object.keys(result.additionalProperties).length === 0
-    ) {
-      result.additionalProperties = true;
-    }
-
-    // Recursively fix nested properties
-    if (result.properties) {
-      result.properties = Object.fromEntries(
-        Object.entries(result.properties).map(([key, value]) => [
-          key,
-          this.fixAdditionalProperties(value as JSONSchema7),
-        ]),
-      );
-    }
-
-    // Recursively fix items in arrays
-    if (result.items) {
-      if (Array.isArray(result.items)) {
-        result.items = result.items.map(item => this.fixAdditionalProperties(item as JSONSchema7));
-      } else {
-        result.items = this.fixAdditionalProperties(result.items as JSONSchema7);
+  #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
+    if (Array.isArray(schema.anyOf)) {
+      const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
+      if (nonNull) {
+        return nonNull;
       }
     }
 
-    // Recursively fix additionalProperties if it's an object schema (not empty)
-    if (
-      result.additionalProperties &&
-      typeof result.additionalProperties === 'object' &&
-      !Array.isArray(result.additionalProperties) &&
-      Object.keys(result.additionalProperties).length > 0
-    ) {
-      result.additionalProperties = this.fixAdditionalProperties(result.additionalProperties as JSONSchema7);
-    }
-
-    return result;
+    return schema;
   }
+}
+
+function isDateFormat(schema: Record<string, unknown>): boolean {
+  return schema.format === 'date-time' || schema.format === 'date';
 }

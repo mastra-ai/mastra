@@ -21,12 +21,198 @@ import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/cor
 
 import { extractUsageMetrics } from './usage';
 
+type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
+
+function formatPreviewLabel(label: unknown, fallback: string): string {
+  return typeof label === 'string' && label.length > 0 ? label : fallback;
+}
+
+function summarizePart(part: unknown): string {
+  if (typeof part === 'string') {
+    return part;
+  }
+
+  if (!part || typeof part !== 'object') {
+    return '';
+  }
+
+  if ('text' in part && typeof part.text === 'string') {
+    return part.text;
+  }
+
+  if ('parts' in part && Array.isArray(part.parts)) {
+    return part.parts.map(summarizePart).filter(Boolean).join('');
+  }
+
+  if ('inlineData' in part && part.inlineData && typeof part.inlineData === 'object') {
+    return `[${formatPreviewLabel((part.inlineData as { mimeType?: unknown }).mimeType, 'binary')}]`;
+  }
+
+  if ('image_url' in part) {
+    return '[image]';
+  }
+
+  if ('functionCall' in part && part.functionCall && typeof part.functionCall === 'object') {
+    return `[tool: ${formatPreviewLabel((part.functionCall as { name?: unknown }).name, 'unknown')}]`;
+  }
+
+  if ('function_call' in part && part.function_call && typeof part.function_call === 'object') {
+    return `[tool: ${formatPreviewLabel((part.function_call as { name?: unknown }).name, 'unknown')}]`;
+  }
+
+  if ('function' in part && part.function && typeof part.function === 'object') {
+    return `[tool: ${formatPreviewLabel((part.function as { name?: unknown }).name, 'unknown')}]`;
+  }
+
+  if ('toolName' in part) {
+    return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
+  }
+
+  if ('type' in part && typeof part.type === 'string') {
+    switch (part.type) {
+      case 'image':
+        return '[image]';
+      case 'file':
+        return '[file]';
+      case 'reasoning':
+        return '[reasoning]';
+      case 'tool-call':
+        return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
+      case 'tool-result':
+        return '[tool-result]';
+      default:
+        return `[${part.type}]`;
+    }
+  }
+
+  if ('content' in part && typeof part.content === 'string') {
+    return part.content;
+  }
+
+  return '[object]';
+}
+
+function summarizeMessageContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content.map(summarizePart).filter(Boolean).join('');
+  }
+
+  if (content && typeof content === 'object') {
+    if ('parts' in content && Array.isArray(content.parts)) {
+      return content.parts.map(summarizePart).filter(Boolean).join('');
+    }
+
+    return summarizePart(content);
+  }
+
+  if (content == null) {
+    return '';
+  }
+
+  return String(content);
+}
+
+function appendToolPreview(preview: string, toolCalls: unknown): string {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return preview;
+  }
+
+  const toolPreview = toolCalls
+    .map(toolCall => summarizePart(toolCall))
+    .filter(Boolean)
+    .join(' ');
+
+  if (!toolPreview) {
+    return preview;
+  }
+
+  return preview ? `${preview} ${toolPreview}` : toolPreview;
+}
+
+function appendPreview(preview: string, addition: string): string {
+  if (!addition) {
+    return preview;
+  }
+
+  return preview ? `${preview} ${addition}` : addition;
+}
+
+function normalizeMessages(messages: unknown[]): Array<{ role: string; content: string }> {
+  return messages.map(message => {
+    if (!message || typeof message !== 'object') {
+      return { role: 'user', content: summarizeMessageContent(message) };
+    }
+
+    const role = typeof (message as { role?: unknown }).role === 'string' ? (message as { role: string }).role : 'user';
+
+    const baseContent = summarizeMessageContent((message as { content?: unknown }).content);
+    const contentWithToolArrays = appendToolPreview(
+      appendToolPreview(baseContent, (message as { toolCalls?: unknown }).toolCalls),
+      (message as { tool_calls?: unknown }).tool_calls,
+    );
+    const functionCall = (message as { functionCall?: unknown }).functionCall;
+    const functionCallPreview = functionCall === undefined ? '' : summarizePart({ functionCall });
+    const functionCallSnakeCase = (message as { function_call?: unknown }).function_call;
+    const functionCallSnakeCasePreview =
+      functionCallSnakeCase === undefined ? '' : summarizePart({ function_call: functionCallSnakeCase });
+    const contentWithFunctionCall = appendPreview(
+      appendPreview(contentWithToolArrays, functionCallPreview),
+      functionCallSnakeCasePreview,
+    );
+
+    return { role, content: contentWithFunctionCall };
+  });
+}
+
+function summarizeRequestBody(body: unknown): StepInputPreview {
+  if (body == null) {
+    return undefined;
+  }
+
+  if (typeof body !== 'object') {
+    return typeof body === 'string' ? body : String(body);
+  }
+
+  if (Array.isArray((body as { messages?: unknown }).messages)) {
+    return normalizeMessages((body as { messages: unknown[] }).messages);
+  }
+
+  if (Array.isArray((body as { input?: unknown }).input)) {
+    return normalizeMessages((body as { input: unknown[] }).input);
+  }
+
+  if (Array.isArray((body as { contents?: unknown }).contents)) {
+    return (body as { contents: Array<{ role?: unknown; parts?: unknown[] }> }).contents.map(item => ({
+      role: typeof item?.role === 'string' ? item.role : 'user',
+      content: Array.isArray(item?.parts) ? item.parts.map(summarizePart).filter(Boolean).join('') : '',
+    }));
+  }
+
+  const summary: Record<string, unknown> = {};
+
+  if (typeof (body as { model?: unknown }).model === 'string') {
+    summary.model = (body as { model: string }).model;
+  }
+
+  const bodyKeys = Object.keys(body as Record<string, unknown>).filter(key => key !== 'body');
+  if (bodyKeys.length > 0) {
+    summary.keys = bodyKeys;
+  }
+
+  return Object.keys(summary).length > 0 ? summary : '[request body]';
+}
+
 /**
  * Extract messages from the raw AI SDK request metadata for use as span input.
- * Parses request.body and returns `messages` (OpenAI/Anthropic) or `contents` (Gemini).
- * Falls back to the original request object when body is missing or unparseable.
+ * Parses request.body and returns a shallow conversation preview instead of the
+ * full request payload, which keeps span serialization bounded for large
+ * multi-turn conversations.
  */
-function extractStepInput(request: StepStartPayload['request'] | undefined): unknown {
+function extractStepInput(request: StepStartPayload['request'] | undefined): StepInputPreview {
   if (!request) return undefined;
 
   const { body } = request;
@@ -34,16 +220,7 @@ function extractStepInput(request: StepStartPayload['request'] | undefined): unk
 
   try {
     const parsed = typeof body === 'string' ? JSON.parse(body) : body;
-
-    // OpenAI / Anthropic / most providers
-    if (Array.isArray(parsed?.messages)) return parsed.messages;
-
-    // Google / Gemini
-    if (Array.isArray(parsed?.contents)) return parsed.contents;
-
-    // Unrecognized structure — return the full parsed body so exporters at
-    // least get the object rather than the stringified HTTP request wrapper
-    return parsed;
+    return summarizeRequestBody(parsed);
   } catch {
     // body was not valid JSON — return as-is
     return request;
@@ -65,6 +242,10 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
+  #deferStepClose: boolean = false;
+  /** Stored step-finish payload when defer mode is enabled */
+  #pendingStepFinishPayload?: StepFinishPayload<any, any>;
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
@@ -117,6 +298,46 @@ export class ModelSpanTracker {
    */
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.update(options);
+  }
+
+  /**
+   * Enable or disable deferred step closing for durable execution.
+   * When enabled, step-finish chunks won't automatically close the step span.
+   * Use exportCurrentStep() to get the span data, then close it manually later.
+   */
+  setDeferStepClose(defer: boolean): void {
+    this.#deferStepClose = defer;
+  }
+
+  /**
+   * Export the current step span for later rebuilding (durable execution).
+   * Returns undefined if no step span is active.
+   */
+  exportCurrentStep(): ReturnType<Span<SpanType.MODEL_STEP>['exportSpan']> | undefined {
+    return this.#currentStepSpan?.exportSpan();
+  }
+
+  /**
+   * Get the pending step finish payload (captured when defer mode is enabled).
+   * This contains usage, finishReason, etc. for closing the step later.
+   */
+  getPendingStepFinishPayload(): StepFinishPayload<any, any> | undefined {
+    return this.#pendingStepFinishPayload;
+  }
+
+  /**
+   * Set the starting step index for durable execution.
+   * Used when resuming across agentic loop iterations to maintain step continuity.
+   */
+  setStepIndex(index: number): void {
+    this.#stepIndex = index;
+  }
+
+  /**
+   * Get the current step index.
+   */
+  getStepIndex(): number {
+    return this.#stepIndex;
   }
 
   /**
@@ -501,7 +722,13 @@ export class ModelSpanTracker {
               break;
 
             case 'step-finish':
-              this.#endStepSpan(chunk.payload);
+              if (this.#deferStepClose) {
+                // Durable mode: save payload for later, don't close the step
+                this.#pendingStepFinishPayload = chunk.payload;
+              } else {
+                // Normal mode: close the step immediately
+                this.#endStepSpan(chunk.payload);
+              }
               break;
 
             // Infrastructure chunks - skip creating spans for these
@@ -544,7 +771,9 @@ export class ModelSpanTracker {
                 dynamic,
                 providerExecuted,
                 providerMetadata,
-                // Output - the actual result
+                // Keep provider-executed results on MODEL_CHUNK because they come
+                // from the model/provider stream and may not have a sibling TOOL_CALL span.
+                // For locally executed tools, the canonical payload lives on TOOL_CALL.
                 result,
                 // Stripped - redundant (already on TOOL_CALL span input)
                 args: _args,
@@ -557,7 +786,7 @@ export class ModelSpanTracker {
               if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
               if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
 
-              this.#createEventSpan(chunk.type, result, { metadata });
+              this.#createEventSpan(chunk.type, providerExecuted ? result : undefined, { metadata });
               break;
             }
 

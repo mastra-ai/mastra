@@ -24,7 +24,7 @@ async function writeDtsFiles() {
 
   // Handle specific path exports
   for (const [key, value] of Object.entries(exports)) {
-    if (key !== '.' && value.require?.types) {
+    if (key !== '.' && value?.require?.types) {
       const pattern = value.require.types;
       const matches = await globby(pattern, {
         cwd: rootPath,

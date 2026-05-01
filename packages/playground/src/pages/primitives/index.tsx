@@ -1,4 +1,4 @@
-import { PageLayout, PageHeader, AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { AgentIcon, McpServerIcon, PageHeader, PageLayout, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 import { FileTextIcon, Cpu, FolderIcon, GlobeIcon, GripIcon } from 'lucide-react';
 import { Link } from 'react-router';
 

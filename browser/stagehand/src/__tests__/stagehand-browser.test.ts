@@ -90,6 +90,15 @@ describe('StagehandBrowser', () => {
       expect(browser.status).toBe('pending');
     });
 
+    it('defaults headless to true', () => {
+      expect(browser.headless).toBe(true);
+    });
+
+    it('respects headless: false', () => {
+      const visible = new StagehandBrowser({ headless: false });
+      expect(visible.headless).toBe(false);
+    });
+
     it('should create instance with custom config', () => {
       const customBrowser = new StagehandBrowser({
         env: 'LOCAL',

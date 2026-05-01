@@ -36,6 +36,7 @@ export interface SettingsCallbacks {
   onEscapeAsCancelChange: (enabled: boolean) => void;
   onQuietModeChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
+  onApiKeys?: () => void;
   onClose: () => void;
 }
 
@@ -376,6 +377,20 @@ export class SettingsComponent extends Box implements Focusable {
           ),
       },
     ];
+
+    if (callbacks.onApiKeys) {
+      items.push({
+        id: 'apiKeys',
+        label: 'API Keys',
+        description: 'Add, update, or remove API keys for model providers',
+        currentValue: 'Manage →',
+        submenu: (_currentValue, done) => {
+          done();
+          callbacks.onApiKeys!();
+          return new Text('', 0, 0);
+        },
+      });
+    }
 
     this.settingsList = new SettingsList(
       items,

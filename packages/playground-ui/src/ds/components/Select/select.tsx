@@ -20,7 +20,7 @@ export type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPri
 };
 
 const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Trigger>, SelectTriggerProps>(
-  ({ className, children, variant = 'inputLike', size = 'default', ...props }, ref) => {
+  ({ className, children, variant = 'default', size = 'default', ...props }, ref) => {
     return (
       <SelectPrimitive.Trigger
         ref={ref}

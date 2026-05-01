@@ -175,95 +175,6 @@ function isJsonSchema(val: any): boolean {
 }
 
 /**
- * Compress a JSON Schema to a more readable format for tracing.
- * Extracts just the essential structure: property names and their types.
- * Recursively handles nested object schemas.
- *
- * @example
- * Input:
- * {
- *   type: "object",
- *   properties: {
- *     name: { type: "string" },
- *     address: {
- *       type: "object",
- *       properties: { city: { type: "string" }, zip: { type: "string" } }
- *     }
- *   },
- *   required: ["name"],
- *   $schema: "http://json-schema.org/draft-07/schema#"
- * }
- *
- * Output:
- * { name: "string (required)", address: { city: "string", zip: "string" } }
- */
-function compressJsonSchema(schema: any, depth: number = 0): any {
-  // Limit recursion depth to avoid overly verbose output
-  if (depth > 3) {
-    return schema.type || 'object';
-  }
-
-  const compositionKeys = ['oneOf', 'anyOf', 'allOf'].filter(key => Array.isArray(schema[key]));
-  if (compositionKeys.length > 0) {
-    const compressed: Record<string, any> = {};
-
-    for (const key of compositionKeys) {
-      compressed[key] = schema[key].map((entry: any) => compressJsonSchema(entry, depth + 1));
-    }
-
-    if (typeof schema.type === 'string') {
-      compressed.type = schema.type;
-    }
-
-    return compressed;
-  }
-
-  if (schema.type !== 'object' || !schema.properties) {
-    // For non-object schemas, just return the type
-    return schema.type || schema;
-  }
-
-  const required = new Set(Array.isArray(schema.required) ? schema.required : []);
-  const compressed: Record<string, any> = {};
-
-  for (const [key, propSchema] of Object.entries(schema.properties)) {
-    const prop = propSchema as any;
-    let value: any = prop.type || 'unknown';
-
-    // Handle nested objects recursively
-    if (prop.type === 'object' && prop.properties) {
-      value = compressJsonSchema(prop, depth + 1);
-      if (required.has(key)) {
-        // For nested objects, we can't append to the object, so wrap it
-        compressed[key + ' (required)'] = value;
-        continue;
-      }
-    }
-    // Handle arrays with item types
-    else if (prop.type === 'array' && prop.items) {
-      if (prop.items.type === 'object' && prop.items.properties) {
-        value = [compressJsonSchema(prop.items, depth + 1)];
-      } else {
-        value = `${prop.items.type || 'any'}[]`;
-      }
-    }
-    // Handle enums
-    else if (prop.enum) {
-      value = prop.enum.map((v: any) => JSON.stringify(v)).join(' | ');
-    }
-
-    // Mark required fields (for non-object types)
-    if (required.has(key) && typeof value === 'string') {
-      value += ' (required)';
-    }
-
-    compressed[key] = value;
-  }
-
-  return compressed;
-}
-
-/**
  * Recursively cleans a value by removing circular references, stripping problematic keys,
  * and enforcing size limits on strings, arrays, and objects.
  *
@@ -499,8 +410,9 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         }
       }
 
-      // Handle JSON Schema objects - compress to a more readable format
-      // Pass the compressed result back through helper to apply size limits
+      // Handle JSON Schema objects - return as-is to preserve raw schemas for debugging.
+      // JSON schemas are plain serializable objects (no circular refs, functions, etc.)
+      // so we skip recursive traversal for performance.
       let looksLikeJsonSchema = false;
       try {
         looksLikeJsonSchema = isJsonSchema(val);
@@ -509,12 +421,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       }
 
       if (looksLikeJsonSchema) {
-        try {
-          const compressed = compressJsonSchema(val);
-          return compressed === val ? '[JSONSchema]' : helper(compressed, depth);
-        } catch {
-          // Fall back to guarded object traversal below.
-        }
+        return val;
       }
 
       // Handle objects - enforce key limit

@@ -1,21 +1,21 @@
 import {
   ButtonWithTooltip,
-  McpServersList,
-  McpServerIcon,
-  NoMCPServersInfo,
+  ErrorState,
   ListSearch,
+  McpServerIcon,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
   is401UnauthorizedError,
   is403ForbiddenError,
-  useMCPServers,
 } from '@mastra/playground-ui';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
+import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
+import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
+import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();

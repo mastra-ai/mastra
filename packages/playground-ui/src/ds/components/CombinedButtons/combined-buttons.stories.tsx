@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CombinedButtons } from './combined-buttons';
-import { Button } from '../Button';
 import { ChevronDown, Plus, Settings, Trash } from 'lucide-react';
+import { Button } from '../Button';
+import { CombinedButtons } from './combined-buttons';
 
 const meta: Meta<typeof CombinedButtons> = {
   title: 'Composite/CombinedButtons',
@@ -9,7 +9,6 @@ const meta: Meta<typeof CombinedButtons> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -69,8 +68,8 @@ export const IconOnly: Story = {
 export const SplitButton: Story = {
   render: () => (
     <CombinedButtons>
-      <Button variant="light">Save draft</Button>
-      <Button variant="light">
+      <Button variant="default">Save draft</Button>
+      <Button variant="default">
         <ChevronDown className="h-4 w-4" />
       </Button>
     </CombinedButtons>

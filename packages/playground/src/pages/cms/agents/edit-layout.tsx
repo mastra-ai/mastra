@@ -1,31 +1,28 @@
 import {
-  useLinkComponent,
-  useAgent,
-  useStoredAgent,
-  useAgentVersion,
-  useAgentVersions,
-  useAgentCmsForm,
-  AgentCmsFormShell,
-  AgentVersionPanel,
-  Header,
-  HeaderTitle,
-  HeaderAction,
-  Icon,
   AgentIcon,
-  Spinner,
+  Notice,
+  Badge,
+  Button,
+  Header,
+  HeaderAction,
+  HeaderTitle,
+  Icon,
   MainContentLayout,
   Skeleton,
-  Alert,
-  Button,
-  AlertTitle,
-  Badge,
-  mapAgentResponseToDataSource,
-  AlertDescription,
+  Spinner,
 } from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
 import { Check, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
+import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useLinkComponent } from '@/lib/framework';
 
 function EditFormContent({
   agentId,
@@ -65,15 +62,23 @@ function EditFormContent({
   const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
 
   const banner = isViewingPreviousVersion ? (
-    <Alert variant="info" className="mb-4">
-      <AlertTitle>This is a previous version</AlertTitle>
-      <AlertDescription as="p">You are seeing a specific version of the agent.</AlertDescription>
-      <div className="pt-2">
-        <Button type="button" variant="light" size="sm" onClick={() => setSearchParams({})}>
+    <Notice variant="info" title="This is a previous version" className="mb-4">
+      <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          onClick={() => void handlePublish(selectedVersionId ?? undefined)}
+          disabled={selectedVersionId === activeVersionId}
+        >
+          Publish This Version
+        </Button>
       </div>
-    </Alert>
+    </Notice>
   ) : undefined;
 
   const rightPanel = hideVersionPanel ? undefined : (

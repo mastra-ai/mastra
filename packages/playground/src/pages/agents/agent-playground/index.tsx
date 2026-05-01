@@ -1,22 +1,21 @@
 import {
-  AgentPlaygroundView,
-  AgentEditFormProvider,
-  useAgent,
-  useStoredAgent,
-  useAgentCmsForm,
-  useAgentVersions,
-  useAgentVersion,
-  useMemory,
-  mapAgentResponseToDataSource,
-  Spinner,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
+  Spinner,
   is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
+import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
+import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 function AgentPlayground() {
   const { agentId } = useParams();

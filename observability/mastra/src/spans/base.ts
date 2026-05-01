@@ -1,3 +1,4 @@
+import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type {
   Span,
   SpanTypeMap,
@@ -14,10 +15,10 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  TracingPolicy,
   CorrelationContext,
 } from '@mastra/core/observability';
 
-import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
@@ -120,6 +121,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public endTime?: Date;
   public isEvent: boolean;
   public isInternal: boolean;
+  public tracingPolicy?: TracingPolicy;
   public observabilityInstance: ObservabilityInstance;
   public input?: any;
   public output?: any;
@@ -146,30 +148,68 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
+  /**
+   * Whether this span is filtered out before export. When true, BaseSpan/
+   * DefaultSpan skip attaching attributes/input/output/errorInfo/requestContext
+   * entirely -- they are never read on excluded spans, and skipping avoids
+   * both the deepClean cost and holding references to large payloads for
+   * the lifetime of the span. Set when excludeSpanTypes drops the type,
+   * when the span is internal and includeInternalSpans is false, or when
+   * the subclass is always excluded (e.g., NoOpSpan).
+   *
+   * Note: metadata is still attached and deepCleaned because it is read in
+   * process by getCorrelationContext() and by getLoggerContext() /
+   * getMetricsContext() (which structuredClone it).
+   */
+  protected isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
 
+  /**
+   * Subclasses can override to unconditionally mark the span as excluded.
+   * NoOpSpan uses this because it is never exported regardless of config.
+   */
+  protected get alwaysExcluded(): boolean {
+    return false;
+  }
+
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     // Get serialization options from observability instance config
-    const serializationOptions = observabilityInstance.getConfig().serializationOptions;
-    this.deepCleanOptions = mergeSerializationOptions(serializationOptions);
+    const observabilityConfig = observabilityInstance.getConfig();
+    this.deepCleanOptions = mergeSerializationOptions(observabilityConfig.serializationOptions);
 
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
-    // Metadata - inherit from parent if not explicitly provided, merge if both exist
+    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+
+    // Determine up front whether this span will ever reach exporters.
+    // getSpanForExport() drops these same spans before export, so we can
+    // skip both the deepClean cost and the retention of large payload
+    // references for the lifetime of the span (notably per-chunk
+    // MODEL_CHUNK spans when excludeSpanTypes: [MODEL_CHUNK] is set).
+    this.isExcluded =
+      this.alwaysExcluded ||
+      observabilityConfig.excludeSpanTypes?.includes(this.type) === true ||
+      (this.isInternal && !observabilityConfig.includeInternalSpans);
+
+    // Metadata is always attached and deepCleaned: it is read in-process
+    // by getCorrelationContext() and by getLoggerContext() /
+    // getMetricsContext() (which structuredClone it), and non-filtered
+    // child spans inherit it via options.parent?.metadata.
     this.metadata = deepClean(
       options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
       this.deepCleanOptions,
     );
+
     if (options.requestContext && options.requestContext.size() > 0) {
       this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
     }
+
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
-    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+    this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
@@ -178,6 +218,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.entityType = options.entityType ?? entityParent?.entityType;
     this.entityId = options.entityId ?? entityParent?.entityId;
     this.entityName = options.entityName ?? entityParent?.entityName;
+
+    if (this.isExcluded) {
+      // Keep the shape of attributes stable for any live-span reader.
+      // input/output/errorInfo/requestContext stay undefined.
+      this.attributes = {} as SpanTypeMap[TType];
+      return;
+    }
+
+    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+    }
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -275,6 +327,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const metadata = this.metadata ?? {};
     const getMetadataString = (key: string): string | undefined =>
       typeof metadata[key] === 'string' ? metadata[key] : undefined;
+    const getSpanMetadataString = (span: AnySpan | null | undefined, key: string): string | undefined => {
+      const m = span?.metadata;
+      return m && typeof m[key] === 'string' ? m[key] : undefined;
+    };
     const parentSpan = this.getParentSpan(false);
 
     let rootSpan: AnySpan = this;
@@ -291,12 +347,15 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityType: this.entityType,
       entityId: this.entityId,
       entityName: this.entityName,
+      entityVersionId: getMetadataString('entityVersionId'),
       parentEntityType: parentSpan?.entityType,
       parentEntityId: parentSpan?.entityId,
       parentEntityName: parentSpan?.entityName,
+      parentEntityVersionId: getSpanMetadataString(parentSpan, 'entityVersionId'),
       rootEntityType: rootSpan.entityType,
       rootEntityId: rootSpan.entityId,
       rootEntityName: rootSpan.entityName,
+      rootEntityVersionId: getSpanMetadataString(rootSpan, 'entityVersionId'),
       userId: getMetadataString('userId'),
       organizationId: getMetadataString('organizationId'),
       resourceId: getMetadataString('resourceId'),
@@ -304,7 +363,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       sessionId: getMetadataString('sessionId'),
       threadId: getMetadataString('threadId'),
       requestId: getMetadataString('requestId'),
-      environment: getMetadataString('environment'),
+      environment: getMetadataString('environment') ?? this.observabilityInstance.getMastraEnvironment?.(),
       source: getMetadataString('source'),
       serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
       experimentId: getMetadataString('experimentId'),

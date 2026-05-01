@@ -5,7 +5,7 @@
     "testName": "AI SDK Voice Integration Tests",
     "model": "tts-1",
     "createdAt": "2026-03-13T14:27:22.184Z",
-    "updatedAt": "2026-03-13T14:30:31.583Z"
+    "updatedAt": "2026-03-24T15:27:01.734Z"
   },
   "recordings": [
     {
@@ -19,7 +19,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412209582
+        "timestamp": 1774366003863
       },
       "response": {
         "status": 200,
@@ -28,23 +28,23 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc26ae46b71a-BRU",
+          "cf-ray": "9e16b2249c50b75f-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:10 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:45 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1104",
+          "openai-processing-ms": "423",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-7b4845457b-mpshd",
+          "via": "envoy-router-6ddd597645-cr4qp",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_a728139189d24bc5be9287b8666add36"
+          "x-ratelimit-remaining-requests": "498",
+          "x-ratelimit-reset-requests": "191ms",
+          "x-request-id": "req_d2bc24473a2749d1b5847371834435bd"
         },
         "body": {
           "__binary": true,
@@ -52,7 +52,7 @@
           "size": 23520
         },
         "binaryArtifact": {
-          "path": "c05edf5e6b99144d-response.mp3",
+          "path": "c05edf5e6b99144d-response-4baba6738ccb.mp3",
           "contentType": "audio/mpeg",
           "size": 23520
         },
@@ -70,7 +70,7 @@
           "voice": "nova",
           "response_format": "mp3"
         },
-        "timestamp": 1773412211152
+        "timestamp": 1774366005620
       },
       "response": {
         "status": 200,
@@ -79,33 +79,33 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc302977ba6a-BRU",
+          "cf-ray": "9e16b22f6c20605a-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:13 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:46 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "2109",
+          "openai-processing-ms": "672",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-664584f796-p5gql",
+          "via": "envoy-router-6ddd597645-wnc2b",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_79603d0a92a6451abdbad10d9afa1480"
+          "x-request-id": "req_99f4bf1bee1b4dd7b04f445c9a2611e0"
         },
         "body": {
           "__binary": true,
           "contentType": "audio/mpeg",
-          "size": 30240
+          "size": 29280
         },
         "binaryArtifact": {
-          "path": "c27b6034c6ec8f57-response.mp3",
+          "path": "c27b6034c6ec8f57-response-04bc0a6aa8e5.mp3",
           "contentType": "audio/mpeg",
-          "size": 30240
+          "size": 29280
         },
         "isStreaming": false
       }
@@ -121,7 +121,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412213848
+        "timestamp": 1774366006718
       },
       "response": {
         "status": 200,
@@ -130,33 +130,33 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc40c9d6b71a-BRU",
+          "cf-ray": "9e16b2361cbfb75f-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:15 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:48 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1166",
+          "openai-processing-ms": "598",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-5c469bb7c5-j7w6q",
+          "via": "envoy-router-canary-7fd8957b6d-dh6hs",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_4825bcb46e7841368af43f4bd364d7af"
+          "x-ratelimit-remaining-requests": "498",
+          "x-ratelimit-reset-requests": "197ms",
+          "x-request-id": "req_57d227a07bf84d0693c22e985fb438b6"
         },
         "body": {
           "__binary": true,
           "contentType": "audio/mpeg",
-          "size": 22080
+          "size": 21120
         },
         "binaryArtifact": {
-          "path": "8a47b614e89e5ba8-response.mp3",
+          "path": "8a47b614e89e5ba8-response-83281150f8f8.mp3",
           "contentType": "audio/mpeg",
-          "size": 22080
+          "size": 21120
         },
         "isStreaming": false
       }
@@ -172,7 +172,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412215414
+        "timestamp": 1774366008496
       },
       "response": {
         "status": 200,
@@ -181,33 +181,33 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc4a98f7ba6a-BRU",
+          "cf-ray": "9e16b2413894605a-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:16 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:51 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "473",
+          "openai-processing-ms": "1699",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-5c469bb7c5-s5znb",
+          "via": "envoy-router-canary-b8c4b574b-49kvm",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_e00ec16f415a48e59c0088151e5a366b"
+          "x-request-id": "req_2eb3709433b847bf99fe4f0d46fe88e6"
         },
         "body": {
           "__binary": true,
           "contentType": "audio/mpeg",
-          "size": 30720
+          "size": 28800
         },
         "binaryArtifact": {
-          "path": "ca58e1d3824603ce-response.mp3",
+          "path": "ca58e1d3824603ce-response-f65b9538a2d6.mp3",
           "contentType": "audio/mpeg",
-          "size": 30720
+          "size": 28800
         },
         "isStreaming": false
       }
@@ -223,7 +223,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412216450
+        "timestamp": 1774366011461
       },
       "response": {
         "status": 200,
@@ -232,53 +232,53 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc510d39b71a-BRU",
+          "cf-ray": "9e16b253bc0fb75f-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:17 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:52 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "749",
+          "openai-processing-ms": "509",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-7cc4784f79-rcjl9",
+          "via": "envoy-router-754f66bd-2kjs6",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_1a5b89416ed3414ab8154d4edb73c841"
+          "x-request-id": "req_f31ec6e8d726416295415da068a210cc"
         },
         "body": {
           "__binary": true,
           "contentType": "audio/mpeg",
-          "size": 35520
+          "size": 34560
         },
         "binaryArtifact": {
-          "path": "8d5a4eabb2757b33-response.mp3",
+          "path": "8d5a4eabb2757b33-response-0957462d3630.mp3",
           "contentType": "audio/mpeg",
-          "size": 35520
+          "size": 34560
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "24e6b8e5435f0acc",
+      "hash": "a3d272ff752c0131",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
         "body": {
           "__binary": true,
-          "contentType": "multipart/form-data; boundary=----formdata-undici-009411600315",
-          "size": 35786,
-          "digest": "ee32894254a487c0"
+          "contentType": "multipart/form-data; boundary=----formdata-undici-061699214881",
+          "size": 34826,
+          "digest": "5c269566abb80dda"
         },
-        "timestamp": 1773412217853,
+        "timestamp": 1774366012469,
         "binaryArtifact": {
-          "path": "24e6b8e5435f0acc-request.bin",
-          "contentType": "multipart/form-data; boundary=----formdata-undici-009411600315",
-          "size": 35786
+          "path": "a3d272ff752c0131-request-5c269566abb8.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-061699214881",
+          "size": 34826
         }
       },
       "response": {
@@ -288,23 +288,23 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc59ce83ba6a-BRU",
+          "cf-ray": "9e16b25a08cf605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 13 Mar 2026 14:30:19 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:53 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1521",
+          "openai-processing-ms": "445",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-5fcf565d66-lxw8t",
+          "via": "envoy-router-754f66bd-2kjs6",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_5e4db715c99342c197b41ba4660f5af7"
+          "x-request-id": "req_97df852ce69e4480ae0d7594bb73ada5"
         },
         "body": {
           "text": "This is a transcription test.",
@@ -317,21 +317,21 @@
       }
     },
     {
-      "hash": "90eed8ee9b8c3a15",
+      "hash": "3170dcdaa14c614f",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
         "body": {
           "__binary": true,
-          "contentType": "multipart/form-data; boundary=----formdata-undici-048854694049",
-          "size": 34346,
-          "digest": "69d224edb61dc1ea"
+          "contentType": "multipart/form-data; boundary=----formdata-undici-018863212528",
+          "size": 34826,
+          "digest": "6bfb305e552a3bd2"
         },
-        "timestamp": 1773412220498,
+        "timestamp": 1774366013985,
         "binaryArtifact": {
-          "path": "90eed8ee9b8c3a15-request.bin",
-          "contentType": "multipart/form-data; boundary=----formdata-undici-048854694049",
-          "size": 34346
+          "path": "3170dcdaa14c614f-request-6bfb305e552a.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-018863212528",
+          "size": 34826
         }
       },
       "response": {
@@ -341,23 +341,23 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc6a5e79ba6a-BRU",
+          "cf-ray": "9e16b2637d44605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 13 Mar 2026 14:30:21 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:54 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "760",
+          "openai-processing-ms": "475",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-5fcf565d66-6p7rz",
+          "via": "envoy-router-d9bd8db94-dkptc",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_0f7c1b70000445ed9201ae8c973dda4e"
+          "x-request-id": "req_01c3022181914f1899fd0225ebbcb386"
         },
         "body": {
           "text": "This is a transcription test.",
@@ -380,7 +380,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412221473
+        "timestamp": 1774366014612
       },
       "response": {
         "status": 200,
@@ -389,23 +389,23 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc7069b6b71a-BRU",
+          "cf-ray": "9e16b2676ac4b75f-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:22 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:55 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "976",
+          "openai-processing-ms": "424",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-664584f796-p5gql",
+          "via": "envoy-router-6cb6d948f4-g9fls",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_b693cb0ecc674d4e8974ced326da20a2"
+          "x-request-id": "req_b72d233911474f6ba35dd4ec17cf0a77"
         },
         "body": {
           "__binary": true,
@@ -413,7 +413,7 @@
           "size": 28800
         },
         "binaryArtifact": {
-          "path": "6014e37fed406cde-response.mp3",
+          "path": "6014e37fed406cde-response-3d43ea04119e.mp3",
           "contentType": "audio/mpeg",
           "size": 28800
         },
@@ -421,20 +421,20 @@
       }
     },
     {
-      "hash": "d4873c170e65324d",
+      "hash": "fa5731f850fec001",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
         "body": {
           "__binary": true,
-          "contentType": "multipart/form-data; boundary=----formdata-undici-023816183397",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-095833588215",
           "size": 29471,
-          "digest": "8cea6a61f57eecb5"
+          "digest": "9d3dd38949b98752"
         },
-        "timestamp": 1773412222902,
+        "timestamp": 1774366016233,
         "binaryArtifact": {
-          "path": "d4873c170e65324d-request.bin",
-          "contentType": "multipart/form-data; boundary=----formdata-undici-023816183397",
+          "path": "fa5731f850fec001-request-9d3dd38949b9.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-095833588215",
           "size": 29471
         }
       },
@@ -445,41 +445,41 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc795c50ba6a-BRU",
+          "cf-ray": "9e16b2719add605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 13 Mar 2026 14:30:23 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:56 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "460",
+          "openai-processing-ms": "346",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-5fcf565d66-bnp4g",
+          "via": "envoy-router-canary-6765dd7cf6-dhf4s",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_a31f79864686475d95ce4d8fbf181603"
+          "x-request-id": "req_db4482727e9347faa119fd3b5af2844f"
         },
         "body": {
           "task": "transcribe",
           "language": "english",
           "duration": 1.440000057220459,
-          "text": "Testing language option.",
+          "text": "Testing language option",
           "segments": [
             {
               "id": 0,
               "seek": 0,
               "start": 0,
-              "end": 1.3600000143051147,
-              "text": " Testing language option.",
-              "tokens": [50364, 45517, 2856, 3614, 13, 50432],
+              "end": 2,
+              "text": " Testing language option",
+              "tokens": [50364, 45517, 2856, 3614, 50464],
               "temperature": 0,
-              "avg_logprob": -0.7451189160346985,
-              "compression_ratio": 0.75,
-              "no_speech_prob": 0.024871496483683586
+              "avg_logprob": -0.7920823693275452,
+              "compression_ratio": 0.7419354915618896,
+              "no_speech_prob": 0.010898757725954056
             }
           ],
           "usage": {
@@ -501,7 +501,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412223565
+        "timestamp": 1774366016735
       },
       "response": {
         "status": 200,
@@ -510,23 +510,23 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc7d7fd2b71a-BRU",
+          "cf-ray": "9e16b274af31b75f-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:24 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:57 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "747",
+          "openai-processing-ms": "607",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-7cc4784f79-sbz9c",
+          "via": "envoy-router-6cb6d948f4-7rb22",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_c6afbbe87e594f4e830f3ce5acafd203"
+          "x-request-id": "req_dbcef573c5ed4d79a9fe5e183634129c"
         },
         "body": {
           "__binary": true,
@@ -534,7 +534,7 @@
           "size": 24480
         },
         "binaryArtifact": {
-          "path": "465ad448709388f5-response.mp3",
+          "path": "465ad448709388f5-response-0dd53eabecb5.mp3",
           "contentType": "audio/mpeg",
           "size": 24480
         },
@@ -552,7 +552,7 @@
           "voice": "alloy",
           "response_format": "mp3"
         },
-        "timestamp": 1773412224824
+        "timestamp": 1774366017780
       },
       "response": {
         "status": 200,
@@ -561,53 +561,53 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc855993ba6a-BRU",
+          "cf-ray": "9e16b27b3e73605a-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:25 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:58 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "435",
+          "openai-processing-ms": "749",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-canary-654bfdf8d6-r75lh",
+          "via": "envoy-router-d9bd8db94-dkptc",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_7e4b2307b044498fa5b81800c3f634bd"
+          "x-request-id": "req_d38e9466d1864cd99b5fbbcf3962f37b"
         },
         "body": {
           "__binary": true,
           "contentType": "audio/mpeg",
-          "size": 24960
+          "size": 25440
         },
         "binaryArtifact": {
-          "path": "4e3c88b0c9aa0735-response.mp3",
+          "path": "4e3c88b0c9aa0735-response-ce7aa7a82191.mp3",
           "contentType": "audio/mpeg",
-          "size": 24960
+          "size": 25440
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "0f36c4addbd7272b",
+      "hash": "2a7206f2a19a66e9",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
         "body": {
           "__binary": true,
-          "contentType": "multipart/form-data; boundary=----formdata-undici-023984595313",
-          "size": 25226,
-          "digest": "a1d5644739443c5f"
+          "contentType": "multipart/form-data; boundary=----formdata-undici-026534413181",
+          "size": 25706,
+          "digest": "993064b8d1a59a73"
         },
-        "timestamp": 1773412225613,
+        "timestamp": 1774366018959,
         "binaryArtifact": {
-          "path": "0f36c4addbd7272b-request.bin",
-          "contentType": "multipart/form-data; boundary=----formdata-undici-023984595313",
-          "size": 25226
+          "path": "2a7206f2a19a66e9-request-993064b8d1a5.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-026534413181",
+          "size": 25706
         }
       },
       "response": {
@@ -617,26 +617,26 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc8a4ee9b71a-BRU",
+          "cf-ray": "9e16b2829ed1b75f-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 13 Mar 2026 14:30:27 GMT",
+          "date": "Tue, 24 Mar 2026 15:26:59 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1242",
+          "openai-processing-ms": "312",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-5c469bb7c5-d964n",
+          "via": "envoy-router-754f66bd-khvtk",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_10a42868a4984628b2999ee46b040ab1"
+          "x-request-id": "req_041f7dbc427e44a88d50e64576ac31da"
         },
         "body": {
-          "text": "Testing Buffer Input",
+          "text": "Testing buffer input.",
           "usage": {
             "type": "duration",
             "seconds": 2
@@ -656,7 +656,7 @@
           "voice": "nova",
           "response_format": "mp3"
         },
-        "timestamp": 1773412227023
+        "timestamp": 1774366019475
       },
       "response": {
         "status": 200,
@@ -665,53 +665,53 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbc931a57b71a-BRU",
+          "cf-ray": "9e16b285ca9ab75f-BRU",
           "connection": "keep-alive",
           "content-type": "audio/mpeg",
-          "date": "Fri, 13 Mar 2026 14:30:28 GMT",
+          "date": "Tue, 24 Mar 2026 15:27:00 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1530",
+          "openai-processing-ms": "636",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-7b4845457b-ct4sx",
+          "via": "envoy-router-canary-7fd8957b6d-dh6hs",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_abf265f844c24c5c97727cbe2c8b0f63"
+          "x-request-id": "req_6d2dbe20608d45318802a3ceb4418fb1"
         },
         "body": {
           "__binary": true,
           "contentType": "audio/mpeg",
-          "size": 72000
+          "size": 71520
         },
         "binaryArtifact": {
-          "path": "dc3b9a7c08b76f8f-response.mp3",
+          "path": "dc3b9a7c08b76f8f-response-8642849f3464.mp3",
           "contentType": "audio/mpeg",
-          "size": 72000
+          "size": 71520
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "79fc79017902697a",
+      "hash": "6ec1c9fa5f954f4e",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
         "body": {
           "__binary": true,
-          "contentType": "multipart/form-data; boundary=----formdata-undici-097167212551",
-          "size": 72266,
-          "digest": "68f5eaac9bd20a2f"
+          "contentType": "multipart/form-data; boundary=----formdata-undici-002694520899",
+          "size": 71786,
+          "digest": "b354ca8b9da4040b"
         },
-        "timestamp": 1773412229521,
+        "timestamp": 1774366020630,
         "binaryArtifact": {
-          "path": "79fc79017902697a-request.bin",
-          "contentType": "multipart/form-data; boundary=----formdata-undici-097167212551",
-          "size": 72266
+          "path": "6ec1c9fa5f954f4e-request-b354ca8b9da4.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-002694520899",
+          "size": 71786
         }
       },
       "response": {
@@ -721,26 +721,26 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9dbbbca2aa74ba6a-BRU",
+          "cf-ray": "9e16b28d09f3605a-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 13 Mar 2026 14:30:31 GMT",
+          "date": "Tue, 24 Mar 2026 15:27:01 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1894",
+          "openai-processing-ms": "928",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-664584f796-qwxc9",
+          "via": "envoy-router-6cb6d948f4-qn2s5",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "500",
           "x-ratelimit-remaining-requests": "499",
           "x-ratelimit-reset-requests": "120ms",
-          "x-request-id": "req_5f0a71c7d0209eabb12799af561a1119"
+          "x-request-id": "req_d8dc90489cf84ca3912b468a017b71e0"
         },
         "body": {
-          "text": "Hello, this is a round-trip test using AI SDK voice models.",
+          "text": "Hello, this is a round-trip test using AISDK voice models.",
           "usage": {
             "type": "duration",
             "seconds": 4

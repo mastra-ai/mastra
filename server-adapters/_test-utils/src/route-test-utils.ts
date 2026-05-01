@@ -346,6 +346,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
     params.agentId = 'test-agent';
   }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
+  if (route.path.includes(':backgroundTaskId')) params.backgroundTaskId = 'test-background-task-id';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
@@ -405,6 +406,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Tool provider route params
   if (route.path.includes(':providerId')) params.providerId = 'test-provider';
   if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
+
+  // Channel route params
+  if (route.path.includes(':platform')) params.platform = 'test-platform';
 
   return params;
 }

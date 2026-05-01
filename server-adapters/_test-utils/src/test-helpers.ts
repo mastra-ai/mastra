@@ -177,6 +177,9 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock resumeStream method - returns object with fullStream property
+  vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
+
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
     text: 'test response',
@@ -434,6 +437,32 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const workspace = await createTestWorkspace();
 
   // Create Mastra instance with all test entities
+  // Mock channel provider for channel route tests
+  const mockChannelProvider = {
+    id: 'test-platform',
+    getRoutes: () => [],
+    getInfo: () => ({
+      id: 'test-platform',
+      name: 'Test Platform',
+      isConfigured: true,
+    }),
+    connect: async () => ({
+      type: 'immediate' as const,
+      installationId: 'test-installation',
+    }),
+    disconnect: async () => {},
+    listInstallations: async () => [
+      {
+        id: 'test-installation',
+        platform: 'test-platform',
+        agentId: 'test-agent',
+        status: 'active' as const,
+        displayName: 'Test Installation',
+        installedAt: new Date(),
+      },
+    ],
+  };
+
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
     storage: new InMemoryStore(),
@@ -452,6 +481,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     workspace,
     processors: {
       'test-processor': testProcessor,
+    },
+    backgroundTasks: {
+      enabled: true,
+    },
+    channels: {
+      'test-platform': mockChannelProvider as any,
     },
   });
 
@@ -519,7 +554,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     if (observability) {
       await observability.createSpan({
         span: {
-          spanId: 'test-span-1',
+          spanId: 'test-span',
           traceId: 'test-trace',
           name: 'test-span',
           spanType: SpanType.GENERIC,
@@ -654,6 +689,28 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           description: 'A test stored skill',
           instructions: 'Test skill instructions',
         },
+      });
+    }
+
+    const backgroundTasks = await storage.getStore('backgroundTasks');
+    if (backgroundTasks) {
+      await backgroundTasks.createTask({
+        id: 'test-background-task-id',
+        status: 'pending',
+        toolName: 'test-tool',
+        toolCallId: 'test-tool-call-id',
+        agentId: 'test-agent',
+        runId: 'test-run',
+        args: { query: 'test' },
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 300_000,
+        createdAt: new Date(),
+      });
+
+      await backgroundTasks.updateTask('test-background-task-id', {
+        status: 'running',
+        startedAt: new Date(),
       });
     }
 

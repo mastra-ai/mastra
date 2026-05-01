@@ -246,7 +246,14 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @returns An object containing an array of tool information.
    */
   public abstract getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
+    tools: Array<{
+      name: string;
+      description?: string;
+      inputSchema: any;
+      outputSchema?: any;
+      toolType?: MCPToolType;
+      _meta?: Record<string, unknown>;
+    }>;
   };
 
   /**
@@ -254,9 +261,16 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param toolId The ID/name of the tool to retrieve.
    * @returns Tool information (name, description, inputSchema) or undefined if not found.
    */
-  public abstract getToolInfo(
-    toolId: string,
-  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined;
+  public abstract getToolInfo(toolId: string):
+    | {
+        name: string;
+        description?: string;
+        inputSchema: any;
+        outputSchema?: any;
+        toolType?: MCPToolType;
+        _meta?: Record<string, unknown>;
+      }
+    | undefined;
 
   /**
    * Executes a specific tool provided by this MCP server.

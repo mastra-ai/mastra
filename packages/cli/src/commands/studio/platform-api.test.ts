@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGET = vi.fn();
 const mockPOST = vi.fn();
@@ -23,6 +23,10 @@ vi.mock('../auth/client.js', async importOriginal => {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal('fetch', vi.fn());
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('fetchProjects', () => {
@@ -117,20 +121,20 @@ describe('uploadDeploy', () => {
   it('creates deploy, uploads zip via signed URL, and confirms', async () => {
     const mockFetch = vi.fn();
 
-    // POST /v1/studio/deploys → returns deploy with uploadUrl
-    mockFetch
+    // createApiClient().POST for create deploy
+    mockPOST
       .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' },
-          }),
+        data: { deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' } },
+        response: { status: 202 },
       })
-      // PUT to signed URL
-      .mockResolvedValueOnce({ ok: true })
       // POST upload-complete
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({
+        data: { status: 'ok' },
+        response: { status: 200 },
+      });
 
+    // PUT to signed URL via global fetch
+    mockFetch.mockResolvedValueOnce({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
 
     const { uploadDeploy } = await import('./platform-api.js');
@@ -138,61 +142,142 @@ describe('uploadDeploy', () => {
       gitBranch: 'main',
       projectName: 'my-app',
       envVars: { FOO: 'bar' },
+      disablePlatformObservability: true,
     });
 
     expect(result).toMatchObject({ id: 'dep-1', status: 'starting' });
 
-    // 3 fetch calls: create, upload, confirm
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    // createApiClient().POST called twice: create + upload-complete
+    expect(mockPOST).toHaveBeenCalledTimes(2);
+    expect(mockPOST).toHaveBeenCalledWith(
+      '/v1/studio/deploys',
+      expect.objectContaining({
+        body: { envVars: { FOO: 'bar' }, disablePlatformObservability: true },
+      }),
+    );
+    expect(mockPOST).toHaveBeenCalledWith('/v1/studio/deploys/{id}/upload-complete', {
+      params: { path: { id: 'dep-1' } },
+    });
 
-    // First call: POST /v1/studio/deploys
-    const createCall = mockFetch.mock.calls[0]!;
-    expect(createCall[0]).toBe('http://localhost:9999/v1/studio/deploys');
-    expect(createCall[1].method).toBe('POST');
+    // fetch called once: PUT to signed URL
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0]![0]).toBe('https://storage.example.com/signed-url');
+    expect(mockFetch.mock.calls[0]![1].method).toBe('PUT');
+  });
 
-    // Second call: PUT to signed URL
-    const uploadCall = mockFetch.mock.calls[1]!;
-    expect(uploadCall[0]).toBe('https://storage.example.com/signed-url');
-    expect(uploadCall[1].method).toBe('PUT');
+  it('omits disablePlatformObservability from deploy body when not provided', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true }));
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' } },
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({
+        data: { status: 'ok' },
+        response: { status: 200 },
+      });
 
-    // Third call: POST upload-complete
-    const completeCall = mockFetch.mock.calls[2]!;
-    expect(completeCall[0]).toBe('http://localhost:9999/v1/studio/deploys/dep-1/upload-complete');
-    expect(completeCall[1].method).toBe('POST');
+    const { uploadDeploy } = await import('./platform-api.js');
+    await uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip-data'));
+
+    expect(mockPOST).toHaveBeenCalledWith(
+      '/v1/studio/deploys',
+      expect.objectContaining({
+        body: { envVars: undefined },
+      }),
+    );
+    expect(mockPOST.mock.calls[0]![1].body).not.toHaveProperty('disablePlatformObservability');
   });
 
   it('throws when deploy creation fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: () => Promise.resolve({ detail: 'Internal server error' }),
-      }),
-    );
+    mockPOST.mockResolvedValueOnce({
+      data: undefined,
+      error: { detail: 'Internal server error' },
+      response: { status: 500 },
+    });
 
     const { uploadDeploy } = await import('./platform-api.js');
     await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow('Internal server error');
   });
 
   it('throws when artifact upload fails', async () => {
-    const mockFetch = vi.fn();
-    mockFetch
+    // Create deploy succeeds
+    mockPOST
       .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' },
-          }),
+        data: { deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' } },
+        response: { status: 202 },
       })
-      .mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden' });
+      // Cancel deploy (best-effort cleanup)
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', status: 'cancelled' },
+        response: { status: 200 },
+      });
 
-    vi.stubGlobal('fetch', mockFetch);
+    // Artifact upload fails
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden' }));
 
     const { uploadDeploy } = await import('./platform-api.js');
     await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
       'Artifact upload failed: 403',
     );
+  });
+});
+
+describe('pollDeploy', () => {
+  it('retries transient polling failures up to 3 times', async () => {
+    vi.useFakeTimers();
+
+    const deploy = { id: 'd1', status: 'running', instanceUrl: 'https://x.com', error: null };
+    const networkError = new TypeError('network request failed');
+    Object.assign(networkError, { cause: { code: 'ECONNRESET' } });
+    mockGET
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce({ data: { deploy }, response: { status: 200 } });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await expect(resultPromise).resolves.toEqual(deploy);
+    expect(mockGET).toHaveBeenCalledTimes(4);
+  });
+
+  it('throws after exhausting transient polling retries', async () => {
+    vi.useFakeTimers();
+
+    const networkError = new TypeError('network request failed');
+    Object.assign(networkError, { cause: { code: 'ECONNRESET' } });
+    mockGET.mockRejectedValue(networkError);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('network request failed');
+
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await rejection;
+    expect(mockGET).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not retry non-transient polling failures', async () => {
+    vi.useFakeTimers();
+
+    mockGET.mockRejectedValue(new Error('Invalid deploy payload'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('Invalid deploy payload');
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    await rejection;
+    expect(mockGET).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,7 +5,7 @@
  * MastraTUI class.
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
@@ -28,6 +28,7 @@ import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
 import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { TaskProgressComponent } from './components/task-progress.js';
+import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
 import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
@@ -111,7 +112,9 @@ export interface TUIState {
   /** Track slash command boxes for expand/collapse */
   allSlashCommandComponents: SlashCommandComponent[];
   /** Track inline system reminders for expand/collapse */
-  allSystemReminderComponents: SystemReminderComponent[];
+  allSystemReminderComponents: Array<SystemReminderComponent | TemporalGapComponent>;
+  /** Track rendered message components by message id for anchored inserts */
+  messageComponentsById: Map<string, Component>;
   /** Track shell passthrough components for expand/collapse */
   allShellComponents: ShellStreamComponent[];
   /** Track active subagent tasks */
@@ -165,6 +168,8 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationTTLMarker?: OMMarkerComponent;
+  activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
@@ -235,6 +240,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
+    messageComponentsById: new Map(),
     allShellComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
