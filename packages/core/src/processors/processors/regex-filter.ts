@@ -242,7 +242,10 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
         retry: false,
         metadata: {
           processorId: this.id,
-          matches,
+          matches: matches.map(m => ({
+            ...m,
+            match: '[REDACTED_MATCH]',
+          })),
           strategy: 'block',
         },
       },
@@ -265,7 +268,12 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
 
   private redactMessages(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages.map(msg => {
-      if (!msg.content || !msg.content.parts) return msg;
+      if (typeof msg.content === 'string') {
+        return { ...msg, content: this.redactText(msg.content) };
+      }
+      if (!msg.content || typeof msg.content !== 'object' || !('parts' in msg.content) || !msg.content.parts) {
+        return msg;
+      }
 
       const newParts = msg.content.parts.map(part => {
         if (part.type === 'text' && 'text' in part) {

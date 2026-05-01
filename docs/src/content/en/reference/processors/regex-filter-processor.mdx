@@ -174,7 +174,7 @@ const agent = new Agent({
 When the `block` strategy is active (default), `RegexFilterProcessor` throws a `TripWire` error with `retry: false` when any pattern matches. The TripWire metadata includes:
 
 - `processorId`: `'regex-filter'`
-- `matches`: Array of match objects with `rule`, `match`, and `index`
+- `matches`: Array of match objects with `rule`, `match` (redacted to `'[REDACTED_MATCH]'`), and `index`
 - `strategy`: `'block'`
 
 ## Built-in presets
@@ -184,4 +184,3 @@ When the `block` strategy is active (default), `RegexFilterProcessor` throws a `
 | `pii` | Emails, phone numbers, SSNs, credit card numbers | `[EMAIL]`, `[PHONE]`, `[SSN]`, `[CREDIT_CARD]` |
 | `secrets` | API keys, bearer tokens, AWS access keys | `[API_KEY]`, `[BEARER_TOKEN]`, `[AWS_KEY]` |
 | `urls` | HTTP/HTTPS URLs | `[URL]` |
-| `injection` | Instruction override, system prompt override, role hijack | `[BLOCKED]` |

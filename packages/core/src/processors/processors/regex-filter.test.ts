@@ -56,6 +56,7 @@ function createStreamArgs(part: ChunkType): ProcessOutputStreamArgs {
 
 describe('RegexFilterProcessor', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -157,6 +158,7 @@ describe('RegexFilterProcessor', () => {
         });
         expect(tripwire.options.metadata.matches.length).toBeGreaterThan(0);
         expect(tripwire.options.metadata.matches[0].rule).toBe('email');
+        expect(tripwire.options.metadata.matches[0].match).toBe('[REDACTED_MATCH]');
       }
     });
   });
@@ -442,6 +444,44 @@ describe('RegexFilterProcessor', () => {
       const args = createOutputResultArgs(messages);
       const result = filter.processOutputResult(args);
       expect(result).toBe(messages);
+    });
+  });
+
+  describe('string content redaction', () => {
+    it('redacts string-form message content', () => {
+      const filter = new RegexFilterProcessor({
+        presets: ['pii'],
+        strategy: 'redact',
+      });
+
+      const msg: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: 'Contact user@example.com please' as any,
+        createdAt: new Date(),
+      };
+      const args = createInputArgs([msg]);
+      const result = filter.processInput(args) as MastraDBMessage[];
+
+      expect(result[0].content).toBe('Contact [EMAIL] please');
+    });
+
+    it('redacts string-form message content in output', () => {
+      const filter = new RegexFilterProcessor({
+        presets: ['pii'],
+        strategy: 'redact',
+      });
+
+      const msg: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        content: 'Your SSN is 123-45-6789' as any,
+        createdAt: new Date(),
+      };
+      const args = createOutputResultArgs([msg]);
+      const result = filter.processOutputResult(args) as MastraDBMessage[];
+
+      expect(result[0].content).toBe('Your SSN is [SSN]');
     });
   });
 
