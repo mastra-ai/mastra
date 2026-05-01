@@ -911,9 +911,7 @@ export class Workspace<
    * Load file contents for search indexing in parallel (bounded by {@link FS_READ_CONCURRENCY}).
    * Paths that cannot be read as UTF-8 text are omitted (same behavior as {@link indexFileForSearch}).
    */
-  private async batchReadFiles(
-    files: string[],
-  ): Promise<Array<{ filePath: string; docs: IndexDocument[] }>> {
+  private async batchReadFiles(files: string[]): Promise<Array<{ filePath: string; docs: IndexDocument[] }>> {
     if (!this._fs || files.length === 0) {
       return [];
     }
@@ -955,9 +953,9 @@ export class Workspace<
     try {
       const entries = await this.batchReadFiles(paths);
       // Clear stale single-doc/chunked entries from previous indexing passes.
-      for (const { filePath } of entries) {
-        await engine.removeSource(filePath);
-      }
+      await pMap(entries, ({ filePath }) => engine.removeSource(filePath), {
+        concurrency: FS_READ_CONCURRENCY,
+      });
       const docs = entries.flatMap(({ docs }) => docs);
       await engine.indexMany(docs);
       return entries.map(({ filePath }) => filePath);
