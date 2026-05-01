@@ -1638,9 +1638,9 @@ export type ProviderModelsMap = {
   readonly dinference: readonly ['glm-4.7', 'glm-5', 'gpt-oss-120b'];
   readonly vivgrid: readonly [
     'deepseek-v3.2',
+    'deepseek-v4-pro',
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
-    'glm-5',
     'gpt-5-mini',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
@@ -1649,6 +1649,7 @@ export type ProviderModelsMap = {
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.4-nano',
+    'gpt-5.5',
   ];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2',
@@ -2595,6 +2596,7 @@ export type ProviderModelsMap = {
     'grok-4.20-0309-non-reasoning',
     'grok-4.20-0309-reasoning',
     'grok-4.20-multi-agent-0309',
+    'grok-4.3',
     'grok-beta',
     'grok-code-fast-1',
     'grok-vision-beta',

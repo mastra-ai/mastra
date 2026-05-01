@@ -1879,9 +1879,9 @@
       "name": "Vivgrid",
       "models": [
         "deepseek-v3.2",
+        "deepseek-v4-pro",
         "gemini-3.1-flash-lite-preview",
         "gemini-3.1-pro-preview",
-        "glm-5",
         "gpt-5-mini",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
@@ -1889,7 +1889,8 @@
         "gpt-5.3-codex",
         "gpt-5.4",
         "gpt-5.4-mini",
-        "gpt-5.4-nano"
+        "gpt-5.4-nano",
+        "gpt-5.5"
       ],
       "docUrl": "https://docs.vivgrid.com/models",
       "gateway": "models.dev",
@@ -3052,6 +3053,7 @@
         "grok-4.20-0309-non-reasoning",
         "grok-4.20-0309-reasoning",
         "grok-4.20-multi-agent-0309",
+        "grok-4.3",
         "grok-beta",
         "grok-code-fast-1",
         "grok-vision-beta"
@@ -6342,9 +6344,9 @@
     "dinference": ["glm-4.7", "glm-5", "gpt-oss-120b"],
     "vivgrid": [
       "deepseek-v3.2",
+      "deepseek-v4-pro",
       "gemini-3.1-flash-lite-preview",
       "gemini-3.1-pro-preview",
-      "glm-5",
       "gpt-5-mini",
       "gpt-5.1-codex",
       "gpt-5.1-codex-max",
@@ -6352,7 +6354,8 @@
       "gpt-5.3-codex",
       "gpt-5.4",
       "gpt-5.4-mini",
-      "gpt-5.4-nano"
+      "gpt-5.4-nano",
+      "gpt-5.5"
     ],
     "deepinfra": [
       "MiniMaxAI/MiniMax-M2",
@@ -7293,6 +7296,7 @@
       "grok-4.20-0309-non-reasoning",
       "grok-4.20-0309-reasoning",
       "grok-4.20-multi-agent-0309",
+      "grok-4.3",
       "grok-beta",
       "grok-code-fast-1",
       "grok-vision-beta"

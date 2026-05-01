@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
-import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
+import { InternalSpans, SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import type {
   TracingEvent,
   ObservabilityExporter,
@@ -9,6 +9,7 @@ import type {
   ExportedSpan,
   LogEvent,
   MetricEvent,
+  ObservabilityBridge,
 } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
@@ -108,6 +109,33 @@ class TestExporter implements ObservabilityExporter {
     this.logEvents = [];
     this.metricEvents = [];
   }
+}
+
+function createMockBridge(overrides: Partial<ObservabilityBridge> = {}): ObservabilityBridge {
+  return {
+    name: 'mock-bridge',
+    exportTracingEvent: vi.fn().mockResolvedValue(undefined),
+    createSpan: vi.fn().mockImplementation(({ parent }: any) => {
+      if (parent) {
+        return {
+          spanId: `bridge-${parent.id}-child`,
+          traceId: parent.traceId,
+          parentSpanId: parent.id,
+        };
+      }
+
+      return {
+        spanId: 'bridge-root-span',
+        traceId: 'bridge-root-trace',
+        parentSpanId: undefined,
+      };
+    }),
+    executeInContext: vi.fn().mockImplementation(async (_spanId: string, fn: () => Promise<any>) => fn()),
+    executeInContextSync: vi.fn().mockImplementation((_spanId: string, fn: () => any) => fn()),
+    flush: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
 }
 
 describe('Tracing', () => {
@@ -223,6 +251,60 @@ describe('Tracing', () => {
       // Grandchild should have correct parent and isRootSpan should be false
       expect(grandchildSpan.parent).toBe(childSpan);
       expect(grandchildSpan.isRootSpan).toBe(false);
+    });
+
+    it('should use the nearest external ancestor when executing an internal span in bridge context', async () => {
+      const bridge = createMockBridge();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        bridge,
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-123' },
+      });
+
+      const internalStep = agentSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.MODEL },
+      });
+
+      await internalStep.executeInContext(async () => 'ok');
+
+      expect(bridge.executeInContext).toHaveBeenCalledWith(agentSpan.id, expect.any(Function));
+    });
+
+    it('should use the nearest external ancestor when executing an internal span in sync bridge context', () => {
+      const bridge = createMockBridge();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        bridge,
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-123' },
+      });
+
+      const internalStep = agentSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.MODEL },
+      });
+
+      internalStep.executeInContextSync(() => 'ok');
+
+      expect(bridge.executeInContextSync).toHaveBeenCalledWith(agentSpan.id, expect.any(Function));
     });
 
     it('should maintain consistent traceId across span hierarchy', () => {
