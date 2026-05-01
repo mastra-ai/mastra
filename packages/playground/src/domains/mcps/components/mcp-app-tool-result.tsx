@@ -8,6 +8,7 @@ interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
+  onSendMessage?: (content: string) => void;
 }
 
 /**
@@ -18,7 +19,7 @@ interface McpAppToolResultProps {
  * (ui/notifications/tool-input and ui/notifications/tool-result), enabling
  * the app to hydrate with data from the tool call.
  */
-export function McpAppToolResult({ appInfo, toolArgs, toolResult }: McpAppToolResultProps) {
+export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage }: McpAppToolResultProps) {
   const client = useMastraClient();
 
   const { data: html, isLoading } = useQuery({
@@ -53,6 +54,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult }: McpAppToolRe
       toolInput={toolArgs}
       toolResult={toolResult}
       onToolCall={handleToolCall}
+      onSendMessage={onSendMessage}
       className="rounded-md border border-border1"
     />
   );

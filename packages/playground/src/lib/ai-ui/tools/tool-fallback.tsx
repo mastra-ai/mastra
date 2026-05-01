@@ -1,7 +1,8 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
+import { useAui } from '@assistant-ui/react';
 
 import type { MastraUIMessage } from '@mastra/react';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
@@ -37,6 +38,17 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isBrowser = isBrowserTool(toolName);
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
+  const aui = useAui();
+
+  const handleMcpAppSendMessage = useCallback(
+    (content: string) => {
+      aui.thread().append({
+        role: 'user',
+        content: [{ type: 'text', text: content }],
+      });
+    },
+    [aui],
+  );
 
   useEffect(() => {
     if (!isBrowser || !browserCtx) return;
@@ -213,7 +225,12 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolCalled={toolCalled}
       />
       {mcpAppInfo && result !== undefined && (
-        <McpAppToolResult appInfo={mcpAppInfo} toolArgs={args} toolResult={result} />
+        <McpAppToolResult
+          appInfo={mcpAppInfo}
+          toolArgs={args}
+          toolResult={result}
+          onSendMessage={handleMcpAppSendMessage}
+        />
       )}
     </>
   );
