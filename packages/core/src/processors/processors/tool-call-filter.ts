@@ -129,6 +129,20 @@ export class ToolCallFilter implements Processor {
     return message.content.parts.filter((part: any) => part.type === 'tool-invocation');
   }
 
+  private hasTopLevelTextContent(message: MastraDBMessage): boolean {
+    const content = message.content as unknown;
+    if (typeof content === 'string') {
+      return content.trim().length > 0;
+    }
+
+    if (!content || typeof content !== 'object') {
+      return false;
+    }
+
+    const topLevelContent = (content as { content?: unknown }).content;
+    return typeof topLevelContent === 'string' && topLevelContent.trim().length > 0;
+  }
+
   private filterAllToolCalls(messages: MastraDBMessage[], preserveToolCallIds = new Set<string>()): MastraDBMessage[] {
     return messages
       .map(message => {
@@ -152,7 +166,7 @@ export class ToolCallFilter implements Processor {
           return preserveToolCallIds.has(part.toolInvocation?.toolCallId ?? part.toolInvocation?.toolCall?.id);
         });
 
-        if (nonToolParts.length === 0) {
+        if (nonToolParts.length === 0 && !this.hasTopLevelTextContent(message)) {
           return null;
         }
 
@@ -238,7 +252,7 @@ export class ToolCallFilter implements Processor {
           return true;
         });
 
-        if (filteredParts.length === 0) {
+        if (filteredParts.length === 0 && !this.hasTopLevelTextContent(message)) {
           return null;
         }
 
