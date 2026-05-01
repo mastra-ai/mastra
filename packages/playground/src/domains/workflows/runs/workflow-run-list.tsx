@@ -1,7 +1,5 @@
-import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import {
   AlertDialog,
-  Badge,
   Skeleton,
   Spinner,
   ThreadDeleteButton,
@@ -13,8 +11,9 @@ import {
   Icon,
 } from '@mastra/playground-ui';
 import { formatDate } from 'date-fns';
-import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import { WorkflowRunStatusBadge } from '../components/workflow-run-status-badge';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -120,62 +119,6 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
       <div ref={setEndOfListElement} />
     </div>
   );
-};
-
-interface WorkflowRunStatusProps {
-  status: WorkflowRunStatus;
-}
-
-const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
-  if (status === 'running') {
-    return (
-      <Badge variant="default" icon={<Spinner />}>
-        {status}
-      </Badge>
-    );
-  }
-
-  if (status === 'failed') {
-    return (
-      <Badge variant="default" icon={<X className="text-accent2" />}>
-        {status}
-      </Badge>
-    );
-  }
-
-  if (status === 'canceled') {
-    return (
-      <Badge variant="default" icon={<CircleSlash className="text-neutral3" />}>
-        {status}
-      </Badge>
-    );
-  }
-
-  if (status === 'pending' || status === 'waiting') {
-    return (
-      <Badge variant="default" icon={<Clock className="text-neutral3" />}>
-        {status}
-      </Badge>
-    );
-  }
-
-  if (status === 'suspended') {
-    return (
-      <Badge variant="default" icon={<CirclePause className="text-accent3" />}>
-        {status}
-      </Badge>
-    );
-  }
-
-  if (status === 'success') {
-    return (
-      <Badge variant="default" icon={<Check className="text-accent1" />}>
-        {status}
-      </Badge>
-    );
-  }
-
-  return <Badge variant="default">{status}</Badge>;
 };
 
 interface DeleteRunDialogProps {

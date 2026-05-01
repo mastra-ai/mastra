@@ -208,9 +208,10 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   });
 }
 
-if (skillPaths.length > 0) {
+const loadedSkillPaths = skillPaths.filter(p => existsSync(p));
+if (loadedSkillPaths.length > 0) {
   console.info(`Skills loaded from:`);
-  for (const p of skillPaths) {
+  for (const p of loadedSkillPaths) {
     console.info(`  - ${p}`);
   }
 }

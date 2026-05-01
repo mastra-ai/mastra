@@ -793,14 +793,14 @@ describe('Observability Registry', () => {
 
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
 
-      // Spy on console to check for warning message
-      // Note: ConsoleLogger.warn() calls console.info() internally
+      // Spy on console to check for disabled message
+      // Note: ConsoleLogger.debug() calls console.info() internally
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      // CloudExporter should not throw, but log warning instead
+      // CloudExporter should not throw, but log debug message instead
       const exporter = new CloudExporter({ logger });
 
-      // Verify warning message was logged with new exporter name
+      // Verify debug message was logged with exporter name
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining(
           'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
