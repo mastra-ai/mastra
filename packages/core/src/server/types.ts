@@ -66,8 +66,12 @@ export type ZodOpenAPIRouteConfig = {
   /**
    * Request schemas using Zod.
    * Each schema is converted to JSON Schema when building the OpenAPI spec.
-   * The presence of this property is used to distinguish `ZodOpenAPIRouteConfig`
-   * from `DescribeRouteOptions` at runtime.
+   *
+   * At runtime, configs with `request` present are unambiguously identified as
+   * `ZodOpenAPIRouteConfig`. Configs without `request` but also without the
+   * `parameters[]` / `requestBody` fields of `DescribeRouteOptions` are also
+   * treated as `ZodOpenAPIRouteConfig` — so fields like `operationId` are
+   * preserved even when no request schemas are needed.
    */
   request?: {
     /**

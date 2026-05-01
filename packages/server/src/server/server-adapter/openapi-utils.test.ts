@@ -294,4 +294,83 @@ describe('convertCustomRoutesToOpenAPIPaths — DescribeRouteOptions (existing f
     expect(schema.type).toBe('object');
     expect(schema.properties).toHaveProperty('items');
   });
+
+  it('preserves raw JSON Schema responses in DescribeRouteOptions (no Zod)', () => {
+    const routes: ApiRoute[] = [
+      {
+        path: '/status',
+        method: 'GET',
+        handler: mockHandler,
+        openapi: {
+          summary: 'Status check',
+          parameters: [],
+          responses: {
+            200: {
+              description: 'OK',
+              content: {
+                'application/json': {
+                  schema: { type: 'object', properties: { status: { type: 'string' } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    const paths = convertCustomRoutesToOpenAPIPaths(routes);
+    const op = paths['/status']['get'];
+
+    expect(op.summary).toBe('Status check');
+    const schema = op.responses['200'].content['application/json'].schema;
+    expect(schema.type).toBe('object');
+    expect(schema.properties).toHaveProperty('status');
+  });
+});
+
+describe('convertCustomRoutesToOpenAPIPaths — operationId preservation', () => {
+  it('preserves operationId on ZodOpenAPIRouteConfig without request field', () => {
+    // Regression: configs like { operationId, responses } type-check as
+    // ZodOpenAPIRouteConfig but were previously misrouted to the legacy converter,
+    // which silently dropped operationId.
+    const routes: ApiRoute[] = [
+      {
+        path: '/ping',
+        method: 'GET',
+        handler: mockHandler,
+        openapi: {
+          operationId: 'getPing',
+          summary: 'Ping',
+          responses: {
+            200: { description: 'pong' },
+          },
+        },
+      },
+    ];
+
+    const paths = convertCustomRoutesToOpenAPIPaths(routes);
+    const op = paths['/ping']['get'];
+
+    expect(op.operationId).toBe('getPing');
+    expect(op.summary).toBe('Ping');
+    expect(op.responses['200'].description).toBe('pong');
+  });
+
+  it('does not pollute Object.prototype when a route path is "__proto__"', () => {
+    const routes: ApiRoute[] = [
+      {
+        path: '__proto__',
+        method: 'GET',
+        handler: mockHandler,
+        openapi: {
+          request: {},
+          responses: { 200: { description: 'ok' } },
+        },
+      },
+    ];
+
+    convertCustomRoutesToOpenAPIPaths(routes);
+
+    expect(({} as any).get).toBeUndefined();
+  });
 });

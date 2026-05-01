@@ -213,7 +213,9 @@ export function generateOpenAPIDocument(
   routes: readonly ServerRoute[],
   info: { title: string; version: string; description?: string },
 ): any {
-  const paths: Record<string, any> = {};
+  // Use Object.create(null) to prevent prototype pollution if a route path is
+  // ever '__proto__', 'constructor', or 'toString'.
+  const paths: Record<string, any> = Object.create(null);
 
   // Build paths object from routes
   // Convert Express-style :param to OpenAPI-style {param}
@@ -222,7 +224,7 @@ export function generateOpenAPIDocument(
 
     const openapiPath = route.path.replace(/:(\w+)/g, '{$1}');
     if (!paths[openapiPath]) {
-      paths[openapiPath] = {};
+      paths[openapiPath] = Object.create(null);
     }
 
     // Convert Zod schemas to JSON Schema
@@ -242,15 +244,31 @@ export function generateOpenAPIDocument(
 
 /**
  * Type guard: returns true when `openapi` was created using the Zod-based
- * `ZodOpenAPIRouteConfig` format (i.e. it has a `request` key) rather than
- * the raw `DescribeRouteOptions` / `OpenAPIV3_1.OperationObject` format.
+ * `ZodOpenAPIRouteConfig` format rather than the raw `DescribeRouteOptions` /
+ * `OpenAPIV3_1.OperationObject` format.
  *
  * `DescribeRouteOptions` extends `OpenAPIV3_1.OperationObject` which uses
  * `parameters[]` / `requestBody`; `ZodOpenAPIRouteConfig` uses `request.params`,
  * `request.query`, and `request.body` instead.
+ *
+ * Detection strategy:
+ *  1. If `request` is present → ZodOpenAPIRouteConfig (unambiguous).
+ *  2. If `parameters` (array) or `requestBody` is present → DescribeRouteOptions.
+ *  3. Otherwise, if `responses` is present, assume ZodOpenAPIRouteConfig so that
+ *     configs like `{ operationId, responses }` (no request schemas) are routed
+ *     through the Zod converter and don't silently lose `operationId`.
  */
 function isZodOpenAPIRouteConfig(openapi: unknown): openapi is ZodOpenAPIRouteConfig {
-  return typeof openapi === 'object' && openapi !== null && 'request' in openapi;
+  if (typeof openapi !== 'object' || openapi === null) return false;
+  if ('request' in openapi) return true;
+  // DescribeRouteOptions distinguishing fields
+  const hasDescribeRouteFields =
+    ('parameters' in openapi && Array.isArray((openapi as any).parameters)) ||
+    'requestBody' in openapi;
+  if (hasDescribeRouteFields) return false;
+  // No request schemas provided and no DescribeRouteOptions fields — treat as
+  // ZodOpenAPIRouteConfig when `responses` is present (required field on the type).
+  return 'responses' in openapi;
 }
 
 /**
@@ -378,7 +396,9 @@ function convertZodRouteConfigToOperation(route: ApiRoute, openapi: ZodOpenAPIRo
  * @returns OpenAPI paths object to be merged into the main spec
  */
 export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<string, any> {
-  const paths: Record<string, any> = {};
+  // Use Object.create(null) to prevent prototype pollution if a route path is
+  // ever '__proto__', 'constructor', or 'toString'.
+  const paths: Record<string, any> = Object.create(null);
 
   for (const route of routes) {
     // Skip routes without openapi metadata or routes marked as hidden
@@ -395,7 +415,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
     const openapiPath = route.path.replace(/:(\w+)/g, '{$1}');
 
     if (!paths[openapiPath]) {
-      paths[openapiPath] = {};
+      paths[openapiPath] = Object.create(null);
     }
 
     const method = route.method.toLowerCase();
