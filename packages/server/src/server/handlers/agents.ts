@@ -2628,6 +2628,7 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
 export const GET_AGENT_SKILL_ROUTE = createRoute({
   method: 'GET',
   path: '/agents/:agentId/skills/:skillName',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
   queryParamSchema: skillDisambiguationQuerySchema,

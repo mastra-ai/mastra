@@ -238,6 +238,7 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
 export const LIST_WORKSPACES_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces',
+  requiresAuth: true,
   responseType: 'json',
   responseSchema: listWorkspacesResponseSchema,
   summary: 'List all workspaces',
@@ -374,6 +375,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 export const GET_WORKSPACE_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   responseSchema: workspaceInfoResponseSchema,
@@ -471,6 +473,7 @@ export const GET_WORKSPACE_ROUTE = createRoute({
 export const WORKSPACE_FS_READ_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/fs/read',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsReadQuerySchema,
@@ -517,6 +520,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
 export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/fs/write',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: fsWriteBodySchema,
@@ -564,6 +568,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
 export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/fs/list',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsListQuerySchema,
@@ -610,6 +615,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   method: 'DELETE',
   path: '/workspaces/:workspaceId/fs/delete',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsDeleteQuerySchema,
@@ -664,6 +670,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
 export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/fs/mkdir',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: fsMkdirBodySchema,
@@ -705,6 +712,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
 export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/fs/stat',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsStatQuerySchema,
@@ -755,6 +763,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
 export const WORKSPACE_SEARCH_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/search',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: searchQuerySchema,
@@ -827,6 +836,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
 export const WORKSPACE_INDEX_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/index',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: indexBodySchema,
@@ -874,6 +884,7 @@ const SKILLS_SH_PATH_PREFIX = `${SKILLS_SH_DIR}/`;
 export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   responseSchema: listSkillsResponseSchema,
@@ -942,6 +953,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/:skillName',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   queryParamSchema: skillDisambiguationQuerySchema,
@@ -995,6 +1007,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/:skillName/references',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   queryParamSchema: skillDisambiguationQuerySchema,
@@ -1041,6 +1054,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/:skillName/references/:referencePath',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
   queryParamSchema: skillDisambiguationQuerySchema,
@@ -1107,6 +1121,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills/search',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: searchSkillsQuerySchema,
@@ -1170,6 +1185,7 @@ const SKILLS_SH_API_URL = 'https://skills-api-production.up.railway.app';
 export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills-sh/search',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShSearchQuerySchema,
@@ -1226,6 +1242,7 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
 export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills-sh/popular',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShPopularQuerySchema,
@@ -1362,6 +1379,7 @@ async function fetchSkillFiles(owner: string, repo: string, skillName: string): 
 export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills-sh/preview',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShPreviewQuerySchema,
@@ -1410,6 +1428,7 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
 export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/install',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShInstallBodySchema,
@@ -1526,6 +1545,7 @@ interface SkillMetaFile {
 export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/remove',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShRemoveBodySchema,
@@ -1598,6 +1618,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/update',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShUpdateBodySchema,
