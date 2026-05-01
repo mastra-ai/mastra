@@ -3,7 +3,7 @@ import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { ApiRoute, MastraAuthConfig, Methods } from './types';
+import type { ApiRoute, MastraAuthConfig, Methods, ZodOpenAPIRouteConfig } from './types';
 
 export type {
   MastraAuthConfig,
@@ -13,6 +13,7 @@ export type {
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
+  ZodOpenAPIRouteConfig,
 } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
@@ -40,7 +41,7 @@ type CustomRouteVariables = {
 
 type RegisterApiRouteOptions<P extends string> = {
   method: Methods;
-  openapi?: DescribeRouteOptions;
+  openapi?: DescribeRouteOptions | ZodOpenAPIRouteConfig;
   handler?: Handler<
     {
       Variables: CustomRouteVariables;

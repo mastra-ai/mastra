@@ -9,13 +9,120 @@ import type { MastraAuthProvider } from './auth';
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
+/**
+ * Zod-based OpenAPI route configuration.
+ * An alternative to `DescribeRouteOptions` that lets you define request/response schemas
+ * using Zod schemas directly (inspired by @hono/zod-openapi's `createRoute` API).
+ *
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ * import { registerApiRoute } from '@mastra/core/server';
+ *
+ * export const getUserRoute = registerApiRoute('/users/:id', {
+ *   method: 'GET',
+ *   openapi: {
+ *     summary: 'Get user by ID',
+ *     tags: ['users'],
+ *     request: {
+ *       params: z.object({ id: z.string() }),
+ *     },
+ *     responses: {
+ *       200: {
+ *         description: 'User found',
+ *         content: {
+ *           'application/json': {
+ *             schema: z.object({ id: z.string(), name: z.string() }),
+ *           },
+ *         },
+ *       },
+ *       404: { description: 'User not found' },
+ *     },
+ *   },
+ *   handler: async (c) => {
+ *     const { id } = c.req.param();
+ *     return c.json({ id, name: 'Alice' });
+ *   },
+ * });
+ * ```
+ */
+export type ZodOpenAPIRouteConfig = {
+  /** Route summary shown in OpenAPI docs */
+  summary?: string;
+  /** Route description shown in OpenAPI docs */
+  description?: string;
+  /** Tags for grouping routes in OpenAPI docs */
+  tags?: string[];
+  /** Whether this route is deprecated */
+  deprecated?: boolean;
+  /** Unique operation identifier for client generation */
+  operationId?: string;
+  /** Whether to hide this route from OpenAPI docs */
+  hide?: boolean;
+  /** External documentation reference */
+  externalDocs?: { url: string; description?: string };
+  /** Security requirements for this route */
+  security?: Record<string, string[]>[];
+  /**
+   * Request schemas using Zod.
+   * Each schema is converted to JSON Schema when building the OpenAPI spec.
+   * The presence of this property is used to distinguish `ZodOpenAPIRouteConfig`
+   * from `DescribeRouteOptions` at runtime.
+   */
+  request?: {
+    /**
+     * Zod object schema for path parameters.
+     * Field names must match the path param names in the route path (e.g. `:id`).
+     *
+     * @example
+     * params: z.object({ id: z.string().describe('User ID') })
+     */
+    params?: object;
+    /**
+     * Zod object schema for query parameters.
+     *
+     * @example
+     * query: z.object({ limit: z.coerce.number().optional(), cursor: z.string().optional() })
+     */
+    query?: object;
+    /**
+     * Request body schema.
+     * Supports multiple media types.
+     *
+     * @example
+     * body: {
+     *   content: { 'application/json': { schema: z.object({ name: z.string() }) } },
+     * }
+     */
+    body?: {
+      content: { [mediaType: string]: { schema: object } };
+      /** Whether the request body is required (default: true) */
+      required?: boolean;
+      /** Description of the request body */
+      description?: string;
+    };
+  };
+  /**
+   * Response schemas by HTTP status code.
+   * Zod schemas in `content[mediaType].schema` are converted to JSON Schema automatically.
+   */
+  responses: {
+    [statusCode: string]: {
+      description: string;
+      content?: {
+        [mediaType: string]: { schema: object };
+      };
+    };
+  };
+};
+
 export type ApiRoute =
   | {
       path: string;
       method: Methods;
       handler: Handler;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
-      openapi?: DescribeRouteOptions;
+      openapi?: DescribeRouteOptions | ZodOpenAPIRouteConfig;
       requiresAuth?: boolean;
     }
   | {
@@ -23,7 +130,7 @@ export type ApiRoute =
       method: Methods;
       createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
-      openapi?: DescribeRouteOptions;
+      openapi?: DescribeRouteOptions | ZodOpenAPIRouteConfig;
       requiresAuth?: boolean;
     };
 

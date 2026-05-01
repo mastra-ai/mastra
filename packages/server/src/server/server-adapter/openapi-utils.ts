@@ -1,6 +1,6 @@
 import type { PublicSchema } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, ZodOpenAPIRouteConfig } from '@mastra/core/server';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat';
 import type { JSONSchema7 } from '@mastra/schema-compat';
@@ -241,9 +241,138 @@ export function generateOpenAPIDocument(
 }
 
 /**
+ * Type guard: returns true when `openapi` was created using the Zod-based
+ * `ZodOpenAPIRouteConfig` format (i.e. it has a `request` key) rather than
+ * the raw `DescribeRouteOptions` / `OpenAPIV3_1.OperationObject` format.
+ *
+ * `DescribeRouteOptions` extends `OpenAPIV3_1.OperationObject` which uses
+ * `parameters[]` / `requestBody`; `ZodOpenAPIRouteConfig` uses `request.params`,
+ * `request.query`, and `request.body` instead.
+ */
+function isZodOpenAPIRouteConfig(openapi: unknown): openapi is ZodOpenAPIRouteConfig {
+  return typeof openapi === 'object' && openapi !== null && 'request' in openapi;
+}
+
+/**
+ * Returns true when `schema` looks like a Zod schema (v3 uses `_def`, v4 uses `_zod`).
+ */
+function isZodSchema(schema: unknown): boolean {
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    ('_def' in schema || '_zod' in (schema as Record<string, unknown>))
+  );
+}
+
+/**
+ * Converts a `ZodOpenAPIRouteConfig` to a plain OpenAPI operation object,
+ * translating Zod schemas in `request.params`, `request.query`, `request.body`,
+ * and `responses` to JSON Schema.
+ */
+function convertZodRouteConfigToOperation(route: ApiRoute, openapi: ZodOpenAPIRouteConfig): Record<string, any> {
+  const operation: Record<string, any> = {
+    summary: openapi.summary || `${route.method} ${route.path}`,
+    description: openapi.description,
+    tags: openapi.tags || ['custom'],
+    deprecated: openapi.deprecated,
+    operationId: openapi.operationId,
+    externalDocs: openapi.externalDocs,
+    security: openapi.security,
+  };
+
+  const parameters: any[] = [];
+
+  // Convert request.params (Zod object → path parameters)
+  if (openapi.request?.params && isZodSchema(openapi.request.params)) {
+    const jsonSchema = zodToJsonSchema(openapi.request.params as any, 'openApi3', 'none') as any;
+    const properties = jsonSchema.properties || {};
+    Object.entries(properties).forEach(([name, schema]) => {
+      parameters.push({
+        name,
+        in: 'path',
+        required: true,
+        description: (schema as any).description || `The ${name} parameter`,
+        schema,
+      });
+    });
+  }
+
+  // Convert request.query (Zod object → query parameters)
+  if (openapi.request?.query && isZodSchema(openapi.request.query)) {
+    const jsonSchema = zodToJsonSchema(openapi.request.query as any, 'openApi3', 'none') as any;
+    const properties = jsonSchema.properties || {};
+    const required: string[] = jsonSchema.required || [];
+    Object.entries(properties).forEach(([name, schema]) => {
+      parameters.push({
+        name,
+        in: 'query',
+        required: required.includes(name),
+        description: (schema as any).description || `Query parameter: ${name}`,
+        schema,
+      });
+    });
+  }
+
+  if (parameters.length > 0) {
+    operation.parameters = parameters;
+  }
+
+  // Convert request.body (multi-media-type support)
+  if (openapi.request?.body?.content) {
+    operation.requestBody = {
+      required: openapi.request.body.required ?? true,
+      description: openapi.request.body.description,
+      content: {},
+    };
+    for (const [mediaType, mediaContent] of Object.entries(openapi.request.body.content)) {
+      if (mediaContent?.schema && isZodSchema(mediaContent.schema)) {
+        operation.requestBody.content[mediaType] = {
+          schema: zodToJsonSchema(mediaContent.schema as any, 'openApi3', 'none'),
+        };
+      } else if (mediaContent?.schema) {
+        operation.requestBody.content[mediaType] = mediaContent;
+      }
+    }
+  }
+
+  // Convert responses
+  operation.responses = {};
+  for (const [statusCode, response] of Object.entries(openapi.responses)) {
+    if (!response) continue;
+    operation.responses[statusCode] = { description: response.description };
+
+    if (response.content) {
+      operation.responses[statusCode].content = {};
+      for (const [mediaType, mediaContent] of Object.entries(response.content)) {
+        if (mediaContent?.schema && isZodSchema(mediaContent.schema)) {
+          operation.responses[statusCode].content[mediaType] = {
+            schema: zodToJsonSchema(mediaContent.schema as any, 'openApi3', 'none'),
+          };
+        } else if (mediaContent?.schema) {
+          operation.responses[statusCode].content[mediaType] = mediaContent;
+        }
+      }
+    }
+  }
+
+  // Remove undefined values
+  Object.keys(operation).forEach(key => {
+    if (operation[key] === undefined) {
+      delete operation[key];
+    }
+  });
+
+  return operation;
+}
+
+/**
  * Converts custom API routes with DescribeRouteOptions to OpenAPI path entries.
  * The DescribeRouteOptions from hono-openapi extends OpenAPIV3_1.OperationObject,
  * so it already has the standard OpenAPI structure (parameters, requestBody, responses, etc.).
+ *
+ * Also supports ZodOpenAPIRouteConfig where Zod schemas are specified via
+ * `request.params`, `request.query`, and `request.body` and are automatically
+ * converted to JSON Schema.
  *
  * @param routes - Array of ApiRoute objects with optional openapi specifications
  * @returns OpenAPI paths object to be merged into the main spec
@@ -253,7 +382,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
 
   for (const route of routes) {
     // Skip routes without openapi metadata or routes marked as hidden
-    if (!route.openapi || route.openapi.hide) {
+    if (!route.openapi || (route.openapi as any).hide) {
       continue;
     }
 
@@ -271,6 +400,13 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
 
     const method = route.method.toLowerCase();
     const openapi = route.openapi;
+
+    // ZodOpenAPIRouteConfig: detected by the presence of a `request` property.
+    // Convert Zod schemas in request.params/query/body and responses to JSON Schema.
+    if (isZodOpenAPIRouteConfig(openapi)) {
+      paths[openapiPath][method] = convertZodRouteConfigToOperation(route, openapi);
+      continue;
+    }
 
     // Build the OpenAPI operation object from DescribeRouteOptions
     // DescribeRouteOptions extends OpenAPIV3_1.OperationObject, so it already has:
@@ -292,8 +428,8 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
     // Copy parameters directly if provided (already in OpenAPI format)
     if (openapi.parameters && Array.isArray(openapi.parameters)) {
       operation.parameters = openapi.parameters.map((param: any) => {
-        // Convert Zod schemas in parameter schemas if needed
-        if (param.schema && typeof param.schema === 'object' && '_def' in param.schema) {
+        // Convert Zod schemas (v3: _def, v4: _zod) in parameter schemas if needed
+        if (param.schema && isZodSchema(param.schema)) {
           return {
             ...param,
             schema: zodToJsonSchema(param.schema, 'openApi3', 'none'),
@@ -312,7 +448,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
       if (requestBody.content) {
         operation.requestBody.content = {};
         for (const [mediaType, mediaContent] of Object.entries(requestBody.content as Record<string, any>)) {
-          if (mediaContent?.schema && typeof mediaContent.schema === 'object' && '_def' in mediaContent.schema) {
+          if (mediaContent?.schema && isZodSchema(mediaContent.schema)) {
             operation.requestBody.content[mediaType] = {
               ...mediaContent,
               schema: zodToJsonSchema(mediaContent.schema, 'openApi3', 'none'),
@@ -342,7 +478,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
         if (response.content) {
           operation.responses[statusCode].content = {};
           for (const [mediaType, mediaContent] of Object.entries(response.content as Record<string, any>)) {
-            if (mediaContent?.schema && typeof mediaContent.schema === 'object' && '_def' in mediaContent.schema) {
+            if (mediaContent?.schema && isZodSchema(mediaContent.schema)) {
               operation.responses[statusCode].content[mediaType] = {
                 ...mediaContent,
                 schema: zodToJsonSchema(mediaContent.schema, 'openApi3', 'none'),
