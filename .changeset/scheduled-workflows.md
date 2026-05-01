@@ -2,6 +2,7 @@
 '@mastra/core': minor
 '@mastra/server': minor
 '@mastra/libsql': minor
+'@mastra/pg': minor
 '@mastra/client-js': minor
 '@mastra/playground-ui': minor
 '@mastra/clickhouse': patch
@@ -28,7 +29,7 @@ Added scheduled workflows. Declare a `schedule` field on `createWorkflow` and Ma
 **Storage:**
 
 - New `schedules` storage domain with `createSchedule`, `getSchedule`, `listSchedules`, `listDueSchedules`, `updateSchedule`, `updateScheduleNextFire` (CAS), `deleteSchedule`, `recordTrigger`, and `listTriggers`.
-- `InMemorySchedulesStorage` ships in `@mastra/core`. `@mastra/libsql` adds the libsql adapter (`mastra_schedules`, `mastra_schedule_triggers`). The scheduler fails to initialize with `MASTRA_SCHEDULER_STORAGE_NOT_AVAILABLE` if the active storage adapter does not provide the domain.
+- `InMemorySchedulesStorage` ships in `@mastra/core`. `@mastra/libsql` and `@mastra/pg` add adapters (`mastra_schedules`, `mastra_schedule_triggers`). The scheduler fails to initialize with `MASTRA_SCHEDULER_STORAGE_NOT_AVAILABLE` if the active storage adapter does not provide the domain.
 - `Schedule.target` is polymorphic with a `workflow` variant today; future targets can be added without a schema migration.
 
 **Pause and resume:**
