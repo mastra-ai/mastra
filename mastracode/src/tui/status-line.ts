@@ -130,6 +130,8 @@ export function updateStatusLine(state: TUIState): void {
   const branch = state.projectInfo.gitBranch;
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
+  const goalState = state.goalManager.getGoal();
+  const goalLabel = goalState?.status === 'active' ? `goal ${goalState.turnsUsed}/${goalState.maxTurns}` : null;
   // Build progressively shorter directory strings for layout fallback
   // Only show branch when not showing thread title (thread title takes priority)
   const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
@@ -259,6 +261,12 @@ export function updateStatusLine(state: TUIState): void {
       parts.push({
         plain: queuedLabel,
         styled: theme.fg('warning', queuedLabel),
+      });
+    }
+    if (opts.showQueue && goalLabel) {
+      parts.push({
+        plain: goalLabel,
+        styled: theme.fg('accent', goalLabel),
       });
     }
     // Directory / branch / thread title (lowest priority on line 1)

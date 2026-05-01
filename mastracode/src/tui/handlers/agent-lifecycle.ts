@@ -6,6 +6,7 @@ import { Spacer, Text } from '@mariozechner/pi-tui';
 
 import { getCurrentGitBranch } from '../../utils/project.js';
 import { GradientAnimator } from '../components/obi-loader.js';
+import { showInfo } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { BOX_INDENT, theme } from '../theme.js';
 
@@ -59,9 +60,13 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     return;
   }
 
+  // User-queued actions preempt the goal loop — if the user typed something
+  // while the agent was running, process that first.
   const nextAction = state.pendingQueuedActions.shift();
   ctx.updateStatusLine();
   if (!nextAction) {
+    // No user-queued actions — check for goal continuation
+    maybeGoalContinuation(ctx);
     return;
   }
 
@@ -103,6 +108,12 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
+  }
+
+  // Pause the goal loop on user-initiated abort
+  if (state.userInitiatedAbort && state.goalManager.isActive()) {
+    state.goalManager.pause();
+    showInfo(state, 'Goal paused (interrupted). Use /goal resume to continue.');
   }
 
   // Update streaming message to show it was interrupted
@@ -148,4 +159,42 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
+}
+
+// =============================================================================
+// Goal Continuation
+// =============================================================================
+
+/**
+ * After a completed agent turn with no queued user actions, evaluate
+ * whether the standing goal is satisfied. If not, send a continuation
+ * prompt to keep the agent working.
+ */
+function maybeGoalContinuation(ctx: EventHandlerContext): void {
+  const { state } = ctx;
+  if (!state.goalManager.isActive()) return;
+
+  state.goalManager
+    .evaluateAfterTurn(state)
+    .then(continuation => {
+      if (continuation) {
+        const goal = state.goalManager.getGoal()!;
+        showInfo(state, `Continuing toward goal (${goal.turnsUsed}/${goal.maxTurns})...`);
+        ctx.fireMessage(continuation);
+      } else {
+        // Goal is done or paused
+        const goal = state.goalManager.getGoal();
+        if (goal?.status === 'done') {
+          showInfo(state, `Goal achieved: "${goal.objective}"`);
+        } else if (goal?.status === 'paused') {
+          showInfo(
+            state,
+            `Goal paused (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
+          );
+        }
+      }
+    })
+    .catch(() => {
+      // Goal evaluation failed — don't block the TUI
+    });
 }

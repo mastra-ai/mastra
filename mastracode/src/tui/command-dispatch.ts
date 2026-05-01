@@ -38,6 +38,7 @@ import {
   handleApiKeysCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
+  handleGoalCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -181,6 +182,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'observability':
       await handleObservabilityCommand(buildCtx(), args);
+      return true;
+    case 'goal':
+      await handleGoalCommand(buildCtx(), args);
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

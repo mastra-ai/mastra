@@ -18,7 +18,6 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
-
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
@@ -31,6 +30,8 @@ import type { TaskProgressComponent } from './components/task-progress.js';
 import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
+
+import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
 // =============================================================================
 // MastraTUIOptions
@@ -174,6 +175,9 @@ export interface TUIState {
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
 
+  // ── Goal loop ─────────────────────────────────────────────────────────
+  goalManager: GoalManager;
+
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
@@ -266,6 +270,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Status line
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
+
+    // Goal loop
+    goalManager: new GoalManager(),
 
     // Input
     customSlashCommands: [],
