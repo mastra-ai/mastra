@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { TTLCache } from '@isaacs/ttlcache';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
@@ -5292,10 +5293,22 @@ export class Agent<
   }
 
   /**
-   * Handles post-execution tasks including memory persistence and title generation.
+   * Tracks in-progress runIds for single-flight: concurrent calls for the same runId
+   * will await the same Promise instead of duplicating work.
    * @internal
    */
-  #completedRunIds = new Set<string>();
+  #inProgressRunIds = new Map<string, Promise<void>>();
+
+  /**
+   * Bounded cache for completed runIds. Uses TTL to auto-evict old entries,
+   * preventing unbounded memory growth. Entries expire after 5 minutes.
+   * @internal
+   */
+  #completedRunIds = new TTLCache<string, boolean>({
+    max: 1000,
+    ttl: 5 * 60 * 1000,
+    updateAgeOnGet: true,
+  });
 
   async #executeOnFinish({
     result,
@@ -5317,7 +5330,59 @@ export class Agent<
       this.logger.debug('Skipping executeOnFinish - already completed for runId', { runId, threadId });
       return;
     }
-    this.#completedRunIds.add(runId);
+
+    const existingInProgress = this.#inProgressRunIds.get(runId);
+    if (existingInProgress) {
+      this.logger.debug('Waiting for in-progress executeOnFinish for runId', { runId, threadId });
+      await existingInProgress;
+      return;
+    }
+
+    const executionPromise = this.#executeOnFinishCore({
+      result,
+      readOnlyMemory,
+      thread: threadAfter,
+      threadId,
+      resourceId,
+      memoryConfig,
+      outputText,
+      requestContext,
+      agentSpan,
+      runId,
+      messageList,
+      threadExists,
+      structuredOutput,
+      overrideScorers,
+    })
+      .then(() => {
+        this.#completedRunIds.set(runId, true);
+        this.#inProgressRunIds.delete(runId);
+      })
+      .catch(error => {
+        this.#inProgressRunIds.delete(runId);
+        throw error;
+      });
+
+    this.#inProgressRunIds.set(runId, executionPromise);
+    await executionPromise;
+  }
+
+  async #executeOnFinishCore({
+    result,
+    readOnlyMemory,
+    thread: threadAfter,
+    threadId,
+    resourceId,
+    memoryConfig,
+    outputText,
+    requestContext,
+    agentSpan,
+    runId,
+    messageList,
+    threadExists,
+    structuredOutput = false,
+    overrideScorers,
+  }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
     const resToLog = {
