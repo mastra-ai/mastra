@@ -96,7 +96,7 @@ export function SkillEditDialog({
   }, [builderSettings]);
 
   const isExistingSkill = !!skill;
-  const isOwner = !skill || (!!currentUserId && skill.authorId === currentUserId);
+  const isOwner = !skill || !currentUserId || skill.authorId === currentUserId;
   const isViewMode = isExistingSkill && !isEditing;
   const isReadOnly = isViewMode || !isOwner;
   const hasFields = !!(name.trim() || description.trim() || instructions.trim());
