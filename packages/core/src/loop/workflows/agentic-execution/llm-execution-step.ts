@@ -215,8 +215,11 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    // Collect every chunk for post-stream message building
-    collectedChunks.push({ type: chunk.type, payload: chunk.payload });
+    // Collect every chunk for post-stream message building.
+    // Only chunks with a payload property produce message parts — data/object chunks are excluded.
+    if ('payload' in chunk) {
+      collectedChunks.push({ type: chunk.type, payload: chunk.payload } as CollectedChunk);
+    }
 
     switch (chunk.type) {
       case 'response-metadata':

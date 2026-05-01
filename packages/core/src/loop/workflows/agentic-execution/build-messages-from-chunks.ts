@@ -1,23 +1,20 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
-import type {
-  FilePayload,
-  ReasoningDeltaPayload,
-  ReasoningStartPayload,
-  SourcePayload,
-  TextDeltaPayload,
-  TextStartPayload,
-  ToolCallPayload,
-  ToolResultPayload,
-} from '../../../stream/types';
+import type { ChunkType } from '../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
  * A raw chunk collected during the stream.
- * We only store the type and payload — everything needed to reconstruct messages post-stream.
+ * Derived from ChunkType — strips BaseChunkType fields (runId, from, metadata)
+ * while preserving the discriminated union so switch cases auto-narrow payload types.
+ * Only includes variants that have a `payload` property (excludes object, data, etc.).
  */
-export type CollectedChunk = { type: string; payload: any };
+export type CollectedChunk = ChunkType extends infer T
+  ? T extends { type: infer U; payload: infer P }
+    ? { type: U; payload: P }
+    : never
+  : never;
 
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
@@ -56,13 +53,12 @@ export function buildMessagesFromChunks({
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
-      const p = chunk.payload as ToolResultPayload;
-      toolResults.set(p.toolCallId, {
-        result: p.result,
-        args: p.args,
-        providerMetadata: p.providerMetadata,
-        providerExecuted: p.providerExecuted,
-        toolName: p.toolName,
+      toolResults.set(chunk.payload.toolCallId, {
+        result: chunk.payload.result,
+        args: chunk.payload.args,
+        providerMetadata: chunk.payload.providerMetadata,
+        providerExecuted: chunk.payload.providerExecuted,
+        toolName: chunk.payload.toolName,
       });
     }
   }
@@ -83,32 +79,33 @@ export function buildMessagesFromChunks({
     switch (chunk.type) {
       // ── Text span ──────────────────────────────────────────────
       case 'text-start': {
-        const p = chunk.payload as TextStartPayload;
         // Just stash metadata — part is created on first delta
-        textMeta.set(p.id, p.providerMetadata);
+        textMeta.set(chunk.payload.id, chunk.payload.providerMetadata);
         break;
       }
       case 'text-delta': {
-        const p = chunk.payload as TextDeltaPayload;
-        let ref = textRefs.get(p.id);
+        let ref = textRefs.get(chunk.payload.id);
         if (!ref) {
           // First delta for this span — create the part and push it now
-          ref = { type: 'text' as const, text: '', providerMetadata: textMeta.get(p.id) ?? p.providerMetadata };
-          textRefs.set(p.id, ref);
+          ref = {
+            type: 'text' as const,
+            text: '',
+            providerMetadata: textMeta.get(chunk.payload.id) ?? chunk.payload.providerMetadata,
+          };
+          textRefs.set(chunk.payload.id, ref);
           parts.push(ref as unknown as MastraMessagePart);
         }
-        ref.text += p.text;
-        if (p.providerMetadata) {
-          ref.providerMetadata = p.providerMetadata;
+        ref.text += chunk.payload.text;
+        if (chunk.payload.providerMetadata) {
+          ref.providerMetadata = chunk.payload.providerMetadata;
         }
         break;
       }
       case 'text-end': {
-        const pEnd = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
-        const ref = textRefs.get(pEnd.id);
+        const ref = textRefs.get(chunk.payload.id);
         if (ref) {
-          if (pEnd.providerMetadata) {
-            ref.providerMetadata = pEnd.providerMetadata;
+          if (chunk.payload.providerMetadata) {
+            ref.providerMetadata = chunk.payload.providerMetadata;
           }
           // Clean up undefined providerMetadata so we don't serialize { providerMetadata: undefined }
           if (!ref.providerMetadata) {
@@ -116,15 +113,14 @@ export function buildMessagesFromChunks({
           }
         }
         // text-end with no deltas means empty span — nothing to emit
-        textMeta.delete(pEnd.id);
-        textRefs.delete(pEnd.id);
+        textMeta.delete(chunk.payload.id);
+        textRefs.delete(chunk.payload.id);
         break;
       }
 
       // ── Reasoning span ─────────────────────────────────────────
       case 'reasoning-start': {
-        const p = chunk.payload as ReasoningStartPayload;
-        const isRedacted = Object.values(p.providerMetadata || {}).some((v: any) => v?.redactedData);
+        const isRedacted = Object.values(chunk.payload.providerMetadata || {}).some((v: any) => v?.redactedData);
 
         // Redacted reasoning never receives deltas, so create and push immediately
         if (isRedacted) {
@@ -132,46 +128,44 @@ export function buildMessagesFromChunks({
             type: 'reasoning' as const,
             reasoning: '',
             details: [{ type: 'redacted', data: '' }],
-            providerMetadata: p.providerMetadata,
+            providerMetadata: chunk.payload.providerMetadata,
           };
-          reasoningRefs.set(p.id, part);
+          reasoningRefs.set(chunk.payload.id, part);
           parts.push(part as unknown as MastraMessagePart);
         } else {
           // Non-redacted: just stash metadata, part is created on first delta
-          reasoningMeta.set(p.id, p.providerMetadata);
+          reasoningMeta.set(chunk.payload.id, chunk.payload.providerMetadata);
         }
         break;
       }
       case 'reasoning-delta': {
-        const p = chunk.payload as ReasoningDeltaPayload;
-        let ref = reasoningRefs.get(p.id);
+        let ref = reasoningRefs.get(chunk.payload.id);
         if (!ref) {
           // First delta for this span — create the part and push it now
           ref = {
             type: 'reasoning' as const,
             reasoning: '',
             details: [{ type: 'text', text: '' }],
-            providerMetadata: reasoningMeta.get(p.id) ?? p.providerMetadata,
+            providerMetadata: reasoningMeta.get(chunk.payload.id) ?? chunk.payload.providerMetadata,
           };
-          reasoningRefs.set(p.id, ref);
+          reasoningRefs.set(chunk.payload.id, ref);
           parts.push(ref as unknown as MastraMessagePart);
         }
         // Append to the text detail
         const detail = ref.details[0];
         if (detail && detail.type === 'text') {
-          detail.text += p.text;
+          detail.text += chunk.payload.text;
         }
-        if (p.providerMetadata) {
-          ref.providerMetadata = p.providerMetadata;
+        if (chunk.payload.providerMetadata) {
+          ref.providerMetadata = chunk.payload.providerMetadata;
         }
         break;
       }
       case 'reasoning-end': {
-        const p = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
-        const ref = reasoningRefs.get(p.id);
+        const ref = reasoningRefs.get(chunk.payload.id);
         if (ref) {
-          if (p.providerMetadata) {
-            ref.providerMetadata = p.providerMetadata;
+          if (chunk.payload.providerMetadata) {
+            ref.providerMetadata = chunk.payload.providerMetadata;
           }
         } else {
           // No deltas arrived — emit empty reasoning part.
@@ -181,38 +175,36 @@ export function buildMessagesFromChunks({
             type: 'reasoning' as const,
             reasoning: '',
             details: [{ type: 'text', text: '' }],
-            providerMetadata: p.providerMetadata ?? reasoningMeta.get(p.id),
+            providerMetadata: chunk.payload.providerMetadata ?? reasoningMeta.get(chunk.payload.id),
           };
           parts.push(part);
         }
-        reasoningMeta.delete(p.id);
-        reasoningRefs.delete(p.id);
+        reasoningMeta.delete(chunk.payload.id);
+        reasoningRefs.delete(chunk.payload.id);
         break;
       }
 
       // Redacted reasoning can appear as a standalone chunk (not wrapped in start/end)
       case 'redacted-reasoning': {
-        const p = chunk.payload as { id: string; data: unknown; providerMetadata?: Record<string, any> };
         parts.push({
           type: 'reasoning' as const,
           reasoning: '',
           details: [{ type: 'redacted', data: '' }],
-          providerMetadata: p.providerMetadata,
+          providerMetadata: chunk.payload.providerMetadata,
         } as MastraMessagePart);
         break;
       }
 
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
-        const p = chunk.payload as SourcePayload;
         parts.push({
           type: 'source',
           source: {
             sourceType: 'url',
-            id: p.id,
-            url: p.url || '',
-            title: p.title,
-            providerMetadata: p.providerMetadata,
+            id: chunk.payload.id,
+            url: chunk.payload.url || '',
+            title: chunk.payload.title,
+            providerMetadata: chunk.payload.providerMetadata,
           },
         } as MastraMessagePart);
         break;
@@ -220,24 +212,22 @@ export function buildMessagesFromChunks({
 
       // ── File ───────────────────────────────────────────────────
       case 'file': {
-        const p = chunk.payload as FilePayload;
         parts.push({
           type: 'file' as const,
-          data: p.data,
-          mimeType: p.mimeType,
-          ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
+          data: chunk.payload.data as string,
+          mimeType: chunk.payload.mimeType,
+          ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
         } as MastraMessagePart);
         break;
       }
 
       // ── Tool call ──────────────────────────────────────────────
       case 'tool-call': {
-        const p = chunk.payload as ToolCallPayload;
-        const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
-        const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
+        const toolDef = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+        const providerExecuted = inferProviderExecuted(chunk.payload.providerExecuted, toolDef);
 
         // Check if we have a matching result from a provider-executed tool
-        const result = toolResults.get(p.toolCallId);
+        const result = toolResults.get(chunk.payload.toolCallId);
 
         if (result) {
           // Merge call + result into a single 'result' state part
@@ -246,12 +236,12 @@ export function buildMessagesFromChunks({
             type: 'tool-invocation' as const,
             toolInvocation: {
               state: 'result' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
               result: result.result,
             },
-            providerMetadata: result.providerMetadata ?? p.providerMetadata,
+            providerMetadata: result.providerMetadata ?? chunk.payload.providerMetadata,
             providerExecuted: resultProviderExecuted,
           } as MastraMessagePart);
         } else {
@@ -260,11 +250,11 @@ export function buildMessagesFromChunks({
             type: 'tool-invocation' as const,
             toolInvocation: {
               state: 'call' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
             },
-            providerMetadata: p.providerMetadata,
+            providerMetadata: chunk.payload.providerMetadata,
             providerExecuted,
           } as MastraMessagePart);
         }
