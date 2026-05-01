@@ -26,6 +26,7 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -252,12 +253,22 @@ const AgentBuilderAgentEditReady = ({
 
 const VisibilitySelectConnected = () => {
   const isRunning = useStreamRunning();
+  const { data: capabilities } = useAuthCapabilities();
+  if (!capabilities?.enabled) return null;
   return <VisibilitySelect disabled={isRunning} variant="ghost" />;
 };
 
 const AgentBuilderMobileMenuConnected = ({ showPublishToSlack }: { showPublishToSlack: boolean }) => {
   const isRunning = useStreamRunning();
-  return <AgentBuilderMobileMenu showSetVisibility showPublishToSlack={showPublishToSlack} disabled={isRunning} />;
+  const { data: capabilities } = useAuthCapabilities();
+  const authEnabled = !!capabilities?.enabled;
+  return (
+    <AgentBuilderMobileMenu
+      showSetVisibility={authEnabled}
+      showPublishToSlack={showPublishToSlack}
+      disabled={isRunning}
+    />
+  );
 };
 
 interface HeaderActionsProps {

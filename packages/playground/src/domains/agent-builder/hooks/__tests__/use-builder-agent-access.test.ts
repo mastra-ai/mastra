@@ -21,10 +21,10 @@ describe('useBuilderAgentAccess', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns permission-denied when missing agents:read', () => {
+  it('returns permission-denied when missing stored-agents:read', () => {
     (usePermissions as Mock).mockReturnValue({
       rbacEnabled: true,
-      hasAllPermissions: (permissions: string[]) => !permissions.includes('agents:read'),
+      hasAllPermissions: (permissions: string[]) => !permissions.includes('stored-agents:read'),
     });
 
     (useBuilderSettings as Mock).mockReturnValue({

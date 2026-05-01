@@ -4,6 +4,9 @@ import { Blocks, LibraryIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useAuthCapabilities } from '@/domains/auth/hooks';
+import { isAuthenticated } from '@/domains/auth/types';
 import { useLinkComponent } from '@/lib/framework';
 
 const baseLinks: NavLink[] = [
@@ -29,6 +32,8 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   const { pathname } = useLocation();
   const features = useBuilderAgentFeatures();
   const state = forceExpanded ? 'default' : contextState;
+  const { data: capabilities } = useAuthCapabilities();
+  const isUserAuthenticated = capabilities && isAuthenticated(capabilities);
 
   const links = useMemo(() => {
     const result = [...baseLinks];
@@ -45,7 +50,16 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
           {state === 'collapsed' ? (
             <div className="flex flex-col gap-3 items-center">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+              {isUserAuthenticated && <AuthStatus />}
             </div>
+          ) : isUserAuthenticated ? (
+            <span className="flex items-center justify-between pl-3 pr-2">
+              <span className="flex items-center gap-2">
+                <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+                <span className="font-serif text-sm">Mastra Studio</span>
+              </span>
+              <AuthStatus />
+            </span>
           ) : (
             <span className="flex items-center gap-2 pl-3">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />

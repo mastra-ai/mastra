@@ -92,6 +92,9 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/stream-chat-conte
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel', () => ({
   AgentConfigurePanel: () => <div data-testid="stub-configure-panel" />,
 }));
+vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
+  useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
+}));
 
 import AgentBuilderAgentView from '../view';
 

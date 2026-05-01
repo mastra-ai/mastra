@@ -78,6 +78,10 @@ vi.mock('@/domains/workspace/hooks/use-stored-workspaces', () => ({
   useStoredWorkspaces: () => ({ data: { workspaces: [] } }),
 }));
 
+vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
+  useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
+}));
+
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: currentUser, isLoading: isCurrentUserLoading }),
 }));

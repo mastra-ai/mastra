@@ -1,9 +1,8 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { EmptyState } from '@mastra/playground-ui';
-import { SearchIcon, SparklesIcon } from 'lucide-react';
+import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
-import { VisibilityBadge } from '@/domains/shared/components/visibility-badge';
 
 function formatRelativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -63,19 +62,30 @@ export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderL
               <SparklesIcon className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-ui-md text-neutral6 truncate">{skill.name}</div>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="text-ui-md text-neutral6 truncate">{skill.name}</div>
+                {skill.visibility === 'private' && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="text-neutral3 shrink-0"
+                        aria-label="Private skill"
+                        data-testid="skill-builder-private-visibility-icon"
+                      >
+                        <Icon size="sm">
+                          <LockIcon />
+                        </Icon>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Only visible to you</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
-                <VisibilityBadge
-                  visibility={skill.visibility}
-                  authorId={skill.authorId}
-                  size="sm"
-                  className="shrink-0 sm:hidden"
-                />
               </div>
             </div>
             <div className="hidden sm:inline-flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
-              <VisibilityBadge visibility={skill.visibility} authorId={skill.authorId} />
               <span className="hidden lg:inline-flex">Updated {formatRelativeTime(skill.updatedAt)}</span>
             </div>
             <SkillStarButton

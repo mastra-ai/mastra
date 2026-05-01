@@ -20,6 +20,10 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
   }),
 }));
 
+vi.mock('@/domains/auth/hooks', () => ({
+  useAuthCapabilities: () => ({ data: undefined, isLoading: false }),
+}));
+
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a {...props}>{children}</a>
 );

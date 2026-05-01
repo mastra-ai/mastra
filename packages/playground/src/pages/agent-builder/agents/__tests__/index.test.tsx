@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -63,9 +64,11 @@ function renderPage() {
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
-          <AgentBuilderAgentsPage />
-        </LinkComponentProvider>
+        <TooltipProvider>
+          <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
+            <AgentBuilderAgentsPage />
+          </LinkComponentProvider>
+        </TooltipProvider>
       </QueryClientProvider>
     </MastraReactProvider>,
   );

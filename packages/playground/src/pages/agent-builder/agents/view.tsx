@@ -27,6 +27,7 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import type { CurrentUser } from '@/domains/auth/types';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
@@ -182,7 +183,7 @@ const AgentBuilderAgentViewReady = ({
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
             {isOwner && <PublishToSlackButton />}
-            <VisibilitySelect disabled variant="ghost" />
+            <VisibilitySelectIfAuth />
           </div>
         }
         primaryAction={
@@ -232,4 +233,10 @@ const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
       <PencilIcon />
     </Button>
   );
+};
+
+const VisibilitySelectIfAuth = () => {
+  const { data: capabilities } = useAuthCapabilities();
+  if (!capabilities?.enabled) return null;
+  return <VisibilitySelect disabled variant="ghost" />;
 };
