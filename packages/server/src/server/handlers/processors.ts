@@ -1,6 +1,6 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MessageInput } from '@mastra/core/agent/message-list';
-import { isProcessorWorkflow } from '@mastra/core/processors';
+import type { MastraDBMessage, MessageInput } from '@mastra/core/agent/message-list';
+import { isProcessorWorkflow, ProcessorRunner, validateProcessorResultExclusivity } from '@mastra/core/processors';
 import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
 
 import { HTTPException } from '../http-exception';
@@ -200,7 +200,8 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, processorId, ...bodyParams }) => {
     try {
-      const { phase, messages } = bodyParams;
+      const { phase, messages, modelContextMessages } = bodyParams;
+      const rawInputMessages = modelContextMessages ?? messages;
 
       if (!processorId) {
         throw new HTTPException(400, { message: 'Processor ID is required' });
@@ -210,9 +211,11 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Phase is required' });
       }
 
-      if (!messages || !Array.isArray(messages)) {
-        throw new HTTPException(400, { message: 'Messages array is required' });
+      if (!Array.isArray(rawInputMessages)) {
+        throw new HTTPException(400, { message: 'Messages or modelContextMessages array is required' });
       }
+
+      const inputMessages = rawInputMessages as unknown as MastraDBMessage[];
 
       // Get the processor from Mastra's registered processors
       let processor;
@@ -229,7 +232,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       }
 
       const messageList = new MessageList();
-      messageList.add(messages as unknown as MessageInput[], 'input');
+      messageList.add(inputMessages as unknown as MessageInput[], 'input');
 
       // Check if this is a workflow processor
       if (isProcessorWorkflow(processor)) {
@@ -238,11 +241,12 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           // Build inputData based on phase - each phase has different required fields
           const baseInputData = {
             phase: phase as 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep',
-            messages: messageList.get.all.db(),
+            messages: inputMessages,
             messageList,
+            ...(modelContextMessages !== undefined ? { modelContextMessages } : {}),
             retryCount: 0,
           };
-          let inputData: typeof baseInputData & Record<string, unknown> = baseInputData;
+          let inputData: Record<string, unknown> = baseInputData;
 
           // Add phase-specific fields
           switch (phase) {
@@ -272,7 +276,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
                 ...inputData,
                 state: {},
                 result: {
-                  text: extractTextFromMessages(messages),
+                  text: extractTextFromMessages(inputMessages),
                   usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
                   finishReason: 'unknown',
                   steps: [],
@@ -287,7 +291,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
                 steps: [],
                 finishReason: 'stop',
                 toolCalls: [],
-                text: extractTextFromMessages(messages),
+                text: extractTextFromMessages(inputMessages),
               };
               break;
             case 'outputStream':
@@ -302,7 +306,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
           const run = await processor.createRun();
           const result = await run.start({
-            inputData,
+            inputData: inputData as any,
           });
 
           // Check for tripwire status
@@ -315,9 +319,9 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
                 reason: result.tripwire.reason || `Tripwire triggered in workflow ${processor.id}`,
                 metadata: result.tripwire.metadata,
               },
-              messages,
+              messages: inputMessages,
               messageList: {
-                messages,
+                messages: inputMessages,
               },
             };
           }
@@ -331,11 +335,15 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
           // Extract output from workflow result
           const output = result.result;
-          let outputMessages = messages;
+          let outputMessages: MastraDBMessage[] = inputMessages;
+          let outputModelContextMessages: MastraDBMessage[] | undefined;
 
           if (output && typeof output === 'object') {
-            if ('messages' in output && Array.isArray(output.messages)) {
-              outputMessages = output.messages;
+            validateProcessorResultExclusivity({ result: output, processorId: processor.id });
+            if ('modelContextMessages' in output && Array.isArray(output.modelContextMessages)) {
+              outputModelContextMessages = output.modelContextMessages as MastraDBMessage[];
+            } else if ('messages' in output && Array.isArray(output.messages)) {
+              outputMessages = output.messages as MastraDBMessage[];
             } else if ('messageList' in output && output.messageList instanceof MessageList) {
               outputMessages = output.messageList.get.all.db();
             }
@@ -344,7 +352,9 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           return {
             success: true,
             phase,
-            messages: outputMessages,
+            ...(outputModelContextMessages !== undefined
+              ? { modelContextMessages: outputModelContextMessages }
+              : { messages: outputMessages }),
             messageList: {
               messages: outputMessages,
             },
@@ -377,7 +387,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       const baseContext = {
         abort,
         retryCount: 0,
-        messages: messageList.get.all.db(),
+        messages: inputMessages,
         messageList,
         state: {},
       };
@@ -425,7 +435,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               ...baseContext,
               state: {},
               result: {
-                text: extractTextFromMessages(messages),
+                text: extractTextFromMessages(inputMessages),
                 usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
                 finishReason: 'unknown',
                 steps: [],
@@ -444,7 +454,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               steps: [],
               finishReason: 'stop',
               toolCalls: [],
-              text: extractTextFromMessages(messages),
+              text: extractTextFromMessages(inputMessages),
               usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
             });
             break;
@@ -460,22 +470,56 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         }
 
         // Process the result
-        let outputMessages = messages;
+        let outputMessages: MastraDBMessage[] = inputMessages;
+        let outputModelContextMessages: MastraDBMessage[] | undefined;
         if (result) {
-          if (Array.isArray(result)) {
-            outputMessages = result;
-          } else if (result.get && result.get.all && typeof result.get.all.db === 'function') {
-            // It's a MessageList
-            outputMessages = result.get.all.db();
-          } else if (result.messages) {
-            outputMessages = result.messages;
+          if (phase === 'input') {
+            const validatedResult = ProcessorRunner.validateAndFormatProcessInputResult(result, {
+              messageList,
+              processor,
+            });
+            if ('modelContextMessages' in validatedResult) {
+              outputModelContextMessages = validatedResult.modelContextMessages as MastraDBMessage[] | undefined;
+            } else if (validatedResult.messages) {
+              outputMessages = validatedResult.messages;
+            } else if (validatedResult.messageList) {
+              outputMessages = validatedResult.messageList.get.all.db();
+            }
+          } else if (phase === 'inputStep') {
+            const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
+              messageList,
+              processor,
+              stepNumber: 0,
+            });
+            if ('modelContextMessages' in validatedResult) {
+              outputModelContextMessages = validatedResult.modelContextMessages;
+            } else if (validatedResult.messages) {
+              outputMessages = validatedResult.messages;
+            } else if (validatedResult.messageList) {
+              outputMessages = validatedResult.messageList.get.all.db();
+            }
+          } else {
+            if (typeof result === 'object' && !Array.isArray(result) && !(result instanceof MessageList)) {
+              validateProcessorResultExclusivity({ result, processorId: processor.id });
+            }
+            if (Array.isArray(result)) {
+              outputMessages = result as MastraDBMessage[];
+            } else if (result instanceof MessageList) {
+              outputMessages = result.get.all.db();
+            } else if (result.messages) {
+              outputMessages = result.messages as MastraDBMessage[];
+            } else if ('modelContextMessages' in result) {
+              outputModelContextMessages = result.modelContextMessages as MastraDBMessage[];
+            }
           }
         }
 
         return {
           success: true,
           phase,
-          messages: outputMessages,
+          ...(outputModelContextMessages !== undefined
+            ? { modelContextMessages: outputModelContextMessages }
+            : { messages: outputMessages }),
           messageList: {
             messages: outputMessages,
           },
@@ -491,9 +535,9 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               reason: tripwireReason || error.message?.replace('TRIPWIRE:', ''),
               metadata: tripwireMetadata,
             },
-            messages,
+            messages: inputMessages,
             messageList: {
-              messages,
+              messages: inputMessages,
             },
           };
         }

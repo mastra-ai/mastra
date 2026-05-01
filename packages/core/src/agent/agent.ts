@@ -2819,6 +2819,7 @@ export class Agent<
     processorStates?: Map<string, ProcessorState>;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
+    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2827,6 +2828,7 @@ export class Agent<
     };
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+    let modelContextMessages: MastraDBMessage[] | undefined;
 
     if (
       inputProcessorOverrides?.length ||
@@ -2843,7 +2845,12 @@ export class Agent<
         processorStates,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
+        ({ messageList, modelContextMessages } = await runner.runInputProcessors(
+          messageList,
+          observabilityContext,
+          requestContext,
+          0,
+        ));
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2874,6 +2881,7 @@ export class Agent<
 
     return {
       messageList,
+      modelContextMessages,
       tripwire,
     };
   }
@@ -2890,6 +2898,7 @@ export class Agent<
       messageList: MessageList;
       stepNumber?: number;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      modelContextMessages?: MastraDBMessage[];
       processorStates?: Map<string, ProcessorState>;
       tools?: Record<string, CoreTool>;
       runId?: string;
@@ -2902,6 +2911,7 @@ export class Agent<
   ): Promise<{
     messageList: MessageList;
     tools?: Record<string, CoreTool>;
+    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2922,12 +2932,14 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      modelContextMessages,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
+    let nextModelContextMessages = modelContextMessages;
 
     if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
@@ -2948,8 +2960,10 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
+          modelContextMessages: nextModelContextMessages,
           retryCount: 0,
         });
+        nextModelContextMessages = result.modelContextMessages;
         if (result.tools) {
           const workspace = await this.getWorkspace({ requestContext });
           const memory = await this.getMemory({ requestContext });
@@ -3023,6 +3037,7 @@ export class Agent<
     return {
       messageList,
       tools: nextTools,
+      modelContextMessages: nextModelContextMessages,
       tripwire,
     };
   }

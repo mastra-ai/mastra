@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
 import { createTool } from '../../../tools/tool';
@@ -35,6 +36,7 @@ type IterationData = {
   processorRetryCount?: number;
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  modelContextMessages?: MastraDBMessage[];
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -103,6 +105,153 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     messageList.add({ role: 'user', content: 'Find the latest AI agent news' }, 'input');
 
     bail = vi.fn(data => data);
+  });
+
+  it('uses prompt-only model context for the model prompt without mutating canonical messages', async () => {
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-1',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+    const promptOnlyUserMessage: MastraDBMessage = {
+      id: 'prompt-only-user',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'prompt-only input' }],
+      },
+      createdAt: new Date(0),
+      threadId: 'test-thread',
+    };
+    const promptOnlySystemMessage: MastraDBMessage = {
+      id: 'prompt-only-system',
+      role: 'system',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'prompt-only system should be ignored' }],
+      },
+      createdAt: new Date(0),
+      threadId: 'test-thread',
+    };
+
+    messageList.addSystem('canonical system');
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      modelContextMessages: [promptOnlySystemMessage, promptOnlyUserMessage],
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          },
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      },
+    } as unknown as OuterLLMRun<{}>);
+
+    const firstInput = createIterationInput();
+    firstInput.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(firstInput));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual([
+      expect.objectContaining({ role: 'system', content: 'canonical system' }),
+      expect.objectContaining({
+        role: 'user',
+        content: [expect.objectContaining({ type: 'text', text: 'prompt-only input' })],
+      }),
+    ]);
+    expect(JSON.stringify(doStream.mock.calls[0]?.[0]?.prompt)).not.toContain('Find the latest AI agent news');
+    expect(JSON.stringify(doStream.mock.calls[0]?.[0]?.prompt)).not.toContain('prompt-only system should be ignored');
+    expect(messageList.get.input.db()).toHaveLength(1);
+    expect(messageList.get.input.db()[0]?.id).not.toBe('prompt-only-user');
+
+    doStream.mockClear();
+    const retryInput = createIterationInput();
+    retryInput.stepResult.isContinued = false;
+    retryInput.output.steps = [{}];
+    retryInput.processorRetryCount = 1;
+
+    await llmExecutionStep.execute(createExecuteParams(retryInput));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(JSON.stringify(doStream.mock.calls[0]?.[0]?.prompt)).toContain('Find the latest AI agent news');
+    expect(JSON.stringify(doStream.mock.calls[0]?.[0]?.prompt)).not.toContain('prompt-only input');
+
+    doStream.mockClear();
+    const explicitRetryInput = createIterationInput();
+    explicitRetryInput.stepResult.isContinued = false;
+    explicitRetryInput.output.steps = [{}];
+    explicitRetryInput.processorRetryCount = 1;
+    explicitRetryInput.modelContextMessages = [promptOnlySystemMessage, promptOnlyUserMessage];
+
+    await llmExecutionStep.execute(createExecuteParams(explicitRetryInput));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual([
+      expect.objectContaining({ role: 'system', content: 'canonical system' }),
+      expect.objectContaining({
+        role: 'user',
+        content: [expect.objectContaining({ type: 'text', text: 'prompt-only input' })],
+      }),
+    ]);
+
+    doStream.mockClear();
+    const resetRetryInput = createIterationInput();
+    resetRetryInput.stepResult.isContinued = false;
+    resetRetryInput.output.steps = [{}];
+    resetRetryInput.processorRetryCount = 1;
+    resetRetryInput.modelContextMessages = undefined;
+
+    await llmExecutionStep.execute(createExecuteParams(resetRetryInput));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(JSON.stringify(doStream.mock.calls[0]?.[0]?.prompt)).toContain('Find the latest AI agent news');
+    expect(JSON.stringify(doStream.mock.calls[0]?.[0]?.prompt)).not.toContain('prompt-only input');
   });
 
   it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {

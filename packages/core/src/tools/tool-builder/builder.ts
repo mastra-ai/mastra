@@ -22,6 +22,7 @@ import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
+import { getInternalToolExecutionHints, setInternalToolExecutionHints } from '../../tools/internal-execution-hints';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
@@ -785,12 +786,16 @@ export class CoreToolBuilder extends MastraBase {
       }
     }
 
+    const hasSuspendSchema = !!this.getSuspendSchema();
+    const internalExecutionHints =
+      !requireApproval && !hasSuspendSchema ? getInternalToolExecutionHints(this.originalTool) : undefined;
+
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
       requireApproval,
       needsApprovalFn,
-      hasSuspendSchema: !!this.getSuspendSchema(),
+      hasSuspendSchema,
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
@@ -800,7 +805,7 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
-    return {
+    const builtTool = {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedInputSchema ?? z.object({}),
@@ -818,5 +823,11 @@ export class CoreToolBuilder extends MastraBase {
       // from the converted CoreTool at dispatch time.
       backgroundConfig: this.options.backgroundConfig,
     } as unknown as CoreTool;
+
+    if (internalExecutionHints) {
+      setInternalToolExecutionHints(builtTool, internalExecutionHints);
+    }
+
+    return builtTool;
   }
 }

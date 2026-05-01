@@ -84,13 +84,27 @@ export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends Pr
   messageList: MessageList;
 }
 
+type ProcessInputSystemMessages = {
+  /** Replace all system messages with these. */
+  systemMessages?: CoreMessageV4[];
+};
+
 /**
- * Return type for processInput that includes modified system messages
+ * Return type for processInput that can modify canonical messages, prompt-only model input, and/or system messages.
  */
-export interface ProcessInputResultWithSystemMessages {
-  messages: MastraDBMessage[];
-  systemMessages: CoreMessageV4[];
-}
+export type ProcessInputResultObject = ProcessInputSystemMessages &
+  (
+    | {
+        /** Replace canonical messages. */
+        messages?: MastraDBMessage[];
+        modelContextMessages?: never;
+      }
+    | {
+        messages?: never;
+        /** Replace the model prompt messages for the next model call without mutating canonical messages. */
+        modelContextMessages?: MastraDBMessage[];
+      }
+  );
 
 /**
  * Return type for message-based processor methods
@@ -102,7 +116,7 @@ export type ProcessorMessageResult = Promise<MessageList | MastraDBMessage[]> | 
 /**
  * Possible return types from processInput
  */
-export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
+export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultObject;
 
 /**
  * Arguments for processInput method
@@ -192,6 +206,7 @@ export type RunProcessInputStepArgs = Omit<
 > & {
   messageId?: string;
   rotateResponseMessageId?: () => string;
+  modelContextMessages?: MastraDBMessage[];
   retryCount?: number;
 };
 
@@ -201,7 +216,17 @@ export type RunProcessInputStepArgs = Omit<
  * Note: structuredOutput.schema is typed as StandardSchemaWithJSON (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
-export type ProcessInputStepResult = {
+type ProcessInputStepMessageResult =
+  | {
+      messages?: MastraDBMessage[];
+      modelContextMessages?: never;
+    }
+  | {
+      messages?: never;
+      modelContextMessages?: MastraDBMessage[];
+    };
+
+export type ProcessInputStepResult = ProcessInputStepMessageResult & {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Override the active assistant response message ID for this step */
   messageId?: string;
@@ -209,9 +234,12 @@ export type ProcessInputStepResult = {
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
   activeTools?: string[];
-
-  messages?: MastraDBMessage[];
   messageList?: MessageList;
+  /**
+   * Replace the messages used to build the next model prompt without mutating the canonical MessageList.
+   * Later processInputStep processors in the same step receive these messages as their `messages` argument.
+   */
+  modelContextMessages?: MastraDBMessage[];
   /** Replace all system messages with these */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
@@ -282,6 +310,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
  * This is distinct from network errors or retryable server errors (which are handled by p-retry).
  */
 export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** Prompt-only messages used for the failed model call, when input processors changed the model context. */
+  modelContextMessages?: MastraDBMessage[];
   /** The error that occurred during the LLM API call */
   error: unknown;
   /** The current step number (0-indexed) */
@@ -304,6 +334,8 @@ export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends Proces
 export type ProcessAPIErrorResult = {
   /** Whether to retry the LLM call after applying modifications */
   retry: boolean;
+  /** Replace the prompt-only messages used for the retry without mutating canonical history. */
+  modelContextMessages?: MastraDBMessage[];
 };
 
 /**
@@ -542,6 +574,17 @@ export {
 export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
+export {
+  createPromptOnlyMessageList,
+  normalizePromptOnlyMessages,
+  snapshotMessageList,
+  stripPromptOnlySystemMessages,
+} from './prompt-view';
+export {
+  validateAndFormatProcessInputResult,
+  validateAndFormatProcessInputStepResult,
+  validateProcessorResultExclusivity,
+} from './validate-result';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

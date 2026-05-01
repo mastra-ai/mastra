@@ -9,7 +9,7 @@ import type {
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
-import type { MessageInput, MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -177,6 +177,10 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Keyed by processor ID.
    */
   processorStates?: Map<string, ProcessorState>;
+  /**
+   * Prompt-only messages for the next model call. These do not mutate or persist canonical messages.
+   */
+  modelContextMessages?: MastraDBMessage[];
 } & Partial<ObservabilityContext>;
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {
