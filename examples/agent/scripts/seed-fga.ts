@@ -1,13 +1,13 @@
 /**
  * Seed script for WorkOS FGA resources.
  *
- * Creates authorization resources for agents and assigns roles
- * to a user's org membership so they can only see/execute specific agents.
+ * Sets up the full authorization model (permissions, roles, resources, assignments)
+ * for the example agent app. Safe to re-run — all operations are idempotent.
  *
- * Prerequisites (already done via API):
- *   - Resource type "agent" exists (child of Organization)
- *   - Permissions: "agents:read", "agents:execute" on "agent" resource type
- *   - Roles: "agent-viewer" (read), "agent-operator" (read+execute) on "agent"
+ * Prerequisites (dashboard only — cannot be done via API):
+ *   - Resource type "agent" exists as a child of Organization
+ *
+ * Everything else (permissions, roles, resources, assignments) is created by this script.
  *
  * Usage:
  *   cd examples/agent && npx tsx scripts/seed-fga.ts
@@ -41,10 +41,73 @@ const hiddenAgents = ['agent-that-harasses-you', 'network-agent'];
 
 const allAgents = [...operatorAgents, ...viewOnlyAgents, ...hiddenAgents];
 
-async function main() {
-  console.log(`\nSeeding FGA resources for org ${orgId}...\n`);
+function isConflict(err: any): boolean {
+  const msg = err?.message || JSON.stringify(err);
+  return err?.status === 409 || msg.includes('already exists') || msg.includes('duplicate') || msg.includes('conflict');
+}
 
-  // Step 1: Create agent resources under the organization
+async function main() {
+  console.log(`\nSeeding FGA for org ${orgId}...\n`);
+
+  // ──────────────────────────────────────────────────────────
+  // Step 1: Create permissions on the "agent" resource type
+  // ──────────────────────────────────────────────────────────
+  console.log('Step 1: Creating permissions...\n');
+  const permissions = [
+    { slug: 'agents:read', name: 'Read agents', resourceTypeSlug: 'agent' },
+    { slug: 'agents:execute', name: 'Execute agents', resourceTypeSlug: 'agent' },
+  ];
+  for (const perm of permissions) {
+    try {
+      await workos.authorization.createPermission(perm);
+      console.log(`  ✓ Created permission: ${perm.slug}`);
+    } catch (err: any) {
+      if (isConflict(err)) {
+        console.log(`  · Already exists: ${perm.slug}`);
+      } else {
+        console.error(`  ✗ Failed: ${perm.slug}:`, err?.message);
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Step 2: Create roles and bind permissions
+  // ──────────────────────────────────────────────────────────
+  console.log('\nStep 2: Creating roles and binding permissions...\n');
+  const roles = [
+    { slug: 'agent-viewer', name: 'Agent Viewer', permissions: ['agents:read'] },
+    { slug: 'agent-operator', name: 'Agent Operator', permissions: ['agents:read', 'agents:execute'] },
+  ];
+  for (const role of roles) {
+    try {
+      await workos.authorization.createOrganizationRole(orgId, {
+        slug: role.slug,
+        name: role.name,
+      });
+      console.log(`  ✓ Created role: ${role.slug}`);
+    } catch (err: any) {
+      if (isConflict(err)) {
+        console.log(`  · Already exists: ${role.slug}`);
+      } else {
+        console.error(`  ✗ Failed to create role ${role.slug}:`, err?.message);
+      }
+    }
+
+    // Bind permissions to the role (idempotent — overwrites)
+    try {
+      await workos.authorization.setOrganizationRolePermissions(orgId, role.slug, {
+        permissions: role.permissions,
+      });
+      console.log(`  ✓ Bound permissions to ${role.slug}: ${role.permissions.join(', ')}`);
+    } catch (err: any) {
+      console.error(`  ✗ Failed to bind permissions to ${role.slug}:`, err?.message);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Step 3: Create agent resources under the organization
+  // ──────────────────────────────────────────────────────────
+  console.log('\nStep 3: Creating agent resources...\n');
   for (const agentId of allAgents) {
     try {
       const resource = await workos.authorization.createResource({
@@ -57,16 +120,18 @@ async function main() {
       console.log(`  ✓ Created resource: agent/${agentId} (${resource.id})`);
     } catch (err: any) {
       const msg = err?.message || JSON.stringify(err);
-      if (msg.includes('already exists') || msg.includes('duplicate') || msg.includes('conflict')) {
-        console.log(`  · Resource already exists: agent/${agentId}`);
+      if (isConflict(err)) {
+        console.log(`  · Already exists: agent/${agentId}`);
       } else {
         console.error(`  ✗ Failed to create: agent/${agentId}:`, msg);
       }
     }
   }
 
-  // Step 2: Assign "agent-operator" role (read + execute) on specific agents
-  console.log(`\nAssigning "agent-operator" role to membership ${membershipId}...\n`);
+  // ──────────────────────────────────────────────────────────
+  // Step 4: Assign roles to the membership on specific agents
+  // ──────────────────────────────────────────────────────────
+  console.log(`\nStep 4: Assigning roles to membership ${membershipId}...\n`);
   for (const agentId of operatorAgents) {
     try {
       await workos.authorization.assignRole({
@@ -77,17 +142,14 @@ async function main() {
       });
       console.log(`  ✓ agent-operator on agent/${agentId}`);
     } catch (err: any) {
-      const msg = err?.message || JSON.stringify(err);
-      if (msg.includes('already assigned') || msg.includes('duplicate')) {
-        console.log(`  · Role already assigned on agent/${agentId}`);
+      if (isConflict(err)) {
+        console.log(`  · Already assigned: agent-operator on agent/${agentId}`);
       } else {
-        console.error(`  ✗ Failed to assign on agent/${agentId}:`, msg);
+        console.error(`  ✗ Failed on agent/${agentId}:`, err?.message);
       }
     }
   }
 
-  // Step 3: Assign "agent-viewer" role (read only) on view-only agents
-  console.log(`\nAssigning "agent-viewer" role...\n`);
   for (const agentId of viewOnlyAgents) {
     try {
       await workos.authorization.assignRole({
@@ -98,18 +160,19 @@ async function main() {
       });
       console.log(`  ✓ agent-viewer on agent/${agentId}`);
     } catch (err: any) {
-      const msg = err?.message || JSON.stringify(err);
-      if (msg.includes('already assigned') || msg.includes('duplicate')) {
-        console.log(`  · Role already assigned on agent/${agentId}`);
+      if (isConflict(err)) {
+        console.log(`  · Already assigned: agent-viewer on agent/${agentId}`);
       } else {
-        console.error(`  ✗ Failed to assign on agent/${agentId}:`, msg);
+        console.error(`  ✗ Failed on agent/${agentId}:`, err?.message);
       }
     }
   }
 
-  // Step 4: Verify with an authorization check
-  console.log(`\nVerifying authorization checks...\n`);
-  for (const agentId of [...operatorAgents, ...viewOnlyAgents, ...hiddenAgents]) {
+  // ──────────────────────────────────────────────────────────
+  // Step 5: Verify authorization checks
+  // ──────────────────────────────────────────────────────────
+  console.log(`\nStep 5: Verifying authorization checks...\n`);
+  for (const agentId of allAgents) {
     try {
       const readResult = await workos.authorization.check({
         organizationMembershipId: membershipId,
