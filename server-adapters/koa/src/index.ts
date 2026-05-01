@@ -25,6 +25,10 @@ type RegisteredKoaRoute = {
   pathRegex: RegExp;
   paramNames: string[];
 };
+type RouteDispatcherGroup = {
+  routes: RegisteredKoaRoute[];
+  middleware: Middleware;
+};
 
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
@@ -82,8 +86,7 @@ declare module 'koa' {
 }
 
 export class MastraServer extends MastraServerBase<Koa, Context, Context> {
-  private readonly registeredRoutes: RegisteredKoaRoute[] = [];
-  private readonly routeDispatcherApps = new WeakSet<Koa>();
+  private readonly activeRouteDispatchers = new WeakMap<Koa, RouteDispatcherGroup>();
 
   async init() {
     this.registerErrorMiddleware();
@@ -262,20 +265,27 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     };
   }
 
-  private ensureRouteDispatcher(app: Koa): void {
-    if (this.routeDispatcherApps.has(app)) {
-      return;
+  private getRouteDispatcherGroup(app: Koa): RouteDispatcherGroup {
+    const activeGroup = this.activeRouteDispatchers.get(app);
+    if (activeGroup && app.middleware[app.middleware.length - 1] === activeGroup.middleware) {
+      return activeGroup;
     }
 
-    app.use(this.createRouteDispatcherMiddleware());
-    this.routeDispatcherApps.add(app);
+    const group: RouteDispatcherGroup = {
+      routes: [],
+      middleware: undefined as unknown as Middleware,
+    };
+    group.middleware = this.createRouteDispatcherMiddleware(group);
+    app.use(group.middleware);
+    this.activeRouteDispatchers.set(app, group);
+    return group;
   }
 
-  private createRouteDispatcherMiddleware(): Middleware {
+  private createRouteDispatcherMiddleware(group: RouteDispatcherGroup): Middleware {
     const server = this;
 
     return async function mastraRouteDispatcher(ctx: Context, next: Next) {
-      const matchedRoute = server.findRegisteredRoute(ctx);
+      const matchedRoute = server.findRegisteredRoute(group.routes, ctx);
 
       if (!matchedRoute) {
         await next();
@@ -286,10 +296,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     };
   }
 
-  private findRegisteredRoute(ctx: Context): RegisteredKoaRoute | undefined {
+  private findRegisteredRoute(routes: RegisteredKoaRoute[], ctx: Context): RegisteredKoaRoute | undefined {
     const method = ctx.method.toUpperCase();
 
-    for (const registeredRoute of this.registeredRoutes) {
+    for (const registeredRoute of routes) {
       if (
         registeredRoute.route.method.toUpperCase() !== 'ALL' &&
         method !== registeredRoute.route.method.toUpperCase()
@@ -771,14 +781,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Convert Express-style :param to Koa-style :param (they're the same)
     const koaPath = fullPath;
 
-    this.registeredRoutes.push({
+    const group = this.getRouteDispatcherGroup(app);
+    group.routes.push({
       route,
       prefix,
       koaPath,
       pathRegex: this.pathToRegex(koaPath),
       paramNames: this.extractParamNames(koaPath),
     });
-    this.ensureRouteDispatcher(app);
   }
 
   /**
