@@ -15,7 +15,12 @@ export class MastraAuthAgentLair extends MastraAuthProvider<AgentLairUser> {
 
     this.jwks = createRemoteJWKSet(new URL(options.jwksUrl ?? DEFAULT_JWKS_URL));
     this.issuer = options.issuer;
-    this.requiredTrustScore = options.requiredTrustScore ?? 0;
+
+    const requiredTrustScore = options.requiredTrustScore ?? 0;
+    if (!Number.isFinite(requiredTrustScore) || requiredTrustScore < 0 || requiredTrustScore > 1000) {
+      throw new Error(`requiredTrustScore must be a finite number between 0 and 1000, got: ${requiredTrustScore}`);
+    }
+    this.requiredTrustScore = requiredTrustScore;
 
     this.registerOptions(options);
   }
@@ -36,9 +41,14 @@ export class MastraAuthAgentLair extends MastraAuthProvider<AgentLairUser> {
         return null;
       }
 
+      const iss = payload.iss;
+      if (typeof iss !== 'string' || !iss) {
+        return null;
+      }
+
       return {
         agentId,
-        iss: payload.iss!,
+        iss,
         trustScore: typeof payload.trust_score === 'number' ? (payload.trust_score as number) : undefined,
         behavioralHealthScore:
           typeof payload.behavioral_health_score === 'number'

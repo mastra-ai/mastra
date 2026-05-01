@@ -120,6 +120,16 @@ describe('MastraAuthAgentLair', () => {
       expect(await auth.authenticateToken('no-sub-token')).toBeNull();
     });
 
+    test('returns null when iss claim is missing', async () => {
+      (createRemoteJWKSet as any).mockReturnValue(vi.fn());
+      (jwtVerify as any).mockResolvedValue({
+        payload: { sub: 'agent-no-iss' },
+      });
+
+      const auth = new MastraAuthAgentLair();
+      expect(await auth.authenticateToken('no-iss-token')).toBeNull();
+    });
+
     test('handles token without trust_score', async () => {
       (createRemoteJWKSet as any).mockReturnValue(vi.fn());
       (jwtVerify as any).mockResolvedValue({
