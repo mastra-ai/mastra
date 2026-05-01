@@ -347,6 +347,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                         error: retryError,
                         runId,
                       });
+                      agentSpan?.error({ error: retryError, endSpan: true });
                     });
                 }, 1000);
               });

@@ -5295,6 +5295,8 @@ export class Agent<
    * Handles post-execution tasks including memory persistence and title generation.
    * @internal
    */
+  #completedRunIds = new Set<string>();
+
   async #executeOnFinish({
     result,
     readOnlyMemory,
@@ -5311,6 +5313,11 @@ export class Agent<
     structuredOutput = false,
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
+    if (this.#completedRunIds.has(runId)) {
+      this.logger.debug('Skipping executeOnFinish - already completed for runId', { runId, threadId });
+      return;
+    }
+    this.#completedRunIds.add(runId);
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
     const resToLog = {
