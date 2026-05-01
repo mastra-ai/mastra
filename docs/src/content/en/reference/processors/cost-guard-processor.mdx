@@ -1,42 +1,45 @@
 ---
 title: "Reference: CostGuardProcessor | Processors"
-description: "API reference for CostGuardProcessor, a processor that monitors cumulative token usage and estimated cost to enforce limits on agent runs."
+description: "API reference for CostGuardProcessor, a processor that enforces monetary cost limits on agent runs."
 packages:
   - "@mastra/core"
 ---
 
 # CostGuardProcessor
 
-The `CostGuardProcessor` monitors cumulative token usage and estimated cost across the agentic loop, blocking or warning when configurable limits are exceeded.
+The `CostGuardProcessor` enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded.
 
-It uses `processInputStep` to check limits before each LLM call. For `resource` and `thread` scopes, it queries the observability storage APIs to retrieve cumulative usage and cost data across runs.
+It uses `processInputStep` to check the cost limit before each LLM call. For `resource` and `thread` scopes, it queries the observability storage APIs to retrieve cumulative cost data across runs within a configurable time window (defaults to 7 days).
+
+For token-based limits, use `TokenLimiterProcessor` instead.
 
 Supports three scoping modes:
 
-- **Run scope** (default): Tracks usage within a single agent run
-- **Resource scope**: Tracks cumulative usage per `resourceId` across runs (requires observability storage)
-- **Thread scope**: Tracks cumulative usage per `threadId` across runs (requires observability storage)
+- **Run scope** (default): Tracks cost within a single agent run
+- **Resource scope**: Tracks cumulative cost per `resourceId` across runs (requires observability storage)
+- **Thread scope**: Tracks cumulative cost per `threadId` across runs (requires observability storage)
 
 ## Usage example
 
-Track token usage within a single agent run:
+Track cost within a single agent run:
 
 ```typescript
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  limits: { maxTotalTokens: 100_000 },
+  maxCost: 1.0,
 })
 ```
 
-Track cumulative cost per thread across runs:
+Track cumulative cost per thread with a 24-hour window:
 
 ```typescript
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  limits: { maxCost: 1.0 },
+  maxCost: 5.0,
   scope: 'thread',
+  window: '24h',
 })
 ```
 
@@ -46,19 +49,21 @@ Attach to an agent with an `onViolation` callback:
 import { Agent } from '@mastra/core/agent'
 import { CostGuardProcessor } from '@mastra/core/processors'
 
+const costGuard = new CostGuardProcessor({
+  maxCost: 5.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ detail }) => {
+  console.log(`Cost exceeded for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`)
+}
+
 const agent = new Agent({
   name: 'my-agent',
   model: 'openai/gpt-5-nano',
   processors: {
-    input: [
-      new CostGuardProcessor({
-        limits: { maxCost: 5.0 },
-        scope: 'resource',
-        onViolation: ({ limitType, usage, limit, scopeKey }) => {
-          console.log(`Limit ${limitType} exceeded for ${scopeKey}: ${usage}/${limit}`)
-        },
-      }),
-    ],
+    input: [costGuard],
   },
 })
 ```
@@ -68,78 +73,47 @@ const agent = new Agent({
 <PropertiesTable
   content={[
   {
-    name: 'limits',
-    type: 'CostGuardLimits',
-    description: 'Token and cost limits for the cost guard. At least one limit must be set.',
+    name: 'maxCost',
+    type: 'number',
+    description:
+      'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics.',
     isOptional: false,
-    properties: [
-      {
-        type: 'CostGuardLimits',
-        parameters: [
-          {
-            name: 'maxTotalTokens',
-            type: 'number',
-            description: 'Maximum total tokens (input + output) allowed.',
-            isOptional: true,
-          },
-          {
-            name: 'maxInputTokens',
-            type: 'number',
-            description: 'Maximum input tokens allowed.',
-            isOptional: true,
-          },
-          {
-            name: 'maxOutputTokens',
-            type: 'number',
-            description: 'Maximum output tokens allowed.',
-            isOptional: true,
-          },
-          {
-            name: 'maxCost',
-            type: 'number',
-            description:
-              'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Uses cost data from observability metrics. Only effective with resource or thread scopes.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
   },
   {
     name: 'scope',
     type: "'run' | 'resource' | 'thread'",
     description:
-      "Scope for cost tracking. 'run' tracks usage within the current agent run. 'resource' tracks cumulative usage per resourceId across runs. 'thread' tracks cumulative usage per threadId across runs. Resource and thread scopes require observability storage with getMetricAggregate support.",
+      "Scope for cost tracking. 'run' tracks cost within the current agent run. 'resource' tracks cumulative cost per resourceId across runs. 'thread' tracks cumulative cost per threadId across runs. Resource and thread scopes require observability storage with getMetricAggregate support.",
     isOptional: true,
     defaultValue: "'run'",
+  },
+  {
+    name: 'window',
+    type: "'1h' | '6h' | '24h' | '7d' | '30d' | '365d'",
+    description:
+      "Time window for cost aggregation when using 'resource' or 'thread' scope. Only applicable to non-run scopes.",
+    isOptional: true,
+    defaultValue: "'7d'",
   },
   {
     name: 'strategy',
     type: "'block' | 'warn'",
     description:
-      "Strategy when a limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
+      "Strategy when the cost limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
     isOptional: true,
     defaultValue: "'block'",
   },
   {
     name: 'message',
     type: 'string',
-    description:
-      'Custom message template for the abort reason. Supports {limitType}, {usage}, and {limit} placeholders.',
+    description: 'Custom message template for the abort reason. Supports {usage} and {limit} placeholders.',
     isOptional: true,
-    defaultValue: "'Cost guard: {limitType} limit exceeded ({usage}/{limit})'",
-  },
-  {
-    name: 'onViolation',
-    type: '(violation: object) => void | Promise<void>',
-    description:
-      'Callback invoked when a limit violation is detected, regardless of strategy. Use this for side effects like alerting, emailing users, or logging to external systems. Receives an object with limitType, usage, limit, totalUsage, scope, and scopeKey.',
-    isOptional: true,
+    defaultValue: "'Cost guard: cost limit exceeded ({usage}/{limit})'",
   },
 ]}
 />
 
-## Returns
+## Instance properties
 
 <PropertiesTable
   content={[
@@ -156,10 +130,17 @@ const agent = new Agent({
     isOptional: false,
   },
   {
+    name: 'onViolation',
+    type: '(violation: ProcessorViolation) => void | Promise<void>',
+    description:
+      'Callback invoked when a cost violation is detected, regardless of strategy. Part of the generalized Processor interface. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught.',
+    isOptional: true,
+  },
+  {
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Checks cumulative token usage and estimated cost against configured limits before each LLM call. For resource and thread scopes, queries observability storage for historical usage and cost. Calls abort() when limits are exceeded (block strategy) or logs a warning (warn strategy).',
+      'Checks cumulative estimated cost against maxCost before each LLM call. For resource and thread scopes, queries observability storage for historical cost within the configured time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy).',
     isOptional: false,
   },
 ]}
@@ -167,11 +148,11 @@ const agent = new Agent({
 
 ## Error behavior
 
-When the `block` strategy is active (default), `CostGuardProcessor` calls `abort()` with `retry: false` when any limit is exceeded. The TripWire metadata includes:
+When the `block` strategy is active (default), `CostGuardProcessor` calls `abort()` with `retry: false` when the cost limit is exceeded. The TripWire metadata includes:
 
 - `processorId`: `'cost-guard'`
-- `usage`: Current cumulative usage (`inputTokens`, `outputTokens`, `totalTokens`, `estimatedCost`, `costUnit`)
-- `limit`: The configured limits object
+- `usage`: Current cumulative usage (`estimatedCost`, `costUnit`)
+- `maxCost`: The configured cost limit
 - `scope`: The active scope (`'run'`, `'resource'`, or `'thread'`)
 - `scopeKey`: The scope identifier for resource/thread scopes (if applicable)
 
@@ -183,6 +164,6 @@ When the `block` strategy is active (default), `CostGuardProcessor` calls `abort
 | `resource` | Yes | Observability storage with `getMetricAggregate` | `resourceId` in `RequestContext` |
 | `thread` | Yes | Observability storage with `getMetricAggregate` | `threadId` in `RequestContext` |
 
-For `resource` and `thread` scopes, the processor queries the observability storage APIs (`getMetricAggregate`) to retrieve cumulative token usage metrics (`mastra_model_total_input_tokens`, `mastra_model_total_output_tokens`) along with associated `estimatedCost` data. If the Mastra instance does not have observability storage configured with `getMetricAggregate` support, an error is thrown at registration time.
+For `resource` and `thread` scopes, the processor queries the observability storage APIs (`getMetricAggregate`) with a time window filter to retrieve cumulative cost data. If the Mastra instance does not have observability storage configured with `getMetricAggregate` support, an error is thrown at registration time.
 
-If the required context ID is missing at runtime, the processor falls back to run-scoped tracking. Observability query failures are handled with a fail-open strategy: if a query fails, historical usage starts from zero.
+If the required context ID is missing at runtime, the processor falls back to run-scoped tracking. Observability query failures are handled with a fail-open strategy: if a query fails, historical cost starts from zero.

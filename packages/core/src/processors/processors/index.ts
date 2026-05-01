@@ -44,10 +44,11 @@ export {
 export {
   CostGuardProcessor,
   type CostGuardOptions,
-  type CostGuardLimits,
   type CostGuardUsage,
   type CostGuardTripwireMetadata,
+  type CostGuardViolationDetail,
   type CostScope,
+  type CostWindow,
 } from './cost-guard';
 
 export { ToolCallFilter } from './tool-call-filter';
