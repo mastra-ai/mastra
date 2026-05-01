@@ -9,11 +9,7 @@ export const mkdirTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
   description: 'Create a directory in the workspace filesystem',
   inputSchema: z.object({
-    path: z
-      .string()
-      .describe(
-        'The relative path of the directory to create (e.g., "src/utils"). Always use relative paths — never start with "/".',
-      ),
+    path: z.string().describe('The path of the directory to create'),
     recursive: z
       .boolean()
       .optional()

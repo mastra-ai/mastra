@@ -546,6 +546,13 @@ describe('LocalFilesystem', () => {
       await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
     });
 
+    it('should hint at the relative form when an absolute path is rejected', async () => {
+      // The error message should guide the LLM (or developer) toward a relative path
+      // instead of just saying "permission denied".
+      await expect(localFs.writeFile('/data/output.txt', 'nope')).rejects.toThrow(/data\/output\.txt/);
+      await expect(localFs.writeFile('/data/output.txt', 'nope')).rejects.toThrow(/relative path/);
+    });
+
     it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
       // Write a file via relative path
       await localFs.writeFile('test.txt', 'relative content');

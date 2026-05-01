@@ -9,11 +9,7 @@ export const deleteFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.DELETE,
   description: 'Delete a file or directory from the workspace filesystem',
   inputSchema: z.object({
-    path: z
-      .string()
-      .describe(
-        'The relative path to the file or directory to delete (e.g., "data/old.txt"). Always use relative paths — never start with "/".',
-      ),
+    path: z.string().describe('The path to the file or directory to delete'),
     recursive: z
       .boolean()
       .optional()

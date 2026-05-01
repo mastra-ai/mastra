@@ -275,6 +275,15 @@ export class LocalFilesystem extends MastraFilesystem {
 
     if (this._contained) {
       if (!this._isWithinAnyRoot(absolutePath)) {
+        // Help the LLM (or developer) recover when they pass an absolute path
+        // that escapes the workspace — point them at the relative form.
+        if (nodePath.isAbsolute(inputPath)) {
+          const suggested = inputPath.replace(/^[/\\]+/, '');
+          throw new PermissionError(
+            inputPath,
+            `access (path is outside the workspace; use a relative path like "${suggested}")`,
+          );
+        }
         throw new PermissionError(inputPath, 'access');
       }
     }
