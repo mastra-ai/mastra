@@ -322,7 +322,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                         e,
                       );
 
-                agentSpan?.error({ error: spanError, endSpan: true });
+                agentSpan?.error({ error: spanError });
 
                 setTimeout(() => {
                   capabilities
