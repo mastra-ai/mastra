@@ -25,4 +25,3 @@ export class NovaSonicError extends Error {
     };
   }
 }
-

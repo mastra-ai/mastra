@@ -20,8 +20,7 @@ import { NovaSonicVoice } from './index';
  * content-block sequence built by `enqueueInitialSessionEvents`.
  */
 const hasAwsCreds =
-  Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
-  Boolean(process.env.AWS_PROFILE);
+  Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) || Boolean(process.env.AWS_PROFILE);
 const e2eEnabled = process.env.RUN_AWS_NOVA_SONIC_E2E === '1' && hasAwsCreds;
 
 describe('NovaSonicVoice (e2e)', () => {
@@ -54,14 +53,11 @@ describe('NovaSonicVoice (e2e)', () => {
     },
   );
 
-  it.skipIf(!e2eEnabled)(
-    'lists the documented speakers without requiring a connection',
-    async () => {
-      voice = new NovaSonicVoice({});
-      const speakers = await voice.getSpeakers();
-      expect(speakers.length).toBeGreaterThanOrEqual(18);
-      expect(speakers.find(s => s.voiceId === 'matthew')).toBeDefined();
-      expect(speakers.find(s => s.voiceId === 'tiffany')).toBeDefined();
-    },
-  );
+  it.skipIf(!e2eEnabled)('lists the documented speakers without requiring a connection', async () => {
+    voice = new NovaSonicVoice({});
+    const speakers = await voice.getSpeakers();
+    expect(speakers.length).toBeGreaterThanOrEqual(18);
+    expect(speakers.find(s => s.voiceId === 'matthew')).toBeDefined();
+    expect(speakers.find(s => s.voiceId === 'tiffany')).toBeDefined();
+  });
 });

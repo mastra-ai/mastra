@@ -44,6 +44,7 @@ yarn add @mastra/voice-aws-nova-sonic
 You can configure AWS credentials in several ways:
 
 **Option 1: Environment Variables**
+
 ```bash
 export AWS_ACCESS_KEY_ID=your-access-key-id
 export AWS_SECRET_ACCESS_KEY=your-secret-access-key
@@ -51,6 +52,7 @@ export AWS_REGION=us-east-1
 ```
 
 **Option 2: AWS Credentials File**
+
 ```ini
 # ~/.aws/credentials
 [default]
@@ -59,9 +61,11 @@ aws_secret_access_key = your-secret-access-key
 ```
 
 **Option 3: IAM Role** (for EC2/Lambda)
+
 - Attach an IAM role with Bedrock permissions to your EC2 instance or Lambda function
 
 **Option 4: Explicit Credentials in Code**
+
 ```typescript
 import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic';
 
@@ -84,10 +88,7 @@ Your AWS credentials need the following IAM permissions:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithBidirectionalStream"
-      ],
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithBidirectionalStream"],
       "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-2-sonic-v1:0"
     }
   ]
@@ -116,7 +117,7 @@ const agent = new Agent({
 await agent.voice.connect();
 
 // Listen for agent audio responses (stream of audio data)
-agent.voice.on('speaker', (audioStream) => {
+agent.voice.on('speaker', audioStream => {
   // Pipe to your audio output (e.g., speaker, WebSocket, file)
   audioStream.pipe(yourAudioOutput);
 });

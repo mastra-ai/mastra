@@ -24,7 +24,6 @@ export type NovaSonicLanguageCode =
   | 'pt-BR'
   | 'hi-IN';
 
-
 /**
  * Tool configuration for Nova 2 Sonic
  */
@@ -342,4 +341,3 @@ export enum NovaSonicErrorCode {
   VALIDATION_ERROR = 'validation_error',
   UNKNOWN_ERROR = 'unknown_error',
 }
-
