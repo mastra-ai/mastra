@@ -173,6 +173,19 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
         const ok = await scheduleStore.updateScheduleNextFire('missing', 100, 200, 150, 'run_1');
         expect(ok).toBe(false);
       });
+
+      it('returns false when schedule is paused', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));
+        await scheduleStore.updateSchedule('s1', { status: 'paused' });
+
+        const ok = await scheduleStore.updateScheduleNextFire('s1', 100, 200, 150, 'run_1');
+        expect(ok).toBe(false);
+
+        const fetched = await scheduleStore.getSchedule('s1');
+        expect(fetched!.nextFireAt).toBe(100);
+        expect(fetched!.status).toBe('paused');
+      });
     });
 
     describe('deleteSchedule', () => {

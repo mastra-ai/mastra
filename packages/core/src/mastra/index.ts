@@ -122,14 +122,27 @@ function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConf
 }
 
 /**
+ * Builds the storage row id for a declarative schedule. Workflow and schedule
+ * ids are URL-encoded so delimiters in user-supplied ids cannot collide
+ * across workflows (e.g. `foo__bar` single vs `foo` array-entry `bar`).
+ */
+function declarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
+  const encodedWorkflow = encodeURIComponent(workflowId);
+  if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
+  return `wf_${encodedWorkflow}__${encodeURIComponent(scheduleId)}`;
+}
+
+/**
  * Determines whether a stored schedule row id belongs to one of the registered
  * workflows. Returns the owning workflow id when the row id either equals
- * `wf_<workflowId>` (single-schedule form) or starts with `wf_<workflowId>__`
- * (array form). Returns undefined when no registered workflow owns the row.
+ * `wf_<encoded(workflowId)>` (single-schedule form) or starts with
+ * `wf_<encoded(workflowId)>__` (array form). Returns undefined when no
+ * registered workflow owns the row.
  */
 function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string>>): string | undefined {
   for (const workflowId of byWorkflow.keys()) {
-    if (rowId === `wf_${workflowId}` || rowId.startsWith(`wf_${workflowId}__`)) {
+    const prefix = `wf_${encodeURIComponent(workflowId)}`;
+    if (rowId === prefix || rowId.startsWith(`${prefix}__`)) {
       return workflowId;
     }
   }
@@ -1113,9 +1126,10 @@ export class Mastra<
   /**
    * Returns the flat list of declarative schedules sourced from currently
    * registered workflows. Single-schedule workflows yield one entry keyed by
-   * `wf_${workflowId}`. Array-form workflows yield one entry per array entry
-   * keyed by `wf_${workflowId}__${scheduleId}` so the prefix uniquely
-   * identifies "all rows owned by this workflow's declarative config".
+   * `wf_<encoded(workflowId)>`. Array-form workflows yield one entry per array
+   * entry keyed by `wf_<encoded(workflowId)>__<encoded(scheduleId)>` so the
+   * prefix uniquely identifies "all rows owned by this workflow's declarative
+   * config" even when ids contain `__` or other delimiter-like characters.
    */
   #collectDeclarativeSchedules(): Array<{
     scheduleId: string;
@@ -1129,7 +1143,9 @@ export class Mastra<
       if (configs.length === 0) continue;
       const isArrayForm = configs.length > 1 || (configs.length === 1 && configs[0]!.id !== undefined);
       for (const cfg of configs) {
-        const scheduleId = isArrayForm ? `wf_${workflow.id}__${cfg.id}` : `wf_${workflow.id}`;
+        const scheduleId = isArrayForm
+          ? declarativeScheduleRowId(workflow.id, cfg.id)
+          : declarativeScheduleRowId(workflow.id);
         out.push({ scheduleId, workflowId: workflow.id, cfg });
       }
     }
@@ -1197,8 +1213,15 @@ export class Mastra<
     const declaredIds = new Set(declared.map(d => d.scheduleId));
 
     // Group declared ids by workflow so we can detect orphans (rows that
-    // start with `wf_<workflowId>` but aren't in the current declared set).
+    // start with `wf_<encoded(workflowId)>` but aren't in the current declared
+    // set). Seed an empty entry for every registered workflow first so that
+    // workflows which removed all their schedules across a redeploy still
+    // have their old rows cleaned up.
     const declaredIdsByWorkflow = new Map<string, Set<string>>();
+    const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    for (const workflow of Object.values(workflows ?? {})) {
+      declaredIdsByWorkflow.set(workflow.id, new Set());
+    }
     for (const { workflowId, scheduleId } of declared) {
       if (!declaredIdsByWorkflow.has(workflowId)) declaredIdsByWorkflow.set(workflowId, new Set());
       declaredIdsByWorkflow.get(workflowId)!.add(scheduleId);

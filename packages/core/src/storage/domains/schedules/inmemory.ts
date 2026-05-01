@@ -84,6 +84,7 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
     const existing = this.db.schedules.get(id);
     if (!existing) return false;
     if (existing.nextFireAt !== expectedNextFireAt) return false;
+    if (existing.status !== 'active') return false;
     const stored: Schedule = {
       ...existing,
       nextFireAt: newNextFireAt,

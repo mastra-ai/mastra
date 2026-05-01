@@ -135,13 +135,13 @@ In Studio, open the schedule detail page and select **Pause** or **Resume** in t
 
 A few rules worth knowing:
 
-- Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status.
+- Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, or other fields.
 - Resume recomputes `nextFireAt` from now. A schedule paused for a week does not fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
-- To unpause permanently, either call `resumeSchedule` or change the `cron` or `timezone` in code, which forces a recompute on the next deploy.
+- The only way to unpause is `resumeSchedule` (or the **Resume** button in Studio). Editing the workflow's `schedule` config does not unpause a paused row.
 - Pause and resume are idempotent. Calling pause on an already-paused schedule is a no-op.
 - This is an operational override, not a way to author schedules. Creating, deleting, and editing schedules still happens in code via the `schedule` field on `createWorkflow`.
 
-The underlying HTTP routes are `POST /schedules/:id/pause` and `POST /schedules/:id/resume`. Both require the `schedules:write` permission.
+The underlying HTTP routes are `POST /api/schedules/:id/pause` and `POST /api/schedules/:id/resume`. Both require the `schedules:write` permission.
 
 ## Redeploying with changes
 

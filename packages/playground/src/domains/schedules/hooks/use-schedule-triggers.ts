@@ -31,7 +31,10 @@ export const useScheduleTriggers = (scheduleId: string | undefined) => {
     },
     refetchInterval: query => {
       const triggers = query.state.data?.pages.flatMap(p => p.triggers) ?? [];
-      const hasActive = triggers.some(t => t.run?.status === 'running' || (!t.run && t.status === 'published'));
+      const hasActive = triggers.some(t => {
+        if (!t.run) return t.status === 'published';
+        return t.run.status === 'pending' || t.run.status === 'running' || t.run.status === 'waiting';
+      });
       return hasActive ? 5_000 : false;
     },
   });

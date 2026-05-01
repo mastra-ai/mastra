@@ -72,9 +72,9 @@ export const scheduleIdPathParams = z.object({
 });
 
 export const listScheduleTriggersQuerySchema = z.object({
-  limit: z.coerce.number().optional(),
-  fromActualFireAt: z.coerce.number().optional(),
-  toActualFireAt: z.coerce.number().optional(),
+  limit: z.coerce.number().int().positive().optional(),
+  fromActualFireAt: z.coerce.number().int().nonnegative().optional(),
+  toActualFireAt: z.coerce.number().int().nonnegative().optional(),
 });
 
 export const listScheduleTriggersResponseSchema = z.object({

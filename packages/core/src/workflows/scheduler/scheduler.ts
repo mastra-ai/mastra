@@ -149,16 +149,28 @@ export class WorkflowScheduler extends MastraBase {
     // Deterministic runId so concurrent ticks across processes derive the same id.
     const runId = `sched_${schedule.id}_${schedule.nextFireAt}`;
 
-    const claimed = await this.#schedulesStore.updateScheduleNextFire(
-      schedule.id,
-      schedule.nextFireAt,
-      newNextFireAt,
-      actualFireAt,
-      runId,
-    );
+    let claimed = false;
+    try {
+      claimed = await this.#schedulesStore.updateScheduleNextFire(
+        schedule.id,
+        schedule.nextFireAt,
+        newNextFireAt,
+        actualFireAt,
+        runId,
+      );
+    } catch (err) {
+      this.logger.error('Failed to claim due schedule fire', {
+        scheduleId: schedule.id,
+        runId,
+        error: err,
+      });
+      this.#config.onError?.(err, { scheduleId: schedule.id });
+      return;
+    }
 
     if (!claimed) {
-      // Another instance won the race. Skip publishing.
+      // Another instance won the race, the row was paused/disabled, or the
+      // expected nextFireAt no longer matches. Skip publishing.
       return;
     }
 

@@ -1532,9 +1532,9 @@ export class EventedWorkflow<
     if (!params.schedule) {
       this.#schedules = [];
     } else if (Array.isArray(params.schedule)) {
-      this.#schedules = params.schedule;
+      this.#schedules = params.schedule.map(cfg => ({ ...cfg }));
     } else {
-      this.#schedules = [params.schedule];
+      this.#schedules = [{ ...params.schedule }];
     }
   }
 
@@ -1544,7 +1544,7 @@ export class EventedWorkflow<
    * schedules at boot. Returns an empty array when no schedule is declared.
    */
   getScheduleConfigs(): WorkflowScheduleConfig[] {
-    return this.#schedules;
+    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {

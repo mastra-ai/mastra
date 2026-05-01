@@ -218,8 +218,8 @@ export class SchedulesLibSQL extends SchedulesStorage {
     const result = await this.#client.execute({
       sql: `UPDATE ${TABLE_SCHEDULES}
             SET next_fire_at = ?, last_fire_at = ?, last_run_id = ?, updated_at = ?
-            WHERE id = ? AND next_fire_at = ?`,
-      args: [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt],
+            WHERE id = ? AND next_fire_at = ? AND status = ?`,
+      args: [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
     });
     return (result.rowsAffected ?? 0) > 0;
   }

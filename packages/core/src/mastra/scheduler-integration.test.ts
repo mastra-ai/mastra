@@ -5,6 +5,32 @@ import { createWorkflow as createDefaultWorkflow } from '../workflows';
 import { createStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { Mastra } from './index';
 
+async function waitUntil(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 2000,
+  intervalMs = 10,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`waitUntil predicate did not become true within ${timeoutMs}ms`);
+}
+
+async function waitForScheduler(mastra: Mastra): Promise<void> {
+  await waitUntil(() => mastra.scheduler?.isRunning === true);
+}
+
+/**
+ * Drain microtasks + a couple of macrotask turns so any pending async init
+ * settles. Used by tests that assert the scheduler intentionally did NOT start,
+ * where there is no positive predicate to poll on.
+ */
+async function flushAsyncInit(): Promise<void> {
+  for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+}
+
 describe('Mastra — workflow scheduler integration', () => {
   it('auto-instantiates the scheduler when a workflow declares a schedule', async () => {
     const wf = createEventedWorkflow({
@@ -29,7 +55,7 @@ describe('Mastra — workflow scheduler integration', () => {
     });
 
     // Allow the async scheduler init to complete.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForScheduler(mastra);
 
     const scheduler = mastra.scheduler;
     expect(scheduler).toBeDefined();
@@ -52,7 +78,7 @@ describe('Mastra — workflow scheduler integration', () => {
       storage,
     });
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await flushAsyncInit();
 
     expect(mastra.scheduler).toBeUndefined();
     // Prove the scheduler never touched the schedules domain.
@@ -85,7 +111,7 @@ describe('Mastra — workflow scheduler integration', () => {
       workflows: { wf } as any,
     });
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await flushAsyncInit();
 
     expect(mastra.scheduler).toBeUndefined();
     expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
@@ -100,7 +126,7 @@ describe('Mastra — workflow scheduler integration', () => {
       scheduler: { enabled: true },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     expect(mastra.scheduler!.isRunning).toBe(true);
 
@@ -125,7 +151,7 @@ describe('Mastra — workflow scheduler integration', () => {
     });
 
     // The scheduler picks the workflow up because it's evented now and has a schedule.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     const schedulesStore = await mastra.getStorage()!.getStore('schedules');
     const schedules = await schedulesStore!.listSchedules();
@@ -141,7 +167,7 @@ describe('Mastra — workflow scheduler integration', () => {
       scheduler: { enabled: true },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     expect(mastra.scheduler!.isRunning).toBe(true);
 
@@ -179,7 +205,7 @@ describe('Mastra — workflow scheduler integration', () => {
         storage,
         workflows: { wf } as any,
       });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForScheduler(mastra);
       return mastra;
     };
 
@@ -279,7 +305,7 @@ describe('Mastra — workflow scheduler integration', () => {
         storage,
         workflows: { wf } as any,
       });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForScheduler(mastra);
       return mastra;
     };
 
@@ -348,7 +374,7 @@ describe('Mastra — workflow scheduler integration', () => {
         )
         .commit();
       const first = new Mastra({ logger: false, storage, workflows: { wfSingle } as any });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForScheduler(first);
       const schedulesStore = (await storage.getStore('schedules'))!;
       expect((await schedulesStore.listSchedules()).map(r => r.id)).toEqual(['wf_multi-wf']);
       await first.shutdown();

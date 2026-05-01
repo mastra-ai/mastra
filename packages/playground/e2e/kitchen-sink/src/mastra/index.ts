@@ -73,6 +73,32 @@ export const mastra = new Mastra({
             clearTasks.push(datasetsStore.dangerouslyClearAll());
           }
 
+          // Reset schedule pause state + drop trigger history between tests.
+          // Schedules are declarative config registered at boot, so we
+          // snapshot the current rows, clear, then re-create them with a
+          // fresh `nextFireAt` and `status: 'active'`.
+          const schedulesStore = await storage.getStore('schedules');
+          if (schedulesStore) {
+            const existingSchedules = await schedulesStore.listSchedules();
+            clearTasks.push(
+              (async () => {
+                await schedulesStore.dangerouslyClearAll();
+                const now = Date.now();
+                for (const schedule of existingSchedules) {
+                  await schedulesStore.createSchedule({
+                    ...schedule,
+                    status: 'active',
+                    nextFireAt: now + 60_000,
+                    lastFireAt: null,
+                    lastRunId: null,
+                    createdAt: now,
+                    updatedAt: now,
+                  });
+                }
+              })(),
+            );
+          }
+
           await Promise.all(clearTasks);
 
           return c.json({ message: 'Custom route' }, 201);
