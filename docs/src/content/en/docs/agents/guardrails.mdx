@@ -221,32 +221,6 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 :::
 
-### Filter with regex patterns
-
-The `RegexFilterProcessor()` detects and handles pattern matches using regular expressions. It requires no LLM calls — all detection is regex-based, making it the fastest guardrail option.
-
-```typescript {7-11,13} title="src/mastra/agents/filtered-agent.ts"
-import { RegexFilterProcessor } from '@mastra/core/processors'
-
-export const filteredAgent = new Agent({
-  id: 'filtered-agent',
-  name: 'Filtered Agent',
-  inputProcessors: [
-    new RegexFilterProcessor({
-      presets: ['pii', 'secrets'],
-      strategy: 'redact',
-    }),
-  ],
-  outputProcessors: [new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' })],
-})
-```
-
-:::note
-
-Visit [`RegexFilterProcessor()`](/reference/processors/regex-filter-processor) reference for a full list of configuration options and built-in presets.
-
-:::
-
 ### Enforce cost limits
 
 The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It uses `processInputStep` to check costs before each LLM call.
