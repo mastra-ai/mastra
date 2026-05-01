@@ -167,10 +167,18 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // Add workspace instructions (matches WorkspaceInstructionsProcessor behavior)
   const workspace = await typedAgent.getWorkspace({ requestContext });
-  if (workspace?.filesystem || workspace?.sandbox) {
-    const wsInstructions = workspace.getInstructions({ requestContext });
-    if (wsInstructions) {
-      messageList.addSystem({ role: 'system', content: wsInstructions });
+  if (workspace) {
+    const hasFs =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSb = typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (hasFs || hasSb) {
+      const wsInstructions =
+        typeof workspace.getInstructionsAsync === 'function'
+          ? await workspace.getInstructionsAsync({ requestContext })
+          : workspace.getInstructions({ requestContext });
+      if (wsInstructions) {
+        messageList.addSystem({ role: 'system', content: wsInstructions });
+      }
     }
   }
 
