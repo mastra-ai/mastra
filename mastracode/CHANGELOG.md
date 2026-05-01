@@ -1,5 +1,47 @@
 # mastracode
 
+## 0.17.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.31.0-alpha.5
+
+## 0.17.0-alpha.5
+
+### Minor Changes
+
+- Free-text answers to the `ask_user` tool can now span multiple lines. Press ([#15395](https://github.com/mastra-ai/mastra/pull/15395))
+  `Shift+Enter` or `\+Enter` to insert a newline, `Enter` to submit, and `Esc`
+  to cancel — long answers wrap inside the input box instead of scrolling
+  horizontally off-screen, and the raw text (including indentation and trailing
+  newlines) is forwarded to the agent intact.
+
+  Slash-command prompts that take short answers (paths, names, yes/no, model
+  picks) keep the existing single-line input, so muscle memory for those
+  prompts is unchanged.
+
+  Internally, this is opt-in via a new `multiline: true` flag on
+  `AskQuestionInlineComponent` / `AskQuestionDialogComponent`. The flag also
+  flows through `createStreaming` and `activate`, so the multiline editor is
+  available everywhere those components are mounted.
+
+## 0.16.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006), [`04151c7`](https://github.com/mastra-ai/mastra/commit/04151c7dcea934b4fe9076708a23fac161195414), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006)]:
+  - @mastra/core@1.31.0-alpha.4
+
+## 0.16.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`b2deb29`](https://github.com/mastra-ai/mastra/commit/b2deb29412b300c868655b5840463614fbb7962d), [`66644be`](https://github.com/mastra-ai/mastra/commit/66644beac1aa560f0e417956ff007c89341dc382), [`310b953`](https://github.com/mastra-ai/mastra/commit/310b95345f302dcd5ba3ed862bdc96f059d44122), [`43f0e1d`](https://github.com/mastra-ai/mastra/commit/43f0e1d5d5a74ba6fc746f2ad89ebe0c64777a7d), [`da0b9e2`](https://github.com/mastra-ai/mastra/commit/da0b9e2ba7ecc560213b426d6c097fe63946086e)]:
+  - @mastra/core@1.31.0-alpha.3
+  - @mastra/libsql@1.9.1-alpha.0
+  - @mastra/pg@1.9.4-alpha.1
+
 ## 0.16.3-alpha.2
 
 ### Patch Changes

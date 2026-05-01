@@ -1,5 +1,32 @@
 # @mastra/server
 
+## 1.31.0-alpha.5
+
+### Patch Changes
+
+- Fix `GET /tools/:toolId` and `POST /tools/:toolId/execute` to find dynamically-resolved agent tools (provided via `toolsResolver` / function-based `tools`) when they are not in the static tool registry. Errors thrown by an individual agent's `listTools()` during the lookup are now logged as warnings instead of being silently swallowed. ([#13989](https://github.com/mastra-ai/mastra/pull/13989))
+
+- Updated dependencies:
+  - @mastra/core@1.31.0-alpha.5
+
+## 1.31.0-alpha.4
+
+### Patch Changes
+
+- Export `MastraServerBase` from `@mastra/core/server` so framework adapters that manage routing independently can share the same server base class. ([#12751](https://github.com/mastra-ai/mastra/pull/12751))
+
+- Updated dependencies [[`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006), [`04151c7`](https://github.com/mastra-ai/mastra/commit/04151c7dcea934b4fe9076708a23fac161195414), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006)]:
+  - @mastra/core@1.31.0-alpha.4
+
+## 1.31.0-alpha.3
+
+### Patch Changes
+
+- Added platform channels framework with ChannelProvider interface, ChannelsStorage domain, and ChannelConnectResult discriminated union supporting OAuth, deep link, and immediate connection flows. Channels can be registered on the Mastra instance and expose connect/disconnect/list APIs for platform integrations. ([#15876](https://github.com/mastra-ai/mastra/pull/15876))
+
+- Updated dependencies [[`b2deb29`](https://github.com/mastra-ai/mastra/commit/b2deb29412b300c868655b5840463614fbb7962d), [`66644be`](https://github.com/mastra-ai/mastra/commit/66644beac1aa560f0e417956ff007c89341dc382), [`310b953`](https://github.com/mastra-ai/mastra/commit/310b95345f302dcd5ba3ed862bdc96f059d44122), [`43f0e1d`](https://github.com/mastra-ai/mastra/commit/43f0e1d5d5a74ba6fc746f2ad89ebe0c64777a7d), [`da0b9e2`](https://github.com/mastra-ai/mastra/commit/da0b9e2ba7ecc560213b426d6c097fe63946086e)]:
+  - @mastra/core@1.31.0-alpha.3
+
 ## 1.31.0-alpha.2
 
 ### Patch Changes
