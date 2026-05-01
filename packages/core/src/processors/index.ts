@@ -316,6 +316,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   readonly id: TId;
   readonly name?: string;
   readonly description?: string;
+  /**
+   * Declares that this processor owns skill discovery and instruction loading.
+   * Agents use this to avoid adding eager skill context and overlapping skill tools.
+   */
+  readonly providesSkillDiscovery?: 'on-demand';
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -528,6 +533,12 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export {
+  isRetryableOpenAIResponsesStreamError,
+  StreamErrorRetryProcessor,
+  type StreamErrorRetryMatcher,
+  type StreamErrorRetryProcessorOptions,
+} from './stream-error-retry-processor';
 export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';

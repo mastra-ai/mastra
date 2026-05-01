@@ -1,5 +1,4 @@
 import { openai } from '@ai-sdk/openai';
-import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { z } from 'zod';
 import { OpenAIVoice } from '@mastra/voice-openai';
@@ -13,7 +12,7 @@ import { requestContextDemoAgent } from './request-context-demo-agent';
 
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
-
+export { slackDemoAgent } from './slack-agent.js';
 const memory = new Memory();
 
 // Define schema directly compatible with OpenAI's requirements
@@ -53,7 +52,7 @@ export const chefAgent = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-5.4-mini',
   tools: {
     cookingTool,
     weatherInfo,
@@ -76,9 +75,9 @@ export const dynamicAgent = new Agent({
   },
   model: ({ requestContext }) => {
     if (requestContext.get('foo')) {
-      return openai('gpt-4o');
+      return 'openai/gpt-5.4' as const;
     }
-    return openai('gpt-4o-mini');
+    return 'openai/gpt-5.4-mini' as const;
   },
   tools: ({ requestContext }) => {
     const tools: Record<string, any> = {
@@ -135,7 +134,7 @@ export const schemaValidatedAgent = new Agent({
     return baseInstructions;
   },
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
 
   tools: ({ requestContext }) => {
     const tools: Record<string, any> = {
@@ -153,26 +152,25 @@ export const schemaValidatedAgent = new Agent({
 });
 
 const piiDetector = new PIIDetector({
-  // model: google('gemini-2.0-flash-001'),
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,
 });
 
 const languageDetector = new LanguageDetector({
-  model: google('gemini-2.0-flash-001'),
+  model: 'google/gemini-2.0-flash-001',
   targetLanguages: ['en'],
   strategy: 'translate',
 });
 
 const promptInjectionDetector = new PromptInjectionDetector({
-  model: google('gemini-2.0-flash-001'),
+  model: 'google/gemini-2.0-flash-001',
   strategy: 'block',
 });
 
 const moderationDetector = new ModerationProcessor({
-  model: google('gemini-2.0-flash-001'),
+  model: 'google/gemini-2.0-flash-001',
   strategy: 'block',
   chunkWindow: 10,
 });
@@ -185,8 +183,7 @@ export const chefAgentResponses = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  model: openai.responses('gpt-4o'),
-  // model: cerebras('qwen-3-coder-480b'),
+  model: 'openai/gpt-5.4',
   tools: async () => {
     return {
       web_search_preview: openai.tools.webSearchPreview(),
@@ -211,12 +208,12 @@ export const agentThatHarassesYou = new Agent({
   instructions: `
     You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
     `,
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   outputProcessors: [moderationDetector],
 });
 
 const answerRelevance = createAnswerRelevancyScorer({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
 });
 
 export const evalAgent = new Agent({
@@ -225,7 +222,7 @@ export const evalAgent = new Agent({
   instructions: `
     You are a helpful assistant with a weather tool.
     `,
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5.4',
   tools: {
     weatherInfo,
   },

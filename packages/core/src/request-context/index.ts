@@ -43,6 +43,13 @@ export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
  */
 export const MASTRA_VERSIONS_KEY = 'mastra__versions';
 
+/**
+ * Reserved key for storing the raw auth token from the incoming request.
+ * Used by the editor to forward authentication when connecting to MCP servers
+ * that require the same auth as the Mastra server itself.
+ */
+export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
+
 export type { VersionOverrides, VersionSelector } from '../mastra/types';
 export { mergeVersionOverrides } from '../mastra/types';
 

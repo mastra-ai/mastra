@@ -102,6 +102,7 @@ const languageModelUsageSchema = z.object({
   totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
 });
 
 // Zod schemas for runtime validation

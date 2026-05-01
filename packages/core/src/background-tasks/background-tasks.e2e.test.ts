@@ -299,4 +299,142 @@ describeE2E('Background Tasks E2E', () => {
       await memoryMastra.backgroundTaskManager?.shutdown();
     }
   }, 60_000);
+
+  it('streamUntilIdle keeps the stream open and continues after a background task completes', async () => {
+    const mockMemory = new MockMemory();
+    const threadId = 'stream-until-idle-thread-1';
+    const resourceId = 'stream-until-idle-user-1';
+
+    const memoryAgent = new Agent({
+      id: 'stream-until-idle-agent-1',
+      name: 'Stream Until Idle Agent',
+      instructions:
+        'You are a helpful assistant. ' +
+        'When asked to research something, use the research tool. ' +
+        'After you see the research result, briefly summarize it for the user.',
+      model: openai('gpt-4o-mini'),
+      tools: { research: researchTool, greet: greetTool },
+      memory: mockMemory,
+      backgroundTasks: { tools: { research: true } },
+    });
+
+    const memoryMastra = new Mastra({
+      agents: { 'stream-until-idle-agent-1': memoryAgent },
+      backgroundTasks: {
+        enabled: true,
+        globalConcurrency: 5,
+        perAgentConcurrency: 3,
+      },
+      storage: testStorage,
+    });
+
+    try {
+      const result = await memoryAgent.streamUntilIdle('Please research "quantum computing" for me', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of result.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // Initial turn dispatched the research background task
+      const bgStarted = chunks.find(c => c.type === 'background-task-started');
+      expect(bgStarted).toBeDefined();
+      expect(bgStarted.payload.toolName).toBe('research');
+
+      // The outer stream forwarded the task lifecycle — completion landed
+      // inline with agent chunks (this is what streamUntilIdle uniquely provides)
+      const bgCompleted = chunks.find(c => c.type === 'background-task-completed');
+      expect(bgCompleted).toBeDefined();
+      expect(bgCompleted.payload.taskId).toBe(bgStarted.payload.taskId);
+
+      // Two LLM turns ran (initial + continuation) — each ends with a finish chunk
+      const finishes = chunks.filter(c => c.type === 'finish');
+      expect(finishes.length).toBeGreaterThanOrEqual(2);
+
+      // The task is persisted as completed in the manager
+      const manager = memoryMastra.backgroundTaskManager!;
+      const tasks = await manager.listTasks({ toolName: 'research', status: 'completed' });
+      expect(tasks.total).toBeGreaterThan(0);
+      expect((tasks.tasks[0]!.result as any).summary).toContain('quantum computing');
+
+      // The continuation turn produced text that references the research
+      // topic — proof the LLM saw the tool result. Assemble from text-delta
+      // chunks directly so we don't race with memory persistence.
+      const assembledText = chunks
+        .filter(c => c?.type === 'text-delta')
+        .map(c => c.payload?.text ?? c.delta ?? '')
+        .join('')
+        .toLowerCase();
+
+      console.log(assembledText);
+
+      expect(assembledText).toContain('quantum computing');
+    } finally {
+      await memoryMastra.backgroundTaskManager?.shutdown();
+    }
+  }, 60_000);
+
+  it('streamUntilIdle closes after the initial turn when no background tasks are dispatched', async () => {
+    const mockMemory = new MockMemory();
+    const threadId = 'stream-until-idle-thread-2';
+    const resourceId = 'stream-until-idle-user-2';
+
+    const memoryAgent = new Agent({
+      id: 'stream-until-idle-agent-2',
+      name: 'Stream Until Idle Agent 2',
+      instructions:
+        'You are a helpful assistant. ' + 'When asked to greet someone, use the greet tool. ' + 'Respond concisely.',
+      model: openai('gpt-4o-mini'),
+      tools: { research: researchTool, greet: greetTool },
+      memory: mockMemory,
+      backgroundTasks: { tools: { research: true } },
+    });
+
+    const memoryMastra = new Mastra({
+      agents: { 'stream-until-idle-agent-2': memoryAgent },
+      backgroundTasks: {
+        enabled: true,
+        globalConcurrency: 5,
+        perAgentConcurrency: 3,
+      },
+      storage: testStorage,
+    });
+
+    try {
+      const result = await memoryAgent.streamUntilIdle('Greet someone named Carol', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of result.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // Foreground tool only — no background task was dispatched
+      const bgStarted = chunks.find(c => c.type === 'background-task-started');
+      expect(bgStarted).toBeUndefined();
+
+      // The greet tool ran inline (foreground)
+      const greetResult = chunks.find(c => c.type === 'tool-result' && c.payload?.toolName === 'greet');
+      expect(greetResult).toBeDefined();
+
+      // Exactly one LLM turn — the outer stream closed after it finished
+      // rather than waiting for a continuation that will never come
+      const finishes = chunks.filter(c => c.type === 'finish');
+      expect(finishes.length).toBe(1);
+
+      // The initial turn's text mentions Carol — assembled from text-delta
+      // chunks directly so the assertion doesn't race with memory persistence
+      const assembledText = chunks
+        .filter(c => c?.type === 'text-delta')
+        .map(c => c.payload?.text ?? c.delta ?? '')
+        .join('')
+        .toLowerCase();
+      expect(assembledText).toContain('carol');
+    } finally {
+      await memoryMastra.backgroundTaskManager?.shutdown();
+    }
+  }, 30_000);
 });

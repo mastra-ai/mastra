@@ -73,7 +73,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
                 placeholder="https://placehold.co/600x400/png"
               />
             </div>
-            <Button type="submit" className="h-8!" variant="light">
+            <Button type="submit" className="h-8!" variant="default">
               <Icon>
                 <Link />
               </Icon>

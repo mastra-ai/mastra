@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
-import type { ToolsInput } from '../agent/types';
+import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
@@ -11,6 +11,9 @@ import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } fr
 
 let questionCounter = 0;
 let planCounter = 0;
+
+const FORKED_SUBAGENT_NESTING_NOTICE =
+  'Do not call the `subagent` tool. You are currently running inside a forked subagent, and this is the maximum allowed subagent nesting level. Further subagent calls will return an error. Answer the task directly using the conversation history and the other tools available to you.';
 
 /**
  * Converts the user's answer into the text returned to the model after the `ask_user`
@@ -370,6 +373,32 @@ export interface CreateSubagentToolOptions {
   harnessTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
   fallbackModelId?: string;
+  /** Returns the parent model ID for display when a subagent call is forked. */
+  getParentModelId?: () => string;
+  /**
+   * Returns the parent Agent that owns the current run. Invoked when a
+   * subagent call is forked so the fork can reuse the parent's
+   * instructions, tools, and model to preserve prompt-cache prefix.
+   */
+  getParentAgent?: () => Agent | undefined;
+  /**
+   * Clones the parent thread so a forked subagent can run on a copy
+   * without polluting the parent conversation. Typically delegates to
+   * `Harness.cloneThread`. Returns the new thread metadata.
+   */
+  cloneThreadForFork?: (opts: {
+    sourceThreadId: string;
+    resourceId?: string;
+    title?: string;
+  }) => Promise<{ id: string; resourceId: string }>;
+  /**
+   * Resolves the toolsets the parent agent runs with for the current request.
+   * When set, forked subagents inherit the parent's toolsets so harness-injected
+   * tools like `ask_user` / `submit_plan` / user-configured harness tools remain
+   * available inside the fork. The `subagent` entry is preserved for prompt-cache
+   * stability, but its runtime execute function is patched to block recursion.
+   */
+  getParentToolsets?: (requestContext?: RequestContext) => Promise<ToolsetsInput | undefined>;
 }
 
 /**
@@ -391,7 +420,9 @@ export function createSubagentTool(opts: CreateSubagentToolOptions) {
 Available agent types:
 ${typeDescriptions}
 
-The subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.
+By default the subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.
+
+Set \`forked: true\` for context-dependent parallel work that needs the parent conversation, prior tool results, or the parent tool environment. Omit it for self-contained delegation. A forked subagent reuses the parent agent's instructions and tools so the prompt prefix stays cache-friendly.
 
 Use this tool when:
 - You want to run multiple investigations in parallel
@@ -401,11 +432,25 @@ Use this tool when:
       task: z
         .string()
         .describe(
-          'Clear, self-contained description of what the subagent should do. Include all relevant context — the subagent cannot see the parent conversation.',
+          'Clear, self-contained description of what the subagent should do. For non-forked subagents include all relevant context — the subagent cannot see the parent conversation.',
         ),
-      modelId: z.string().optional().describe('Optional model ID override for this task.'),
+      modelId: z
+        .string()
+        .optional()
+        .describe(
+          "Optional model ID override for this task. Ignored when `forked: true` (the parent agent's model is used).",
+        ),
+      forked: z
+        .boolean()
+        .optional()
+        .describe(
+          "If true, fork the parent conversation: clone the parent thread and run with the parent agent's instructions/tools so prompt cache is preserved. Requires memory to be configured on the Harness. Defaults to the subagent definition's `forked` setting.",
+        ),
     }),
-    execute: async ({ agentType, task, modelId }, context) => {
+    execute: async (input, context) => {
+      const { agentType, modelId, forked } = input;
+      let { task } = input;
+      const displayTask = task;
       const definition = subagents.find(s => s.id === agentType);
       if (!definition) {
         return {
@@ -418,60 +463,190 @@ Use this tool when:
       const emitEvent = harnessCtx?.emitEvent;
       const abortSignal = harnessCtx?.abortSignal;
       const toolCallId = context?.agent?.toolCallId ?? 'unknown';
+      const workspace = context?.workspace;
 
-      // Merge tools: subagent's own tools + filtered harness tools
-      const mergedTools: ToolsInput = { ...definition.tools };
-      if (definition.allowedHarnessTools && harnessTools) {
-        for (const toolId of definition.allowedHarnessTools) {
-          if (harnessTools[toolId] && !mergedTools[toolId]) {
-            mergedTools[toolId] = harnessTools[toolId];
+      const runAsForked = forked ?? definition.forked ?? false;
+
+      // Per-invocation state produced by either the forked or non-forked setup path.
+      let subagentToRun: Agent;
+      let resolvedModelId: string;
+      let subagentRequestContext: RequestContext | undefined;
+      let streamMemory: { thread: string; resource?: string } | undefined;
+      let streamMaxSteps: number | undefined;
+      let streamStopWhen: HarnessSubagent['stopWhen'];
+      let streamPrepareStep: ((args: { tools?: Record<string, unknown> }) => { activeTools: string[] }) | undefined;
+      let forkedToolsets: ToolsetsInput | undefined;
+
+      if (runAsForked) {
+        // Forked path: reuse the parent agent + a clone of the parent thread so the
+        // request prefix (system prompt + tool schemas + history) stays identical and
+        // the prompt cache hits. The subagent definition's instructions/tools/model
+        // are intentionally ignored in this path.
+        const parentAgent = opts.getParentAgent?.();
+        if (!parentAgent) {
+          return {
+            content: 'Forked subagent requires a parent agent. None is configured on this Harness.',
+            isError: true,
+          };
+        }
+        const parentThreadId = harnessCtx?.threadId;
+        if (!parentThreadId) {
+          return {
+            content: 'Forked subagent requires an active parent thread; none is set on the Harness.',
+            isError: true,
+          };
+        }
+        if (!opts.cloneThreadForFork) {
+          return {
+            content:
+              'Forked subagent requires memory to be configured on the Harness so the parent thread can be cloned.',
+            isError: true,
+          };
+        }
+
+        // The parent stream batches message saves through a debounced save
+        // queue (see SaveQueueManager). If we clone straight away, the parent's
+        // user message (and the assistant turn that produced this tool call)
+        // are still in-memory, not in the store — and the clone ends up empty.
+        // Drain the queue first so the fork actually carries the prior
+        // conversation.
+        await context?.agent?.flushMessages?.().catch(() => {
+          // Non-fatal: a failed flush just means the fork may be missing the
+          // very latest turn. Still proceed with the clone.
+        });
+
+        let forkedThread: { id: string; resourceId: string };
+        try {
+          forkedThread = await opts.cloneThreadForFork({
+            sourceThreadId: parentThreadId,
+            resourceId: harnessCtx?.resourceId,
+            title: `Fork: ${definition.name} subagent`,
+          });
+        } catch (err) {
+          return {
+            content: `Failed to clone parent thread for forked subagent: ${err instanceof Error ? err.message : String(err)}`,
+            isError: true,
+          };
+        }
+
+        subagentToRun = parentAgent;
+        // Display value only; forked runs use the parent agent's configured model.
+        resolvedModelId = opts.getParentModelId?.() || 'parent-agent';
+        task = `${task}\n\n${FORKED_SUBAGENT_NESTING_NOTICE}`;
+        streamMemory = { thread: forkedThread.id, resource: forkedThread.resourceId };
+        // Allow a recovery step if the forked model accidentally calls the
+        // inherited-but-disabled `subagent` tool. Without this, the single-step
+        // default can return only the stub tool result instead of the answer.
+        streamMaxSteps = 1000;
+        streamStopWhen = undefined;
+        streamPrepareStep = undefined;
+
+        if (context?.requestContext) {
+          subagentRequestContext = new RequestContext(context.requestContext.entries());
+          if (harnessCtx) {
+            // Point at the fork so inherited tools (recall, browser, OM, memory writes, etc.)
+            // operate on the cloned thread instead of the active parent thread.
+            subagentRequestContext.set('harness', {
+              ...harnessCtx,
+              threadId: forkedThread.id,
+              resourceId: forkedThread.resourceId,
+            });
+          }
+        }
+
+        // Inherit the parent's toolsets with the fork request context so tools that
+        // close over request-scoped state use the cloned thread/resource. Preserve
+        // `subagent` in the tool schema to keep the prompt-cache prefix stable, but
+        // patch its runtime execute function so nested forks fail gracefully.
+        const inheritedToolsets = await opts.getParentToolsets?.(subagentRequestContext);
+        if (inheritedToolsets) {
+          forkedToolsets = {};
+          for (const [setName, setTools] of Object.entries(inheritedToolsets)) {
+            const patched: ToolsInput = {};
+            for (const [toolId, tool] of Object.entries(setTools as ToolsInput)) {
+              if (toolId === 'subagent') {
+                patched[toolId] = patchSubagentToolForFork(tool);
+              } else {
+                patched[toolId] = tool;
+              }
+            }
+            forkedToolsets[setName] = patched;
+          }
+        }
+      } else {
+        // Non-forked path: fresh Agent with the subagent's own instructions/tools/model.
+        // Merge tools: subagent's own tools + filtered harness tools
+        const mergedTools: ToolsInput = { ...definition.tools };
+        if (definition.allowedHarnessTools && harnessTools) {
+          for (const toolId of definition.allowedHarnessTools) {
+            if (harnessTools[toolId] && !mergedTools[toolId]) {
+              mergedTools[toolId] = harnessTools[toolId];
+            }
+          }
+        }
+
+        // Resolve model: explicit arg → harness setting → subagent default → fallback
+        const harnessModelId = harnessCtx?.getSubagentModelId?.({ agentType }) ?? undefined;
+        const maybeModelId = modelId ?? harnessModelId ?? definition.defaultModelId ?? fallbackModelId;
+        if (!maybeModelId) {
+          return { content: 'No model ID available for subagent. Configure defaultModelId.', isError: true };
+        }
+        resolvedModelId = maybeModelId;
+
+        let model: MastraLanguageModel;
+        try {
+          model = resolveModel(resolvedModelId);
+        } catch (err) {
+          return {
+            content: `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
+            isError: true,
+          };
+        }
+
+        subagentToRun = new Agent({
+          id: `subagent-${definition.id}`,
+          name: `${definition.name} Subagent`,
+          instructions: definition.instructions,
+          model,
+          tools: mergedTools,
+          workspace,
+        });
+
+        // Only resolve workspace tool names when an allowlist is configured,
+        // avoiding unnecessary createWorkspaceTools overhead for subagents
+        // that don't restrict workspace tools.
+        const allowedWs = definition.allowedWorkspaceTools ? new Set(definition.allowedWorkspaceTools) : undefined;
+        const allWorkspaceToolNames =
+          workspace && allowedWs
+            ? new Set(
+                Object.keys(
+                  await createWorkspaceTools(workspace, {
+                    requestContext: context?.requestContext ?? {},
+                    workspace,
+                  }),
+                ),
+              )
+            : undefined;
+
+        streamMaxSteps = definition.maxSteps ?? (definition.stopWhen ? undefined : 50);
+        streamStopWhen = definition.stopWhen;
+        streamPrepareStep =
+          allowedWs && allWorkspaceToolNames
+            ? ({ tools }) => ({
+                activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs!.has(k)),
+              })
+            : undefined;
+
+        // Build a request context for the subagent that inherits sandbox paths
+        // and harness state but strips threadId/resourceId so the subagent
+        // doesn't trigger OM enrichment on the parent's memory thread.
+        if (context?.requestContext) {
+          subagentRequestContext = new RequestContext(context.requestContext.entries());
+          if (harnessCtx) {
+            subagentRequestContext.set('harness', { ...harnessCtx, threadId: null, resourceId: '' });
           }
         }
       }
-
-      // Resolve model: explicit arg → harness setting → subagent default → fallback
-      const harnessModelId = harnessCtx?.getSubagentModelId?.({ agentType }) ?? undefined;
-      const resolvedModelId = modelId ?? harnessModelId ?? definition.defaultModelId ?? fallbackModelId;
-      if (!resolvedModelId) {
-        return { content: 'No model ID available for subagent. Configure defaultModelId.', isError: true };
-      }
-
-      let model: MastraLanguageModel;
-      try {
-        model = resolveModel(resolvedModelId);
-      } catch (err) {
-        return {
-          content: `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
-          isError: true,
-        };
-      }
-
-      const workspace = context?.workspace;
-
-      const subagent = new Agent({
-        id: `subagent-${definition.id}`,
-        name: `${definition.name} Subagent`,
-        instructions: definition.instructions,
-        model,
-        tools: mergedTools,
-        workspace,
-      });
-
-      // Only resolve workspace tool names when an allowlist is configured,
-      // avoiding unnecessary createWorkspaceTools overhead for subagents
-      // that don't restrict workspace tools.
-      const allowedWs = definition.allowedWorkspaceTools ? new Set(definition.allowedWorkspaceTools) : undefined;
-      const allWorkspaceToolNames =
-        workspace && allowedWs
-          ? new Set(
-              Object.keys(
-                await createWorkspaceTools(workspace, {
-                  requestContext: context?.requestContext ?? {},
-                  workspace,
-                }),
-              ),
-            )
-          : undefined;
 
       const startTime = Date.now();
 
@@ -479,40 +654,24 @@ Use this tool when:
         type: 'subagent_start',
         toolCallId,
         agentType,
-        task,
+        task: displayTask,
         modelId: resolvedModelId,
+        forked: runAsForked,
       });
 
       let partialText = '';
-      const toolCallLog: Array<{ name: string; toolCallId: string; isError?: boolean }> = [];
-
-      // Build a request context for the subagent that inherits sandbox paths
-      // and harness state but strips threadId/resourceId so the subagent
-      // doesn't trigger OM enrichment on the parent's memory thread.
-      let subagentRequestContext: RequestContext | undefined;
-      if (context?.requestContext) {
-        subagentRequestContext = new RequestContext(context.requestContext.entries());
-        if (harnessCtx) {
-          subagentRequestContext.set('harness', { ...harnessCtx, threadId: null, resourceId: '' });
-        }
-      }
 
       try {
-        const response = await subagent.stream(task, {
-          maxSteps: definition.maxSteps ?? (definition.stopWhen ? undefined : 50),
-          stopWhen: definition.stopWhen,
+        const response = await subagentToRun.stream(task, {
+          maxSteps: streamMaxSteps,
+          stopWhen: streamStopWhen,
           abortSignal,
           requireToolApproval: false,
           requestContext: subagentRequestContext,
+          ...(streamMemory && { memory: streamMemory }),
+          ...(forkedToolsets && { toolsets: forkedToolsets }),
           ...(context?.tracingContext && { tracingContext: context.tracingContext }),
-          // When allowedWorkspaceTools is set, hide workspace tools not in
-          // the list. Non-workspace tools always pass through.
-          prepareStep:
-            allowedWs && allWorkspaceToolNames
-              ? ({ tools }) => ({
-                  activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs!.has(k)),
-                })
-              : undefined,
+          prepareStep: streamPrepareStep,
         });
 
         for await (const chunk of response.fullStream) {
@@ -528,32 +687,29 @@ Use this tool when:
               break;
 
             case 'tool-call':
-              toolCallLog.push({ name: chunk.payload.toolName, toolCallId: chunk.payload.toolCallId });
-              emitEvent?.({
-                type: 'subagent_tool_start',
-                toolCallId,
-                agentType,
-                subToolName: chunk.payload.toolName,
-                subToolArgs: chunk.payload.args,
-              });
+              if (!(runAsForked && chunk.payload.toolName === 'subagent')) {
+                emitEvent?.({
+                  type: 'subagent_tool_start',
+                  toolCallId,
+                  agentType,
+                  subToolName: chunk.payload.toolName,
+                  subToolArgs: chunk.payload.args,
+                });
+              }
               break;
 
             case 'tool-result': {
               const isErr = chunk.payload.isError ?? false;
-              for (let i = toolCallLog.length - 1; i >= 0; i--) {
-                if (toolCallLog[i]!.toolCallId === chunk.payload.toolCallId && toolCallLog[i]!.isError === undefined) {
-                  toolCallLog[i]!.isError = isErr;
-                  break;
-                }
+              if (!(runAsForked && chunk.payload.toolName === 'subagent')) {
+                emitEvent?.({
+                  type: 'subagent_tool_end',
+                  toolCallId,
+                  agentType,
+                  subToolName: chunk.payload.toolName,
+                  subToolResult: chunk.payload.result,
+                  isError: isErr,
+                });
               }
-              emitEvent?.({
-                type: 'subagent_tool_end',
-                toolCallId,
-                agentType,
-                subToolName: chunk.payload.toolName,
-                subToolResult: chunk.payload.result,
-                isError: isErr,
-              });
               break;
             }
           }
@@ -566,8 +722,15 @@ Use this tool when:
             : '[Aborted by user]';
 
           emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: abortResult, isError: false, durationMs });
-          const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-          return { content: abortResult + meta, isError: false };
+          // Intentionally do NOT append `<subagent-meta />` to model-facing
+          // content: when the parent model can see the tag in a tool result
+          // it sometimes echoes the literal markup back into its own assistant
+          // text on the next turn. Live UIs get model/duration/tool data from
+          // the structured `subagent_*` events emitted above; history UIs read
+          // the persisted `tool_call.args.modelId`. Older persisted threads
+          // that still carry the tag are handled by `parseSubagentMeta` for
+          // backward compatibility.
+          return { content: abortResult, isError: false };
         }
 
         const fullOutput = await response.getFullOutput();
@@ -576,8 +739,7 @@ Use this tool when:
         const durationMs = Date.now() - startTime;
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: resultText, isError: false, durationMs });
 
-        const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-        return { content: resultText + meta, isError: false };
+        return { content: resultText, isError: false };
       } catch (err) {
         const isAbort =
           err instanceof Error &&
@@ -591,37 +753,66 @@ Use this tool when:
 
           emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: abortResult, isError: false, durationMs });
 
-          const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-          return { content: abortResult + meta, isError: false };
+          return { content: abortResult, isError: false };
         }
 
         const message = err instanceof Error ? err.message : String(err);
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: message, isError: true, durationMs });
 
-        const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-        return { content: `Subagent "${definition.name}" failed: ${message}` + meta, isError: true };
+        return { content: `Subagent "${definition.name}" failed: ${message}`, isError: true };
       }
     },
   });
 }
 
 /**
- * Build a metadata tag appended to subagent results.
- * UIs can parse this to display model ID, duration, and tool calls
- * when loading from history (where live events aren't available).
+ * Returns a copy of the parent's `subagent` tool with `execute` replaced by a
+ * stub that refuses to dispatch a nested fork.
+ *
+ * Why patch instead of remove or replace wholesale:
+ *  - Forked subagents reuse the parent Agent's `stream()` so the LLM request
+ *    prefix (system prompt + tool list + tool schemas + tool descriptions)
+ *    matches the parent byte-for-byte. This is what makes prompt-cache hits
+ *    possible inside a fork, which is the whole reason forked mode exists.
+ *  - Removing the `subagent` entry from the inherited toolset, or replacing
+ *    its description / parameters with anything else, perturbs that prefix
+ *    and invalidates the cache.
+ *  - Replacing only `execute` is invisible to the LLM (execute lives in the
+ *    runtime, not in the request payload) but lets us reject recursive
+ *    invocations cleanly at runtime.
+ *
+ * The stub returns a tool-level error result with a clear human-readable
+ * recovery instruction. This does not fail the outer subagent run; the model
+ * receives the tool error and can continue with a direct answer.
  */
-function buildSubagentMeta(
-  modelId: string,
-  durationMs: number,
-  toolCalls: Array<{ name: string; isError?: boolean }>,
-): string {
-  const tools = toolCalls.map(tc => `${tc.name}:${tc.isError ? 'err' : 'ok'}`).join(',');
-  return `\n<subagent-meta modelId="${modelId}" durationMs="${durationMs}" tools="${tools}" />`;
+function patchSubagentToolForFork(tool: unknown): any {
+  const stubExecute = async () => ({
+    content: FORKED_SUBAGENT_NESTING_NOTICE,
+    isError: true,
+  });
+  // Spread preserves id / description / inputSchema / parameters / outputSchema
+  // / providerOptions / strict / requireApproval / etc. on whatever shape the
+  // tool came in as (Mastra `Tool` instance, AI SDK v4/v5 `tool({ ... })`
+  // object, provider-defined tool). `Object.assign` on a fresh object keeps
+  // own enumerable props; that is enough for the toolset-merge layer to
+  // serialize the same schema/description into the model request.
+  return Object.assign({}, tool as Record<string, unknown>, { execute: stubExecute });
 }
 
 /**
  * Parse subagent metadata from a tool result string.
- * Returns the metadata and the cleaned result text (without the tag).
+ *
+ * Older persisted threads may have an internal `<subagent-meta />` tag
+ * appended to the subagent tool result content (carrying modelId / durationMs
+ * / sub-tool-call summary, used by history-render UIs to reconstruct the
+ * subagent activity box when live events aren't available).
+ *
+ * New runs no longer append the tag — the metadata leaked into model context
+ * and could be echoed back as visible assistant text — but this parser is
+ * retained so existing threads continue to render cleanly. It also strips the
+ * tag so callers never display it to users.
+ *
+ * Returns the cleaned text plus any parsed metadata.
  */
 export function parseSubagentMeta(content: string): {
   text: string;

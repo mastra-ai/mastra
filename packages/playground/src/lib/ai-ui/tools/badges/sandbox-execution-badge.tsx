@@ -1,5 +1,5 @@
 import { useAuiState } from '@assistant-ui/react';
-import { Badge, IconButton, Icon, cn } from '@mastra/playground-ui';
+import { Badge, Button, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -107,7 +107,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
             <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
-            <IconButton variant="light" size="sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
+            <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
               <span className="grid">
                 <span
                   style={{ gridArea: '1/1' }}
@@ -122,7 +122,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
                   <CopyIcon size={14} />
                 </span>
               </span>
-            </IconButton>
+            </Button>
           )}
         </div>
       )}

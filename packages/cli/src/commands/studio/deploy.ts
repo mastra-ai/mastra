@@ -11,7 +11,7 @@ import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
-import { loadProjectConfig, saveProjectConfig } from './project-config.js';
+import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from './project-config.js';
 
 function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -101,7 +101,10 @@ async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
 
   return entries
     .filter(
-      entry => (entry.isFile() || entry.isSymbolicLink()) && (entry.name === '.env' || entry.name.startsWith('.env.')),
+      entry =>
+        (entry.isFile() || entry.isSymbolicLink()) &&
+        (entry.name === '.env' || entry.name.startsWith('.env.')) &&
+        !entry.name.endsWith('.example'),
     )
     .map(entry => entry.name)
     .sort((a, b) => a.localeCompare(b));
@@ -358,7 +361,11 @@ export async function deployAction(
     }
 
     if (!isAlreadyLinked) {
-      await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
+      await saveProjectConfig(
+        targetDir,
+        getProjectConfigToSave(projectId, projectName, projectSlug, orgId, projectConfig),
+        opts.config,
+      );
       p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
     }
   } else {
@@ -394,7 +401,11 @@ export async function deployAction(
     p.log.success(`Created project "${projectName}"`);
 
     // Save the project link
-    await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
+    await saveProjectConfig(
+      targetDir,
+      getProjectConfigToSave(projectId, projectName, projectSlug, orgId, projectConfig),
+      opts.config,
+    );
     p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
   }
 
@@ -428,13 +439,12 @@ export async function deployAction(
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
-  s.start('Reading environment variables...');
   const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
-    s.stop(`Found ${envCount} env var(s)`);
+    p.log.step(`Found ${envCount} env var(s)`);
   } else {
-    s.stop('No .env file found');
+    p.log.step('No env vars found in selected env file');
   }
 
   t = performance.now();
@@ -445,6 +455,7 @@ export async function deployAction(
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
+    disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

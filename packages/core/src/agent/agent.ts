@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -39,7 +40,7 @@ import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfigInternal } from '../memory/types';
+import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
@@ -69,7 +70,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isProviderTool } from '../tools/toolchecks';
+import { isMastraTool, isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -96,6 +97,7 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { runStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -138,6 +140,67 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
   }
 
   return cb(value as T);
+}
+
+function hasConfiguredProcessor(
+  processors: InputProcessorOrWorkflow[],
+  predicate: (processor: Processor) => boolean,
+): boolean {
+  return processors.some(processor => {
+    const maybeWorkflow = processor as {
+      steps?: Record<string, unknown>;
+      stepGraph?: Array<{ type: string; step?: unknown; steps?: Array<{ step?: unknown }> }>;
+    };
+    const isWorkflowLike = isProcessorWorkflow(processor);
+
+    const workflowSteps = [
+      ...Object.values(maybeWorkflow.steps ?? {}),
+      ...(maybeWorkflow.stepGraph ?? []).flatMap(entry => {
+        if (entry.type === 'step') {
+          return entry.step ? [entry.step] : [];
+        }
+        return entry.steps?.map(stepEntry => stepEntry.step).filter(Boolean) ?? [];
+      }),
+    ];
+
+    if (!isWorkflowLike || workflowSteps.length === 0) {
+      const processorId =
+        typeof (processor as Processor).id === 'string' && (processor as Processor).id.startsWith('processor:')
+          ? (processor as Processor).id.slice('processor:'.length)
+          : (processor as Processor).id;
+      return predicate({
+        ...(processor as Processor),
+        id: processorId,
+        providesSkillDiscovery: (processor as Processor).providesSkillDiscovery,
+      } as Processor);
+    }
+
+    return workflowSteps.some(step => {
+      if (isProcessorWorkflow(step)) {
+        return hasConfiguredProcessor([step], predicate);
+      }
+
+      const stepId = typeof (step as { id?: unknown }).id === 'string' ? (step as { id: string }).id : undefined;
+      if (!stepId?.startsWith('processor:')) {
+        return false;
+      }
+
+      const processorId = stepId.slice('processor:'.length);
+      const workflowStep = step as { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
+      return predicate({
+        id: processorId,
+        providesSkillDiscovery: workflowStep.providesSkillDiscovery,
+      } as Processor);
+    });
+  });
+}
+
+function hasEagerSkillsProcessor(processors: InputProcessorOrWorkflow[]): boolean {
+  return hasConfiguredProcessor(processors, processor => processor.id === 'skills-processor');
+}
+
+function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow[]): boolean {
+  return hasConfiguredProcessor(processors, processor => processor.providesSkillDiscovery === 'on-demand');
 }
 
 /**
@@ -197,6 +260,17 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
+   * scope on this Agent instance. A new call for the same scope aborts the
+   * prior one before subscribing so bg-task pubsub events aren't fanned into
+   * two concurrent wrappers (which would forward duplicate events and
+   * trigger duplicate continuation turns).
+   *
+   * Value is the prior wrapper's `forceClose`. Entries remove themselves on
+   * close if they're still the active one.
+   */
+  #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -318,13 +392,20 @@ export class Agent<
     if (config.channels) {
       if (config.channels instanceof AgentChannels) {
         this.#agentChannels = config.channels;
-      } else if (config.channels.adapters && Object.keys(config.channels.adapters).length > 0) {
+        this.#agentChannels.__setAgent(this);
+      } else if (
+        'adapters' in config.channels &&
+        config.channels.adapters &&
+        Object.keys(config.channels.adapters).length > 0
+      ) {
+        // ChannelConfig with adapters — direct adapter configuration
+        const channelConfig = config.channels as ChannelConfig;
         this.#agentChannels = new AgentChannels({
-          ...config.channels,
-          userName: config.channels.userName ?? config.name,
+          ...channelConfig,
+          userName: channelConfig.userName ?? config.name,
         });
+        this.#agentChannels.__setAgent(this);
       }
-      this.#agentChannels?.__setAgent(this);
     }
 
     if (config.browser) {
@@ -389,6 +470,32 @@ export class Agent<
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
     return this.#backgroundTasks;
+  }
+
+  /**
+   * Returns the statically-configured sub-agents without executing dynamic
+   * resolvers. Used by Mastra at registration time to detect whether background
+   * tasks should be auto-enabled. Returns undefined when sub-agents are
+   * configured via a function (those get resolved per-request).
+   * @internal
+   */
+  __getStaticAgents(): Record<string, Agent> | undefined {
+    if (typeof this.#agents === 'function') return undefined;
+    return this.#agents as Record<string, Agent> | undefined;
+  }
+
+  /**
+   * True when this agent has any sub-agent registry configured — either a
+   * static record with entries OR a dynamic (function-based) resolver.
+   * Used by Mastra at registration time to decide whether to auto-enable
+   * background tasks; we can't know what a function resolver will return
+   * at request time, so we enable defensively.
+   * @internal
+   */
+  __hasSubAgentsConfigured(): boolean {
+    if (typeof this.#agents === 'function') return true;
+    const record = this.#agents as Record<string, Agent> | undefined;
+    return !!record && Object.keys(record).length > 0;
   }
 
   /**
@@ -469,6 +576,19 @@ export class Agent<
   }
 
   /**
+   * Sets the AgentChannels instance for this agent.
+   * Used by ChannelProvider implementations to inject the channels they create.
+   * @internal
+   */
+  setChannels(agentChannels: AgentChannels): void {
+    if (this.#agentChannels && this.#agentChannels !== agentChannels) {
+      this.logger?.debug(`Replacing existing AgentChannels on agent "${this.name}"`);
+    }
+    this.#agentChannels = agentChannels;
+    agentChannels.__setAgent(this);
+  }
+
+  /**
    * Returns the browser instance for this agent, if configured.
    * Browser tools are automatically added at execution time via `convertTools()`.
    * This getter is primarily used by server-side code to access browser features
@@ -515,10 +635,9 @@ export class Agent<
     }
 
     // Check for existing SkillsProcessor in configured processors to avoid duplicates
-    const hasSkillsProcessor = configuredProcessors.some(
-      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'skills-processor',
-    );
-    if (hasSkillsProcessor) {
+    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredProcessors);
+    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredProcessors);
+    if (hasSkillsProcessor || hasOnDemandProcessor) {
       return [];
     }
 
@@ -846,6 +965,16 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Returns the error processors for this agent, resolving function-based processors if necessary.
+   */
+  public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
+    if (!this.#errorProcessors) return [];
+    return typeof this.#errorProcessors === 'function'
+      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+      : this.#errorProcessors;
   }
 
   /**
@@ -2536,6 +2665,7 @@ export class Agent<
     mastraProxy,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    suppressEagerSkillTools,
     ...rest
   }: {
     runId?: string;
@@ -2545,6 +2675,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    suppressEagerSkillTools: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -2564,6 +2695,9 @@ export class Agent<
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
 
       for (const [toolName, tool] of Object.entries(skillTools)) {
+        if (suppressEagerSkillTools && (toolName === 'skill' || toolName === 'skill_search')) {
+          continue;
+        }
         const toolObj = tool;
         const options: ToolOptions = {
           name: toolName,
@@ -2755,10 +2889,19 @@ export class Agent<
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
+      inputProcessorOverrides?: InputProcessorOrWorkflow[];
       processorStates?: Map<string, ProcessorState>;
+      tools?: Record<string, CoreTool>;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      outputWriter?: OutputWriter;
+      autoResumeSuspendedTools?: boolean;
+      backgroundTaskEnabled?: boolean;
     },
   ): Promise<{
     messageList: MessageList;
+    tools?: Record<string, CoreTool>;
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2766,20 +2909,36 @@ export class Agent<
       processorId?: string;
     };
   }> {
-    const { requestContext, messageList, stepNumber = 0, processorStates, ...rest } = args;
+    const {
+      requestContext,
+      messageList,
+      stepNumber = 0,
+      inputProcessorOverrides,
+      processorStates,
+      tools,
+      runId,
+      threadId,
+      resourceId,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+      ...rest
+    } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+    let nextTools = tools;
 
-    if (this.#inputProcessors || this.#memory) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
         requestContext,
+        inputProcessorOverrides,
         processorStates,
       });
       try {
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
-        await runner.runProcessInputStep({
+        const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
           steps: [],
@@ -2788,8 +2947,51 @@ export class Agent<
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
+          tools,
           retryCount: 0,
         });
+        if (result.tools) {
+          const workspace = await this.getWorkspace({ requestContext });
+          const memory = await this.getMemory({ requestContext });
+          const mastraProxy = this.#mastra
+            ? createMastraProxy({ mastra: this.#mastra, logger: this.logger })
+            : undefined;
+          const convertedTools: Record<string, CoreTool> = {};
+
+          for (const [name, tool] of Object.entries(result.tools)) {
+            if (isMastraTool(tool) || isProviderTool(tool)) {
+              convertedTools[name] = makeCoreTool(
+                tool as unknown as ToolToConvert,
+                {
+                  name,
+                  runId,
+                  threadId,
+                  resourceId,
+                  logger: this.logger,
+                  mastra: mastraProxy as MastraUnion | undefined,
+                  memory,
+                  agentName: this.name,
+                  agentId: this.id,
+                  requestContext,
+                  ...observabilityContext,
+                  model: await this.getModel({ requestContext }),
+                  outputWriter,
+                  tracingPolicy: this.#options?.tracingPolicy,
+                  requireApproval: (tool as any).requireApproval,
+                  backgroundConfig: (tool as any).background,
+                  workspace,
+                },
+                undefined,
+                autoResumeSuspendedTools,
+                backgroundTaskEnabled,
+              );
+            } else {
+              convertedTools[name] = tool as CoreTool;
+            }
+          }
+
+          nextTools = convertedTools;
+        }
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2820,6 +3022,7 @@ export class Agent<
 
     return {
       messageList,
+      tools: nextTools,
       tripwire,
     };
   }
@@ -3223,8 +3426,8 @@ export class Agent<
               z.object({
                 toolName: z.string().describe('The name of the tool'),
                 toolCallId: z.string().describe('The ID of the tool call'),
-                result: z.any().describe('The result of the tool call'),
-                args: z.any().describe('The arguments of the tool call').optional(),
+                result: z.unknown().describe('The result of the tool call'),
+                args: z.unknown().describe('The arguments of the tool call').optional(),
                 isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
               }),
             )
@@ -3232,12 +3435,20 @@ export class Agent<
             .optional(),
         });
 
+        const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
+          ? undefined
+          : (output: z.infer<typeof agentOutputSchema>) => ({
+              type: 'text' as const,
+              value: output.text,
+            });
+
         const toolObj = createTool({
           id: `agent-${agentName}`,
           description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
+          ...(toModelOutput ? { toModelOutput } : {}),
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
@@ -4324,6 +4535,36 @@ export class Agent<
   }
 
   /**
+   * Get tools for execution.
+   *
+   * This method assembles all tools from various sources (assigned tools, memory tools,
+   * toolsets, client tools, agent tools, workflow tools) into a unified CoreTool dictionary.
+   *
+   * This is useful for durable execution where tools need to be reconstructed from
+   * serialized state rather than stored in a registry.
+   *
+   * @param options - Options for tool assembly
+   * @returns A record of tool names to CoreTool instances
+   */
+  async getToolsForExecution(options: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    requestContext?: RequestContext;
+    memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
+  }): Promise<Record<string, CoreTool>> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    return this.convertTools({
+      ...options,
+      requestContext,
+      methodType: 'stream',
+    });
+  }
+
+  /**
    * Assembles all tools from various sources into a unified CoreTool dictionary.
    * @internal
    */
@@ -4340,6 +4581,7 @@ export class Agent<
     autoResumeSuspendedTools,
     delegation,
     backgroundTaskEnabled,
+    inputProcessors,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -4354,6 +4596,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
+    inputProcessors?: InputProcessorOrWorkflow[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -4443,6 +4686,10 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
+    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
+    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
+
     const skillTools = await this.listSkillTools({
       runId,
       resourceId,
@@ -4452,6 +4699,7 @@ export class Agent<
       mastraProxy,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
     const channelTools = await this.listChannelTools({
@@ -5033,6 +5281,7 @@ export class Agent<
             backgroundTaskManager: this.#mastra?.backgroundTaskManager,
             agentBackgroundConfig: this.#backgroundTasks,
           }),
+      skipBgTaskWait: options._skipBgTaskWait,
     });
 
     const run = await executionWorkflow.createRun();
@@ -5274,7 +5523,6 @@ export class Agent<
     const mergedOptions = {
       ...defaultNetworkOptions,
       ...options,
-      // Deep merge nested objects
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
@@ -5352,7 +5600,6 @@ export class Agent<
     const mergedOptions = {
       ...defaultNetworkOptions,
       ...options,
-      // Deep merge nested objects
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
@@ -5659,6 +5906,83 @@ export class Agent<
     }
 
     return result.result;
+  }
+
+  /**
+   * Streams the agent's response and keeps the stream open until all
+   * background tasks dispatched during this turn (and any triggered by
+   * follow-up turns) complete. When a background task finishes, its tool
+   * result is injected into memory by the tool-call-step's `onResult` hook,
+   * and this method re-enters the agentic loop via `agent.stream([], ...)`
+   * so the LLM can process the result immediately — without waiting for a
+   * new user message.
+   *
+   * Invariants:
+   * - Only one inner LLM stream runs at a time (a completion arriving
+   *   mid-turn is queued and processed after the current turn ends).
+   * - When there are no running background tasks and no queued completions,
+   *   the outer stream closes.
+   * - If the agent has no memory configured, this falls through to a plain
+   *   `stream()` call since continuation requires memory.
+   *
+   * Return shape: `streamUntilIdle` returns a `MastraModelOutput` that looks
+   * like the one from `stream()` — *only* `fullStream` spans the initial
+   * turn **and** any auto-continuations. Aggregate properties (`text`,
+   * `toolCalls`, `toolResults`, `finishReason`, `messageList`,
+   * `getFullOutput()`) still resolve against the **first turn's** internal
+   * buffer. If you need an aggregate view across continuations, consume
+   * `fullStream` yourself and accumulate — or follow up with `agent.generate`
+   * once the stream closes.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.streamUntilIdle('Research solana for me', {
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   *
+   * for await (const chunk of stream.fullStream) {
+   *   // chunks from the initial turn AND any continuation turns
+   *   // triggered by background task completions flow through here
+   * }
+   * ```
+   */
+  async streamUntilIdle<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<T>>;
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
+      activeStreams: this.#activeStreamUntilIdle,
+      bgManager: this.#mastra?.backgroundTaskManager,
+    });
   }
 
   /**
