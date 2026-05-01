@@ -1,0 +1,183 @@
+---
+title: "Reference: CostGuardProcessor | Processors"
+description: "API reference for CostGuardProcessor, a processor that monitors cumulative token usage and step count to enforce cost limits on agent runs."
+packages:
+  - "@mastra/core"
+---
+
+# CostGuardProcessor
+
+The `CostGuardProcessor` monitors cumulative token usage and step count across the agentic loop, blocking or warning when configurable limits are exceeded.
+
+It uses `processInputStep` to check limits before each LLM call, and `processOutputStep` to record usage after each LLM response for cross-run scopes.
+
+Supports three scoping modes:
+
+- **Run scope** (default): Tracks usage within a single agent run
+- **Resource scope**: Tracks cumulative usage per `resourceId` across runs (requires server cache)
+- **Thread scope**: Tracks cumulative usage per `threadId` across runs (requires server cache)
+
+## Usage example
+
+Track token usage within a single agent run:
+
+```typescript
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  limits: { maxTotalTokens: 100_000, maxSteps: 10 },
+})
+```
+
+Track cumulative usage per thread across runs:
+
+```typescript
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  limits: { maxTotalTokens: 500_000 },
+  scope: 'thread',
+})
+```
+
+Attach to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'openai/gpt-5-nano',
+  processors: {
+    input: [
+      new CostGuardProcessor({
+        limits: { maxTotalTokens: 50_000, maxSteps: 5 },
+      }),
+    ],
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'limits',
+    type: 'CostGuardLimits',
+    description: 'Token and step limits for the cost guard. At least one limit must be set.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'CostGuardLimits',
+        parameters: [
+          {
+            name: 'maxTotalTokens',
+            type: 'number',
+            description: 'Maximum total tokens (input + output) allowed.',
+            isOptional: true,
+          },
+          {
+            name: 'maxInputTokens',
+            type: 'number',
+            description: 'Maximum input tokens allowed.',
+            isOptional: true,
+          },
+          {
+            name: 'maxOutputTokens',
+            type: 'number',
+            description: 'Maximum output tokens allowed.',
+            isOptional: true,
+          },
+          {
+            name: 'maxSteps',
+            type: 'number',
+            description: 'Maximum number of LLM steps allowed.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'scope',
+    type: "'run' | 'resource' | 'thread'",
+    description:
+      "Scope for cost tracking. 'run' tracks usage within the current agent run. 'resource' tracks cumulative usage per resourceId across runs. 'thread' tracks cumulative usage per threadId across runs. Resource and thread scopes require a configured server cache.",
+    isOptional: true,
+    defaultValue: "'run'",
+  },
+  {
+    name: 'strategy',
+    type: "'block' | 'warn'",
+    description:
+      "Strategy when a limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
+    isOptional: true,
+    defaultValue: "'block'",
+  },
+  {
+    name: 'message',
+    type: 'string',
+    description:
+      'Custom message template for the abort reason. Supports {limitType}, {usage}, and {limit} placeholders.',
+    isOptional: true,
+    defaultValue: "'Cost guard: {limitType} limit exceeded ({usage}/{limit})'",
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'cost-guard'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Cost Guard'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<void>',
+    description:
+      'Checks cumulative token usage and step count against configured limits before each LLM call. Throws TripWire when limits are exceeded (block strategy) or logs a warning (warn strategy).',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputStep',
+    type: '(args: ProcessOutputStepArgs) => Promise<MastraDBMessage[]>',
+    description:
+      'Records token usage from each step for resource and thread scopes. No-op for run scope. Returns messages unchanged.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Error behavior
+
+When the `block` strategy is active (default), `CostGuardProcessor` throws a `TripWire` error with `retry: false` when any limit is exceeded. The TripWire metadata includes:
+
+- `processorId`: `'cost-guard'`
+- `usage`: Current cumulative usage (`inputTokens`, `outputTokens`, `totalTokens`, `steps`)
+- `limit`: The configured limits object
+- `scope`: The active scope (`'run'`, `'resource'`, or `'thread'`)
+- `scopeKey`: The cache key used for resource/thread scopes (if applicable)
+
+## Scoping behavior
+
+| Scope | Tracks across runs | Requires cache | Requires context |
+| - | - | - | - |
+| `run` | No | No | No |
+| `resource` | Yes | Yes | `resourceId` in `RequestContext` |
+| `thread` | Yes | Yes | `threadId` in `RequestContext` |
+
+For `resource` and `thread` scopes, the processor reads and writes usage data via the Mastra server cache. If the cache is unavailable or the required context ID is missing, the processor falls back to run-scoped tracking.
+
+Cache failures are handled with a fail-open strategy: if a cache read fails, usage starts from zero; if a cache write fails, the step continues without persisting.

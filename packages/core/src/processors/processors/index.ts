@@ -41,6 +41,15 @@ export {
   type SystemPromptDetection,
 } from './system-prompt-scrubber';
 
+export {
+  CostGuardProcessor,
+  type CostGuardOptions,
+  type CostGuardLimits,
+  type CostGuardUsage,
+  type CostGuardTripwireMetadata,
+  type CostScope,
+} from './cost-guard';
+
 export { ToolCallFilter } from './tool-call-filter';
 
 export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
