@@ -156,6 +156,31 @@ When you change the `schedule` config and redeploy, Mastra diffs the existing sc
 
 Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
 
+## Deployment topology
+
+The built-in scheduler is a `setInterval` tick loop that polls the schedules table, claims due rows, and dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process. Match the deployment target to that assumption.
+
+### Long-lived host (recommended)
+
+Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own server keep the Mastra process alive between cron ticks. Schedules work without extra setup.
+
+If you run more than one replica of the same Mastra process, every replica polls on its own interval. The scheduler's compare-and-set claim on `nextFireAt` prevents double fires, so this is correct but wasteful at high replica counts. Pin schedule-bearing deployments to a single replica when you can, or split scheduling onto a dedicated worker.
+
+### Serverless platforms
+
+Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request. The tick loop never gets a second tick. Schedules declared in code do not fire on these platforms with the built-in scheduler today.
+
+You have two working options:
+
+- Use [`@mastra/inngest`](#inngest-workflows). Inngest is serverless-native and holds the cron state for you. This is the recommended path on Vercel, Netlify, and Cloudflare Workers.
+- Run Mastra on an always-on host alongside your serverless app. The serverless app handles requests; the always-on host owns scheduled fires and shares the same storage.
+
+A future release will add an HTTP endpoint that drives a single tick on demand, so platform-native cron (Vercel Cron, Cloudflare Triggers, EventBridge Scheduler) can fire ticks externally. Until then, prefer one of the options above.
+
+### When to use Mastra schedules
+
+For one or two static schedules with no need for runtime control, your platform's native cron plus a route handler that calls `workflow.start()` is a reasonable alternative. Mastra schedules earn their keep when you have several schedules, want pause and resume without redeploying, want the trigger history and run hydration in Studio, or want the schedule to live next to the workflow definition rather than in a separate config file.
+
 ## Inngest workflows
 
 The `schedule` field documented on this page drives Mastra's built-in scheduler. If you use `@mastra/inngest`, scheduled workflows are configured through Inngest's own `cron` field on `createFunction` and fire on Inngest's scheduler instead.
