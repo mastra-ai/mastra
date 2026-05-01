@@ -55,15 +55,21 @@ const server = new MCPServer({
       html: `<html>
         <body>
           <h2>Calculator</h2>
-          <button onclick="compute()">Compute</button>
-          <script>
-            async function compute() {
-              const result = await window.__mcpApp.callServerTool({
+          <button id="btn">Compute</button>
+          <script type="module">
+            import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps';
+            const app = new App({ name: 'Calculator', version: '1.0.0' });
+            app.ontoolinput = (params) => {
+              console.log('Tool input:', params.arguments);
+            };
+            document.getElementById('btn').addEventListener('click', async () => {
+              const result = await app.callServerTool({
                 name: 'calculatorWithUI',
                 arguments: { num1: 10, num2: 5, operation: 'add' }
               });
               document.body.innerHTML += '<p>Result: ' + JSON.stringify(result) + '</p>';
-            }
+            });
+            await app.connect();
           </script>
         </body>
       </html>`,
@@ -176,38 +182,60 @@ execute: async ({ num1, num2, operation }) => {
 }
 ```
 
-## App bridge API
+## App API (guest-side)
 
-The iframe receives a `window.__mcpApp` object that provides methods for communicating with the host:
+MCP App HTML uses the standard [`App` class from `@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps) to communicate with the host. Import it via ESM CDN or bundle it.
 
-### `callServerTool(params)`
+```javascript
+import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps'
+const app = new App({ name: 'MyApp', version: '1.0.0' })
+```
+
+### `app.callServerTool(params)`
 
 Calls an MCP server tool from within the iframe. This is useful for interactive computation without leaving the UI.
 
 ```javascript
-const result = await window.__mcpApp.callServerTool({
+const result = await app.callServerTool({
   name: 'calculatorWithUI',
   arguments: { num1: 42, num2: 8, operation: 'add' },
 })
 ```
 
-### `sendMessage(text)`
+### `app.sendMessage(params)`
 
 Injects a user message into the agent chat, triggering a new model turn. Use this for sharing results or requesting follow-up actions.
 
 ```javascript
-window.__mcpApp.sendMessage('The result of 42 + 8 is 50')
+await app.sendMessage({
+  role: 'user',
+  content: [{ type: 'text', text: 'The result of 42 + 8 is 50' }],
+})
 ```
 
-### `ontoolinput`
+### `app.ontoolinput`
 
-A callback that fires when the host delivers tool input data to the iframe, allowing pre-population of form fields.
+A callback that fires when the host delivers tool input data to the iframe, allowing pre-population of form fields. The `params.arguments` object contains the tool call arguments.
 
 ```javascript
-window.__mcpApp.ontoolinput = function (input) {
-  document.getElementById('num1').value = input.num1
+app.ontoolinput = params => {
+  document.getElementById('num1').value = params.arguments.num1
 }
 ```
+
+### `app.connect()`
+
+Establishes the connection to the host. Call this after registering all event handlers.
+
+```javascript
+await app.connect()
+```
+
+:::note
+
+See the [`App` class API reference](https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html) for the full list of methods, callbacks, and lifecycle hooks.
+
+:::
 
 ## Using external MCP servers with apps
 
@@ -250,13 +278,15 @@ Visit [MCPClient reference](/reference/tools/mcp-client#tomcpserverproxies) for 
 
 ## Sandbox security
 
+Mastra Studio uses [`@mcp-ui/client`](https://www.npmjs.com/package/@mcp-ui/client) to render MCP App iframes through a sandbox proxy. The proxy loads app HTML via `postMessage` rather than `srcDoc`, providing additional isolation.
+
 App iframes are sandboxed with the following permissions:
 
 - `allow-scripts`: Enables JavaScript execution
 - `allow-forms`: Allows form submission
 - `allow-popups`: Permits `window.open()` and link targets
 
-The iframe does not have access to the parent page's DOM, cookies, or storage. All communication happens through the postMessage protocol.
+The iframe does not have access to the parent page's DOM, cookies, or storage. All communication happens through the JSON-RPC postMessage protocol managed by `@mcp-ui/client`'s `AppRenderer` on the host side and `@modelcontextprotocol/ext-apps`'s `App` class on the guest side.
 
 ## Related
 

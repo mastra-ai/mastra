@@ -49,38 +49,34 @@ const colorMixerHtml = `<!DOCTYPE html>
     <input id="c2hex" type="text" value="#4169e1" readonly />
   </div>
   <div class="row">
-    <button id="btn" onclick="mix()">Mix Colors</button>
+    <button id="btn">Mix Colors</button>
   </div>
   <div id="result" class="result" style="display:none;"></div>
-  <script>
+  <script type="module">
+    import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps@1.7.1';
+
+    var app = new App({ name: 'ColorMixer', version: '1.0.0' });
+
     document.getElementById('c1').addEventListener('input', function(e) {
       document.getElementById('c1hex').value = e.target.value;
     });
     document.getElementById('c2').addEventListener('input', function(e) {
       document.getElementById('c2hex').value = e.target.value;
     });
+    document.getElementById('btn').addEventListener('click', mix);
+
     async function mix() {
       var btn = document.getElementById('btn');
       btn.disabled = true;
       btn.textContent = 'Mixing\\u2026';
       try {
-        // Use the MCP Apps protocol API (falls back to legacy bridge)
-        var api = window.__mcpApp || window.__mcpBridge;
-        var response;
-        if (window.__mcpApp) {
-          response = await window.__mcpApp.callServerTool({
-            name: 'mixColors',
-            arguments: {
-              color1: document.getElementById('c1').value,
-              color2: document.getElementById('c2').value,
-            }
-          });
-        } else {
-          response = await window.__mcpBridge.callTool('mixColors', {
+        var response = await app.callServerTool({
+          name: 'mixColors',
+          arguments: {
             color1: document.getElementById('c1').value,
             color2: document.getElementById('c2').value,
-          });
-        }
+          }
+        });
         var result = response && response.structuredContent
           ? response.structuredContent.result || response.structuredContent
           : (response && response.content && response.content[0]
@@ -100,6 +96,8 @@ const colorMixerHtml = `<!DOCTYPE html>
         btn.textContent = 'Mix Colors';
       }
     }
+
+    await app.connect();
   </script>
 </body>
 </html>`;

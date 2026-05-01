@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 export interface McpAppToolInfo {
   serverId: string;
   toolId: string;
+  toolName: string;
   resourceUri: string;
 }
 
@@ -42,7 +43,7 @@ export function useMcpAppTools() {
           const resourceUri = meta?.ui?.resourceUri;
           if (resourceUri) {
             const toolId = tool.id ?? tool.name;
-            const info: McpAppToolInfo = { serverId, toolId, resourceUri };
+            const info: McpAppToolInfo = { serverId, toolId, toolName: tool.name, resourceUri };
             map[toolId] = info;
             if (tool.name !== toolId) {
               map[tool.name] = info;

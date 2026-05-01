@@ -43,24 +43,27 @@ const calculatorAppHtml = `<!DOCTYPE html>
       <option value="subtract">&minus;</option>
     </select>
     <input id="n2" type="number" placeholder="Number 2" value="8" />
-    <button id="btn" onclick="calc()">Calculate</button>
+    <button id="btn">Calculate</button>
   </div>
   <div id="result" class="result" style="display:none;"></div>
   <div id="history" class="history"></div>
-  <script>
+  <script type="module">
+    import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps@1.7.1';
+
     var lastResult = null;
     var calcHistory = [];
+    var app = new App({ name: 'Calculator', version: '1.0.0' });
 
-    // Hydrate from tool input if available (populated by the host)
-    if (window.__mcpApp) {
-      window.__mcpApp.ontoolinput = function(input) {
-        if (input) {
-          if (input.num1 !== undefined) document.getElementById('n1').value = input.num1;
-          if (input.num2 !== undefined) document.getElementById('n2').value = input.num2;
-          if (input.operation) document.getElementById('op').value = input.operation;
-        }
-      };
-    }
+    // Hydrate from tool input (standard MCP Apps protocol)
+    app.ontoolinput = function(params) {
+      var args = params.arguments || {};
+      if (args.num1 !== undefined) document.getElementById('n1').value = args.num1;
+      if (args.num2 !== undefined) document.getElementById('n2').value = args.num2;
+      if (args.operation) document.getElementById('op').value = args.operation;
+      calc();
+    };
+
+    document.getElementById('btn').addEventListener('click', calc);
 
     async function calc() {
       var btn = document.getElementById('btn');
@@ -71,24 +74,32 @@ const calculatorAppHtml = `<!DOCTYPE html>
       var n2 = Number(document.getElementById('n2').value);
       var op = document.getElementById('op').value;
       try {
-        var response = await window.__mcpApp.callServerTool({
+        var response = await app.callServerTool({
           name: 'calculatorWithUI',
           arguments: { num1: n1, num2: n2, operation: op }
         });
         var val = response && response.structuredContent
           ? response.structuredContent.result || response.structuredContent
           : response;
-        // Parse the result text if it's a string description
         if (typeof val === 'string') {
           var match = val.match(/= (-?[\\d.]+)/);
           if (match) val = Number(match[1]);
+        }
+        // Extract from content array if needed
+        if (val && val.content && Array.isArray(val.content)) {
+          var textItem = val.content.find(function(c) { return c.type === 'text'; });
+          if (textItem) {
+            var m = textItem.text.match(/= (-?[\\d.]+)/);
+            val = m ? Number(m[1]) : textItem.text;
+          }
         }
         lastResult = { n1: n1, n2: n2, op: op, result: val };
         calcHistory.push(lastResult);
         resultDiv.className = 'result';
         resultDiv.innerHTML = '<span>Result: <strong>' + n1 + ' ' + (op === 'add' ? '+' : '\\u2212') + ' ' + n2 + ' = ' + val + '</strong></span>' +
-          '<button class="share-btn" onclick="shareResult()">Share</button>';
+          '<button class="share-btn" id="share-btn">Share</button>';
         resultDiv.style.display = 'flex';
+        document.getElementById('share-btn').addEventListener('click', shareResult);
         renderHistory();
       } catch (err) {
         resultDiv.className = 'result error';
@@ -100,11 +111,12 @@ const calculatorAppHtml = `<!DOCTYPE html>
       }
     }
 
-    function shareResult() {
-      if (!lastResult || !window.__mcpApp) return;
+    async function shareResult() {
+      if (!lastResult) return;
       var text = 'The calculator result: ' + lastResult.n1 + ' ' +
         (lastResult.op === 'add' ? '+' : '\\u2212') + ' ' + lastResult.n2 + ' = ' + lastResult.result;
-      window.__mcpApp.sendMessage({
+      await app.sendMessage({
+        role: 'user',
         content: [{ type: 'text', text: text }]
       });
     }
@@ -120,6 +132,8 @@ const calculatorAppHtml = `<!DOCTYPE html>
         div.appendChild(item);
       });
     }
+
+    await app.connect();
   </script>
 </body>
 </html>`;
@@ -149,20 +163,25 @@ const greetingAppHtml = `<!DOCTYPE html>
   </p>
   <div class="row">
     <input id="name" type="text" placeholder="Your name" value="World" />
-    <button id="btn" onclick="greet()">Greet</button>
+    <button id="btn">Greet</button>
   </div>
   <div id="result" class="result" style="display:none;"></div>
-  <script>
-    var lastGreeting = null;
+  <script type="module">
+    import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps@1.7.1';
 
-    // Hydrate from tool input if available
-    if (window.__mcpApp) {
-      window.__mcpApp.ontoolinput = function(input) {
-        if (input && input.name) {
-          document.getElementById('name').value = input.name;
-        }
-      };
-    }
+    var lastGreeting = null;
+    var app = new App({ name: 'GreetingApp', version: '1.0.0' });
+
+    // Hydrate from tool input (standard MCP Apps protocol)
+    app.ontoolinput = function(params) {
+      var args = params.arguments || {};
+      if (args.name) {
+        document.getElementById('name').value = args.name;
+        greet();
+      }
+    };
+
+    document.getElementById('btn').addEventListener('click', greet);
 
     async function greet() {
       var btn = document.getElementById('btn');
@@ -170,7 +189,7 @@ const greetingAppHtml = `<!DOCTYPE html>
       btn.disabled = true;
       var name = document.getElementById('name').value;
       try {
-        var response = await window.__mcpApp.callServerTool({
+        var response = await app.callServerTool({
           name: 'greetUserWithUI',
           arguments: { name: name }
         });
@@ -182,8 +201,9 @@ const greetingAppHtml = `<!DOCTYPE html>
         lastGreeting = text;
         resultDiv.className = 'result';
         resultDiv.innerHTML = '<span>' + text + '</span>' +
-          '<button class="share-btn" onclick="shareGreeting()">Share</button>';
+          '<button class="share-btn" id="share-btn">Share</button>';
         resultDiv.style.display = 'flex';
+        document.getElementById('share-btn').addEventListener('click', shareGreeting);
       } catch (err) {
         resultDiv.className = 'result';
         resultDiv.style.background = '#ffebee';
@@ -194,12 +214,15 @@ const greetingAppHtml = `<!DOCTYPE html>
       }
     }
 
-    function shareGreeting() {
-      if (!lastGreeting || !window.__mcpApp) return;
-      window.__mcpApp.sendMessage({
+    async function shareGreeting() {
+      if (!lastGreeting) return;
+      await app.sendMessage({
+        role: 'user',
         content: [{ type: 'text', text: lastGreeting }]
       });
     }
+
+    await app.connect();
   </script>
 </body>
 </html>`;
