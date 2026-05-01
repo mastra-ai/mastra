@@ -299,9 +299,11 @@ export class LocalFilesystem extends MastraFilesystem {
     if (!stripped) return 'access';
 
     // If the first segment exists under basePath, the LLM almost certainly
-    // meant a workspace-relative path. Suggest the exact form.
+    // meant a workspace-relative path. Suggest the exact form. Reject any
+    // segment that would escape basePath (`.`, `..`) — suggesting those would
+    // just produce another containment failure on the next turn.
     const firstSegment = stripped.split(/[/\\]/, 1)[0];
-    if (firstSegment) {
+    if (firstSegment && firstSegment !== '.' && firstSegment !== '..') {
       try {
         if (realpathSync(nodePath.join(this._basePath, firstSegment))) {
           return `access (path is outside the workspace; use a relative path like "${stripped}")`;

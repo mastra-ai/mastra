@@ -562,6 +562,15 @@ describe('LocalFilesystem', () => {
       await expect(localFs.readFile('/etc/passwd')).rejects.not.toThrow(/"etc\/passwd"/);
     });
 
+    it('should not suggest a relative path that would itself escape the workspace', async () => {
+      // `/../etc/passwd` strips to `../etc/passwd`. Suggesting that as a
+      // "relative path" would just fail again on the next turn — fall back
+      // to the soft hint instead.
+      await expect(localFs.readFile('/../etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('/../etc/passwd')).rejects.toThrow(/relative to the workspace root/);
+      await expect(localFs.readFile('/../etc/passwd')).rejects.not.toThrow(/"\.\.\//);
+    });
+
     it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
       // Write a file via relative path
       await localFs.writeFile('test.txt', 'relative content');
