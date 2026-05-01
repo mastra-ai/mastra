@@ -2918,6 +2918,11 @@ export class Workflow<
       activeStepsPath: includeAllFields || fieldsSet.has('activeStepsPath') ? snapshotState.activeStepsPath : undefined,
       serializedStepGraph:
         includeAllFields || fieldsSet.has('serializedStepGraph') ? snapshotState.serializedStepGraph : undefined,
+      suspendedPaths: includeAllFields || fieldsSet.has('suspendedPaths') ? snapshotState.suspendedPaths : undefined,
+      resumeLabels: includeAllFields || fieldsSet.has('resumeLabels') ? snapshotState.resumeLabels : undefined,
+      waitingPaths: includeAllFields || fieldsSet.has('waitingPaths') ? snapshotState.waitingPaths : undefined,
+      requestContext: includeAllFields || fieldsSet.has('requestContext') ? snapshotState.requestContext : undefined,
+      tracingContext: includeAllFields || fieldsSet.has('tracingContext') ? snapshotState.tracingContext : undefined,
     };
 
     // Clean up undefined/empty values if field filtering is active
@@ -2929,6 +2934,11 @@ export class Workflow<
       if (!fieldsSet.has('steps')) delete result.steps;
       if (result.activeStepsPath === undefined) delete result.activeStepsPath;
       if (result.serializedStepGraph === undefined) delete result.serializedStepGraph;
+      if (result.suspendedPaths === undefined) delete result.suspendedPaths;
+      if (result.resumeLabels === undefined) delete result.resumeLabels;
+      if (result.waitingPaths === undefined) delete result.waitingPaths;
+      if (result.requestContext === undefined) delete result.requestContext;
+      if (result.tracingContext === undefined) delete result.tracingContext;
     }
 
     return result;
