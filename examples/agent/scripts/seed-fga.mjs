@@ -82,9 +82,25 @@ function isConflict(err) {
 async function main() {
   console.log(`\nSeeding FGA for org ${orgId}...\n`);
 
-  // ──────────────────────────────────────────────────────────
+  // Verify the "agent" resource type exists before doing anything
+  try {
+    await apiCall('GET', `/authorization/resources?resource_type_slug=agent&organization_id=${orgId}&limit=1`);
+  } catch {
+    console.error(
+`Error: The "agent" resource type does not exist in your WorkOS environment.
+
+Create it in your WorkOS dashboard before running this script:
+  1. Go to Authorization > Resource Types
+  2. Create a resource type with slug "agent" as a child of Organization
+
+This is the one step that cannot be done via API.`
+    );
+    process.exit(1);
+  }
+
+  // ───���─────────────────────────────���────────────────────────
   // Step 1: Create permissions on the "agent" resource type
-  // ──────────────────────────────────────────────────────────
+  // ──────���───────────────────────────────────────────────────
   console.log('Step 1: Creating permissions...\n');
   const permissions = [
     { slug: 'agents:read', name: 'Read agents', resource_type_slug: 'agent' },
@@ -103,9 +119,9 @@ async function main() {
     }
   }
 
-  // ──────────────────────────────────────────────────────────
+  // ───��────────────────────��─────────────────────────────────
   // Step 2: Create roles and bind permissions
-  // ──────────────────────────────────────────────────────────
+  // ─────────��──────────────────────────────���─────────────────
   console.log('\nStep 2: Creating roles and binding permissions...\n');
   const roles = [
     { slug: 'agent-viewer', name: 'Agent Viewer', permissions: ['agents:read'] },
@@ -137,7 +153,7 @@ async function main() {
     }
   }
 
-  // ──────────────────────────────────────────────────────────
+  // ────��─────────────────────────────────────────────────────
   // Step 3: Create agent resources under the organization
   // ──────────────────────────────────────────────────────────
   console.log('\nStep 3: Creating agent resources...\n');
@@ -160,9 +176,9 @@ async function main() {
     }
   }
 
-  // ──────────────────────────────────────────────────────────
+  // ────────���──────────────────��──────────────────────────────
   // Step 4: Assign roles to the membership on specific agents
-  // ──────────────────────────────────────────────────────────
+  // ─────���─────────────���────────────────────────────���─────────
   console.log(`\nStep 4: Assigning roles to membership ${membershipId}...\n`);
   for (const agentId of operatorAgents) {
     try {
@@ -198,9 +214,9 @@ async function main() {
     }
   }
 
-  // ──────────────────────────────────────────────────────────
+  // ────────────��─────────────────────────────────────────────
   // Step 5: Verify authorization checks
-  // ──────────────────────────────────────────────────────────
+  // ────────��─────────────────────────────���───────────────────
   console.log(`\nStep 5: Verifying authorization checks...\n`);
   for (const agentId of allAgents) {
     try {

@@ -49,6 +49,22 @@ function isConflict(err: any): boolean {
 async function main() {
   console.log(`\nSeeding FGA for org ${orgId}...\n`);
 
+  // Verify the "agent" resource type exists before doing anything
+  try {
+    await workos.authorization.listResources({ resourceTypeSlug: 'agent', organizationId: orgId, limit: 1 });
+  } catch {
+    console.error(
+`Error: The "agent" resource type does not exist in your WorkOS environment.
+
+Create it in your WorkOS dashboard before running this script:
+  1. Go to Authorization > Resource Types
+  2. Create a resource type with slug "agent" as a child of Organization
+
+This is the one step that cannot be done via API.`
+    );
+    process.exit(1);
+  }
+
   // ──────────────────────────────────────────────────────────
   // Step 1: Create permissions on the "agent" resource type
   // ──────────────────────────────────────────────────────────
