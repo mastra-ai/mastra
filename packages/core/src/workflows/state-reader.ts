@@ -1,4 +1,9 @@
-import type { WorkflowResumeLabel, WorkflowState, WorkflowStateStepResult } from './types';
+import type {
+  WorkflowResumeLabel,
+  WorkflowState,
+  WorkflowStateSingleStepResult,
+  WorkflowStateStepResult,
+} from './types';
 
 export type WorkflowSuspendedStep = {
   stepId: string;
@@ -25,17 +30,23 @@ export type WorkflowStateReader = {
 
 const getStep = (state: WorkflowState, stepId: string) => state.steps?.[stepId];
 
+const getFirstStepResult = (step?: WorkflowStateStepResult): WorkflowStateSingleStepResult | undefined => {
+  return Array.isArray(step) ? (step.find(result => result?.status === 'suspended') ?? step[0]) : step;
+};
+
 const getNestedSuspendPath = (step?: WorkflowStateStepResult): string[] => {
-  const path = step?.suspendPayload?.__workflow_meta?.path;
+  const path = getFirstStepResult(step)?.suspendPayload?.__workflow_meta?.path;
   return Array.isArray(path) ? path.filter((part): part is string => typeof part === 'string') : [];
 };
 
 export function getWorkflowStepOutput(state: WorkflowState, stepId: string) {
-  return getStep(state, stepId)?.output;
+  const step = getStep(state, stepId);
+  return Array.isArray(step) ? step.map(result => result?.output) : step?.output;
 }
 
 export function getWorkflowStepPayload(state: WorkflowState, stepId: string) {
-  return getStep(state, stepId)?.payload;
+  const step = getStep(state, stepId);
+  return Array.isArray(step) ? step.map(result => result?.payload) : step?.payload;
 }
 
 export function getWorkflowResumeLabel(state: WorkflowState, label: string) {
@@ -56,6 +67,7 @@ export function getWorkflowResumeLabels(state: WorkflowState): Record<string, Wo
 export function getWorkflowSuspendedSteps(state: WorkflowState): WorkflowSuspendedStep[] {
   return Object.entries(state.suspendedPaths ?? {}).map(([stepId, executionPath]) => {
     const step = getStep(state, stepId);
+    const firstStepResult = getFirstStepResult(step);
     const nestedPath = getNestedSuspendPath(step);
     const path = nestedPath.length > 0 ? (nestedPath[0] === stepId ? nestedPath : [stepId, ...nestedPath]) : [stepId];
     const resumeLabels = Object.entries(state.resumeLabels ?? {}).reduce(
@@ -73,9 +85,9 @@ export function getWorkflowSuspendedSteps(state: WorkflowState): WorkflowSuspend
       path,
       executionPath,
       step,
-      payload: step?.payload,
-      suspendPayload: step?.suspendPayload,
-      suspendOutput: step?.suspendOutput,
+      payload: Array.isArray(step) ? step.map(result => result?.payload) : step?.payload,
+      suspendPayload: firstStepResult?.suspendPayload,
+      suspendOutput: firstStepResult?.suspendOutput,
       resumeLabels,
     };
   });

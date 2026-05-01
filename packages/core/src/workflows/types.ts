@@ -277,8 +277,8 @@ export type WorkflowResumeLabel = {
   foreachIndex?: number;
 };
 
-export type WorkflowStateStepResult = {
-  status: WorkflowRunStatus;
+export type WorkflowStateSingleStepResult = {
+  status: WorkflowStepStatus;
   output?: any;
   payload?: any;
   resumePayload?: any;
@@ -291,6 +291,8 @@ export type WorkflowStateStepResult = {
   resumedAt?: number;
   metadata?: StepMetadata;
 };
+
+export type WorkflowStateStepResult = WorkflowStateSingleStepResult | WorkflowStateSingleStepResult[];
 
 export type WorkflowStateTracingContext = {
   traceId?: string;

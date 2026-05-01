@@ -46,6 +46,18 @@ describe('workflow state reader', () => {
         suspendOutput: { pending: true },
         suspendedAt: 1,
       },
+      'foreach-step': [
+        {
+          status: 'success',
+          payload: { item: 'alpha' },
+          output: { approved: true },
+        },
+        {
+          status: 'suspended',
+          payload: { item: 'beta' },
+          suspendPayload: { reason: 'review beta' },
+        },
+      ],
     },
     suspendedPaths: {
       'approval-step': [2, 0],
@@ -66,6 +78,8 @@ describe('workflow state reader', () => {
     expect(reader.getStepOutput('first-step')).toEqual({ value: 'processed' });
     expect(reader.getStepPayload('first-step')).toEqual({ value: 'initial' });
     expect(reader.getStepOutput('nested-workflow.review-step')).toEqual({ reviewed: true });
+    expect(reader.getStepOutput('foreach-step')).toEqual([{ approved: true }, undefined]);
+    expect(reader.getStepPayload('foreach-step')).toEqual([{ item: 'alpha' }, { item: 'beta' }]);
     expect(getWorkflowStepOutput(baseState, 'missing-step')).toBeUndefined();
     expect(getWorkflowStepPayload(baseState, 'missing-step')).toBeUndefined();
   });
@@ -217,6 +231,7 @@ describe('Workflow.getWorkflowRunById recovery fields', () => {
     const filteredState = await workflow.getWorkflowRunById('run-1', {
       fields: ['resumeLabels', 'requestContext', 'tracingContext'],
     });
+    const defaultState = await workflow.getWorkflowRunById('run-1');
 
     expect(filteredState).toMatchObject({
       runId: 'run-1',
@@ -229,5 +244,7 @@ describe('Workflow.getWorkflowRunById recovery fields', () => {
     expect(filteredState).not.toHaveProperty('steps');
     expect(filteredState).not.toHaveProperty('suspendedPaths');
     expect(filteredState).not.toHaveProperty('waitingPaths');
+    expect(defaultState).not.toHaveProperty('requestContext');
+    expect(defaultState).not.toHaveProperty('tracingContext');
   });
 });
