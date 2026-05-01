@@ -75,6 +75,54 @@ export interface BuilderAgentDefaults extends Record<string, unknown> {
     allowed?: ProviderModelEntry[];
     default?: DefaultModelEntry;
   };
+  /**
+   * Admin-controlled allowlist of tool IDs visible in the builder tools picker.
+   *
+   * Semantics:
+   * - omitted (`undefined`) ⇒ unrestricted; show all registered tools.
+   * - `allowed: []` ⇒ empty picker (explicit lockdown).
+   * - `allowed: [...ids]` ⇒ show only the listed tool IDs.
+   *
+   * IDs are `tool.id` (preferred — what you see in the UI, URLs and traces)
+   * but the registration key (the property name under `Mastra({ tools: {…} })`)
+   * is also accepted as an alias. Matched against the registered tools at
+   * request time. Unknown IDs are dropped and surfaced as warnings.
+   */
+  tools?: {
+    allowed?: string[];
+  };
+  /**
+   * Admin-controlled allowlist of agent IDs visible in the builder sub-agents picker.
+   *
+   * Semantics:
+   * - omitted (`undefined`) ⇒ unrestricted; show all registered agents.
+   * - `allowed: []` ⇒ empty picker (explicit lockdown).
+   * - `allowed: [...ids]` ⇒ show only the listed agent IDs.
+   *
+   * IDs are `Agent.id` (preferred — what you see in the UI, URLs and traces)
+   * but the registration key (the property name under `Mastra({ agents: {…} })`)
+   * is also accepted as an alias. Matched against the registered agents at
+   * request time. Unknown IDs are dropped and surfaced as warnings.
+   */
+  agents?: {
+    allowed?: string[];
+  };
+  /**
+   * Admin-controlled allowlist of workflow IDs visible in the builder workflows picker.
+   *
+   * Semantics:
+   * - omitted (`undefined`) ⇒ unrestricted; show all registered workflows.
+   * - `allowed: []` ⇒ empty picker (explicit lockdown).
+   * - `allowed: [...ids]` ⇒ show only the listed workflow IDs.
+   *
+   * IDs are `workflow.id` (preferred — what you see in the UI, URLs and traces)
+   * but the registration key (the property name under `Mastra({ workflows: {…} })`)
+   * is also accepted as an alias. Matched against the registered workflows at
+   * request time. Unknown IDs are dropped and surfaced as warnings.
+   */
+  workflows?: {
+    allowed?: string[];
+  };
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   agentConfigurationSchema,
   agentFeaturesSchema,
   agentModelsSchema,
+  builderPickerSchema,
   builderSettingsResponseSchema,
   defaultModelEntrySchema,
   providerModelEntrySchema,
@@ -108,6 +109,72 @@ describe('editor-builder schemas — admin model configuration', () => {
         expect(result.data.maxTokens).toBe(4096);
       }
     });
+
+    it('accepts picker allowlists for tools, agents, and workflows', () => {
+      const input = {
+        tools: { allowed: ['weather'] },
+        agents: { allowed: ['support'] },
+        workflows: { allowed: ['ticket-flow'] },
+      };
+      const result = agentConfigurationSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject(input);
+      }
+    });
+
+    it('accepts picker allowlists with empty arrays (explicit lockdown)', () => {
+      const input = {
+        tools: { allowed: [] },
+        agents: { allowed: [] },
+        workflows: { allowed: [] },
+      };
+      const result = agentConfigurationSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts picker allowlist objects with allowed omitted (unrestricted)', () => {
+      const result = agentConfigurationSchema.safeParse({
+        tools: {},
+        agents: {},
+        workflows: {},
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('builderPickerSchema', () => {
+    it('accepts null for each kind (unrestricted)', () => {
+      const result = builderPickerSchema.safeParse({
+        visibleTools: null,
+        visibleAgents: null,
+        visibleWorkflows: null,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts string arrays for each kind (restricted)', () => {
+      const result = builderPickerSchema.safeParse({
+        visibleTools: ['a'],
+        visibleAgents: ['b'],
+        visibleWorkflows: ['c'],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts empty arrays (explicit lockdown)', () => {
+      const result = builderPickerSchema.safeParse({
+        visibleTools: [],
+        visibleAgents: [],
+        visibleWorkflows: [],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects mixed-kind missing fields', () => {
+      const result = builderPickerSchema.safeParse({ visibleTools: null });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('agentFeaturesSchema', () => {
@@ -123,6 +190,27 @@ describe('editor-builder schemas — admin model configuration', () => {
   });
 
   describe('builderSettingsResponseSchema', () => {
+    it('treats picker as optional', () => {
+      const result = builderSettingsResponseSchema.safeParse({ enabled: false });
+      expect(result.success).toBe(true);
+    });
+
+    it('round-trips a response with a resolved picker', () => {
+      const input = {
+        enabled: true,
+        picker: {
+          visibleTools: ['weather'],
+          visibleAgents: null,
+          visibleWorkflows: [],
+        },
+      };
+      const result = builderSettingsResponseSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(input);
+      }
+    });
+
     it('round-trips a full response with locked admin model configuration', () => {
       const input = {
         enabled: true,

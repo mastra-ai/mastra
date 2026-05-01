@@ -78,6 +78,20 @@ export const agentModelsSchema = z.object({
 });
 
 /**
+ * Admin-controlled allowlist for one of the builder pickers (tools/agents/workflows).
+ *
+ * Semantics:
+ * - omitted ⇒ unrestricted (all registered IDs shown in the picker).
+ * - `allowed: []` ⇒ empty picker (explicit lockdown).
+ * - `allowed: [...ids]` ⇒ only the listed IDs are shown.
+ */
+export const pickerAllowlistSchema = z
+  .object({
+    allowed: z.array(z.string()).optional(),
+  })
+  .strict();
+
+/**
  * Agent configuration (pinned, non-overridable settings).
  *
  * Known structured field: `models` (Phase 1 contracts).
@@ -86,8 +100,24 @@ export const agentModelsSchema = z.object({
 export const agentConfigurationSchema = z
   .object({
     models: agentModelsSchema.optional(),
+    tools: pickerAllowlistSchema.optional(),
+    agents: pickerAllowlistSchema.optional(),
+    workflows: pickerAllowlistSchema.optional(),
   })
   .catchall(z.unknown());
+
+/**
+ * Resolved picker visibility returned in `BuilderSettingsResponse`.
+ *
+ * Per kind:
+ * - `null` ⇒ unrestricted (show all registered entries).
+ * - `string[]` ⇒ explicit allowlist (may be empty to show none).
+ */
+export const builderPickerSchema = z.object({
+  visibleTools: z.array(z.string()).nullable(),
+  visibleAgents: z.array(z.string()).nullable(),
+  visibleWorkflows: z.array(z.string()).nullable(),
+});
 
 /**
  * Derived `BuilderModelPolicy`. Server-owned shape so the playground hook is a
@@ -122,9 +152,15 @@ export const builderSettingsResponseSchema = z.object({
     .optional(),
   modelPolicy: builderModelPolicySchema.optional(),
   /**
+   * Resolved picker visibility for tools/agents/workflows. Always present when
+   * the builder is enabled. Omitted when the builder is disabled.
+   */
+  picker: builderPickerSchema.optional(),
+  /**
    * Non-fatal warnings produced by `EditorAgentBuilder`'s constructor-time
-   * validation (e.g. allowlist entries with unknown provider strings). UI
-   * surfaces these as a banner in the Builder admin view.
+   * validation (e.g. allowlist entries with unknown provider strings, or
+   * picker allowlist entries that don't match a registered ID). UI surfaces
+   * these as a banner in the Builder admin view.
    */
   modelPolicyWarnings: z.array(z.string()).optional(),
 });
@@ -136,3 +172,5 @@ export type ProviderModelEntrySchema = z.infer<typeof providerModelEntrySchema>;
 export type DefaultModelEntrySchema = z.infer<typeof defaultModelEntrySchema>;
 export type AgentModelsSchema = z.infer<typeof agentModelsSchema>;
 export type BuilderModelPolicySchema = z.infer<typeof builderModelPolicySchema>;
+export type PickerAllowlistSchema = z.infer<typeof pickerAllowlistSchema>;
+export type BuilderPickerSchema = z.infer<typeof builderPickerSchema>;

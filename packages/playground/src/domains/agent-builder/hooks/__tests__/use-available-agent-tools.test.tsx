@@ -1,7 +1,24 @@
 // @vitest-environment jsdom
 import { renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BuilderPickerVisibility } from '../../../builder';
 import { useAvailableAgentTools } from '../use-available-agent-tools';
+
+let pickerMock: BuilderPickerVisibility;
+
+vi.mock('../../../builder', () => ({
+  useBuilderPickerVisibility: () => pickerMock,
+}));
+
+const UNRESTRICTED: BuilderPickerVisibility = {
+  visibleTools: null,
+  visibleAgents: null,
+  visibleWorkflows: null,
+};
+
+beforeEach(() => {
+  pickerMock = UNRESTRICTED;
+});
 
 describe('useAvailableAgentTools', () => {
   it('builds AgentTool[] from tools and agents data', () => {
@@ -95,5 +112,98 @@ describe('useAvailableAgentTools', () => {
     rerender({ tools: toolsData, agents: agentsData, selT: selectedTools, selA: selectedAgents });
 
     expect(result.current).toBe(first);
+  });
+
+  it('filters tools when picker tools allowlist is restricted', () => {
+    pickerMock = {
+      ...UNRESTRICTED,
+      visibleTools: new Set(['tool-a']),
+    };
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: { 'tool-a': { description: 'A' }, 'tool-b': { description: 'B' } },
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+      }),
+    );
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].id).toBe('tool-a');
+  });
+
+  it('filters agents and workflows independently from tools', () => {
+    pickerMock = {
+      visibleTools: null,
+      visibleAgents: new Set(['agent-x']),
+      visibleWorkflows: new Set(['wf-1']),
+    };
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: { 'tool-a': {} },
+        agentsData: { 'agent-x': { name: 'X' }, 'agent-y': { name: 'Y' } },
+        workflowsData: { 'wf-1': { name: 'WF1' }, 'wf-2': { name: 'WF2' } },
+        selectedTools: {},
+        selectedAgents: {},
+        selectedWorkflows: {},
+      }),
+    );
+    const ids = result.current.map(t => t.id).sort();
+    expect(ids).toEqual(['agent-x', 'tool-a', 'wf-1']);
+  });
+
+  it('returns empty list when an allowlist is empty', () => {
+    pickerMock = {
+      ...UNRESTRICTED,
+      visibleTools: new Set(),
+    };
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: { 'tool-a': {}, 'tool-b': {} },
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+      }),
+    );
+    expect(result.current).toHaveLength(0);
+  });
+
+  it('matches allowlist against the response key (server normalizes IDs server-side)', () => {
+    // Server-side, picker IDs are normalized to the response keys of each
+    // GET /<kind> endpoint, so the client filter only needs to compare keys.
+    pickerMock = {
+      ...UNRESTRICTED,
+      visibleTools: new Set(['weatherKey', 'fallback-key']),
+    };
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: {
+          weatherKey: { id: 'weather-id', description: 'W' },
+          'fallback-key': { description: 'F' },
+          otherKey: { id: 'other-id', description: 'O' },
+        },
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+      }),
+    );
+    const ids = result.current.map(t => t.id).sort();
+    expect(ids).toEqual(['fallback-key', 'weatherKey']);
+  });
+
+  it('ignores allowlist IDs not present in raw data', () => {
+    pickerMock = {
+      ...UNRESTRICTED,
+      visibleTools: new Set(['tool-a', 'ghost']),
+    };
+    const { result } = renderHook(() =>
+      useAvailableAgentTools({
+        toolsData: { 'tool-a': {} },
+        agentsData: {},
+        selectedTools: {},
+        selectedAgents: {},
+      }),
+    );
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].id).toBe('tool-a');
   });
 });

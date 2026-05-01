@@ -2838,9 +2838,31 @@ export interface BuilderSettingsResponse {
    */
   modelPolicy?: BuilderModelPolicy;
   /**
+   * Resolved picker visibility for tools, agents, and workflows. Present when
+   * the builder is enabled. Each `visible*` field is `null` when unrestricted
+   * (show all registered entries) and `string[]` otherwise — making the
+   * empty-vs-unrestricted distinction explicit so the UI never has to
+   * disambiguate.
+   */
+  picker?: BuilderPickerResponse;
+  /**
    * Non-fatal warnings produced by builder config validation (e.g. allowlist
-   * entries with unknown providers that aren't tagged `kind: 'custom'`).
+   * entries with unknown providers that aren't tagged `kind: 'custom'`, or
+   * picker allowlist entries that don't match a registered ID).
    * Only present when there is at least one warning.
    */
   modelPolicyWarnings?: string[];
+}
+
+/**
+ * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.
+ *
+ * Per kind:
+ * - `null` ⇒ unrestricted (show all registered entries).
+ * - `string[]` ⇒ explicit allowlist (may be empty to show none).
+ */
+export interface BuilderPickerResponse {
+  visibleTools: string[] | null;
+  visibleAgents: string[] | null;
+  visibleWorkflows: string[] | null;
 }
