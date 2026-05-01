@@ -41,6 +41,15 @@ export {
   type SystemPromptDetection,
 } from './system-prompt-scrubber';
 
+export {
+  RegexFilterProcessor,
+  type RegexFilterOptions,
+  type RegexRule,
+  type RegexMatch,
+  type RegexPreset,
+  type RegexFilterTripwireMetadata,
+} from './regex-filter';
+
 export { ToolCallFilter } from './tool-call-filter';
 
 export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
