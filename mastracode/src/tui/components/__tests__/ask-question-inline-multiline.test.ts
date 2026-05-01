@@ -153,6 +153,6 @@ describe('AskQuestionInlineComponent multiline opt-in', () => {
       fakeTui,
     );
     const hint = (component as any).borderedBox?.hintText;
-    expect(hint).toBe('Enter to submit · Shift+Enter for new line · Esc to skip');
+    expect(hint).toBe('Enter to submit · Shift+Enter/\\+Enter for new line · Esc to skip');
   });
 });

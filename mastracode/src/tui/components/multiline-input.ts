@@ -56,10 +56,12 @@ export class MultilineInput {
         return;
       }
 
-      // Submit on plain Enter
-      const text = this.editor.getText().trim();
-      if (text || this.allowEmptySubmit) {
-        this.onSubmit?.(text);
+      // Submit on plain Enter. Use trim() only to decide emptiness;
+      // forward the raw buffer so leading indentation and trailing
+      // newlines reach the caller intact.
+      const rawText = this.editor.getText();
+      if (rawText.trim() || this.allowEmptySubmit) {
+        this.onSubmit?.(rawText);
       }
       return;
     }
@@ -100,8 +102,10 @@ export class MultilineInput {
         continue;
       }
 
-      // Skip scroll indicator lines (pattern: ── ↑ ── or ── ↓ ── with optional numbers)
-      if (/^─+.*[↑↓].*─+$/.test(stripped)) {
+      // Skip dedicated scroll-indicator chrome (e.g. "── ↑ ──").
+      // Match only full-line indicator format so user content with
+      // arrow characters in it is preserved.
+      if (/^─+\s*[↑↓]\s*─+$/.test(stripped.trim())) {
         continue;
       }
 

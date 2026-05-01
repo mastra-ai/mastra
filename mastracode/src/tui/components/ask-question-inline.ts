@@ -317,7 +317,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         this.buildSelectMode(options.options);
       } else {
         hintText = this.useMultiline()
-          ? 'Enter to submit · Shift+Enter for new line · Esc to skip'
+          ? 'Enter to submit · Shift+Enter/\\+Enter for new line · Esc to skip'
           : 'Enter to submit · Esc to skip';
         this.buildInputMode();
       }
@@ -390,7 +390,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       this.buildSelectMode(options.options);
     } else {
       hintText = this.useMultiline()
-        ? 'Enter to submit · Shift+Enter for new line · Esc to skip'
+        ? 'Enter to submit · Shift+Enter/\\+Enter for new line · Esc to skip'
         : 'Enter to submit · Esc to skip';
       this.buildInputMode();
     }
@@ -437,7 +437,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.borderedBox.setInteractive(
       undefined,
       this.input,
-      this.tui ? 'Enter to submit · Shift+Enter for new line · Esc to skip' : 'Enter to submit · Esc to skip',
+      this.useMultiline()
+        ? 'Enter to submit · Shift+Enter/\\+Enter for new line · Esc to skip'
+        : 'Enter to submit · Esc to skip',
     );
   }
 
@@ -452,9 +454,10 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       const multilineInput = new MultilineInput(this.tui!, getEditorTheme());
       multilineInput.allowEmptySubmit = this.allowEmptyInput;
       multilineInput.onSubmit = (value: string) => {
-        const trimmed = value.trim();
-        if (trimmed || this.allowEmptyInput) {
-          this.handleAnswer(trimmed);
+        // Trim only for the emptiness decision; forward the raw value
+        // so leading indentation / trailing newlines survive.
+        if (value.trim() || this.allowEmptyInput) {
+          this.handleAnswer(value);
         }
       };
       multilineInput.onEscape = () => {

@@ -113,9 +113,10 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     if (this.useMultiline()) {
       const multilineInput = new MultilineInput(this.tui!, getEditorTheme());
       multilineInput.onSubmit = (value: string) => {
-        const trimmed = value.trim();
-        if (trimmed) {
-          this.onSubmit(trimmed);
+        // Trim only for the emptiness decision; forward the raw value
+        // so leading indentation / trailing newlines survive.
+        if (value.trim()) {
+          this.onSubmit(value);
         }
       };
       multilineInput.onEscape = () => {

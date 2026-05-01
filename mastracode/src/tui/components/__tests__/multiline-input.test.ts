@@ -44,7 +44,7 @@ describe('MultilineInput', () => {
     input = new MultilineInput({} as any, {} as any);
   });
 
-  it('calls onSubmit with trimmed text when Enter is pressed', () => {
+  it('calls onSubmit with the raw editor text when Enter is pressed', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
     mocks.editorGetText.mockReturnValue('  my answer  ');
     const onSubmit = vi.fn();
@@ -52,7 +52,9 @@ describe('MultilineInput', () => {
 
     input.handleInput('\r');
 
-    expect(onSubmit).toHaveBeenCalledWith('my answer');
+    // Raw text is forwarded so leading indentation / trailing newlines
+    // survive — only the emptiness check is trimmed.
+    expect(onSubmit).toHaveBeenCalledWith('  my answer  ');
     expect(mocks.editorHandleInput).not.toHaveBeenCalled();
   });
 
@@ -67,7 +69,7 @@ describe('MultilineInput', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('calls onSubmit with empty string when allowEmptySubmit is true and Enter is pressed', () => {
+  it('forwards raw whitespace text when allowEmptySubmit is true and Enter is pressed', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
     mocks.editorGetText.mockReturnValue('   ');
     const onSubmit = vi.fn();
@@ -76,7 +78,7 @@ describe('MultilineInput', () => {
 
     input.handleInput('\r');
 
-    expect(onSubmit).toHaveBeenCalledWith('');
+    expect(onSubmit).toHaveBeenCalledWith('   ');
   });
 
   it('does not call onSubmit when Enter is pressed with no text', () => {
