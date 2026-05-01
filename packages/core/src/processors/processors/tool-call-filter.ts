@@ -7,9 +7,14 @@ type ToolLikePart = {
   type: string;
   toolCallId?: string;
   toolName?: string;
+  providerMetadata?: {
+    mastra?: unknown;
+  };
   toolInvocation?: {
+    state?: string;
     toolName?: string;
     toolCallId?: string;
+    result?: unknown;
   };
 };
 
@@ -38,6 +43,13 @@ export type ToolCallFilterOptions = {
    * @default true
    */
   preserveLatestStep?: boolean;
+  /**
+   * Keep completed tool results that have providerMetadata.mastra.modelOutput,
+   * replacing the raw result with that compact model-facing projection.
+   *
+   * @default false
+   */
+  preserveModelOutput?: boolean;
 };
 
 /**
@@ -50,15 +62,18 @@ export class ToolCallFilter implements Processor {
   name = 'ToolCallFilter';
   private exclude: string[] | 'all';
   private preserveLatestStep: boolean;
+  private preserveModelOutput: boolean;
 
   /**
    * Create a filter for tool calls and results.
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
    * @param options.preserveLatestStep Keep the latest step's tool calls and results during processInputStep.
+   * @param options.preserveModelOutput Keep completed tool results that have providerMetadata.mastra.modelOutput.
    */
   constructor(options: ToolCallFilterOptions = {}) {
     this.preserveLatestStep = options.preserveLatestStep ?? true;
+    this.preserveModelOutput = options.preserveModelOutput ?? false;
 
     // If no options or exclude is provided, exclude all tools
     if (!options || !options.exclude) {
@@ -104,6 +119,34 @@ export class ToolCallFilter implements Processor {
   private getToolParts(message: MastraDBMessage): Array<MessagePart & ToolLikePart> {
     if (!message.content?.parts) return [];
     return message.content.parts.filter((part): part is MessagePart & ToolLikePart => this.isToolPart(part));
+  }
+
+  private getModelOutput(part: MessagePart & ToolLikePart): unknown {
+    const mastraMetadata = part.providerMetadata?.mastra;
+    if (!mastraMetadata || typeof mastraMetadata !== 'object') {
+      return undefined;
+    }
+
+    return (mastraMetadata as Record<string, unknown>).modelOutput;
+  }
+
+  private compactToolResultPart(part: MessagePart & ToolLikePart): (MessagePart & ToolLikePart) | null {
+    if (!this.preserveModelOutput || part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') {
+      return null;
+    }
+
+    const modelOutput = this.getModelOutput(part);
+    if (modelOutput == null) {
+      return null;
+    }
+
+    return {
+      ...part,
+      toolInvocation: {
+        ...part.toolInvocation,
+        result: modelOutput,
+      },
+    };
   }
 
   private collectToolCallIds(parts: MessagePart[], toolCallIds: Set<string>) {
@@ -265,17 +308,24 @@ export class ToolCallFilter implements Processor {
 
         const filteredParts = originalParts
           ? this.removeOrphanStepStarts(
-              originalParts.filter(part => {
+              originalParts.flatMap(part => {
                 if (!this.isToolPart(part)) {
-                  return true;
+                  return [part];
                 }
 
-                return this.shouldKeepTool(
-                  this.getToolName(part),
-                  this.getToolCallId(part),
-                  preservedToolCallIds,
-                  excludedToolCallIds,
-                );
+                if (
+                  this.shouldKeepTool(
+                    this.getToolName(part),
+                    this.getToolCallId(part),
+                    preservedToolCallIds,
+                    excludedToolCallIds,
+                  )
+                ) {
+                  return [part];
+                }
+
+                const compactPart = this.compactToolResultPart(part);
+                return compactPart ? [compactPart] : [];
               }),
             )
           : undefined;

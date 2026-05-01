@@ -120,6 +120,135 @@ describe('ToolCallFilter', () => {
       }
     });
 
+    it('should preserve compact model output while excluding raw tool results when enabled', async () => {
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+
+      const rawResult = {
+        rows: Array.from({ length: 20 }, (_, index) => ({ id: index, value: `raw-${index}` })),
+        diagnostics: { retainedOnlyForApp: true },
+      };
+      const modelOutput = { type: 'text', value: 'Weather summary: sunny, 72F' };
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                  result: rawResult,
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput,
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+
+      const parts = resultMessages[0]!.content.parts;
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).toMatchObject({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'weather',
+          result: modelOutput,
+        },
+        providerMetadata: {
+          mastra: {
+            modelOutput,
+          },
+        },
+      });
+      expect(JSON.stringify(resultMessages)).not.toContain('retainedOnlyForApp');
+
+      const filteredList = new MessageList();
+      filteredList.add(resultMessages, 'memory');
+      const prompt = await filteredList.get.all.aiV5.llmPrompt();
+      expect(JSON.stringify(prompt)).toContain('Weather summary: sunny, 72F');
+      expect(JSON.stringify(prompt)).not.toContain('retainedOnlyForApp');
+    });
+
+    it('should still remove model output tool results by default', async () => {
+      const filter = new ToolCallFilter();
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                  result: { raw: true },
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: { type: 'text', value: 'compact' },
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(0);
+    });
+
     it('should handle messages without tool calls', async () => {
       const filter = new ToolCallFilter();
 
@@ -446,6 +575,67 @@ describe('ToolCallFilter', () => {
         expect(weatherInvocations).toHaveLength(0);
         expect(calculatorInvocations.length).toBeGreaterThan(0);
       }
+    });
+
+    it('should preserve model output only for excluded tools when enabled', async () => {
+      const filter = new ToolCallFilter({ exclude: ['weather'], preserveModelOutput: true });
+
+      const weatherModelOutput = { type: 'text', value: 'Weather summary: sunny' };
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-weather',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                  result: { rawWeather: true },
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: weatherModelOutput,
+                  },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-calculator',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                  result: { value: 4 },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const parts = resultMessages[0]!.content.parts.filter((part: any) => part.type === 'tool-invocation');
+
+      expect(parts).toHaveLength(2);
+      expect((parts[0] as any).toolInvocation.result).toEqual(weatherModelOutput);
+      expect((parts[1] as any).toolInvocation.result).toEqual({ value: 4 });
+      expect(JSON.stringify(resultMessages)).not.toContain('rawWeather');
     });
 
     it('should exclude multiple specified tools', async () => {
