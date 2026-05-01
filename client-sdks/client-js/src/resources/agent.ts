@@ -1975,21 +1975,13 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
-              const toolInvocationWithMetadata = message?.toolInvocations?.find(
-                invocation => invocation.toolCallId === toolCall.toolCallId,
-              );
-              toolCalls.push({
-                ...toolInvocationWithMetadata,
-                ...toolCall,
-                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
-                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
-                  : {}),
-              });
-            }
+            const pendingToolCalls = (message?.parts ?? [])
+              .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
+              .map(part => part.toolInvocation)
+              .filter((inv): inv is ToolInvocation => inv != null && inv.state === 'call');
+
+            toolCalls.length = 0;
+            toolCalls.push(...pendingToolCalls);
 
             let shouldExecuteClientTool = false;
             // Handle tool calls if needed
@@ -3000,21 +2992,13 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
-              const toolInvocationWithMetadata = message?.toolInvocations?.find(
-                invocation => invocation.toolCallId === toolCall.toolCallId,
-              );
-              toolCalls.push({
-                ...toolInvocationWithMetadata,
-                ...toolCall,
-                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
-                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
-                  : {}),
-              });
-            }
+            const pendingToolCalls = (message?.parts ?? [])
+              .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
+              .map(part => part.toolInvocation)
+              .filter((inv): inv is ToolInvocation => inv != null && inv.state === 'call');
+
+            toolCalls.length = 0;
+            toolCalls.push(...pendingToolCalls);
 
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
