@@ -512,6 +512,17 @@ export interface ActiveSubagentState {
 }
 
 /**
+ * Terminal subagent activity retained for display snapshots after the parent run ends.
+ */
+export interface HarnessSubagentHistoryEntry extends Omit<ActiveSubagentState, 'status'> {
+  toolCallId: string;
+  status: ActiveSubagentState['status'] | 'aborted';
+  endedAt: Date;
+  order: number;
+  parentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+}
+
+/**
  * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
  *
  * `single_select` is the default for prompts that provide options, preserving the
@@ -608,6 +619,9 @@ export interface HarnessDisplayState {
   /** Active subagent executions keyed by parent toolCallId */
   activeSubagents: Map<string, ActiveSubagentState>;
 
+  /** Terminal subagent executions retained after they leave activeSubagents */
+  subagentHistory: HarnessSubagentHistoryEntry[];
+
   // ── Observational Memory ─────────────────────────────────────────────
   /** Full OM progress state (status, tokens, thresholds, buffered) */
   omProgress: OMProgressState;
@@ -653,6 +667,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     pendingQuestion: null,
     pendingPlanApproval: null,
     activeSubagents: new Map(),
+    subagentHistory: [],
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
     bufferingObservations: false,

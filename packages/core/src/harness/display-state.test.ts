@@ -39,6 +39,7 @@ describe('defaultDisplayState', () => {
     expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.subagentHistory).toEqual([]);
     expect(ds.omProgress.status).toBe('idle');
     expect(ds.omProgress.pendingTokens).toBe(0);
     expect(ds.omProgress.threshold).toBe(30000);
@@ -75,6 +76,7 @@ describe('Harness.getDisplayState()', () => {
     expect(ds.pendingQuestion).toBeNull();
     expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.subagentHistory).toEqual([]);
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
     expect(ds.previousTasks).toEqual([]);
@@ -182,6 +184,13 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState().activeSubagents.size).toBe(0);
+    expect(harness.getDisplayState().subagentHistory).toEqual([
+      expect.objectContaining({
+        toolCallId: 's1',
+        status: 'aborted',
+        parentEndReason: 'complete',
+      }),
+    ]);
   });
 });
 
@@ -635,6 +644,43 @@ describe('subagent lifecycle', () => {
     expect(sub.result).toBe('done');
   });
 
+  it('records completed subagent history on subagent_end', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_tool_start',
+      toolCallId: 's1',
+      agentType: 'execute',
+      subToolName: 'read_file',
+      subToolArgs: {},
+    });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+
+    const ds = harness.getDisplayState();
+    expect(ds.activeSubagents.get('s1')?.status).toBe('completed');
+    expect(ds.subagentHistory).toHaveLength(1);
+    expect(ds.subagentHistory[0]).toEqual(
+      expect.objectContaining({
+        toolCallId: 's1',
+        agentType: 'execute',
+        task: 't',
+        modelId: 'm',
+        status: 'completed',
+        durationMs: 1234,
+        result: 'done',
+        order: 0,
+      }),
+    );
+    expect(ds.subagentHistory[0]!.endedAt).toBeInstanceOf(Date);
+    expect(ds.subagentHistory[0]!.toolCalls).toEqual([{ name: 'read_file', isError: false }]);
+  });
+
   it('marks subagent as error on failed subagent_end', () => {
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
     emit(harness, {
@@ -646,6 +692,98 @@ describe('subagent lifecycle', () => {
       durationMs: 500,
     });
     expect(harness.getDisplayState().activeSubagents.get('s1')!.status).toBe('error');
+  });
+
+  it('records errored subagent history on failed subagent_end', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'failed',
+      isError: true,
+      durationMs: 500,
+    });
+
+    const history = harness.getDisplayState().subagentHistory;
+    expect(history).toHaveLength(1);
+    expect(history[0]).toEqual(
+      expect.objectContaining({
+        toolCallId: 's1',
+        status: 'error',
+        result: 'failed',
+        durationMs: 500,
+      }),
+    );
+    expect(history[0]!.parentEndReason).toBeUndefined();
+  });
+
+  it('preserves subagentHistory after agent_end', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+
+    emit(harness, { type: 'agent_end', reason: 'complete' });
+
+    const ds = harness.getDisplayState();
+    expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.subagentHistory).toHaveLength(1);
+    expect(ds.subagentHistory[0]).toEqual(expect.objectContaining({ toolCallId: 's1', status: 'completed' }));
+  });
+
+  it('records running subagents as aborted when agent_end fires', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 'find', modelId: 'm' });
+
+    emit(harness, { type: 'agent_end', reason: 'error' });
+
+    const ds = harness.getDisplayState();
+    expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.subagentHistory).toHaveLength(1);
+    expect(ds.subagentHistory[0]).toEqual(
+      expect.objectContaining({
+        toolCallId: 's1',
+        status: 'aborted',
+        parentEndReason: 'error',
+        order: 0,
+      }),
+    );
+    expect(ds.subagentHistory[0]!.endedAt).toBeInstanceOf(Date);
+  });
+
+  it('defaults parentEndReason to aborted when agent_end has no reason', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 'find', modelId: 'm' });
+
+    emit(harness, { type: 'agent_end' });
+
+    expect(harness.getDisplayState().subagentHistory[0]).toEqual(
+      expect.objectContaining({
+        status: 'aborted',
+        parentEndReason: 'aborted',
+      }),
+    );
+  });
+
+  it('clears subagentHistory on agent_start', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+    expect(harness.getDisplayState().subagentHistory).toHaveLength(1);
+
+    emit(harness, { type: 'agent_start' });
+
+    expect(harness.getDisplayState().subagentHistory).toEqual([]);
   });
 });
 
@@ -1108,6 +1246,14 @@ describe('resetThreadDisplayState', () => {
     emit(harness, { type: 'ask_question', questionId: 'q1', question: 'Q?', options: [] });
     emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'P', plan: '#' });
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'explore',
+      result: 'done',
+      isError: false,
+      durationMs: 100,
+    });
     emit(harness, { type: 'task_updated', tasks: [{ content: 'T', status: 'pending', activeForm: 'T' }] });
     emit(harness, { type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
     emit(harness, { type: 'om_buffering_start', cycleId: 'c2', operationType: 'observation', tokensToBuffer: 1000 });
@@ -1122,6 +1268,7 @@ describe('resetThreadDisplayState', () => {
     expect(ds.pendingQuestion).toBeNull();
     expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.subagentHistory).toEqual([]);
     expect(ds.currentMessage).toBeNull();
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
@@ -1426,6 +1573,44 @@ describe('Harness.subscribeDisplayState()', () => {
     expect(liveToolArgs.nested.marker).toBe('original');
     expect(liveModifiedFile.firstModified).toEqual(firstModified);
     expect(liveModifiedFile.operations).toEqual(['write_file']);
+  });
+
+  it('isolates listener subagentHistory snapshots from live display state', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    const endedAt = new Date('2026-01-01T00:00:00.000Z');
+    vi.setSystemTime(endedAt);
+
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_tool_start',
+      toolCallId: 's1',
+      agentType: 'execute',
+      subToolName: 'read_file',
+      subToolArgs: {},
+    });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+
+    const snapshot = listener.mock.calls.at(-1)?.[0];
+    const liveEntry = harness.getDisplayState().subagentHistory[0]!;
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.subagentHistory).toHaveLength(1);
+    expect(snapshot!.subagentHistory[0]).not.toBe(liveEntry);
+    expect(snapshot!.subagentHistory[0]!.endedAt).not.toBe(liveEntry.endedAt);
+
+    snapshot!.subagentHistory[0]!.toolCalls[0]!.name = 'mutated';
+    harness.getDisplayState().subagentHistory.push({ ...liveEntry, toolCallId: 's2', order: 1 });
+
+    expect(liveEntry.toolCalls[0]!.name).toBe('read_file');
+    expect(snapshot!.subagentHistory).toHaveLength(1);
   });
 
   it('unsubscribe cancels pending timers and prevents later callbacks', () => {

@@ -355,6 +355,10 @@ Return the current `HarnessDisplayState` snapshot for UI rendering.
 const displayState = harness.getDisplayState()
 ```
 
+`HarnessDisplayState.subagentHistory` contains completed, errored, and aborted subagent runs. Each entry includes the `ActiveSubagentState` fields plus `toolCallId`, `endedAt`, `order`, optional `parentEndReason`, and an extra `aborted` status for subagents still running when the parent run ends.
+
+Harness appends entries on `subagent_end` and keeps them after `agent_end`, while `activeSubagents` is cleared on `agent_end`. During a run, a completed or errored subagent can appear in both `activeSubagents` and `subagentHistory`, so display adapters that read both should dedupe by `toolCallId`. The history resets on `agent_start` and thread display-state resets.
+
 #### `setState(updates)`
 
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
