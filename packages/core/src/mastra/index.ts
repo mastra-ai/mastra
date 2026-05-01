@@ -2722,6 +2722,14 @@ export class Mastra<
       return;
     }
 
+    memory.__registerMastra(this);
+    if (!memory.hasOwnStorage) {
+      const storage = this.getStorage();
+      if (storage) {
+        memory.setStorage(storage);
+      }
+    }
+
     memoryRegistry[memoryKey] = memory;
   }
 
