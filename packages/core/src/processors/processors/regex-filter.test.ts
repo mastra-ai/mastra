@@ -486,7 +486,7 @@ describe('RegexFilterProcessor', () => {
   });
 
   describe('edge cases', () => {
-    it('handles messages with no parts gracefully', () => {
+    it('redacts text parts in structured content', () => {
       const filter = new RegexFilterProcessor({
         presets: ['pii'],
         strategy: 'redact',
