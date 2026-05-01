@@ -1,4 +1,4 @@
-import { IconButton, Textarea } from '@mastra/playground-ui';
+import { Button, Textarea } from '@mastra/playground-ui';
 import { ArrowUpIcon, GraduationCap, MessageCircleQuestion, MessagesSquare, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
@@ -87,17 +87,17 @@ export const AgentBuilderStarter = () => {
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
-              <IconButton
+              <Button
                 type="submit"
                 variant="default"
-                size="md"
+                size="icon-md"
                 tooltip="Start building"
                 disabled={trimmed.length === 0}
                 data-testid="agent-builder-starter-submit"
                 className="rounded-full"
               >
                 <ArrowUpIcon />
-              </IconButton>
+              </Button>
             </div>
           </div>
         </form>

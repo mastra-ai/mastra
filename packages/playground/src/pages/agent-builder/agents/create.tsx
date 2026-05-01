@@ -1,4 +1,4 @@
-import { IconButton } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -22,7 +22,8 @@ export default function AgentBuilderCreate() {
   return (
     <>
       <div className="absolute top-3 left-3 md:top-6 md:left-6 z-10">
-        <IconButton
+        <Button
+          size="icon-sm"
           variant="ghost"
           onClick={() =>
             navigate('/agent-builder/agents', {
@@ -33,7 +34,7 @@ export default function AgentBuilderCreate() {
           tooltip="Agents list"
         >
           <ArrowLeftIcon />
-        </IconButton>
+        </Button>
       </div>
       <AgentBuilderStarter />
     </>

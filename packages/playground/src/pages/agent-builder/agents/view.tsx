@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { IconButton, Spinner } from '@mastra/playground-ui';
+import { Button, Spinner } from '@mastra/playground-ui';
 import { PencilIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -221,8 +221,8 @@ const AgentBuilderAgentViewReady = ({
 const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
   const isRunning = useStreamRunning();
   return (
-    <IconButton
-      size="sm"
+    <Button
+      size="icon-sm"
       variant="ghost"
       onClick={onEdit}
       disabled={isRunning}
@@ -230,6 +230,6 @@ const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
       data-testid="agent-builder-view-edit"
     >
       <PencilIcon />
-    </IconButton>
+    </Button>
   );
 };

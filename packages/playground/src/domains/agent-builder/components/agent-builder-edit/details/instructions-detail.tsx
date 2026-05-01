@@ -1,4 +1,4 @@
-import { CodeEditor, IconButton, Txt } from '@mastra/playground-ui';
+import { Button, CodeEditor, Txt } from '@mastra/playground-ui';
 import { FileTextIcon, XIcon } from 'lucide-react';
 
 interface InstructionsDetailProps {
@@ -18,7 +18,8 @@ export const InstructionsDetail = ({ prompt, onChange, onClose, editable = true 
             Instructions
           </Txt>
         </div>
-        <IconButton
+        <Button
+          size="icon-sm"
           variant="ghost"
           tooltip="Close"
           className="rounded-full"
@@ -26,7 +27,7 @@ export const InstructionsDetail = ({ prompt, onChange, onClose, editable = true 
           data-testid="instructions-detail-close"
         >
           <XIcon />
-        </IconButton>
+        </Button>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col px-6 py-4">

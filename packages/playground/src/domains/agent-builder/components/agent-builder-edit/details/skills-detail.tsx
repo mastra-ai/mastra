@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Checkbox, IconButton, Txt } from '@mastra/playground-ui';
+import { Button, Checkbox, Txt } from '@mastra/playground-ui';
 import { SparklesIcon, XIcon } from 'lucide-react';
 import { useFormContext } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -34,7 +34,8 @@ export const SkillsDetail = ({ onClose, editable = true, availableSkills = [] }:
             </Txt>
           )}
         </div>
-        <IconButton
+        <Button
+          size="icon-sm"
           variant="ghost"
           tooltip="Close"
           className="rounded-full"
@@ -42,7 +43,7 @@ export const SkillsDetail = ({ onClose, editable = true, availableSkills = [] }:
           data-testid="skills-detail-close"
         >
           <XIcon />
-        </IconButton>
+        </Button>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto py-2">

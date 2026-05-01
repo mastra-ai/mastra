@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
   DropdownMenu,
-  IconButton,
 } from '@mastra/playground-ui';
 import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -46,9 +45,9 @@ export function AgentBuilderMobileMenu({
     <div className="lg:hidden" data-testid="agent-builder-mobile-menu">
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <IconButton variant="ghost" tooltip="More actions" data-testid="agent-builder-mobile-menu-trigger">
+          <Button size="icon-sm" variant="ghost" tooltip="More actions" data-testid="agent-builder-mobile-menu-trigger">
             <MoreVerticalIcon />
-          </IconButton>
+          </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
           {showSetVisibility && (

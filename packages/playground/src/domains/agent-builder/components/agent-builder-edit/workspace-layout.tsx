@@ -1,4 +1,4 @@
-import { cn, IconButton } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -61,13 +61,14 @@ export const WorkspaceLayout = ({
     <div className="flex flex-1 min-w-0 flex-col h-full">
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4 md:px-10">
         <div className="justify-self-start">
-          <IconButton
+          <Button
+            size="icon-sm"
             variant="ghost"
             tooltip={backTooltip}
             onClick={() => navigate(backHref, { viewTransition: true })}
           >
             <ArrowLeftIcon />
-          </IconButton>
+          </Button>
         </div>
         <AgentBuilderBreadcrumb
           className="min-w-0 lg:justify-self-center"
@@ -81,7 +82,8 @@ export const WorkspaceLayout = ({
           {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
           {showConfigure && (
             <div className="shrink-0 hidden lg:inline-flex">
-              <IconButton
+              <Button
+                size="icon-sm"
                 variant="ghost"
                 tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
                 onClick={() => setExpanded(prev => !prev)}
@@ -97,7 +99,7 @@ export const WorkspaceLayout = ({
                   <div />
                   <div className="bg-neutral1 h-full w-full" />
                 </div>
-              </IconButton>
+              </Button>
             </div>
           )}
         </div>

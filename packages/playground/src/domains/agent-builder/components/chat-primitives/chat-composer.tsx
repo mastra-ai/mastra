@@ -1,4 +1,4 @@
-import { IconButton, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ChatTextarea } from './chat-textarea';
@@ -61,17 +61,17 @@ export const ChatComposer = ({
           disabled={disabled}
         />
         <div className="flex items-center justify-end pb-3">
-          <IconButton
+          <Button
             type="submit"
             variant="default"
-            size="sm"
+            size="icon-sm"
             tooltip={isRunning ? 'Generating…' : 'Send'}
             disabled={!canSubmit}
             data-testid={submitTestId}
             className="rounded-full"
           >
             {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
-          </IconButton>
+          </Button>
         </div>
       </div>
     </form>
