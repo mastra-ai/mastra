@@ -34,7 +34,11 @@ vi.mock('@mariozechner/pi-tui', async importOriginal => {
   class StubSelectList {
     onSelect?: (item: unknown) => void;
     onCancel?: () => void;
-    constructor(public items: unknown[], _h: number, _theme: unknown) {}
+    constructor(
+      public items: unknown[],
+      _h: number,
+      _theme: unknown,
+    ) {}
     handleInput(_data: string): void {}
     render(): string[] {
       return [''];
