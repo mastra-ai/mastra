@@ -8,22 +8,27 @@ export interface McpAppToolInfo {
 }
 
 /**
- * Builds a map of tool names → MCP App info for all tools across MCP servers
+ * Builds a map of tool names → MCP App info for tools across MCP servers
  * that have `_meta.ui.resourceUri` (i.e., tools with interactive MCP App UIs).
+ *
+ * When `mcpServerIds` is provided, only those servers are scanned.
+ * This allows scoping app resource lookups to an agent's declared MCP servers.
  */
-export function useMcpAppTools() {
+export function useMcpAppTools(mcpServerIds?: string[]) {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['mcp-app-tools'],
+    queryKey: ['mcp-app-tools', mcpServerIds ?? 'all'],
     queryFn: async () => {
       const map: Record<string, McpAppToolInfo> = {};
 
       const { servers } = await client.getMcpServers();
       if (!servers?.length) return map;
 
+      const filteredServers = mcpServerIds ? servers.filter(s => mcpServerIds.includes(s.id)) : servers;
+
       const results = await Promise.allSettled(
-        servers.map(async server => {
+        filteredServers.map(async server => {
           const { tools } = await client.getMcpServerTools(server.id);
           return { serverId: server.id, tools };
         }),

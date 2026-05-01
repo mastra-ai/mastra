@@ -30,6 +30,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
+import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
@@ -271,6 +272,12 @@ export interface AgentConfig<
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
+  /**
+   * MCP servers whose tools and app resources this agent can access.
+   * Tools from these servers are automatically available to the agent at runtime.
+   * App resources (interactive UIs via `ui://` URIs) are scoped to the agent.
+   */
+  mcpServers?: Record<string, MCPServerBase>;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */

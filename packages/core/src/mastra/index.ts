@@ -1381,6 +1381,15 @@ export class Mastra<
         });
     }
 
+    // Auto-register agent-level MCP servers at the Mastra level
+    // so they are discoverable via listMCPServers() and the API
+    const agentMcpServers = mastraAgent.getMcpServers?.();
+    if (agentMcpServers) {
+      for (const [serverKey, server] of Object.entries(agentMcpServers)) {
+        this.addMCPServer(server, serverKey);
+      }
+    }
+
     // Register scorers from the agent to the Mastra instance
     // This makes agent-level scorers discoverable via mastra.getScorer()/getScorerById()
     mastraAgent

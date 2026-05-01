@@ -220,6 +220,8 @@ export interface SerializedAgent {
   defaultStreamOptionsLegacy?: Record<string, unknown>;
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
+  /** IDs of MCP servers configured on this agent */
+  mcpServerIds?: string[];
   source?: 'code' | 'stored';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
@@ -600,6 +602,10 @@ async function formatAgentList({
     // Agent doesn't have a workspace or can't access it
   }
 
+  // Get MCP server IDs if agent has MCP servers configured
+  const mcpServers = agent.getMcpServers?.();
+  const mcpServerIds = mcpServers ? Object.keys(mcpServers) : undefined;
+
   const model = llm?.getModel();
 
   let models: Awaited<ReturnType<Agent['getModelList']>> | undefined;
@@ -639,6 +645,7 @@ async function formatAgentList({
     workspaceTools,
     browserTools,
     workspaceId,
+    mcpServerIds,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider:
