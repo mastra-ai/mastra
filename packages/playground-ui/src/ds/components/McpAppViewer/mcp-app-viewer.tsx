@@ -116,9 +116,7 @@ export function McpAppViewer({
               jsonrpc: '2.0',
               id: data.id,
               result: {
-                content: [
-                  { type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) },
-                ],
+                content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
                 structuredContent: typeof result === 'object' ? result : { result },
               },
             });
