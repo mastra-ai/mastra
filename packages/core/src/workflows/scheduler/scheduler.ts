@@ -67,7 +67,13 @@ export class WorkflowScheduler extends MastraBase {
       if (this.#stopping || !this.#started) return;
 
       this.#intervalHandle = setInterval(() => {
-        void this.#runTick();
+        // Swallow rejections here so a tick failure can't surface as an
+        // unhandled promise rejection and crash the host process. #processTick
+        // already logs its own errors and notifies onError, so we only need a
+        // belt-and-braces logger.error for anything that escapes.
+        void this.#runTick().catch(err => {
+          this.logger.error('WorkflowScheduler tick crashed', { error: err });
+        });
       }, this.#config.tickIntervalMs);
     } catch (err) {
       // Reset state so a future start() can retry. Without this, a failed
