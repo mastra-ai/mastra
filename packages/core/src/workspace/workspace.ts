@@ -1321,7 +1321,9 @@ export class Workspace<
     const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
     const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
 
-    return this.getInstructionsForProviders(filesystem, sandbox, opts);
+    // Forward the resolved requestContext so provider getInstructions hooks see
+    // the same context used to resolve them, even when the caller didn't pass one.
+    return this.getInstructionsForProviders(filesystem, sandbox, { ...opts, requestContext });
   }
 
   /**
@@ -1348,7 +1350,9 @@ export class Workspace<
     const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
     const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
 
-    return this.getPathContextForProviders(filesystem, sandbox, opts);
+    // Forward the resolved requestContext so provider getInstructions hooks see
+    // the same context used to resolve them, even when the caller didn't pass one.
+    return this.getPathContextForProviders(filesystem, sandbox, { ...opts, requestContext });
   }
 
   private getPathContextForProviders(

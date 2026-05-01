@@ -2509,6 +2509,27 @@ Line 3 conclusion`;
       expect(pathContext.sandbox?.workingDirectory).toBe(path.join(tempDir, 'user'));
       expect(pathContext.instructions).toContain(path.join(tempDir, 'user'));
     });
+
+    it('should forward the synthesized requestContext to provider instruction hooks', async () => {
+      // When the caller omits opts.requestContext, getInstructionsAsync synthesizes one
+      // to invoke resolvers — and must pass that same context to the provider's own
+      // getInstructions hook so per-request customization stays consistent.
+      let seenContext: RequestContext | undefined;
+      const workspace = new Workspace({
+        sandbox: () =>
+          new LocalSandbox({
+            workingDirectory: tempDir,
+            instructions: ({ requestContext }) => {
+              seenContext = requestContext;
+              return 'sandbox instructions';
+            },
+          }),
+      });
+
+      await workspace.getInstructionsAsync();
+
+      expect(seenContext).toBeInstanceOf(RequestContext);
+    });
   });
 
   // ===========================================================================
