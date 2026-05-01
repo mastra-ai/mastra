@@ -1,4 +1,5 @@
-import { AppRenderer, type AppRendererHandle, type SandboxConfig } from '@mcp-ui/client';
+import { AppRenderer } from '@mcp-ui/client';
+import type { AppRendererHandle, SandboxConfig } from '@mcp-ui/client';
 import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
@@ -32,7 +33,7 @@ export interface McpAppViewerProps {
  */
 export function McpAppViewer({
   html,
-  title = 'MCP App',
+  title: _title = 'MCP App',
   toolName = 'mcp-app',
   toolInput,
   toolResult,
