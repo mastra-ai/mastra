@@ -8,7 +8,6 @@ const meta: Meta<typeof Chip> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     color: {
       control: { type: 'select' },
