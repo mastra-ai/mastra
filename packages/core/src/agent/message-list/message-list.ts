@@ -739,6 +739,14 @@ export class MessageList {
             providerMetadata?: unknown;
           };
 
+          const mergedProviderMetadata =
+            originalPart.providerMetadata !== undefined || inputPartWithMeta.providerMetadata !== undefined
+              ? ({
+                  ...((originalPart.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
+                  ...((inputPartWithMeta.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
+                } as AIV5Type.ProviderMetadata)
+              : undefined;
+
           msg.content.parts[i] = {
             ...inputPart,
             toolInvocation: {
@@ -749,10 +757,7 @@ export class MessageList {
             ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
               ? { providerExecuted: originalPart.providerExecuted }
               : {}),
-            // Preserve providerMetadata from original call if not in result
-            ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
-              ? { providerMetadata: originalPart.providerMetadata }
-              : {}),
+            ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
           };
 
           // `backgroundTasks` is a per-toolCallId record — merge instead of
