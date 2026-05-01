@@ -221,6 +221,58 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 :::
 
+### Filter with regex patterns
+
+The `RegexFilterProcessor()` detects and handles pattern matches using regular expressions. It requires no LLM calls — all detection is regex-based, making it the fastest guardrail option.
+
+```typescript {7-11,13} title="src/mastra/agents/filtered-agent.ts"
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+export const filteredAgent = new Agent({
+  id: 'filtered-agent',
+  name: 'Filtered Agent',
+  inputProcessors: [
+    new RegexFilterProcessor({
+      presets: ['pii', 'secrets'],
+      strategy: 'redact',
+    }),
+  ],
+  outputProcessors: [new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' })],
+})
+```
+
+:::note
+
+Visit [`RegexFilterProcessor()`](/reference/processors/regex-filter-processor) reference for a full list of configuration options and built-in presets.
+
+:::
+
+### Enforce cost limits
+
+The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It uses `processInputStep` to check costs before each LLM call.
+
+```typescript {7-11} title="src/mastra/agents/budgeted-agent.ts"
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+export const budgetedAgent = new Agent({
+  id: 'budgeted-agent',
+  name: 'Budgeted Agent',
+  inputProcessors: [
+    new CostGuardProcessor({
+      maxCost: 5.0,
+      scope: 'thread',
+      window: '24h',
+    }),
+  ],
+})
+```
+
+:::note
+
+Visit [`CostGuardProcessor()`](/reference/processors/cost-guard-processor) reference for scoping modes, time windows, and the `onViolation` callback.
+
+:::
+
 ## Processor strategies
 
 Many built-in processors support a `strategy` parameter that controls how they handle flagged content. Supported values include: `block`, `warn`, `detect`, `redact`, `rewrite`, and `translate`.
@@ -237,6 +289,26 @@ inputProcessors: [
   }),
 ]
 ```
+
+## Violation callbacks
+
+All processors support an `onViolation` callback that fires when a policy violation is detected, regardless of strategy. Use it for side effects like alerting, logging to external systems, or sending notifications.
+
+```typescript
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 10.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ processorId, message, detail }) => {
+  alertSystem.notify(`[${processorId}] ${message}`)
+}
+```
+
+The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor can use it. Errors thrown by the callback are silently caught to prevent interfering with the processor's main logic.
 
 ## Handle blocked requests
 
