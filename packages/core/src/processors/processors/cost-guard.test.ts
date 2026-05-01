@@ -77,6 +77,7 @@ function createMockObservabilityStorage(
 
 describe('CostGuardProcessor', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 

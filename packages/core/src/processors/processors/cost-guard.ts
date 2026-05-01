@@ -147,7 +147,12 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
   constructor(options: CostGuardOptions) {
     const { limits } = options;
-    if (!limits.maxTotalTokens && !limits.maxInputTokens && !limits.maxOutputTokens && !limits.maxCost) {
+    if (
+      limits.maxTotalTokens === undefined &&
+      limits.maxInputTokens === undefined &&
+      limits.maxOutputTokens === undefined &&
+      limits.maxCost === undefined
+    ) {
       throw new Error('CostGuardProcessor requires at least one limit to be set');
     }
 
@@ -277,16 +282,20 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   }
 
   private checkLimits(usage: CostGuardUsage): { limitType: string; usage: number; limit: number } | null {
-    if (this.limits.maxTotalTokens && usage.totalTokens >= this.limits.maxTotalTokens) {
+    if (this.limits.maxTotalTokens !== undefined && usage.totalTokens >= this.limits.maxTotalTokens) {
       return { limitType: 'maxTotalTokens', usage: usage.totalTokens, limit: this.limits.maxTotalTokens };
     }
-    if (this.limits.maxInputTokens && usage.inputTokens >= this.limits.maxInputTokens) {
+    if (this.limits.maxInputTokens !== undefined && usage.inputTokens >= this.limits.maxInputTokens) {
       return { limitType: 'maxInputTokens', usage: usage.inputTokens, limit: this.limits.maxInputTokens };
     }
-    if (this.limits.maxOutputTokens && usage.outputTokens >= this.limits.maxOutputTokens) {
+    if (this.limits.maxOutputTokens !== undefined && usage.outputTokens >= this.limits.maxOutputTokens) {
       return { limitType: 'maxOutputTokens', usage: usage.outputTokens, limit: this.limits.maxOutputTokens };
     }
-    if (this.limits.maxCost && usage.estimatedCost !== null && usage.estimatedCost >= this.limits.maxCost) {
+    if (
+      this.limits.maxCost !== undefined &&
+      usage.estimatedCost !== null &&
+      usage.estimatedCost >= this.limits.maxCost
+    ) {
       return { limitType: 'maxCost', usage: usage.estimatedCost, limit: this.limits.maxCost };
     }
     return null;
