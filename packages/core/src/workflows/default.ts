@@ -615,8 +615,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Used by durable execution engines to persist context across step replays.
    */
   serializeRequestContext(requestContext: RequestContext | Record<string, any>): Record<string, any> {
-    if (requestContext instanceof RequestContext) {
-      return requestContext.toJSON();
+    if (typeof (requestContext as RequestContext).toJSON === 'function') {
+      return (requestContext as RequestContext).toJSON();
+    }
+
+    if (typeof (requestContext as RequestContext).forEach === 'function') {
+      const entries: [string, unknown][] = [];
+      (requestContext as RequestContext).forEach((value, key) => {
+        entries.push([key, value]);
+      });
+      return new RequestContext<unknown>(entries).toJSON();
     }
 
     return new RequestContext(Object.entries(requestContext)).toJSON();
