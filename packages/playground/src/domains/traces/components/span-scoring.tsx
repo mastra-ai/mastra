@@ -48,7 +48,7 @@ export function SpanScoring({
         {
           onSuccess: () =>
             toast.info('Scorer triggered', {
-              description: 'When finished successfully, it will appear in the list below. It could take a moment.',
+              description: 'Results will appear once scoring completes.',
             }),
         },
       );
