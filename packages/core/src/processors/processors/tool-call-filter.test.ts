@@ -1252,6 +1252,23 @@ describe('ToolCallFilter', () => {
       expect(serialized).not.toContain('search result:\\nCompact search summary');
     });
 
+    it('exposes filterAfterToolSteps and preserveModelOutput through the processor provider config', async () => {
+      const parsedConfig = toolCallFilterProvider.configSchema.parse({
+        filterAfterToolSteps: 0,
+        preserveModelOutput: true,
+      });
+      const processor = toolCallFilterProvider.createProcessor(parsedConfig);
+      const messageList = createMessageList(toolMessages);
+
+      const result = await processor.processInputStep?.(mockStepArgs(messageList));
+
+      expect(result?.messages).toBeDefined();
+      const resultMessages = result?.messages;
+      expect(JSON.stringify(resultMessages)).toContain('Compact search summary');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_QUERY');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_RAW_RESULT');
+    });
+
     it('exposes preserveModelOutput through the processor provider config', async () => {
       const parsedConfig = toolCallFilterProvider.configSchema.parse({ preserveModelOutput: true });
       const processor = toolCallFilterProvider.createProcessor(parsedConfig);

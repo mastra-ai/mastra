@@ -74,6 +74,7 @@ export const toolCallFilterProvider: ProcessorProvider = {
   },
   configSchema: z.object({
     exclude: z.array(z.string()).optional(),
+    filterAfterToolSteps: z.number().optional(),
     preserveModelOutput: z.boolean().optional(),
   }),
   availablePhases: ['processInput'] as ProcessorPhase[],
