@@ -5,6 +5,7 @@ import { formValuesToSaveParams } from '../mappers/form-values-to-save-params';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 import { isModelNotAllowedError, useBuilderModelPolicy } from '@/domains/builder';
 
 interface UseSaveAgentArgs {
@@ -77,10 +78,12 @@ export function useSaveAgent({
 }: UseSaveAgentArgs) {
   const { createStoredAgent, updateStoredAgent } = useStoredAgentMutations(agentId);
   const policy = useBuilderModelPolicy();
+  const defaultVisibility = useDefaultVisibility();
 
   const save = useCallback(
     async (values: AgentBuilderEditFormValues) => {
       const params = formValuesToSaveParams(values, availableAgentTools, availableSkills);
+      const visibility = params.visibility ?? defaultVisibility;
       const workspaceField = params.workspace ? { workspace: params.workspace } : {};
       const browserField = { browser: params.browser };
       const metadataField = params.metadata ? { metadata: params.metadata } : {};
@@ -95,7 +98,7 @@ export function useSaveAgent({
             agents: params.agents,
             workflows: params.workflows,
             skills: params.skills,
-            visibility: params.visibility,
+            visibility,
             model: params.model,
             ...workspaceField,
             ...browserField,
@@ -125,7 +128,7 @@ export function useSaveAgent({
           agents: params.agents,
           workflows: params.workflows,
           skills: params.skills,
-          visibility: params.visibility,
+          visibility,
           ...workspaceField,
           ...browserField,
           ...metadataField,
@@ -143,7 +146,17 @@ export function useSaveAgent({
         throw error;
       }
     },
-    [agentId, mode, availableAgentTools, availableSkills, createStoredAgent, updateStoredAgent, onSuccess, policy],
+    [
+      agentId,
+      mode,
+      availableAgentTools,
+      availableSkills,
+      createStoredAgent,
+      updateStoredAgent,
+      onSuccess,
+      policy,
+      defaultVisibility,
+    ],
   );
 
   return { save, isSaving: createStoredAgent.isPending || updateStoredAgent.isPending };

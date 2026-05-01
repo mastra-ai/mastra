@@ -331,10 +331,10 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
-      // Default visibility: 'private' when there's an owner, 'public' when unowned
-      // (no auth / no user context). Unowned resources should always be public.
+      // No owner = always public (no auth / no user context).
+      // With an owner, respect the client's choice, defaulting to 'private'.
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
-      const visibility = bodyVisibility ?? (authorId ? 'private' : 'public');
+      const visibility = authorId ? (bodyVisibility ?? 'private') : 'public';
 
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
@@ -488,6 +488,10 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
+      // No owner = always public, regardless of what the client sent.
+      const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
+      const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
+
       // Enforce admin model allowlist (Phase 6) before persisting.
       if (model !== undefined) {
         const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
@@ -506,7 +510,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         id: storedAgentId,
         authorId,
         metadata,
-        visibility,
+        visibility: resolvedVisibility,
         name,
         description,
         instructions,

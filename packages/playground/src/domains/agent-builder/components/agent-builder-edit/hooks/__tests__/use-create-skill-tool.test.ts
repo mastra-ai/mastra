@@ -14,6 +14,10 @@ vi.mock('@/domains/agents/hooks/use-create-skill', () => ({
   useCreateSkill: () => ({ mutateAsync }),
 }));
 
+vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
+  useDefaultVisibility: () => 'private',
+}));
+
 const renderCreateSkillTool = (options: { availableWorkspaces?: { id: string; name: string }[] } = {}) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = {
     current: null,

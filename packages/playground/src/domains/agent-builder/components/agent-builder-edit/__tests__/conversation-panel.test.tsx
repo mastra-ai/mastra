@@ -53,6 +53,10 @@ vi.mock('@/domains/agents/hooks/use-create-skill', () => ({
   useCreateSkill: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
+  useDefaultVisibility: () => 'private',
+}));
+
 const llmProviderState = { isLoading: false };
 
 type MockProvider = { id: string; name: string; models: Array<{ id: string; name: string }> };

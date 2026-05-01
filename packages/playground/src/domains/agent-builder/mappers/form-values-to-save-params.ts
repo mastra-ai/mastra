@@ -18,7 +18,7 @@ export interface SaveParams {
   workspace: StoredWorkspaceRef | undefined;
   /** `true` = enable browser (server applies default config); `false` = disable browser */
   browser: boolean;
-  visibility: 'private' | 'public';
+  visibility: 'private' | 'public' | undefined;
   /**
    * Static model selection from the form. Conditional models are owned by code;
    * the form never round-trips them, so this is always either `undefined` or
@@ -91,7 +91,7 @@ export function formValuesToSaveParams(
     skills: skills as Record<string, StoredAgentSkillConfig>,
     workspace,
     browser,
-    visibility: values.visibility ?? 'private',
+    visibility: values.visibility,
     model: values.model,
     metadata,
   };

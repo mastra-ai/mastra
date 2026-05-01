@@ -7,6 +7,7 @@ import type { AvailableWorkspace } from './use-agent-builder-tool';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { createInitialStructure, updateNodeContent } from '@/domains/agents/components/agent-cms-pages/skill-file-tree';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
+import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const CREATE_SKILL_TOOL_NAME = 'createSkillTool';
 
@@ -17,6 +18,7 @@ interface UseCreateSkillToolArgs {
 export function useCreateSkillTool({ availableWorkspaces = [] }: UseCreateSkillToolArgs = {}) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const createSkill = useCreateSkill();
+  const defaultVisibility = useDefaultVisibility();
 
   return useMemo(() => {
     const workspaceIds = availableWorkspaces.map(w => w.id);
@@ -77,7 +79,7 @@ export function useCreateSkillTool({ availableWorkspaces = [] }: UseCreateSkillT
           const created = await createSkill.mutateAsync({
             name,
             description,
-            visibility: visibility ?? 'private',
+            visibility: visibility ?? defaultVisibility,
             workspaceId,
             files,
           });
@@ -94,5 +96,5 @@ export function useCreateSkillTool({ availableWorkspaces = [] }: UseCreateSkillT
         }
       },
     });
-  }, [formMethods, createSkill, availableWorkspaces]);
+  }, [formMethods, createSkill, availableWorkspaces, defaultVisibility]);
 }

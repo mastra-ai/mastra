@@ -57,7 +57,7 @@ export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefi
     skills: Object.fromEntries(Object.keys(flattenAgentSkills(storedAgent?.skills)).map(k => [k, true])),
     workspaceId: extractWorkspaceId(storedAgent?.workspace),
     browserEnabled: storedAgent?.browser != null,
-    visibility: storedAgent?.visibility ?? 'private',
+    visibility: storedAgent?.visibility,
     avatarUrl,
     model: extractStaticModel(storedAgent?.model),
   };

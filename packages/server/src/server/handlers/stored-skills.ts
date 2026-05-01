@@ -328,10 +328,10 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
-      // Default visibility: 'private' when there's an owner, 'public' when unowned
-      // (no auth / no user context). Unowned resources should always be public.
+      // No owner = always public (no auth / no user context).
+      // With an owner, respect the client's choice, defaulting to 'private'.
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
-      const visibility: 'private' | 'public' = bodyVisibility ?? (authorId ? 'private' : 'public');
+      const visibility: 'private' | 'public' = authorId ? (bodyVisibility ?? 'private') : 'public';
 
       // Derive references/scripts/assets path arrays from the files tree
       // so agents can discover them via skill_read even when only `files` is provided.
@@ -430,6 +430,10 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         record: existing,
       });
 
+      // No owner = always public, regardless of what the client sent.
+      const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
+      const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
+
       // Derive references/scripts/assets path arrays from the files tree
       const indexedPaths = files ? extractIndexedPathsFromFiles(files, { references, scripts, assets }) : {};
 
@@ -438,7 +442,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       await skillStore.update({
         id: storedSkillId,
         authorId,
-        visibility,
+        visibility: resolvedVisibility,
         name,
         description,
         instructions,

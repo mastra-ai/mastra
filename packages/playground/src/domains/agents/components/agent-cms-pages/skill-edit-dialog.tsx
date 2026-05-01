@@ -29,6 +29,7 @@ import {
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
 import { useWorkspaceInfo } from '@/domains/workspace/hooks';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
@@ -75,6 +76,7 @@ export function SkillEditDialog({
   const { data: builderSettings } = useBuilderSettings();
   const { data: authCapabilities } = useAuthCapabilities();
   const authEnabled = !!authCapabilities?.enabled;
+  const defaultVisibility = useDefaultVisibility();
   const workspaceOptions = useMemo(
     () =>
       (workspacesData?.workspaces ?? [])
@@ -106,7 +108,7 @@ export function SkillEditDialog({
         // View/edit mode for existing skill
         setName(skill.name ?? '');
         setDescription(skill.description ?? '');
-        setVisibility(skill.visibility ?? 'private');
+        setVisibility(skill.visibility ?? defaultVisibility);
         setInstructions(skill.instructions ?? '');
         setIsEditing(false);
         setMode('simple');
@@ -122,7 +124,7 @@ export function SkillEditDialog({
         // Create mode — start chat-first
         setName('');
         setDescription('');
-        setVisibility('private');
+        setVisibility(defaultVisibility);
         setInstructions('');
         setWorkspaceId(builderDefaultWorkspaceId ?? (workspaceOptions.length === 1 ? workspaceOptions[0].value : ''));
         setFiles([]);
@@ -133,7 +135,7 @@ export function SkillEditDialog({
       prevNameRef.current = '';
       setChatSessionKey(nanoid());
     }
-  }, [isOpen, skill, workspaceOptions, builderDefaultWorkspaceId]);
+  }, [isOpen, skill, workspaceOptions, builderDefaultWorkspaceId, defaultVisibility]);
 
   const handleNameChange = useCallback((newName: string) => {
     setName(newName);
