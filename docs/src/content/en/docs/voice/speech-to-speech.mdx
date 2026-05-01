@@ -4,6 +4,7 @@ description: Overview of speech-to-speech capabilities in Mastra, including real
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
+  - "@mastra/voice-aws-nova-sonic"
   - "@mastra/voice-google-gemini-live"
   - "@mastra/voice-openai-realtime"
 ---
@@ -111,3 +112,47 @@ Note:
 
 - Live API requires `GOOGLE_API_KEY`. Vertex AI requires project/location and service account credentials.
 - Events: `speaker` (audio stream), `writing` (text), `turnComplete`, `usage`, and `error`.
+
+## AWS Nova Sonic (Realtime)
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+
+const agent = new Agent({
+  id: 'agent',
+  name: 'Nova Sonic Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
+  // Model used for text generation; voice provider handles realtime audio
+  model: 'openai/gpt-5.4',
+  voice: new NovaSonicVoice({
+    region: 'us-east-1',
+    speaker: 'matthew',
+    // Static credentials are optional. The default AWS credential provider
+    // chain is used when none are passed.
+  }),
+})
+
+await agent.voice.connect()
+
+// Assistant audio is emitted as 16-bit PCM on the `speaking` event
+agent.voice.on('speaking', ({ audioData }) => {
+  if (audioData) playAudio(audioData)
+})
+
+agent.voice.on('writing', ({ role, text }) => {
+  console.log(`${role}: ${text}`)
+})
+
+await agent.voice.speak('How can I help you today?')
+
+const micStream = getMicrophoneStream()
+await agent.voice.send(micStream)
+```
+
+Note:
+
+- Available regions: `us-east-1`, `us-west-2`, and `ap-northeast-1`.
+- Authenticates through the standard AWS credential provider chain. Pass `credentials` to override.
+- Events: `speaking` (Int16Array audio), `writing` (text with `generationStage`), `toolCall`, `interrupt`, `turnComplete`, `usage`, `session`, and `error`.

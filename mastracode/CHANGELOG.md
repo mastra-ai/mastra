@@ -1,5 +1,31 @@
 # mastracode
 
+## 0.17.0-alpha.5
+
+### Minor Changes
+
+- Free-text answers to the `ask_user` tool can now span multiple lines. Press ([#15395](https://github.com/mastra-ai/mastra/pull/15395))
+  `Shift+Enter` or `\+Enter` to insert a newline, `Enter` to submit, and `Esc`
+  to cancel — long answers wrap inside the input box instead of scrolling
+  horizontally off-screen, and the raw text (including indentation and trailing
+  newlines) is forwarded to the agent intact.
+
+  Slash-command prompts that take short answers (paths, names, yes/no, model
+  picks) keep the existing single-line input, so muscle memory for those
+  prompts is unchanged.
+
+  Internally, this is opt-in via a new `multiline: true` flag on
+  `AskQuestionInlineComponent` / `AskQuestionDialogComponent`. The flag also
+  flows through `createStreaming` and `activate`, so the multiline editor is
+  available everywhere those components are mounted.
+
+## 0.16.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006), [`04151c7`](https://github.com/mastra-ai/mastra/commit/04151c7dcea934b4fe9076708a23fac161195414), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006)]:
+  - @mastra/core@1.31.0-alpha.4
+
 ## 0.16.3-alpha.3
 
 ### Patch Changes

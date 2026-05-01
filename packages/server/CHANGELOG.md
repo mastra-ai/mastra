@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.31.0-alpha.4
+
+### Patch Changes
+
+- Export `MastraServerBase` from `@mastra/core/server` so framework adapters that manage routing independently can share the same server base class. ([#12751](https://github.com/mastra-ai/mastra/pull/12751))
+
+- Updated dependencies [[`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006), [`04151c7`](https://github.com/mastra-ai/mastra/commit/04151c7dcea934b4fe9076708a23fac161195414), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006)]:
+  - @mastra/core@1.31.0-alpha.4
+
 ## 1.31.0-alpha.3
 
 ### Patch Changes

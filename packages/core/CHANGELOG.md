@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.31.0-alpha.4
+
+### Minor Changes
+
+- Fixed trajectory scorers in dataset.startExperiment receiving raw agent messages instead of a Trajectory object, which caused a crash when accessing run.output.steps. Trajectory scorers now receive the same pre-extracted Trajectory that runEvals provides. ([#15693](https://github.com/mastra-ai/mastra/pull/15693))
+
+  The scorers option now also accepts the same categorised shape as runEvals (AgentScorerConfig / WorkflowScorerConfig), so you no longer need to rewrite your scorer config when moving from runEvals to dataset.startExperiment.
+
+  **Before (trajectory scorer crashed at runtime):**
+
+  await dataset.startExperiment({ scorers: [orderScorer] }) // run.output.steps was undefined
+
+  **After (works correctly, both flat and categorised forms accepted):**
+
+  await dataset.startExperiment({ scorers: [orderScorer] })
+  await dataset.startExperiment({ scorers: { agent: [accuracyScorer], trajectory: [orderScorer] } })
+
+  Per-step scorers are now also supported for workflow targets, matching `runEvals`. Pass `scorers: { workflow: [...], steps: { stepId: [...] }, trajectory: [...] }` to score individual workflow steps with their own scorers; results carry the originating `stepId` and keep `targetScope: 'span'` (with `targetEntityType: WORKFLOW_STEP` on the underlying scorer run), matching how `runEvals` encodes step identity.
+
+- Workspace search now supports batch-capable embedders. Pass an embedder branded with `batch: true` (and an optional `maxBatchSize`) to embed all pending chunks for a flush in a single provider call instead of one call per chunk. This dramatically reduces index-rebuild time on large workspaces when using providers that support batch embedding (e.g. OpenAI's `embedMany`). Existing single-text embedders continue to work unchanged. ([#14735](https://github.com/mastra-ai/mastra/pull/14735))
+
+  ```ts
+  import { embedMany } from 'ai';
+  import { openai } from '@ai-sdk/openai';
+
+  const model = openai.embedding('text-embedding-3-small');
+
+  const workspace = new Workspace({
+    // ...
+    embedder: Object.assign(
+      async (texts: string[]) => {
+        const { embeddings } = await embedMany({ model, values: texts });
+        return embeddings;
+      },
+      { batch: true as const, maxBatchSize: 2048 },
+    ),
+  });
+  ```
+
+### Patch Changes
+
+- - **SearchEngine**: `indexMany` uses `p-map` with a default concurrency of 8 when vector embedding runs, with optional `concurrency` and `stopOnError` (same semantics as `p-map`). Lazy vector indexing flushes pending documents at the same concurrency, drains the queue before awaiting so concurrent `index` calls are not dropped, loops until the queue is empty before search, dedupes by document id (last wins), and re-queues the batch if a flush throws. ([#14735](https://github.com/mastra-ai/mastra/pull/14735))
+  - **Workspace**: Search auto-indexing reads files in parallel with a bounded concurrency, skips unreadable paths, awaits batch indexing, and falls back to per-file indexing when the batch path throws. Successful single-file indexing returns the path so callers can track what was indexed.
+
 ## 1.31.0-alpha.3
 
 ### Minor Changes

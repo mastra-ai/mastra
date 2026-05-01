@@ -133,12 +133,16 @@
     "@mastra/vercel": "0.1.0",
     "@mastra/google-drive": "0.0.1",
     "@mastra/perplexity": "0.1.0-alpha.0",
-    "@mastra/slack": "1.0.2"
+    "@mastra/slack": "1.0.2",
+    "@mastra/nestjs": "0.0.0",
+    "@mastra/voice-aws-nova-sonic": "0.0.0"
   },
   "changesets": [
     "@mastra_deployer-15211-dependencies",
     "all-paws-shake",
     "automated-provider-registry-20260430-184308",
+    "aws-nova-sonic-voice-provider",
+    "bright-moons-cheer",
     "brown-lamps-lie",
     "chilly-turtles-rescue",
     "cyan-roses-repair",
@@ -159,10 +163,13 @@
     "fruity-yaks-jump",
     "google-drive-filesystem",
     "green-birds-knock",
+    "green-snails-relax",
     "icy-trains-wait",
+    "multiline-question-input",
     "new-pets-live",
     "proud-bags-create",
     "public-jeans-dance",
+    "search-engine-index-many-concurrency",
     "semantic-recall-readonly",
     "sharp-eels-dress",
     "sharp-facts-work",
@@ -176,6 +183,8 @@
     "tired-ravens-shake",
     "tricky-papayas-feel",
     "twelve-coats-punch",
-    "witty-dolls-beg"
+    "witty-dolls-beg",
+    "witty-pens-wear",
+    "workspace-batch-embedder"
   ]
 }

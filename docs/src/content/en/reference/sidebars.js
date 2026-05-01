@@ -420,7 +420,12 @@ const sidebars = {
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
-        { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
+        {
+          type: 'doc',
+          id: 'server/mastra-server',
+          label: 'MastraServer',
+        },
+        { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
       ],
@@ -529,6 +534,7 @@ const sidebars = {
       label: 'Voice',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'voice/aws-nova-sonic', label: 'AWS Nova Sonic' },
         { type: 'doc', id: 'voice/azure', label: 'Azure' },
         { type: 'doc', id: 'voice/cloudflare', label: 'Cloudflare' },
         { type: 'doc', id: 'voice/composite-voice', label: 'Composite Voice' },
