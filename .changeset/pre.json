@@ -132,7 +132,8 @@
     "@mastra/s3": "0.5.0",
     "@mastra/vercel": "0.1.0",
     "@mastra/google-drive": "0.0.1",
-    "@mastra/perplexity": "0.1.0-alpha.0"
+    "@mastra/perplexity": "0.1.0-alpha.0",
+    "@mastra/slack": "1.0.2"
   },
   "changesets": [
     "@mastra_deployer-15211-dependencies",

@@ -18,6 +18,7 @@ import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
+import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { MCPClientsPG } from './domains/mcp-clients';
@@ -51,6 +52,7 @@ const ALL_DOMAINS = [
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
+  ChannelsPG,
 ] as const;
 
 /**
@@ -78,6 +80,7 @@ export {
   AgentsPG,
   BackgroundTasksPG,
   BlobsPG,
+  ChannelsPG,
   DatasetsPG,
   ExperimentsPG,
   MCPClientsPG,
@@ -167,6 +170,7 @@ export class PostgresStore extends MastraCompositeStore {
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),
         backgroundTasks: new BackgroundTasksPG(domainConfig),
+        channels: new ChannelsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(

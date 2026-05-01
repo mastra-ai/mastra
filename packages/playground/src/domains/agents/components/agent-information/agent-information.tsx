@@ -1,12 +1,14 @@
 import { Tabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
-import { useState, useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { useAgent } from '../../hooks/use-agent';
+import { useChannelPlatforms } from '../../hooks/use-channels';
+import { AgentChannels } from '../agent-channels';
 import { AgentEntityHeader } from '../agent-entity-header';
 import { AgentMetadata } from '../agent-metadata';
 import { AgentSettings } from '../agent-settings';
 import { BrowserSidebarTab } from '../browser-view/browser-sidebar-tab';
 import { AgentMemory } from './agent-memory';
+import { useAgentInformationTab } from './use-agent-information-tab';
 import { useMemory } from '@/domains/memory/hooks';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { RequestContextSchemaForm } from '@/domains/request-context';
@@ -19,12 +21,15 @@ export interface AgentInformationProps {
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: platforms } = useChannelPlatforms();
   const { hasSession, isInSidebar } = useBrowserSession();
   const hasMemory = !isMemoryLoading && Boolean(memory?.result);
+  const hasChannels = Boolean(platforms && platforms.length > 0);
 
   const { selectedTab, handleTabChange } = useAgentInformationTab({
     isMemoryLoading,
     hasMemory,
+    hasChannels,
   });
 
   return (
@@ -45,6 +50,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
             {hasMemory && <Tab value="memory">Memory</Tab>}
+            {hasChannels && <Tab value="channels">Channels</Tab>}
             {agent?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
             <Tab value="tracing-options">Tracing Options</Tab>
           </TabList>
@@ -69,6 +75,12 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             </TabContent>
           )}
 
+          {hasChannels && (
+            <TabContent value="channels">
+              <AgentChannels agentId={agentId} />
+            </TabContent>
+          )}
+
           <TabContent value="tracing-options">
             <TracingRunOptions />
           </TabContent>
@@ -77,46 +89,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
     </AgentInformationLayout>
   );
 }
-
-const STORAGE_KEY = 'agent-info-selected-tab';
-
-export interface UseAgentInformationTabArgs {
-  isMemoryLoading: boolean;
-  hasMemory: boolean;
-}
-
-// Valid tab values that can be persisted
-const VALID_TABS = new Set(['overview', 'model-settings', 'memory', 'request-context', 'tracing-options']);
-
-export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentInformationTabArgs) => {
-  const [selectedTab, setSelectedTab] = useState<string>(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY) || 'overview';
-    // Validate stored tab is a known valid tab
-    if (!VALID_TABS.has(stored)) return 'overview';
-    return stored;
-  });
-
-  // Compute effective tab - handle unavailable tabs
-  const effectiveTab = (() => {
-    // Unknown tab values fall back to overview
-    if (!VALID_TABS.has(selectedTab)) return 'overview';
-    // Memory tab requires memory to be available
-    if (selectedTab === 'memory' && !isMemoryLoading && !hasMemory) {
-      return 'overview';
-    }
-    return selectedTab;
-  })();
-
-  const handleTabChange = useCallback((value: string) => {
-    setSelectedTab(value);
-    sessionStorage.setItem(STORAGE_KEY, value);
-  }, []);
-
-  return {
-    selectedTab: effectiveTab,
-    handleTabChange,
-  };
-};
 
 export interface AgentInformationLayoutProps {
   children: React.ReactNode;
@@ -136,11 +108,14 @@ export interface AgentInformationTabLayoutProps {
 }
 export const AgentInformationTabLayout = ({ children, agentId }: AgentInformationTabLayoutProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: platforms } = useChannelPlatforms();
   const hasMemory = Boolean(memory?.result);
+  const hasChannels = Boolean(platforms && platforms.length > 0);
 
   const { selectedTab, handleTabChange } = useAgentInformationTab({
     isMemoryLoading,
     hasMemory,
+    hasChannels,
   });
 
   return (
