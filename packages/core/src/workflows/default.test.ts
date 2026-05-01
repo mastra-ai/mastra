@@ -629,9 +629,27 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
     const engine = new TestableExecutionEngine({ mastra: undefined });
     const circular: any = { name: 'service' };
     circular.self = circular;
-    const plainObj = { userId: 'user-123', progressEmitter: () => undefined, service: circular };
+    const plainObj = {
+      userId: 'user-123',
+      progressEmitter: () => undefined,
+      service: circular,
+      forEach: () => undefined,
+    };
 
     const serialized = engine.serializeRequestContext(plainObj);
+
+    expect(() => JSON.stringify(serialized)).not.toThrow();
+    expect(serialized).toEqual({ userId: 'user-123' });
+  });
+
+  it('should serialize Map request context values', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const requestContext = new Map<string, unknown>([
+      ['userId', 'user-123'],
+      ['progressEmitter', () => undefined],
+    ]);
+
+    const serialized = engine.serializeRequestContext(requestContext);
 
     expect(() => JSON.stringify(serialized)).not.toThrow();
     expect(serialized).toEqual({ userId: 'user-123' });
