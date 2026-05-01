@@ -62,12 +62,30 @@ const colorMixerHtml = `<!DOCTYPE html>
     async function mix() {
       var btn = document.getElementById('btn');
       btn.disabled = true;
-      btn.textContent = 'Mixing…';
+      btn.textContent = 'Mixing\\u2026';
       try {
-        var result = await window.__mcpBridge.callTool('mixColors', {
-          color1: document.getElementById('c1').value,
-          color2: document.getElementById('c2').value,
-        });
+        // Use the MCP Apps protocol API (falls back to legacy bridge)
+        var api = window.__mcpApp || window.__mcpBridge;
+        var response;
+        if (window.__mcpApp) {
+          response = await window.__mcpApp.callServerTool({
+            name: 'mixColors',
+            arguments: {
+              color1: document.getElementById('c1').value,
+              color2: document.getElementById('c2').value,
+            }
+          });
+        } else {
+          response = await window.__mcpBridge.callTool('mixColors', {
+            color1: document.getElementById('c1').value,
+            color2: document.getElementById('c2').value,
+          });
+        }
+        var result = response && response.structuredContent
+          ? response.structuredContent.result || response.structuredContent
+          : (response && response.content && response.content[0]
+            ? response.content[0].text
+            : response);
         var div = document.getElementById('result');
         div.innerHTML = '<div style="display:flex;align-items:center;gap:12px;">'
           + '<div class="swatch" style="background:' + result + '"></div>'

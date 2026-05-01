@@ -23,14 +23,18 @@ const calculatorAppHtml = `<!DOCTYPE html>
     button { padding: 8px 20px; background: #4f46e5; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
     button:hover { background: #4338ca; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .result { margin-top: 12px; padding: 12px; background: #e8f5e9; border-radius: 6px; font-size: 15px; }
+    .result { margin-top: 12px; padding: 12px; background: #e8f5e9; border-radius: 6px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
     .error { background: #ffebee; color: #c62828; }
+    .share-btn { padding: 4px 12px; background: #4f46e5; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .share-btn:hover { background: #4338ca; }
+    .history { margin-top: 16px; }
+    .history-item { padding: 6px 0; border-bottom: 1px solid #eee; font-size: 13px; color: #555; }
   </style>
 </head>
 <body>
   <h2>Interactive Calculator</h2>
   <p style="color:#666; margin-bottom:16px; font-size:13px;">
-    This UI is served as a <code>ui://</code> MCP App resource and calls the calculator tool via the bridge.
+    Perform calculations below. Click "Share" to send a result back to the chat.
   </p>
   <div class="row">
     <input id="n1" type="number" placeholder="Number 1" value="42" />
@@ -42,21 +46,50 @@ const calculatorAppHtml = `<!DOCTYPE html>
     <button id="btn" onclick="calc()">Calculate</button>
   </div>
   <div id="result" class="result" style="display:none;"></div>
+  <div id="history" class="history"></div>
   <script>
+    var lastResult = null;
+    var history = [];
+
+    // Hydrate from tool input if available (populated by the host)
+    if (window.__mcpApp) {
+      window.__mcpApp.ontoolinput = function(input) {
+        if (input) {
+          if (input.num1 !== undefined) document.getElementById('n1').value = input.num1;
+          if (input.num2 !== undefined) document.getElementById('n2').value = input.num2;
+          if (input.operation) document.getElementById('op').value = input.operation;
+        }
+      };
+    }
+
     async function calc() {
       var btn = document.getElementById('btn');
       var resultDiv = document.getElementById('result');
       btn.disabled = true;
-      btn.textContent = 'Calculating…';
+      btn.textContent = 'Calculating\\u2026';
+      var n1 = Number(document.getElementById('n1').value);
+      var n2 = Number(document.getElementById('n2').value);
+      var op = document.getElementById('op').value;
       try {
-        var result = await window.__mcpBridge.callTool('calculatorWithUI', {
-          num1: Number(document.getElementById('n1').value),
-          num2: Number(document.getElementById('n2').value),
-          operation: document.getElementById('op').value,
+        var response = await window.__mcpApp.callServerTool({
+          name: 'calculatorWithUI',
+          arguments: { num1: n1, num2: n2, operation: op }
         });
+        var val = response && response.structuredContent
+          ? response.structuredContent.result || response.structuredContent
+          : response;
+        // Parse the result text if it's a string description
+        if (typeof val === 'string') {
+          var match = val.match(/= (-?[\\d.]+)/);
+          if (match) val = Number(match[1]);
+        }
+        lastResult = { n1: n1, n2: n2, op: op, result: val };
+        history.push(lastResult);
         resultDiv.className = 'result';
-        resultDiv.textContent = 'Result: ' + JSON.stringify(result);
-        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<span>Result: <strong>' + n1 + ' ' + (op === 'add' ? '+' : '\\u2212') + ' ' + n2 + ' = ' + val + '</strong></span>' +
+          '<button class="share-btn" onclick="shareResult()">Share</button>';
+        resultDiv.style.display = 'flex';
+        renderHistory();
       } catch (err) {
         resultDiv.className = 'result error';
         resultDiv.textContent = 'Error: ' + err.message;
@@ -65,6 +98,27 @@ const calculatorAppHtml = `<!DOCTYPE html>
         btn.disabled = false;
         btn.textContent = 'Calculate';
       }
+    }
+
+    function shareResult() {
+      if (!lastResult || !window.__mcpApp) return;
+      var text = 'The calculator result: ' + lastResult.n1 + ' ' +
+        (lastResult.op === 'add' ? '+' : '\\u2212') + ' ' + lastResult.n2 + ' = ' + lastResult.result;
+      window.__mcpApp.sendMessage({
+        content: [{ type: 'text', text: text }]
+      });
+    }
+
+    function renderHistory() {
+      var div = document.getElementById('history');
+      if (history.length < 2) { div.innerHTML = ''; return; }
+      div.innerHTML = '<p style="font-size:12px;color:#999;margin-bottom:4px;">History</p>';
+      history.forEach(function(h) {
+        var item = document.createElement('div');
+        item.className = 'history-item';
+        item.textContent = h.n1 + ' ' + (h.op === 'add' ? '+' : '\\u2212') + ' ' + h.n2 + ' = ' + h.result;
+        div.appendChild(item);
+      });
     }
   </script>
 </body>
@@ -83,13 +137,15 @@ const greetingAppHtml = `<!DOCTYPE html>
     button { padding: 8px 20px; background: #059669; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
     button:hover { background: #047857; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .result { margin-top: 12px; padding: 12px; background: #ecfdf5; border-radius: 6px; font-size: 15px; }
+    .result { margin-top: 12px; padding: 12px; background: #ecfdf5; border-radius: 6px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .share-btn { padding: 4px 12px; background: #059669; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .share-btn:hover { background: #047857; }
   </style>
 </head>
 <body>
   <h2>Greeting App</h2>
   <p style="color:#666; margin-bottom:16px; font-size:13px;">
-    Enter a name and the tool will generate a personalized greeting.
+    Enter a name and generate a personalized greeting. Click "Share" to send it to the chat.
   </p>
   <div class="row">
     <input id="name" type="text" placeholder="Your name" value="World" />
@@ -97,22 +153,52 @@ const greetingAppHtml = `<!DOCTYPE html>
   </div>
   <div id="result" class="result" style="display:none;"></div>
   <script>
+    var lastGreeting = null;
+
+    // Hydrate from tool input if available
+    if (window.__mcpApp) {
+      window.__mcpApp.ontoolinput = function(input) {
+        if (input && input.name) {
+          document.getElementById('name').value = input.name;
+        }
+      };
+    }
+
     async function greet() {
       var btn = document.getElementById('btn');
       var resultDiv = document.getElementById('result');
       btn.disabled = true;
+      var name = document.getElementById('name').value;
       try {
-        var result = await window.__mcpBridge.callTool('greetUserWithUI', {
-          name: document.getElementById('name').value,
+        var response = await window.__mcpApp.callServerTool({
+          name: 'greetUserWithUI',
+          arguments: { name: name }
         });
-        resultDiv.textContent = result;
-        resultDiv.style.display = 'block';
+        var text = response && response.structuredContent
+          ? (response.structuredContent.result || JSON.stringify(response.structuredContent))
+          : (response && response.content && response.content[0]
+            ? response.content[0].text
+            : JSON.stringify(response));
+        lastGreeting = text;
+        resultDiv.className = 'result';
+        resultDiv.innerHTML = '<span>' + text + '</span>' +
+          '<button class="share-btn" onclick="shareGreeting()">Share</button>';
+        resultDiv.style.display = 'flex';
       } catch (err) {
+        resultDiv.className = 'result';
+        resultDiv.style.background = '#ffebee';
         resultDiv.textContent = 'Error: ' + err.message;
         resultDiv.style.display = 'block';
       } finally {
         btn.disabled = false;
       }
+    }
+
+    function shareGreeting() {
+      if (!lastGreeting || !window.__mcpApp) return;
+      window.__mcpApp.sendMessage({
+        content: [{ type: 'text', text: lastGreeting }]
+      });
     }
   </script>
 </body>

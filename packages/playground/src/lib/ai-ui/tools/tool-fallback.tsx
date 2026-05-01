@@ -212,7 +212,9 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         isNetwork={isNetwork}
         toolCalled={toolCalled}
       />
-      {mcpAppInfo && result !== undefined && <McpAppToolResult appInfo={mcpAppInfo} />}
+      {mcpAppInfo && result !== undefined && (
+        <McpAppToolResult appInfo={mcpAppInfo} toolArgs={args} toolResult={result} />
+      )}
     </>
   );
 };

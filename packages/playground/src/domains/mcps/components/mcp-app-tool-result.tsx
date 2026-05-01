@@ -6,13 +6,19 @@ import type { McpAppToolInfo } from '../hooks/use-mcp-app-tools';
 
 interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
+  toolArgs?: Record<string, unknown>;
+  toolResult?: unknown;
 }
 
 /**
  * Fetches MCP App HTML from the resource URI and renders it in a McpAppViewer.
  * Used inline in agent chat when a tool call has an associated MCP App UI.
+ *
+ * Passes tool arguments and result to the iframe via the MCP Apps protocol
+ * (ui/notifications/tool-input and ui/notifications/tool-result), enabling
+ * the app to hydrate with data from the tool call.
  */
-export function McpAppToolResult({ appInfo }: McpAppToolResultProps) {
+export function McpAppToolResult({ appInfo, toolArgs, toolResult }: McpAppToolResultProps) {
   const client = useMastraClient();
 
   const { data: html, isLoading } = useQuery({
@@ -44,6 +50,8 @@ export function McpAppToolResult({ appInfo }: McpAppToolResultProps) {
     <McpAppViewer
       html={html}
       title="MCP App"
+      toolInput={toolArgs}
+      toolResult={toolResult}
       onToolCall={handleToolCall}
       className="rounded-md border border-border1"
     />

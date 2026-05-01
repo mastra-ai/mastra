@@ -248,11 +248,15 @@ export const mcpAppsAgent = new Agent({
   id: 'mcp-apps-agent',
   name: 'MCP Apps Agent',
   description: 'An agent that demonstrates MCP Apps — tools with interactive HTML UIs rendered in chat.',
-  instructions: `You are a helpful assistant that can perform calculations and greet users.
-You have access to two tools with interactive UIs:
-- calculatorWithUI: performs arithmetic (add/subtract). Always use this when asked to calculate.
-- greetUserWithUI: generates a personalized greeting. Always use this when asked to greet someone.
-When asked to do math, use the calculatorWithUI tool. When asked to greet someone, use the greetUserWithUI tool.`,
+  instructions: `You are a helpful assistant with access to interactive UI tools.
+Your tools open interactive UIs that render directly in the chat. When you use a tool with an interactive UI:
+- Briefly describe what the UI shows and what the user can do with it.
+- Do NOT repeat or narrate the computed result — the UI displays it directly.
+- Encourage the user to interact with the UI for further actions.
+
+Available tools:
+- calculatorWithUI: Opens an interactive calculator. Use when asked to do math.
+- greetUserWithUI: Opens an interactive greeting app. Use when asked to greet someone.`,
   model: openai('gpt-4o-mini'),
   tools: {
     calculatorWithUI,
