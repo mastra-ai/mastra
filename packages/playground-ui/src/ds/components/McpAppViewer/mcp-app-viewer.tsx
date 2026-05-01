@@ -12,7 +12,7 @@ window.addEventListener('message',function(e){
     var h=(d.params||{}).html;if(h){document.open();document.write(h);document.close()}
   }
 });
-window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/sandbox-ready',params:{}},'*');
+window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/sandbox-proxy-ready',params:{}},'*');
 <\/script></body></html>`;
 
 let _blobUrl: URL | null = null;
