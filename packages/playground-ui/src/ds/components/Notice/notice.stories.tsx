@@ -8,7 +8,6 @@ const meta: Meta<typeof Notice> = {
   parameters: {
     layout: 'padded',
   },
-  tags: ['autodocs'],
   argTypes: {
     variant: {
       control: { type: 'select' },

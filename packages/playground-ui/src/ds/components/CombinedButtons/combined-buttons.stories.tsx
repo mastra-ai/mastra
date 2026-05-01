@@ -9,7 +9,6 @@ const meta: Meta<typeof CombinedButtons> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

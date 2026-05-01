@@ -7,7 +7,6 @@ const meta: Meta<typeof SelectField> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },
