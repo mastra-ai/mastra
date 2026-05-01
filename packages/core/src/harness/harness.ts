@@ -38,6 +38,7 @@ import type {
   HarnessRequestContext,
   HarnessSession,
   HarnessSubagentHistoryEntry,
+  HarnessSubagentHistoryStatus,
   HarnessThread,
   ModelAuthStatus,
   PermissionPolicy,
@@ -55,7 +56,7 @@ function createSubagentHistoryEntry({
 }: {
   toolCallId: string;
   subagent: ActiveSubagentState;
-  status: ActiveSubagentState['status'] | 'aborted';
+  status: HarnessSubagentHistoryStatus;
   parentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
   order: number;
 }): HarnessSubagentHistoryEntry {

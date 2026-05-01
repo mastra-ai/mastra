@@ -1298,12 +1298,61 @@ describe('resetThreadDisplayState', () => {
   });
 
   it('resets omProgress on thread_changed', () => {
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'explore',
+      result: 'done',
+      isError: false,
+      durationMs: 100,
+    });
     emit(harness, { type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
+    expect(harness.getDisplayState().subagentHistory).toHaveLength(1);
     expect(harness.getDisplayState().omProgress.status).toBe('observing');
 
     emit(harness, { type: 'thread_changed', threadId: 'other', previousThreadId: 'old' });
     expect(harness.getDisplayState().omProgress.status).toBe('idle');
     expect(harness.getDisplayState().omProgress.pendingTokens).toBe(0);
+    expect(harness.getDisplayState().subagentHistory).toEqual([]);
+  });
+
+  it('resets subagentHistory on thread_deleted when no current thread is set', () => {
+    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'explore',
+      result: 'done',
+      isError: false,
+      durationMs: 100,
+    });
+    expect(harness.getDisplayState().subagentHistory).toHaveLength(1);
+    expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(150);
+
+    emit(harness, { type: 'thread_deleted', threadId: 'deleted' });
+
+    expect(harness.getDisplayState().subagentHistory).toEqual([]);
+    expect(harness.getDisplayState().tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+  });
+
+  it('preserves subagentHistory on thread_deleted when another thread remains current', () => {
+    (harness as any).currentThreadId = 'current';
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'explore',
+      result: 'done',
+      isError: false,
+      durationMs: 100,
+    });
+
+    emit(harness, { type: 'thread_deleted', threadId: 'deleted' });
+
+    expect(harness.getDisplayState().subagentHistory).toHaveLength(1);
   });
 
   it('syncs tokenUsage from internal counters on thread_changed', () => {

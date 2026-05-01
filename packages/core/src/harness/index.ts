@@ -26,6 +26,7 @@ export type {
   HarnessStateSchema,
   HarnessSubagent,
   HarnessSubagentHistoryEntry,
+  HarnessSubagentHistoryStatus,
   HarnessThread,
   HeartbeatHandler,
   ModelAuthChecker,

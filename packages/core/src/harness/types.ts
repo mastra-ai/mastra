@@ -511,12 +511,14 @@ export interface ActiveSubagentState {
   result?: string;
 }
 
+export type HarnessSubagentHistoryStatus = 'completed' | 'error' | 'aborted';
+
 /**
  * Terminal subagent activity retained for display snapshots after the parent run ends.
  */
 export interface HarnessSubagentHistoryEntry extends Omit<ActiveSubagentState, 'status'> {
   toolCallId: string;
-  status: ActiveSubagentState['status'] | 'aborted';
+  status: HarnessSubagentHistoryStatus;
   endedAt: Date;
   order: number;
   parentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
