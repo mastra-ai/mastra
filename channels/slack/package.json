@@ -1,6 +1,6 @@
 {
   "name": "@mastra/slack",
-  "version": "0.0.0",
+  "version": "1.0.2",
   "description": "Slack integration for Mastra agents with app factory, OAuth, and slash commands",
   "license": "Apache-2.0",
   "type": "module",
@@ -41,7 +41,7 @@
     "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.31.0-0 <2.0.0-0"
+    "@mastra/core": "^1.0.0"
   },
   "publishConfig": {
     "access": "public"
