@@ -90,7 +90,7 @@ import { DatadogBridge } from '@mastra/datadog'
 ```
 
 :::note
-Import and initialize `dd-trace` before all other modules. If you can't reorder imports, use the `--import` or `--require` Node flag to load a separate initialization file.
+Import and initialize `dd-trace` at the very top of your application's entry file, before any other imports.
 :::
 
 ### Step 2: Mastra Configuration

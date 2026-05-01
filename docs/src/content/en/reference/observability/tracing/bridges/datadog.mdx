@@ -51,7 +51,7 @@ Extends `BaseExporterConfig`, which includes:
     name: 'mlApp',
     type: 'string',
     description:
-      'ML application name for grouping LLM Observability traces. Required. Falls back to DD_LLMOBS_ML_APP env var.',
+      'ML application name for grouping LLM Observability traces. Required if DD_LLMOBS_ML_APP is not set; otherwise falls back to the env var.',
     required: false,
   },
   {
@@ -235,6 +235,7 @@ Note: APM data cannot be sent in agentless mode. If you only need LLM Observabil
 The bridge can be combined with non-Datadog exporters to send traces to additional destinations:
 
 ```typescript
+import { Mastra } from '@mastra/core'
 import { Observability, DefaultExporter } from '@mastra/observability'
 import { DatadogBridge } from '@mastra/datadog'
 
@@ -281,7 +282,7 @@ Mastra span types are mapped to Datadog LLM Observability span kinds:
 
 ## Tags support
 
-Tags supplied via `tracingOptions.tags` are converted into structured LLM Observability annotation tags. Tags formatted as `key:value` are split into separate entries; tags without a colon are set with a `true` value.
+`tracingOptions.tags` values become structured LLM Observability annotation tags: `key:value` entries are split into key/value pairs, and tags without a colon are set to `true`.
 
 ```typescript
 const result = await agent.generate('Hello', {

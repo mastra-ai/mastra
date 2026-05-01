@@ -34,6 +34,9 @@ import { formatUsageMetrics } from './metrics';
 import { ensureTracer, formatInput, formatOutput, kindFor, toDate } from './utils';
 import type { DatadogSpanKind } from './utils';
 
+// These types model dd-trace internals, not its public API surface.
+// The bridge uses them intentionally for experimental LLM Observability support
+// and they should be reviewed when upgrading dd-trace.
 type LLMObsTagger = {
   registerLLMObsSpan: (
     span: any,
@@ -225,14 +228,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         }
       }
 
-      if (!apmParentDdSpan && externalParentId) {
-        apmParentDdSpan = tracer.scope().active() ?? undefined;
-        if (apmParentDdSpan) {
-          parentSource = 'active-scope';
-        }
-      }
-
-      if (!apmParentDdSpan && !externalParentId) {
+      if (!apmParentDdSpan) {
         apmParentDdSpan = tracer.scope().active() ?? undefined;
         if (apmParentDdSpan) {
           parentSource = 'active-scope';
@@ -299,6 +295,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     if (ddSpan) {
       return tracer.scope().activate(ddSpan, () => {
         const llmobs = (tracer as any).llmobs as LLMObsInternalApi | undefined;
+        // `_activate` is an internal dd-trace hook. Keep this usage aligned
+        // with supported dd-trace versions when the dependency is upgraded.
         if (typeof llmobs?._activate === 'function') {
           return llmobs._activate(ddSpan, undefined, fn);
         }
@@ -362,6 +360,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
           : undefined;
       const traceCtx = this.resolveTraceContext(traceId, options);
 
+      // `registerLLMObsSpan` comes from dd-trace internals. Keep it under
+      // review because the bridge depends on experimental behavior here.
       tagger.registerLLMObsSpan(ddSpan, {
         parent: parentDdSpan,
         kind,
@@ -386,6 +386,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
   private getLlmObsTagger(): LLMObsTagger | undefined {
     const tagger = (tracer as any).llmobs?._tagger;
+    // `_tagger` is also internal dd-trace state and may change between releases.
     if (tagger && typeof tagger.registerLLMObsSpan === 'function') {
       return tagger as LLMObsTagger;
     }

@@ -403,10 +403,30 @@ describe('DatadogBridge', () => {
       expect(mockLlmobsActivate).toHaveBeenCalledWith(apmSpan, undefined, expect.any(Function));
     });
 
+    it('activates the eager dd span in scope for sync functions', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+      const apmSpan = capturedApmSpans[0];
+
+      bridge.executeInContextSync(spanResult.spanId, () => {});
+
+      expect(mockScopeActivate).toHaveBeenCalledWith(apmSpan, expect.any(Function));
+      expect(mockLlmobsActivate).toHaveBeenCalledWith(apmSpan, undefined, expect.any(Function));
+    });
+
     it('falls back to direct execution when the span is not in the map', async () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
       const result = await bridge.executeInContext('nonexistent-span', async () => 42);
+
+      expect(result).toBe(42);
+      expect(mockScopeActivate).not.toHaveBeenCalled();
+    });
+
+    it('falls back to direct sync execution when the span is not in the map', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      const result = bridge.executeInContextSync('nonexistent-span', () => 42);
 
       expect(result).toBe(42);
       expect(mockScopeActivate).not.toHaveBeenCalled();

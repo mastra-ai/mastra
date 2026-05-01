@@ -280,6 +280,33 @@ describe('Tracing', () => {
       expect(bridge.executeInContext).toHaveBeenCalledWith(agentSpan.id, expect.any(Function));
     });
 
+    it('should use the nearest external ancestor when executing an internal span in sync bridge context', () => {
+      const bridge = createMockBridge();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        bridge,
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-123' },
+      });
+
+      const internalStep = agentSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.MODEL },
+      });
+
+      internalStep.executeInContextSync(() => 'ok');
+
+      expect(bridge.executeInContextSync).toHaveBeenCalledWith(agentSpan.id, expect.any(Function));
+    });
+
     it('should maintain consistent traceId across span hierarchy', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
