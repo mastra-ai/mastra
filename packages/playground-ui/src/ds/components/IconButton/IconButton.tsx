@@ -9,6 +9,11 @@ export interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLBut
   tooltip: React.ReactNode;
   size?: FormElementSize;
   variant?: 'default' | 'light' | 'outline' | 'ghost' | 'primary';
+  /**
+   * Accessible name for the icon-only button. When omitted, falls back to
+   * `tooltip` if it's a string. Provide explicitly when `tooltip` is JSX.
+   */
+  ariaLabel?: string;
 }
 
 const sizeClasses: Record<FormElementSize, string> = {
@@ -41,12 +46,18 @@ const baseButtonStyles =
   'border border-border1 inline-flex items-center justify-center rounded-md transition-all duration-normal ease-out-custom active:scale-[0.98]';
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ className, children, tooltip, size = 'md', variant = 'default', disabled, ...props }, ref) => {
+  (
+    { className, children, tooltip, size = 'md', variant = 'default', disabled, type = 'button', ariaLabel, ...props },
+    ref,
+  ) => {
+    const resolvedAriaLabel = ariaLabel ?? (typeof tooltip === 'string' ? tooltip : undefined);
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             ref={ref}
+            type={type}
+            aria-label={resolvedAriaLabel}
             disabled={disabled}
             className={cn(
               baseButtonStyles,

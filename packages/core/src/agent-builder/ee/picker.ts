@@ -78,13 +78,13 @@ export function resolvePickerVisibility({
   registeredAgentIds,
   registeredWorkflowIds,
 }: ResolvePickerVisibilityInputs): ResolvedPickerVisibility {
-  const tools = resolveOne(config?.tools?.allowed, registeredToolIds, 'tool', 'agent.tools.allowed');
-  const agents = resolveOne(config?.agents?.allowed, registeredAgentIds, 'agent', 'agent.agents.allowed');
+  const tools = resolveOne(config?.tools?.allowed, registeredToolIds, 'tool', 'configuration.agent.tools.allowed');
+  const agents = resolveOne(config?.agents?.allowed, registeredAgentIds, 'agent', 'configuration.agent.agents.allowed');
   const workflows = resolveOne(
     config?.workflows?.allowed,
     registeredWorkflowIds,
     'workflow',
-    'agent.workflows.allowed',
+    'configuration.agent.workflows.allowed',
   );
 
   return {

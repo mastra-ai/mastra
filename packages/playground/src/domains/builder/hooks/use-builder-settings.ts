@@ -1,6 +1,7 @@
 import type { BuilderModelPolicy } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 interface UseBuilderSettingsOptions {
   enabled?: boolean;
@@ -77,10 +78,12 @@ const UNRESTRICTED_PICKER: BuilderPickerVisibility = {
 export const useBuilderPickerVisibility = (): BuilderPickerVisibility => {
   const { data } = useBuilderSettings();
   const picker = data?.picker;
-  if (!picker) return UNRESTRICTED_PICKER;
-  return {
-    visibleTools: picker.visibleTools === null ? null : new Set(picker.visibleTools),
-    visibleAgents: picker.visibleAgents === null ? null : new Set(picker.visibleAgents),
-    visibleWorkflows: picker.visibleWorkflows === null ? null : new Set(picker.visibleWorkflows),
-  };
+  return useMemo<BuilderPickerVisibility>(() => {
+    if (!picker) return UNRESTRICTED_PICKER;
+    return {
+      visibleTools: picker.visibleTools === null ? null : new Set(picker.visibleTools),
+      visibleAgents: picker.visibleAgents === null ? null : new Set(picker.visibleAgents),
+      visibleWorkflows: picker.visibleWorkflows === null ? null : new Set(picker.visibleWorkflows),
+    };
+  }, [picker]);
 };
