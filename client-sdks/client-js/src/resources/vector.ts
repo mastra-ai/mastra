@@ -1,9 +1,9 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { QueryResult } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
   GetVectorIndexResponse,
   QueryVectorParams,
+  QueryVectorResponse,
   ClientOptions,
   UpsertVectorParams,
 } from '../types';
@@ -82,7 +82,7 @@ export class Vector extends BaseResource {
    * @param params - Query parameters including query vector and search options
    * @returns Promise containing query results
    */
-  query(params: QueryVectorParams): Promise<QueryResult[]> {
+  query(params: QueryVectorParams): Promise<QueryVectorResponse> {
     return this.request(`/vector/${encodeURIComponent(this.vectorName)}/query`, {
       method: 'POST',
       body: params,

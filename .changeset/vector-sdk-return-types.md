@@ -1,5 +1,5 @@
 ---
-'@mastra/client-js': major
+'@mastra/client-js': minor
 ---
 
 Fixed Vector resource return types so they match what the server actually returns. Previously the types declared shapes that did not exist at runtime, leading to runtime failures with no TypeScript errors.
