@@ -314,11 +314,6 @@ const sidebars = {
           id: 'mcp/overview',
           label: 'Overview',
         },
-        {
-          type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
-        },
       ],
     },
     {

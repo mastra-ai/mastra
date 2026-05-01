@@ -43,6 +43,8 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_background_tasks: new Map(),
       mastra_schedules: new Map(),
       mastra_schedule_triggers: new Map(),
+      mastra_channel_installations: new Map(),
+      mastra_channel_config: new Map(),
     };
   }
 

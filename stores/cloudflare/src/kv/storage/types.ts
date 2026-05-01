@@ -166,6 +166,8 @@ export type RecordTypes = {
   mastra_background_tasks: Record<string, any>;
   [TABLE_SCHEDULES]: Record<string, any>;
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;
+  mastra_channel_installations: Record<string, any>;
+  mastra_channel_config: Record<string, any>;
 };
 
 export type ListOptions = {

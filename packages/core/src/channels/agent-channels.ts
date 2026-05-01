@@ -366,6 +366,8 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
+  /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
+  private externallyManagedPlatforms: Set<string> = new Set();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -411,6 +413,38 @@ export class AgentChannels {
   __setLogger(logger: IMastraLogger): void {
     this.logger =
       'child' in logger && typeof (logger as any).child === 'function' ? (logger as any).child('CHANNEL') : logger;
+  }
+
+  /**
+   * Register an adapter dynamically.
+   * When `managesRoutes` is true, AgentChannels will NOT create webhook routes for this platform
+   * (the ChannelProvider handles routing and calls handleWebhookEvent directly).
+   * @internal
+   */
+  __registerAdapter(
+    platform: string,
+    adapter: Adapter,
+    config?: ChannelAdapterConfig,
+    options?: { managesRoutes?: boolean },
+  ): void {
+    if (this.adapters[platform]) {
+      if (options?.managesRoutes) {
+        this.externallyManagedPlatforms.add(platform);
+      }
+      return;
+    }
+    this.adapters[platform] = adapter;
+    this.adapterConfigs[platform] = config ?? { adapter };
+    if (options?.managesRoutes) {
+      this.externallyManagedPlatforms.add(platform);
+    }
+  }
+
+  /**
+   * Check if an adapter is registered for the given platform.
+   */
+  hasAdapter(platform: string): boolean {
+    return platform in this.adapters;
   }
 
   /**
@@ -681,6 +715,7 @@ export class AgentChannels {
   /**
    * Returns API routes for receiving webhook events from each adapter.
    * One POST route per adapter at `/api/agents/{agentId}/channels/{platform}/webhook`.
+   * Skips platforms that are externally managed (e.g., by SlackProvider).
    */
   getWebhookRoutes(): ApiRoute[] {
     if (!this.agent) return [];
@@ -689,6 +724,10 @@ export class AgentChannels {
     const routes: ApiRoute[] = [];
 
     for (const platform of Object.keys(this.adapters)) {
+      // Skip platforms where routes are managed externally (e.g., SlackProvider)
+      if (this.externallyManagedPlatforms.has(platform)) {
+        continue;
+      }
       const self = this;
       routes.push({
         path: `/api/agents/${agentId}/channels/${platform}/webhook`,
@@ -734,6 +773,53 @@ export class AgentChannels {
     }
 
     return routes;
+  }
+
+  /**
+   * Handle a webhook event from an external source (e.g., SlackProvider).
+   * Use this when a ChannelProvider manages its own routes but wants AgentChannels
+   * to process the actual message handling (threading, agent responses, etc.).
+   *
+   * @param platform - The platform name (e.g., 'slack')
+   * @param request - The raw HTTP request
+   * @param options - Optional execution context for serverless environments
+   * @returns The response from the Chat SDK webhook handler
+   */
+  async handleWebhookEvent(
+    platform: string,
+    request: Request,
+    options?: { waitUntil?: (p: Promise<unknown>) => void },
+  ): Promise<Response> {
+    // Ensure initialization is complete
+    if (this.initPromise) {
+      try {
+        await this.initPromise;
+      } catch {
+        return new Response(JSON.stringify({ error: 'Channel initialization failed' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    const sdkInstance = this.chat;
+    if (!sdkInstance) {
+      return new Response(JSON.stringify({ error: 'Chat not initialized' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Access the internal webhook handler from Chat SDK
+    const webhookHandler = (sdkInstance as any).webhooks?.[platform] as Function | undefined;
+    if (!webhookHandler) {
+      return new Response(JSON.stringify({ error: `No webhook handler for ${platform}` }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return webhookHandler(request, options);
   }
 
   /**
