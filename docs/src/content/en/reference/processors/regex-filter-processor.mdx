@@ -9,7 +9,7 @@ packages:
 
 The `RegexFilterProcessor` applies zero-cost regex pattern matching to filter, redact, or block content in agent messages. No LLM calls are made — all detection is regex-based.
 
-Supports built-in presets for common patterns (PII, secrets, URLs, prompt injection) and custom regex rules. Can be applied to input, output, or both phases.
+Supports built-in presets for common patterns (PII, secrets, URLs) and custom regex rules. Can be applied to input, output, or both phases.
 
 ## Usage example
 
@@ -60,7 +60,7 @@ const agent = new Agent({
   processors: {
     input: [
       new RegexFilterProcessor({
-        presets: ['pii', 'injection'],
+        presets: ['pii', 'secrets'],
         strategy: 'block',
       }),
     ],
@@ -106,9 +106,9 @@ const agent = new Agent({
   },
   {
     name: 'presets',
-    type: "('pii' | 'secrets' | 'urls' | 'injection')[]",
+    type: "('pii' | 'secrets' | 'urls')[]",
     description:
-      "Built-in preset categories. 'pii' matches emails, phone numbers, SSNs, credit cards. 'secrets' matches API keys, bearer tokens, AWS keys. 'urls' matches HTTP/HTTPS URLs. 'injection' matches common prompt injection phrases.",
+      "Built-in preset categories. 'pii' matches emails, phone numbers, SSNs, credit cards. 'secrets' matches API keys, bearer tokens, AWS keys. 'urls' matches HTTP/HTTPS URLs.",
     isOptional: true,
   },
   {

@@ -46,7 +46,7 @@ export interface RegexFilterTripwireMetadata {
 /**
  * Built-in preset categories for common regex patterns
  */
-export type RegexPreset = 'pii' | 'secrets' | 'urls' | 'injection';
+export type RegexPreset = 'pii' | 'secrets' | 'urls';
 
 /**
  * Configuration options for RegexFilterProcessor
@@ -63,7 +63,6 @@ export interface RegexFilterOptions {
    * - 'pii': Emails, phone numbers, SSNs, credit card numbers
    * - 'secrets': API keys, tokens, passwords in common formats
    * - 'urls': HTTP/HTTPS URLs
-   * - 'injection': Common prompt injection phrases
    */
   presets?: RegexPreset[];
 
@@ -133,36 +132,17 @@ const URL_RULES: RegexRule[] = [
   },
 ];
 
-const INJECTION_RULES: RegexRule[] = [
-  {
-    name: 'ignore-instructions',
-    pattern: /ignore\s+(?:all\s+)?(?:previous|above|prior)\s+instructions/gi,
-    replacement: '[BLOCKED]',
-  },
-  {
-    name: 'system-prompt-override',
-    pattern: /(?:you\s+are\s+now|new\s+instructions|forget\s+(?:everything|your\s+(?:instructions|rules)))/gi,
-    replacement: '[BLOCKED]',
-  },
-  {
-    name: 'role-hijack',
-    pattern: /\b(?:system|assistant)\s*:\s*/gi,
-    replacement: '[BLOCKED]',
-  },
-];
-
 const PRESET_MAP: Record<RegexPreset, RegexRule[]> = {
   pii: PII_RULES,
   secrets: SECRETS_RULES,
   urls: URL_RULES,
-  injection: INJECTION_RULES,
 };
 
 /**
  * RegexFilterProcessor applies zero-cost regex pattern matching to filter, redact, or block
  * content in agent messages. No LLM calls are made — all detection is regex-based.
  *
- * Supports built-in presets for common patterns (PII, secrets, URLs, prompt injection) and
+ * Supports built-in presets for common patterns (PII, secrets, URLs) and
  * custom regex rules. Can be applied to input, output, or both phases.
  *
  * @example Block emails and phone numbers in input:
