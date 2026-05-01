@@ -188,4 +188,44 @@ describe('dynamic sandbox tools', () => {
 
     expect(resolverCalls).toBe(0);
   });
+
+  it('should call the resolver exactly once per request across instructions and tool calls', async () => {
+    let resolverCalls = 0;
+    const workspace = new Workspace({
+      sandbox: () => {
+        resolverCalls++;
+        return new LocalSandbox({ workingDirectory: tempDir });
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+    const requestContext = new RequestContext([['user-id', 'alice']]);
+
+    await workspace.getInstructionsAsync({ requestContext });
+    await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute({ command: 'echo a' }, { requestContext });
+    await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute({ command: 'echo b' }, { requestContext });
+
+    expect(resolverCalls).toBe(1);
+  });
+
+  it('should resolve a fresh sandbox for each new requestContext', async () => {
+    let resolverCalls = 0;
+    const workspace = new Workspace({
+      sandbox: () => {
+        resolverCalls++;
+        return new LocalSandbox({ workingDirectory: tempDir });
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
+      { command: 'echo a' },
+      { requestContext: new RequestContext() },
+    );
+    await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
+      { command: 'echo b' },
+      { requestContext: new RequestContext() },
+    );
+
+    expect(resolverCalls).toBe(2);
+  });
 });

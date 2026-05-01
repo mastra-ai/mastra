@@ -494,6 +494,9 @@ export class Workspace<
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
   private readonly _sandboxResolver?: WorkspaceSandboxResolver;
+  // Per-request memoization so one resolver call serves both instructions and tool execution.
+  private readonly _filesystemRequestCache = new WeakMap<RequestContext, Promise<WorkspaceFilesystem>>();
+  private readonly _sandboxRequestCache = new WeakMap<RequestContext, Promise<WorkspaceSandbox>>();
   private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
@@ -765,10 +768,13 @@ export class Workspace<
   }: {
     requestContext: RequestContext;
   }): Promise<WorkspaceFilesystem | undefined> {
-    if (this._filesystemResolver) {
-      return await this._filesystemResolver({ requestContext });
+    if (!this._filesystemResolver) return this._fs;
+    let pending = this._filesystemRequestCache.get(requestContext);
+    if (!pending) {
+      pending = Promise.resolve(this._filesystemResolver({ requestContext }));
+      this._filesystemRequestCache.set(requestContext, pending);
     }
-    return this._fs;
+    return pending;
   }
 
   /**
@@ -785,10 +791,13 @@ export class Workspace<
    * Returns undefined if no sandbox is configured.
    */
   async resolveSandbox({ requestContext }: { requestContext: RequestContext }): Promise<WorkspaceSandbox | undefined> {
-    if (this._sandboxResolver) {
-      return await this._sandboxResolver({ requestContext });
+    if (!this._sandboxResolver) return this._sandbox;
+    let pending = this._sandboxRequestCache.get(requestContext);
+    if (!pending) {
+      pending = Promise.resolve(this._sandboxResolver({ requestContext }));
+      this._sandboxRequestCache.set(requestContext, pending);
     }
-    return this._sandbox;
+    return pending;
   }
 
   /**
