@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
+import { computeNextFireAt } from '@mastra/core/workflows';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
@@ -76,7 +77,11 @@ export const mastra = new Mastra({
           // Reset schedule pause state + drop trigger history between tests.
           // Schedules are declarative config registered at boot, so we
           // snapshot the current rows, clear, then re-create them with a
-          // fresh `nextFireAt` and `status: 'active'`.
+          // fresh `nextFireAt` (computed from each schedule's own cron +
+          // timezone, exactly as boot registration would) and
+          // `status: 'active'`. Hardcoding `now + 60_000` here would make
+          // the reset handler fire schedules at cadences they never
+          // declare, which can leak surprise runs into unrelated tests.
           const schedulesStore = await storage.getStore('schedules');
           if (schedulesStore) {
             const existingSchedules = await schedulesStore.listSchedules();
@@ -85,10 +90,21 @@ export const mastra = new Mastra({
                 await schedulesStore.dangerouslyClearAll();
                 const now = Date.now();
                 for (const schedule of existingSchedules) {
+                  let nextFireAt: number;
+                  try {
+                    nextFireAt = computeNextFireAt(schedule.cron, {
+                      timezone: schedule.timezone,
+                      after: now,
+                    });
+                  } catch {
+                    // Fall back to the previously-recorded fire time so a
+                    // malformed cron does not break the reset handler.
+                    nextFireAt = schedule.nextFireAt;
+                  }
                   await schedulesStore.createSchedule({
                     ...schedule,
                     status: 'active',
-                    nextFireAt: now + 60_000,
+                    nextFireAt,
                     lastFireAt: null,
                     lastRunId: null,
                     createdAt: now,

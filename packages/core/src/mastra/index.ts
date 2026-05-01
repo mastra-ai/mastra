@@ -1173,6 +1173,11 @@ export class Mastra<
     }
 
     this.#schedulerInitPromise = this.#initScheduler().catch(error => {
+      // Drop both the in-flight promise and any partially-constructed
+      // scheduler instance so a future #ensureScheduler() call (e.g. after
+      // setStorage attaches storage, or after a transient pubsub failure)
+      // can retry initialization from a clean slate.
+      this.#scheduler = undefined;
       this.#schedulerInitPromise = undefined;
       this.#logger?.error('Failed to initialize workflow scheduler', error);
     });
@@ -1203,9 +1208,19 @@ export class Mastra<
     }
     this.#scheduler = scheduler;
 
-    await this.#registerDeclarativeSchedules(schedulesStore);
-
-    await scheduler.start();
+    try {
+      await this.#registerDeclarativeSchedules(schedulesStore);
+      await scheduler.start();
+    } catch (err) {
+      // Best-effort cleanup of any partially-started scheduler so the catch
+      // handler in #ensureScheduler() can null out #scheduler safely.
+      try {
+        await scheduler.stop();
+      } catch {
+        // ignore secondary errors during cleanup
+      }
+      throw err;
+    }
   }
 
   async #registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
@@ -3146,6 +3161,10 @@ export class Mastra<
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
     this.#ensureBackgroundTaskManager();
+    // If storage was attached after construction, the scheduler bootstrap
+    // would have bailed out early in __init(). Retry it now that storage
+    // is available so declarative schedules still get registered + fired.
+    this.#ensureScheduler();
   }
 
   public setLogger({ logger }: { logger: TLogger }) {

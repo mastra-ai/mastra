@@ -126,9 +126,12 @@ import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
 
-await client.pauseSchedule('daily-report')
+// Schedule ids are derived from the workflow id: `wf_<workflowId>` for a
+// single declarative schedule, or `wf_<workflowId>__<scheduleId>` when you
+// declare multiple schedules per workflow as an array.
+await client.pauseSchedule('wf_daily-report')
 // ...investigate, ship a fix, then:
-await client.resumeSchedule('daily-report')
+await client.resumeSchedule('wf_daily-report')
 ```
 
 In Studio, open the schedule detail page and select **Pause** or **Resume** in the header.

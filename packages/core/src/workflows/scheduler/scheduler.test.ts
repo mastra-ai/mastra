@@ -171,6 +171,55 @@ describe('WorkflowScheduler', () => {
     publishSpy.mockRestore();
   });
 
+  it('isolates a throwing onError handler so the tick loop keeps processing the batch', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const original = pubsub.publish.bind(pubsub);
+    const publishSpy = vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+      if (topic === 'workflows') {
+        throw new Error('boom');
+      }
+      return original(topic, event);
+    });
+    // First call throws inside the user hook. If the scheduler doesn't
+    // isolate it, the throw escapes #fireSchedule, aborts #processTick,
+    // and the second schedule never gets a recorded trigger.
+    const onError = vi.fn().mockImplementationOnce(() => {
+      throw new Error('hook exploded');
+    });
+    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub, config: { onError } });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-a',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+    await store.createSchedule({
+      id: 'sched-b',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past + 1,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    await expect(scheduler.tick()).resolves.toBeUndefined();
+
+    expect(onError).toHaveBeenCalledTimes(2);
+    const triggersA = await store.listTriggers('sched-a');
+    const triggersB = await store.listTriggers('sched-b');
+    expect(triggersA).toHaveLength(1);
+    expect(triggersB).toHaveLength(1);
+
+    publishSpy.mockRestore();
+  });
+
   it('uses a deterministic runId derived from id + scheduledFireAt', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();

@@ -58,12 +58,25 @@ export class WorkflowScheduler extends MastraBase {
     this.#started = true;
     this.#stopping = false;
 
-    // Run one tick immediately so newly-due schedules don't wait the full interval.
-    await this.#runTick();
+    try {
+      // Run one tick immediately so newly-due schedules don't wait the full interval.
+      await this.#runTick();
 
-    this.#intervalHandle = setInterval(() => {
-      void this.#runTick();
-    }, this.#config.tickIntervalMs);
+      // If stop() ran concurrently with the warm-up tick, don't arm a new
+      // interval afterwards — the caller has already asked us to shut down.
+      if (this.#stopping || !this.#started) return;
+
+      this.#intervalHandle = setInterval(() => {
+        void this.#runTick();
+      }, this.#config.tickIntervalMs);
+    } catch (err) {
+      // Reset state so a future start() can retry. Without this, a failed
+      // warm-up tick would leave #started=true with no interval armed and
+      // every subsequent start() call would silently no-op.
+      this.#started = false;
+      this.#stopping = false;
+      throw err;
+    }
   }
 
   /** Stop the tick loop and wait for any in-flight tick to finish. */
@@ -142,7 +155,7 @@ export class WorkflowScheduler extends MastraBase {
         cron: schedule.cron,
         error: err,
       });
-      this.#config.onError?.(err, { scheduleId: schedule.id });
+      this.#notifyError(err, schedule.id);
       return;
     }
 
@@ -164,7 +177,7 @@ export class WorkflowScheduler extends MastraBase {
         runId,
         error: err,
       });
-      this.#config.onError?.(err, { scheduleId: schedule.id });
+      this.#notifyError(err, schedule.id);
       return;
     }
 
@@ -187,7 +200,7 @@ export class WorkflowScheduler extends MastraBase {
         runId,
         error: err,
       });
-      this.#config.onError?.(err, { scheduleId: schedule.id });
+      this.#notifyError(err, schedule.id);
     }
 
     try {
@@ -204,6 +217,23 @@ export class WorkflowScheduler extends MastraBase {
         scheduleId: schedule.id,
         runId,
         error: err,
+      });
+    }
+  }
+
+  /**
+   * Invoke the user-supplied onError hook in isolation. A throwing hook
+   * must not abort the scheduler tick loop, so we swallow + log any error
+   * the callback itself raises.
+   */
+  #notifyError(error: unknown, scheduleId: string): void {
+    if (!this.#config.onError) return;
+    try {
+      this.#config.onError(error, { scheduleId });
+    } catch (callbackError) {
+      this.logger.error('WorkflowScheduler onError handler threw', {
+        scheduleId,
+        error: callbackError,
       });
     }
   }
