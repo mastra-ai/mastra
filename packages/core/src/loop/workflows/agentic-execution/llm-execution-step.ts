@@ -807,6 +807,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       type: 'step-start',
                       payload: {
                         request: request || {},
+                        inputMessages,
                         warnings: warnings || [],
                         messageId: currentStep.messageId,
                       },

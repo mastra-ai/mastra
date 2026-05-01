@@ -207,12 +207,14 @@ function summarizeRequestBody(body: unknown): StepInputPreview {
 }
 
 /**
- * Extract messages from the raw AI SDK request metadata for use as span input.
- * Parses request.body and returns a shallow conversation preview instead of the
- * full request payload, which keeps span serialization bounded for large
- * multi-turn conversations.
+ * Extract a shallow conversation preview for model_step span input.
  */
-function extractStepInput(request: StepStartPayload['request'] | undefined): StepInputPreview {
+function extractStepInput(payload?: StepStartPayload): StepInputPreview {
+  if (Array.isArray(payload?.inputMessages)) {
+    return normalizeMessages(payload.inputMessages);
+  }
+
+  const request = payload?.request;
   if (!request) return undefined;
 
   const { body } = request;
@@ -222,7 +224,7 @@ function extractStepInput(request: StepStartPayload['request'] | undefined): Ste
     const parsed = typeof body === 'string' ? JSON.parse(body) : body;
     return summarizeRequestBody(parsed);
   } catch {
-    // body was not valid JSON — return as-is
+    // body was not valid JSON; return as-is
     return request;
   }
 }
@@ -359,7 +361,7 @@ export class ModelSpanTracker {
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
         ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
       },
-      input: extractStepInput(payload?.request),
+      input: extractStepInput(payload),
     });
     // Reset chunk sequence for new step
     this.#chunkSequence = 0;
@@ -376,7 +378,7 @@ export class ModelSpanTracker {
 
     // Update span with request/warnings from the step-start chunk
     this.#currentStepSpan.update({
-      input: extractStepInput(payload.request),
+      input: extractStepInput(payload),
       attributes: {
         ...(payload.messageId ? { messageId: payload.messageId } : {}),
         ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
