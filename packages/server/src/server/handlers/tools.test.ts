@@ -172,6 +172,57 @@ describe('Tools Handlers', () => {
 
       expect(result).toHaveProperty('id', 'dynamic-tool');
     });
+
+    it('should log a warning when an agent toolsResolver throws during fallback', async () => {
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: vi.fn(),
+      });
+
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+
+      const warnSpy = vi.fn();
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({ warn: warnSpy } as any);
+
+      await GET_TOOL_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to list tools for agent while resolving tool by id',
+        expect.objectContaining({
+          agentId: 'failing-agent',
+          toolId: 'dynamic-tool',
+          error: 'toolsResolver failed',
+        }),
+      );
+    });
   });
 
   describe('executeToolHandler', () => {
@@ -340,6 +391,56 @@ describe('Tools Handlers', () => {
         data: {},
       });
       expect(result).toEqual(mockResult);
+    });
+
+    it('should log a warning when an agent toolsResolver throws during fallback', async () => {
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: vi.fn().mockResolvedValue({ ok: true }),
+      });
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+
+      const warnSpy = vi.fn();
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({ warn: warnSpy } as any);
+
+      await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+        data: {},
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to list tools for agent while resolving tool by id',
+        expect.objectContaining({
+          agentId: 'failing-agent',
+          toolId: 'dynamic-tool',
+          error: 'toolsResolver failed',
+        }),
+      );
     });
   });
 
