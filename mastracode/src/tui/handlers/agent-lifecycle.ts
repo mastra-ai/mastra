@@ -187,10 +187,7 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
         if (goal?.status === 'done') {
           showInfo(state, `Goal achieved: "${goal.objective}"`);
         } else if (goal?.status === 'paused') {
-          showInfo(
-            state,
-            `Goal paused (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
-          );
+          showInfo(state, `Goal paused (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`);
         }
       }
     })

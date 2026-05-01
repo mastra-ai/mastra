@@ -142,6 +142,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
+        // Load goal state from thread metadata
+        state.goalManager.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
       }
       break;
     }

@@ -25,6 +25,7 @@ export interface GoalState {
   status: GoalStatus;
   turnsUsed: number;
   maxTurns: number;
+  judgeModelId: string;
 }
 
 export interface GoalJudgeResult {
@@ -37,6 +38,7 @@ export interface GoalJudgeResult {
 // =============================================================================
 
 const DEFAULT_MAX_TURNS = 20;
+const THREAD_GOAL_KEY = 'goal';
 
 const JUDGE_SYSTEM_PROMPT = `You are a goal completion judge. You evaluate whether an AI assistant has achieved a stated goal based on its most recent response.
 
@@ -48,13 +50,6 @@ Rules:
 - Say "continue" if the goal is partially done, in progress, or not yet addressed.
 - When in doubt, say "continue".
 - Do not be overly strict — if the assistant has made substantial progress and the remaining work is trivial cleanup, say "done".`;
-
-// Prefer a fast, cheap model for the judge call
-const JUDGE_MODEL_PREFERENCES = [
-  'anthropic/claude-haiku-4-5',
-  'openai/gpt-4o-mini',
-  'google/gemini-2.0-flash',
-];
 
 // =============================================================================
 // GoalManager
@@ -74,14 +69,42 @@ export class GoalManager {
   /**
    * Set a new goal objective. Resets turn counter.
    */
-  setGoal(objective: string, maxTurns: number = DEFAULT_MAX_TURNS): GoalState {
+  setGoal(objective: string, judgeModelId: string, maxTurns: number = DEFAULT_MAX_TURNS): GoalState {
     this.goal = {
       objective,
       status: 'active',
       turnsUsed: 0,
       maxTurns,
+      judgeModelId,
     };
     return this.goal;
+  }
+
+  /**
+   * Load goal state from thread metadata (called on thread switch).
+   */
+  loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
+    const saved = metadata?.[THREAD_GOAL_KEY] as GoalState | undefined;
+    if (saved && saved.objective && saved.status) {
+      this.goal = saved;
+    } else {
+      this.goal = null;
+    }
+  }
+
+  /**
+   * Persist goal state to thread metadata.
+   */
+  async saveToThread(state: TUIState): Promise<void> {
+    try {
+      if (this.goal) {
+        await state.harness.setThreadSetting({ key: THREAD_GOAL_KEY, value: this.goal });
+      } else {
+        await state.harness.setThreadSetting({ key: THREAD_GOAL_KEY, value: undefined });
+      }
+    } catch {
+      // Persistence is not critical
+    }
   }
 
   pause(): GoalState | null {
@@ -123,6 +146,7 @@ export class GoalManager {
     // Budget exhaustion
     if (this.goal.turnsUsed >= this.goal.maxTurns) {
       this.goal.status = 'paused';
+      await this.saveToThread(state);
       return null;
     }
 
@@ -130,17 +154,20 @@ export class GoalManager {
     const lastAssistantContent = await this.getLastAssistantContent(state);
     if (!lastAssistantContent) {
       // No assistant message to judge — continue anyway
+      await this.saveToThread(state);
       return this.buildContinuationPrompt('No response yet, keep working.');
     }
 
     // Call judge
-    const result = await this.callJudge(state, lastAssistantContent);
+    const result = await this.callJudge(lastAssistantContent);
 
     if (result.decision === 'done') {
       this.goal.status = 'done';
+      await this.saveToThread(state);
       return null;
     }
 
+    await this.saveToThread(state);
     return this.buildContinuationPrompt(result.reason);
   }
 
@@ -175,9 +202,9 @@ export class GoalManager {
     return String(content ?? '');
   }
 
-  private async callJudge(state: TUIState, assistantContent: string): Promise<GoalJudgeResult> {
+  private async callJudge(assistantContent: string): Promise<GoalJudgeResult> {
     try {
-      const model = this.resolveJudgeModel(state);
+      const model = this.resolveJudgeModel();
       if (!model) {
         // No model available — fail OPEN (continue)
         return { decision: 'continue', reason: 'No judge model available.' };
@@ -202,27 +229,13 @@ export class GoalManager {
     }
   }
 
-  private resolveJudgeModel(state: TUIState): LanguageModel | null {
-    // Try preferred fast models first
-    for (const modelId of JUDGE_MODEL_PREFERENCES) {
-      try {
-        return resolveModel(modelId) as LanguageModel;
-      } catch {
-        continue;
-      }
+  private resolveJudgeModel(): LanguageModel | null {
+    if (!this.goal?.judgeModelId) return null;
+    try {
+      return resolveModel(this.goal.judgeModelId) as LanguageModel;
+    } catch {
+      return null;
     }
-
-    // Fall back to current model
-    const currentModelId = state.harness.getCurrentModelId();
-    if (currentModelId) {
-      try {
-        return resolveModel(currentModelId) as LanguageModel;
-      } catch {
-        // Fall through
-      }
-    }
-
-    return null;
   }
 
   private parseJudgeResponse(text: string): GoalJudgeResult {
