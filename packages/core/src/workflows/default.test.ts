@@ -625,6 +625,18 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
     expect(serialized).toEqual({ userId: 'user-123' });
   });
 
+  it('should serialize plain object request context values', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const circular: any = { name: 'service' };
+    circular.self = circular;
+    const plainObj = { userId: 'user-123', progressEmitter: () => undefined, service: circular };
+
+    const serialized = engine.serializeRequestContext(plainObj);
+
+    expect(() => JSON.stringify(serialized)).not.toThrow();
+    expect(serialized).toEqual({ userId: 'user-123' });
+  });
+
   it('should return a RequestContext instance with all entries from the plain object', () => {
     const engine = new TestableExecutionEngine({ mastra: undefined });
     const plainObj = { userId: 'user-123', tenantId: 'tenant-456', nested: { flag: true } };
