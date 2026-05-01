@@ -245,16 +245,27 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * Gets a list of tools provided by this MCP server, including their schemas.
    * @returns An object containing an array of tool information.
    */
-  public abstract getToolListInfo(): {
-    tools: Array<{
-      name: string;
-      description?: string;
-      inputSchema: any;
-      outputSchema?: any;
-      toolType?: MCPToolType;
-      _meta?: Record<string, unknown>;
-    }>;
-  };
+  public abstract getToolListInfo():
+    | {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }
+    | Promise<{
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }>;
 
   /**
    * Gets information for a specific tool provided by this MCP server.
@@ -270,7 +281,18 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
         toolType?: MCPToolType;
         _meta?: Record<string, unknown>;
       }
-    | undefined;
+    | undefined
+    | Promise<
+        | {
+            name: string;
+            description?: string;
+            inputSchema: any;
+            outputSchema?: any;
+            toolType?: MCPToolType;
+            _meta?: Record<string, unknown>;
+          }
+        | undefined
+      >;
 
   /**
    * Executes a specific tool provided by this MCP server.

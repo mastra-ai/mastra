@@ -163,7 +163,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot list tools in this way.` });
     }
 
-    return server.getToolListInfo();
+    return await server.getToolListInfo();
   },
 });
 
@@ -192,7 +192,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot provide tool details in this way.` });
     }
 
-    const toolInfo = server.getToolInfo(toolId);
+    const toolInfo = await server.getToolInfo(toolId);
     if (!toolInfo) {
       throw new HTTPException(404, { message: `Tool with ID '${toolId}' not found on MCP server '${serverId}'` });
     }
