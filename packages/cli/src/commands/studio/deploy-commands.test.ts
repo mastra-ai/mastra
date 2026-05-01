@@ -44,6 +44,36 @@ vi.mock('../auth/client.js', () => ({
   }),
 }));
 
+const mockClackIntro = vi.fn();
+const mockClackOutro = vi.fn();
+const mockClackLogError = vi.fn();
+const mockClackLogInfo = vi.fn();
+const mockClackLogStep = vi.fn();
+const mockClackLogMessage = vi.fn();
+const mockClackLogWarn = vi.fn();
+const mockClackSpinnerStart = vi.fn();
+const mockClackSpinnerStop = vi.fn();
+
+vi.mock('../../utils/polling.js', () => ({
+  withPollingRetries: (fn: () => unknown) => fn(),
+}));
+
+vi.mock('@clack/prompts', () => ({
+  intro: (...args: unknown[]) => mockClackIntro(...args),
+  outro: (...args: unknown[]) => mockClackOutro(...args),
+  spinner: () => ({
+    start: (...args: unknown[]) => mockClackSpinnerStart(...args),
+    stop: (...args: unknown[]) => mockClackSpinnerStop(...args),
+  }),
+  log: {
+    error: (...args: unknown[]) => mockClackLogError(...args),
+    info: (...args: unknown[]) => mockClackLogInfo(...args),
+    step: (...args: unknown[]) => mockClackLogStep(...args),
+    message: (...args: unknown[]) => mockClackLogMessage(...args),
+    warn: (...args: unknown[]) => mockClackLogWarn(...args),
+  },
+}));
+
 beforeEach(() => {
   vi.resetAllMocks();
   mockGetToken.mockResolvedValue('test-token');
@@ -203,27 +233,23 @@ describe('suggestionsAction', () => {
       },
     });
 
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await suggestionsAction('d1');
 
-    const output = spy.mock.calls.map(c => c[0]).join('\n');
-    expect(output).toContain('Deploy suggestions for d1');
-    expect(output).toContain('Missing environment variables');
-    expect(output).toContain('Add OPENAI_API_KEY');
-    expect(output).toContain('https://mastra.ai/docs/env');
-    spy.mockRestore();
+    const allMessages = mockClackLogMessage.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
+    expect(allMessages).toContain('Deploy Suggestions');
+    expect(allMessages).toContain('Missing environment variables');
+    expect(allMessages).toContain('Add OPENAI_API_KEY');
+    expect(allMessages).toContain('https://mastra.ai/docs/env');
   });
 
   it('reports when a deploy is already running', async () => {
     mockFetchDeployDiagnosis.mockResolvedValue({ state: 'healthy' });
 
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await suggestionsAction('d1');
 
-    expect(spy).toHaveBeenCalledWith('Deploy is running successfully. No suggestions required.');
-    spy.mockRestore();
+    expect(mockClackOutro).toHaveBeenCalledWith('Deploy is running successfully. No suggestions required.');
   });
 
   it('starts a diagnosis when none exists and then prints suggestions', async () => {
@@ -241,16 +267,14 @@ describe('suggestionsAction', () => {
       },
     });
 
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await suggestionsAction('d1');
 
     expect(mockStartDeployDiagnosis).toHaveBeenCalledWith('d1', 'test-token', 'org-1');
     expect(mockFetchDeployDiagnosis).toHaveBeenCalledTimes(2);
-    expect(spy.mock.calls.map(c => c[0]).join('\n')).toContain(
-      'No suggested changes are available for this failed deploy.',
-    );
-    spy.mockRestore();
+    expect(mockClackLogWarn).toHaveBeenCalled();
+    const warnMsg = String(mockClackLogWarn.mock.calls[0][0]);
+    expect(warnMsg).toContain('No suggestions could be generated');
   });
 
   it('defaults to the linked project latest deploy when deploy id is omitted', async () => {
@@ -295,15 +319,14 @@ describe('suggestionsAction', () => {
       },
     });
 
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await suggestionsAction();
 
-    const output = spy.mock.calls.map(c => c[0]).join('\n');
     expect(mockFetchDeployDiagnosis).toHaveBeenCalledWith('d2', 'test-token', 'org-1');
-    expect(output).toContain('Using latest deploy: d2 (App 2)');
-    expect(output).toContain('No suggested changes are available for this failed deploy.');
-    spy.mockRestore();
+    expect(mockClackLogInfo).toHaveBeenCalledWith('Using latest deploy: d2 (App 2)');
+    expect(mockClackLogWarn).toHaveBeenCalled();
+    const warnMsg = String(mockClackLogWarn.mock.calls[0][0]);
+    expect(warnMsg).toContain('No suggestions could be generated');
   });
 
   it('tells the user how to deploy and rerun suggestions when the linked studio project has no deploys', async () => {
@@ -335,11 +358,49 @@ describe('suggestionsAction', () => {
       },
     ]);
 
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit');
+    });
+
     const { suggestionsAction } = await import('./deploy-suggestions.js');
-    await expect(suggestionsAction()).rejects.toThrow(
-      'No deploys found for linked Studio project App 2. Run a failed deployment first with `mastra studio deploy`. The suggestions command helps debug failed deployments, and you can run it afterward with `mastra studio deploy suggestions <deploy-id>` or `mastra studio deploy suggestions`.',
+    await expect(suggestionsAction()).rejects.toThrow('process.exit');
+
+    expect(mockClackLogError).toHaveBeenCalledWith(
+      'No deploys found for linked Studio project App 2. The suggestions command helps debug failed deployments, and you can run it after a deployment fails with `mastra studio deploy suggestions <deploy-id>` or `mastra studio deploy suggestions`.',
     );
     expect(mockFetchDeployDiagnosis).not.toHaveBeenCalled();
+    mockExit.mockRestore();
+  });
+
+  it('fails fast when linked project is not found in the org', async () => {
+    mockLoadProjectConfig.mockResolvedValue({ projectId: 'deleted-project', organizationId: 'org-1' });
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'App 1',
+        slug: 'app-1',
+        organizationId: 'org-1',
+        latestDeployId: 'd1',
+        latestDeployStatus: 'failed',
+        latestDeployCreatedAt: '2025-06-01T00:00:00Z',
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit');
+    });
+
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await expect(suggestionsAction()).rejects.toThrow('process.exit');
+
+    expect(mockClackLogError).toHaveBeenCalledWith(
+      'Linked Studio project deleted-project was not found in this organization. Re-link your project or pass a deploy ID explicitly.',
+    );
+    expect(mockFetchDeployDiagnosis).not.toHaveBeenCalled();
+    mockExit.mockRestore();
   });
 
   it('exits when diagnosis failed', async () => {
@@ -359,14 +420,13 @@ describe('suggestionsAction', () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit');
     });
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await expect(suggestionsAction('d1')).rejects.toThrow('process.exit');
 
-    expect(spy).toHaveBeenCalledWith('Diagnosis failed: doctor timeout');
+    expect(mockClackLogError).toHaveBeenCalledWith('Diagnosis failed: doctor timeout');
+    expect(mockClackLogStep).toHaveBeenCalledWith('Deploy logs: https://projects.mastra.ai');
     expect(mockExit).toHaveBeenCalledWith(1);
-    spy.mockRestore();
     mockExit.mockRestore();
   });
 
@@ -375,14 +435,12 @@ describe('suggestionsAction', () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit');
     });
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await expect(suggestionsAction('d1')).rejects.toThrow('process.exit');
 
-    expect(errorSpy).toHaveBeenCalledWith('No organization selected. Run: mastra auth login');
+    expect(mockClackLogError).toHaveBeenCalledWith('No organization selected. Run: mastra auth login');
     expect(mockExit).toHaveBeenCalledWith(1);
-    errorSpy.mockRestore();
     mockExit.mockRestore();
   });
 });

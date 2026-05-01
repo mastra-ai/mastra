@@ -11,6 +11,11 @@ const mockIntro = vi.fn();
 const mockOutro = vi.fn();
 const mockLogError = vi.fn();
 const mockLogInfo = vi.fn();
+const mockLogStep = vi.fn();
+const mockLogMessage = vi.fn();
+const mockLogWarn = vi.fn();
+const mockSpinnerStart = vi.fn();
+const mockSpinnerStop = vi.fn();
 
 vi.mock('./env.js', () => ({
   resolveAuth: (...args: unknown[]) => mockResolveAuth(...args),
@@ -23,12 +28,23 @@ vi.mock('./platform-api.js', () => ({
   fetchServerProjectDetail: (...args: unknown[]) => mockFetchServerProjectDetail(...args),
 }));
 
+vi.mock('../../utils/polling.js', () => ({
+  withPollingRetries: (fn: () => unknown) => fn(),
+}));
+
 vi.mock('@clack/prompts', () => ({
   intro: (...args: unknown[]) => mockIntro(...args),
   outro: (...args: unknown[]) => mockOutro(...args),
+  spinner: () => ({
+    start: (...args: unknown[]) => mockSpinnerStart(...args),
+    stop: (...args: unknown[]) => mockSpinnerStop(...args),
+  }),
   log: {
     error: (...args: unknown[]) => mockLogError(...args),
     info: (...args: unknown[]) => mockLogInfo(...args),
+    step: (...args: unknown[]) => mockLogStep(...args),
+    message: (...args: unknown[]) => mockLogMessage(...args),
+    warn: (...args: unknown[]) => mockLogWarn(...args),
   },
 }));
 
@@ -65,15 +81,13 @@ describe('serverSuggestionsAction', () => {
       },
     });
 
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { serverSuggestionsAction } = await import('./deploy-suggestions.js');
     await serverSuggestionsAction('dep-1', {});
 
-    const output = infoSpy.mock.calls.map(call => call[0]).join('\n');
-    expect(output).toContain('Deploy suggestions for dep-1');
-    expect(output).toContain('Set API_KEY');
-    expect(mockOutro).toHaveBeenCalledWith('Suggestions ready.');
-    infoSpy.mockRestore();
+    const allMessages = mockLogMessage.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+    expect(allMessages).toContain('Deploy Suggestions');
+    expect(allMessages).toContain('Set API_KEY');
+    expect(allMessages).toContain('https://mastra.ai/docs/server/env');
   });
 
   it('reports when deploy is already running successfully', async () => {
@@ -100,16 +114,14 @@ describe('serverSuggestionsAction', () => {
       },
     });
 
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { serverSuggestionsAction } = await import('./deploy-suggestions.js');
     await serverSuggestionsAction('dep-1', {});
 
     expect(mockStartServerDeployDiagnosis).toHaveBeenCalledWith('dep-1', 't', 'o');
     expect(mockFetchServerDeployDiagnosis).toHaveBeenCalledTimes(2);
-    expect(infoSpy.mock.calls.map(call => call[0]).join('\n')).toContain(
-      'No suggested changes are available for this failed deploy.',
-    );
-    infoSpy.mockRestore();
+    expect(mockLogWarn).toHaveBeenCalled();
+    const warnMsg = String(mockLogWarn.mock.calls[0][0]);
+    expect(warnMsg).toContain('No suggestions could be generated');
   });
 
   it('defaults to the linked project latest deploy when deploy id is omitted', async () => {
@@ -134,17 +146,16 @@ describe('serverSuggestionsAction', () => {
       },
     });
 
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { serverSuggestionsAction } = await import('./deploy-suggestions.js');
     await serverSuggestionsAction(undefined, {});
 
-    const output = infoSpy.mock.calls.map(call => call[0]).join('\n');
     expect(mockResolveProjectId).toHaveBeenCalledWith({}, { token: 't', orgId: 'o' });
     expect(mockFetchServerProjectDetail).toHaveBeenCalledWith('t', 'o', 'proj-1');
     expect(mockFetchServerDeployDiagnosis).toHaveBeenCalledWith('dep-2', 't', 'o');
     expect(mockLogInfo).toHaveBeenCalledWith('Using latest deploy: dep-2 (Server App)');
-    expect(output).toContain('No suggested changes are available for this failed deploy.');
-    infoSpy.mockRestore();
+    expect(mockLogWarn).toHaveBeenCalled();
+    const warnMsg = String(mockLogWarn.mock.calls[0][0]);
+    expect(warnMsg).toContain('No suggestions could be generated');
   });
 
   it('tells the user how to deploy and rerun suggestions when the linked server project has no deploys', async () => {
@@ -163,7 +174,7 @@ describe('serverSuggestionsAction', () => {
     await expect(serverSuggestionsAction(undefined, {})).rejects.toThrow('exit:1');
 
     expect(mockLogError).toHaveBeenCalledWith(
-      'No deploys found for linked Server project Server App. Run a failed deployment first with `mastra server deploy`. The suggestions command helps debug failed deployments, and you can run it afterward with `mastra server deploy suggestions <deploy-id>` or `mastra server deploy suggestions`.',
+      'No deploys found for linked Server project Server App. The suggestions command helps debug failed deployments, and you can run it after a deployment fails with `mastra server deploy suggestions <deploy-id>` or `mastra server deploy suggestions`.',
     );
     expect(mockFetchServerDeployDiagnosis).not.toHaveBeenCalled();
     mockExit.mockRestore();
@@ -191,6 +202,7 @@ describe('serverSuggestionsAction', () => {
     await expect(serverSuggestionsAction('dep-1', {})).rejects.toThrow('exit:1');
 
     expect(mockLogError).toHaveBeenCalledWith('Diagnosis failed: doctor timeout');
+    expect(mockLogStep).toHaveBeenCalledWith('Deploy logs: https://projects.mastra.ai');
     mockExit.mockRestore();
   });
 });
