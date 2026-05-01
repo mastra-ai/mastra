@@ -2,6 +2,7 @@ import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
   LanguageModelV2CallWarning,
+  LanguageModelV2Prompt,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
@@ -249,6 +250,7 @@ export interface StepStartPayload {
     body?: string;
     [key: string]: unknown;
   };
+  inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
   [key: string]: unknown;
 }
@@ -923,6 +925,7 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:

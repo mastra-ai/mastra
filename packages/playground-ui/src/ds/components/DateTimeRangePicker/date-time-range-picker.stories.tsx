@@ -17,7 +17,6 @@ const meta: Meta<typeof DateTimeRangePicker> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

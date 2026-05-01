@@ -61,7 +61,7 @@
     "test:cli": "pnpm --filter ./packages/cli test",
     "test:deployer": "pnpm --filter ./packages/deployer test",
     "test:server": "pnpm --filter ./packages/server test",
-    "test:server-adapters": "pnpm --filter ./server-adapters/hono test && pnpm --filter ./server-adapters/express test",
+    "test:server-adapters": "pnpm --filter ./server-adapters/hono test && pnpm --filter ./server-adapters/express test && pnpm --filter ./server-adapters/nestjs test",
     "test:core": "pnpm --filter ./packages/core test",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
@@ -73,6 +73,10 @@
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:editor": "pnpm --filter ./packages/editor test",
     "test:evals": "pnpm --filter ./packages/evals test",
+    "test:durable": "pnpm test:durable:core && pnpm test:durable:inngest",
+    "test:durable:core": "pnpm --filter @mastra/core test src/agent/durable/",
+    "test:durable:inngest": "pnpm --filter @mastra/inngest test:suite",
+    "test:durable:inngest:unit": "pnpm --filter @mastra/inngest test:unit",
     "test:mastracode": "pnpm --filter ./mastracode test",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
@@ -114,6 +118,7 @@
       "js-yaml": "^3.14.2",
       "glob@<=10.5.0": "10.5.0",
       "body-parser@<=2.2.1": "2.2.2",
+      "inngest": "^3.50.0",
       "fast-xml-parser@<5.5.7": "^5.7.1",
       "langsmith@<0.5.19": "^0.5.19",
       "lodash@<=4.17.23": "^4.18.0",
@@ -123,7 +128,7 @@
     },
     "patchedDependencies": {
       "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",
-      "fetch-to-node@2.1.0": "patches/fetch-to-node@2.1.0.patch"
+      "tsup@8.5.1": "patches/tsup@8.5.1.patch"
     }
   },
   "license": "Apache-2.0",

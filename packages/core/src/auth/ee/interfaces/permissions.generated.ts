@@ -16,6 +16,7 @@ export const RESOURCES = [
   'agent-builder',
   'agents',
   'background-tasks',
+  'channels',
   'datasets',
   'embedders',
   'experiments',
@@ -83,6 +84,8 @@ export const PERMISSION_PATTERNS = {
   'agents:*': 'agents:*',
   /** Full access to background tasks */
   'background-tasks:*': 'background-tasks:*',
+  /** Full access to channels */
+  'channels:*': 'channels:*',
   /** Full access to datasets */
   'datasets:*': 'datasets:*',
   /** Full access to embedders */
@@ -143,6 +146,10 @@ export const PERMISSION_PATTERNS = {
   'agents:write': 'agents:write',
   /** View background tasks */
   'background-tasks:read': 'background-tasks:read',
+  /** View channels */
+  'channels:read': 'channels:read',
+  /** Create and modify channels */
+  'channels:write': 'channels:write',
   /** Delete datasets */
   'datasets:delete': 'datasets:delete',
   /** Execute datasets */
@@ -256,6 +263,8 @@ export const PERMISSIONS = [
   'agents:read',
   'agents:write',
   'background-tasks:read',
+  'channels:read',
+  'channels:write',
   'datasets:delete',
   'datasets:execute',
   'datasets:read',
@@ -335,6 +344,10 @@ export const MastraFGAPermissions = {
   AGENTS_WRITE: 'agents:write',
   /** View background tasks */
   BACKGROUND_TASKS_READ: 'background-tasks:read',
+  /** View channels */
+  CHANNELS_READ: 'channels:read',
+  /** Create and modify channels */
+  CHANNELS_WRITE: 'channels:write',
   /** Delete datasets */
   DATASETS_DELETE: 'datasets:delete',
   /** Execute datasets */

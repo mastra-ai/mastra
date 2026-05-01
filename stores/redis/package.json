@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis",
-  "version": "1.0.2-alpha.0",
+  "version": "1.1.0",
   "description": "Redis storage provider for Mastra - provides storage capabilities for direct Redis connections",
   "type": "module",
   "main": "dist/index.js",
@@ -20,13 +20,14 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "build": "pnpm build:lib",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d",
     "test": "vitest run",
     "posttest": "docker compose down",
-    "lint": "eslint .",
-    "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts"
+    "lint": "eslint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -42,6 +43,7 @@
     "@vitest/ui": "catalog:",
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
+    "ioredis": "^5.6.1",
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:"

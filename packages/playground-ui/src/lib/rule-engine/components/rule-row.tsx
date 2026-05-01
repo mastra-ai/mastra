@@ -9,7 +9,7 @@ import { RuleValueInput } from './rule-value-input';
 import { getFieldOptionAtPath } from './schema-utils';
 import type { RuleRowProps } from './types';
 
-import { IconButton } from '@/ds/components/IconButton';
+import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'integer']);
@@ -98,9 +98,9 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
         )}
       </div>
 
-      <IconButton type="button" onClick={onRemove} tooltip="Remove rule" size="sm" variant="ghost">
+      <Button type="button" onClick={onRemove} tooltip="Remove rule" size="icon-sm" variant="ghost">
         <X />
-      </IconButton>
+      </Button>
     </div>
   );
 };

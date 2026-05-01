@@ -10,6 +10,8 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
+export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
+
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 
 export const WORKSPACE_TOOLS = {

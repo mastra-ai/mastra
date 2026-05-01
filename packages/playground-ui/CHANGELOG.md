@@ -1,5 +1,337 @@
 # @mastra/playground-ui
 
+## 25.1.0-alpha.0
+
+### Minor Changes
+
+- Removed the deprecated `Notification` component. Use `Notice` for inline persistent context (errors, empty states) and `toast` (from `@mastra/playground-ui`'s sonner wrapper) for transient feedback (success messages, confirmations). ([#16033](https://github.com/mastra-ai/mastra/pull/16033))
+
+  ```tsx
+  // Before
+  <Notification isVisible={true} type="error">Failed to load.</Notification>
+
+  // After — inline persistent context
+  <Notice variant="destructive">Failed to load.</Notice>
+
+  // Before
+  <Notification isVisible={true}>Saved successfully!</Notification>
+
+  // After — transient feedback
+  toast.info('Saved successfully');
+  ```
+
+- Removed the `CombinedButtons` component. Use `ButtonsGroup` with `spacing="close"` for the same segmented-style cluster of toggle buttons. ([#16035](https://github.com/mastra-ai/mastra/pull/16035))
+
+  ```tsx
+  // Before
+  <CombinedButtons>
+    <Button>Agent</Button>
+    <Button>Model</Button>
+  </CombinedButtons>
+
+  // After
+  <ButtonsGroup spacing="close">
+    <Button>Agent</Button>
+    <Button>Model</Button>
+  </ButtonsGroup>
+  ```
+
+### Patch Changes
+
+- Added support for icon-and-description layout in `Notice` by making `title` optional. When omitted, the notice renders as a single row with icon and description, useful for inline contextual messages. ([#16033](https://github.com/mastra-ai/mastra/pull/16033))
+
+  ```tsx
+  // Before — title required
+  <Notice variant="info" title="Heads up">Some message.</Notice>
+
+  // After — title optional, single-row layout
+  <Notice variant="info">Some message.</Notice>
+  ```
+
+- Updated dependencies [[`6dcd65f`](https://github.com/mastra-ai/mastra/commit/6dcd65f2a34069e6dc43ba35f1d11119b9b40bef), [`1c2dda8`](https://github.com/mastra-ai/mastra/commit/1c2dda805fbfccc0abf55d4cb20cc34402dc3f0c)]:
+  - @mastra/core@1.31.1-alpha.0
+  - @mastra/client-js@1.16.1-alpha.0
+  - @mastra/react@0.2.34-alpha.0
+
+## 25.0.0
+
+### Minor Changes
+
+- Refactored Button component to use a single `cva` (class-variance-authority) variant config instead of nested manual maps. Consolidated `IconButton` into `Button` via `size="icon-sm|icon-md|icon-lg"` and removed the `IconButton` export. Replaced `variant="light"` and `variant="inputLike"` with `variant="default"` (no behavior change for default styling). Added `cta` and `outline` variants and unified active/hover styles between text- and icon-mode buttons. ([#15985](https://github.com/mastra-ai/mastra/pull/15985))
+
+  **Why:** A single source of truth for variants means consistent visuals, fewer drift bugs, simpler maintenance, and a more predictable surface for AI agents — single-variant cva is the dominant shadcn pattern across DS components in this repo (`Card`, `Input`, `Label`, `Textarea`, `StatusBadge`).
+
+  **Migration:**
+
+  ```tsx
+  // Before
+  import { IconButton } from '@mastra/playground-ui';
+  <IconButton><Settings /></IconButton>
+  <Button variant="light">…</Button>
+  <Combobox variant="inputLike" />
+
+  // After
+  import { Button } from '@mastra/playground-ui';
+  <Button size="icon-md"><Settings /></Button>
+  <Button variant="default">…</Button>
+  <Combobox variant="default" />
+  ```
+
+- Removed `<Alert>` in favor of `<Notice>`. The two components had significant visual and behavioral overlap; `<Notice>` is now the single banner primitive and supports every previous `<Alert>` use case. ([#15791](https://github.com/mastra-ai/mastra/pull/15791))
+
+  `<Notice>` is also redesigned with a flatter API: `title` and `icon` are now props, each variant ships a default icon, an optional `action` prop renders a button aligned to the title, and a new `note` variant has been added alongside `warning`, `destructive`, `info`, and `success`. Theme tokens (`notice-warning`, `notice-destructive`, `notice-info`, `notice-success`, `notice-note`) replace the previous hardcoded colors.
+
+  **Migration**
+
+  ```tsx
+  // Before
+  <Alert variant="warning">
+    <AlertTitle>Provider not connected</AlertTitle>
+    <AlertDescription as="p">Set the API key environment variable.</AlertDescription>
+  </Alert>
+
+  // After
+  <Notice variant="warning" title="Provider not connected">
+    <Notice.Message>Set the API key environment variable.</Notice.Message>
+  </Notice>
+  ```
+
+### Patch Changes
+
+- Removed the "Avg Score" KPI card from the Metrics dashboard and the avg-score summary from the Scores card. ([#15967](https://github.com/mastra-ai/mastra/pull/15967))
+
+- Fixed row click behavior in the dataset experiments compare view. Clicking a row while selection mode is active now toggles the row's selection instead of navigating to the experiment. Clicking directly on the checkbox no longer also triggers the row click handler. ([#15492](https://github.com/mastra-ai/mastra/pull/15492))
+
+- Aligned AlertDialog visual styling with Dialog component for design system consistency. AlertDialog now uses the same surface tokens, border radius, shadow, animation curves, and typography scale as Dialog. The accessibility primitive remains separate (preserves `role="alertdialog"` and explicit Action/Cancel semantics) — only the visual shell was synced. Also added `AlertDialog.Body` for parity with Dialog. ([#15988](https://github.com/mastra-ai/mastra/pull/15988))
+
+- Updated dependencies [[`1723e09`](https://github.com/mastra-ai/mastra/commit/1723e099829892419ddbfe49287acfeac2522724), [`629f9e9`](https://github.com/mastra-ai/mastra/commit/629f9e9a7e56aa8f129515a3923c5813298790c7), [`25168fb`](https://github.com/mastra-ai/mastra/commit/25168fb9c1de9db7f8171df4f58ceb842c53aa29), [`ab34b5a`](https://github.com/mastra-ai/mastra/commit/ab34b5a2191b8e4353df1dbf7b9155e7d6628d79), [`5fb6c2a`](https://github.com/mastra-ai/mastra/commit/5fb6c2a95c1843cc231704b91354311fc1f34a71), [`2b0f355`](https://github.com/mastra-ai/mastra/commit/2b0f3553be3e9e5524da539a66e5cf82668440a4), [`394f0cf`](https://github.com/mastra-ai/mastra/commit/394f0cfc31e6b4d801219fdef2e9cc69e5bc8682), [`b2deb29`](https://github.com/mastra-ai/mastra/commit/b2deb29412b300c868655b5840463614fbb7962d), [`66644be`](https://github.com/mastra-ai/mastra/commit/66644beac1aa560f0e417956ff007c89341dc382), [`e109607`](https://github.com/mastra-ai/mastra/commit/e10960749251e34d46b480a20648c490fd30381b), [`310b953`](https://github.com/mastra-ai/mastra/commit/310b95345f302dcd5ba3ed862bdc96f059d44122), [`3d7f709`](https://github.com/mastra-ai/mastra/commit/3d7f709b615e588050bb6283c4ee5cfe2978cbde), [`48a42f1`](https://github.com/mastra-ai/mastra/commit/48a42f114a4006a95e0b7a1b5ad1a24815a175c2), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006), [`2c83efc`](https://github.com/mastra-ai/mastra/commit/2c83efc4482b3efe50830e3b8b4ba9a8d219edff), [`43f0e1d`](https://github.com/mastra-ai/mastra/commit/43f0e1d5d5a74ba6fc746f2ad89ebe0c64777a7d), [`57b8756`](https://github.com/mastra-ai/mastra/commit/57b87567523484825ef145a2c927f947d1306253), [`43f0e1d`](https://github.com/mastra-ai/mastra/commit/43f0e1d5d5a74ba6fc746f2ad89ebe0c64777a7d), [`da0b9e2`](https://github.com/mastra-ai/mastra/commit/da0b9e2ba7ecc560213b426d6c097fe63946086e), [`282a10c`](https://github.com/mastra-ai/mastra/commit/282a10c9446e9922afe80e10e3770481c8ac8a28), [`04151c7`](https://github.com/mastra-ai/mastra/commit/04151c7dcea934b4fe9076708a23fac161195414), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006)]:
+  - @mastra/core@1.31.0
+  - @mastra/client-js@1.16.0
+  - @mastra/react@0.2.33
+
+## 25.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.31.0-alpha.5
+  - @mastra/client-js@1.16.0-alpha.5
+  - @mastra/react@0.2.33-alpha.5
+
+## 25.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006), [`04151c7`](https://github.com/mastra-ai/mastra/commit/04151c7dcea934b4fe9076708a23fac161195414), [`8091c7c`](https://github.com/mastra-ai/mastra/commit/8091c7c944d15e13fef6d61b6cfd903f158d4006)]:
+  - @mastra/core@1.31.0-alpha.4
+  - @mastra/client-js@1.16.0-alpha.4
+  - @mastra/react@0.2.33-alpha.4
+
+## 25.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b2deb29`](https://github.com/mastra-ai/mastra/commit/b2deb29412b300c868655b5840463614fbb7962d), [`66644be`](https://github.com/mastra-ai/mastra/commit/66644beac1aa560f0e417956ff007c89341dc382), [`310b953`](https://github.com/mastra-ai/mastra/commit/310b95345f302dcd5ba3ed862bdc96f059d44122), [`43f0e1d`](https://github.com/mastra-ai/mastra/commit/43f0e1d5d5a74ba6fc746f2ad89ebe0c64777a7d), [`57b8756`](https://github.com/mastra-ai/mastra/commit/57b87567523484825ef145a2c927f947d1306253), [`43f0e1d`](https://github.com/mastra-ai/mastra/commit/43f0e1d5d5a74ba6fc746f2ad89ebe0c64777a7d), [`da0b9e2`](https://github.com/mastra-ai/mastra/commit/da0b9e2ba7ecc560213b426d6c097fe63946086e)]:
+  - @mastra/core@1.31.0-alpha.3
+  - @mastra/client-js@1.16.0-alpha.3
+  - @mastra/react@0.2.33-alpha.3
+
+## 24.1.0-alpha.3
+
+### Patch Changes
+
+- Fixed row click behavior in the dataset experiments compare view. Clicking a row while selection mode is active now toggles the row's selection instead of navigating to the experiment. Clicking directly on the checkbox no longer also triggers the row click handler. ([#15492](https://github.com/mastra-ai/mastra/pull/15492))
+
+- Updated dependencies [[`2b0f355`](https://github.com/mastra-ai/mastra/commit/2b0f3553be3e9e5524da539a66e5cf82668440a4)]:
+  - @mastra/core@1.31.0-alpha.2
+  - @mastra/client-js@1.15.3-alpha.2
+  - @mastra/react@0.2.33-alpha.2
+
+## 24.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e109607`](https://github.com/mastra-ai/mastra/commit/e10960749251e34d46b480a20648c490fd30381b)]:
+  - @mastra/core@1.31.0-alpha.1
+  - @mastra/client-js@1.15.3-alpha.1
+  - @mastra/react@0.2.33-alpha.1
+
+## 24.1.0-alpha.1
+
+### Minor Changes
+
+- Refactored Button component to use a single `cva` (class-variance-authority) variant config instead of nested manual maps. Consolidated `IconButton` into `Button` via `size="icon-sm|icon-md|icon-lg"` and removed the `IconButton` export. Replaced `variant="light"` and `variant="inputLike"` with `variant="default"` (no behavior change for default styling). Added `cta` and `outline` variants and unified active/hover styles between text- and icon-mode buttons. ([#15985](https://github.com/mastra-ai/mastra/pull/15985))
+
+  **Why:** A single source of truth for variants means consistent visuals, fewer drift bugs, simpler maintenance, and a more predictable surface for AI agents — single-variant cva is the dominant shadcn pattern across DS components in this repo (`Card`, `Input`, `Label`, `Textarea`, `StatusBadge`).
+
+  **Migration:**
+
+  ```tsx
+  // Before
+  import { IconButton } from '@mastra/playground-ui';
+  <IconButton><Settings /></IconButton>
+  <Button variant="light">…</Button>
+  <Combobox variant="inputLike" />
+
+  // After
+  import { Button } from '@mastra/playground-ui';
+  <Button size="icon-md"><Settings /></Button>
+  <Button variant="default">…</Button>
+  <Combobox variant="default" />
+  ```
+
+### Patch Changes
+
+- Aligned AlertDialog visual styling with Dialog component for design system consistency. AlertDialog now uses the same surface tokens, border radius, shadow, animation curves, and typography scale as Dialog. The accessibility primitive remains separate (preserves `role="alertdialog"` and explicit Action/Cancel semantics) — only the visual shell was synced. Also added `AlertDialog.Body` for parity with Dialog. ([#15988](https://github.com/mastra-ai/mastra/pull/15988))
+
+- Updated dependencies [[`1723e09`](https://github.com/mastra-ai/mastra/commit/1723e099829892419ddbfe49287acfeac2522724), [`629f9e9`](https://github.com/mastra-ai/mastra/commit/629f9e9a7e56aa8f129515a3923c5813298790c7), [`25168fb`](https://github.com/mastra-ai/mastra/commit/25168fb9c1de9db7f8171df4f58ceb842c53aa29), [`ab34b5a`](https://github.com/mastra-ai/mastra/commit/ab34b5a2191b8e4353df1dbf7b9155e7d6628d79), [`5fb6c2a`](https://github.com/mastra-ai/mastra/commit/5fb6c2a95c1843cc231704b91354311fc1f34a71), [`394f0cf`](https://github.com/mastra-ai/mastra/commit/394f0cfc31e6b4d801219fdef2e9cc69e5bc8682), [`3d7f709`](https://github.com/mastra-ai/mastra/commit/3d7f709b615e588050bb6283c4ee5cfe2978cbde), [`48a42f1`](https://github.com/mastra-ai/mastra/commit/48a42f114a4006a95e0b7a1b5ad1a24815a175c2), [`2c83efc`](https://github.com/mastra-ai/mastra/commit/2c83efc4482b3efe50830e3b8b4ba9a8d219edff), [`282a10c`](https://github.com/mastra-ai/mastra/commit/282a10c9446e9922afe80e10e3770481c8ac8a28)]:
+  - @mastra/core@1.31.0-alpha.0
+  - @mastra/client-js@1.15.3-alpha.0
+  - @mastra/react@0.2.33-alpha.0
+
+## 24.1.0-alpha.0
+
+### Minor Changes
+
+- Removed `<Alert>` in favor of `<Notice>`. The two components had significant visual and behavioral overlap; `<Notice>` is now the single banner primitive and supports every previous `<Alert>` use case. ([#15791](https://github.com/mastra-ai/mastra/pull/15791))
+
+  `<Notice>` is also redesigned with a flatter API: `title` and `icon` are now props, each variant ships a default icon, an optional `action` prop renders a button aligned to the title, and a new `note` variant has been added alongside `warning`, `destructive`, `info`, and `success`. Theme tokens (`notice-warning`, `notice-destructive`, `notice-info`, `notice-success`, `notice-note`) replace the previous hardcoded colors.
+
+  **Migration**
+
+  ```tsx
+  // Before
+  <Alert variant="warning">
+    <AlertTitle>Provider not connected</AlertTitle>
+    <AlertDescription as="p">Set the API key environment variable.</AlertDescription>
+  </Alert>
+
+  // After
+  <Notice variant="warning" title="Provider not connected">
+    <Notice.Message>Set the API key environment variable.</Notice.Message>
+  </Notice>
+  ```
+
+### Patch Changes
+
+- Removed the "Avg Score" KPI card from the Metrics dashboard and the avg-score summary from the Scores card. ([#15967](https://github.com/mastra-ai/mastra/pull/15967))
+
+## 24.0.2
+
+### Patch Changes
+
+- Updated the look and motion of `Dialog`. The surface is now lighter and translucent with a subtle backdrop blur, the typography is tighter, and the open/close animation feels snappier. `SideDialog` and `AlertDialog` pick up the refined ambient shadow as well, since they share the same shadow style. ([#15958](https://github.com/mastra-ai/mastra/pull/15958))
+
+- Polished DataList visuals: removed the trailing "No more data to load" message and dropped the bottom border on the last row for a cleaner end-of-list appearance. ([#15959](https://github.com/mastra-ai/mastra/pull/15959))
+
+- Refined the DataPanel loading state with a smaller spinner and tightened layout for a less prominent appearance. ([#15965](https://github.com/mastra-ai/mastra/pull/15965))
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`5339dbe`](https://github.com/mastra-ai/mastra/commit/5339dbef397378847975bb93856353d6c6a722ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/core@1.30.0
+  - @mastra/client-js@1.15.2
+  - @mastra/react@0.2.32
+
+## 24.0.2-alpha.1
+
+### Patch Changes
+
+- Updated the look and motion of `Dialog`. The surface is now lighter and translucent with a subtle backdrop blur, the typography is tighter, and the open/close animation feels snappier. `SideDialog` and `AlertDialog` pick up the refined ambient shadow as well, since they share the same shadow style. ([#15958](https://github.com/mastra-ai/mastra/pull/15958))
+
+- Polished DataList visuals: removed the trailing "No more data to load" message and dropped the bottom border on the last row for a cleaner end-of-list appearance. ([#15959](https://github.com/mastra-ai/mastra/pull/15959))
+
+- Refined the DataPanel loading state with a smaller spinner and tightened layout for a less prominent appearance. ([#15965](https://github.com/mastra-ai/mastra/pull/15965))
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/core@1.30.0-alpha.1
+  - @mastra/client-js@1.15.2-alpha.1
+  - @mastra/react@0.2.32-alpha.1
+
+## 24.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`5339dbe`](https://github.com/mastra-ai/mastra/commit/5339dbef397378847975bb93856353d6c6a722ca)]:
+  - @mastra/core@1.29.2-alpha.0
+  - @mastra/client-js@1.15.2-alpha.0
+  - @mastra/react@0.2.32-alpha.0
+
+## 24.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+  - @mastra/client-js@1.15.1
+  - @mastra/react@0.2.31
+
+## 24.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+  - @mastra/client-js@1.15.1-alpha.2
+  - @mastra/react@0.2.31-alpha.2
+
+## 24.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1-alpha.1
+  - @mastra/client-js@1.15.1-alpha.1
+  - @mastra/react@0.2.31-alpha.1
+
+## 24.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9)]:
+  - @mastra/core@1.29.1-alpha.0
+  - @mastra/client-js@1.15.1-alpha.0
+  - @mastra/react@0.2.31-alpha.0
+
+## 24.0.0
+
+### Minor Changes
+
+- Added shared `ThemeProvider`, `useTheme`, and `ThemeToggle` to unify theme management. ([#15838](https://github.com/mastra-ai/mastra/pull/15838))
+
+  **Added**
+  - `ThemeProvider` applies the resolved theme class to `<html>` and persists the choice under the shared `mastra-theme` localStorage key, with a one-time migration from previously stored preferences.
+  - `useTheme()` works without a `<ThemeProvider>` ancestor: it returns a read-only fallback that tracks the OS color scheme and exposes a no-op `setTheme`, so theme-aware leaf components (e.g. `CodeDiff`, `CodeEditor`) keep working when embedded standalone.
+  - `ThemeToggle` renders a system/light/dark pill and supports both controlled and uncontrolled usage.
+
+### Patch Changes
+
+- Migrated color tokens to oklch() for perceptually uniform, wide-gamut (P3) ready colors. Light theme neutrals and surfaces no longer have a blue tint (slate → true gray). Dark theme is visually unchanged. ([#15713](https://github.com/mastra-ai/mastra/pull/15713))
+
+- Added shared Logs components and hooks under `@mastra/playground-ui`. Consumers can now reuse the Logs page building blocks together with the data hooks and the URL-state / filter-persistence helpers instead of duplicating them per app. ([#15723](https://github.com/mastra-ai/mastra/pull/15723))
+
+- Added shared metrics components and hooks under `@mastra/playground-ui`. Consumers can now reuse the metrics dashboard building blocks (KPI, Latency, Scores, Token Usage, Trace Volume, Model Usage Cost cards), their data hooks, and the `MetricsProvider` / `DateRangeSelector` primitives instead of duplicating them per app. ([#15705](https://github.com/mastra-ai/mastra/pull/15705))
+
+  **New peer dependency:** `@tanstack/react-query ^5.90.21`. Add it alongside your existing playground-ui install.
+
+- Added shared Traces components and hooks under `@mastra/playground-ui`. Consumers can now reuse the Traces page building blocks together with the data hooks and the URL-state / filter-persistence helpers instead of duplicating them per app. ([#15714](https://github.com/mastra-ai/mastra/pull/15714))
+
+- Fixed the logs date filter button height to match other filter controls. ([#15801](https://github.com/mastra-ai/mastra/pull/15801))
+
+- Updated dependencies [[`28caa5b`](https://github.com/mastra-ai/mastra/commit/28caa5b032358545af2589ed90636eccb4dd9d2f), [`b1888da`](https://github.com/mastra-ai/mastra/commit/b1888da8fb00c2ebe8404350303c10a289ba9838), [`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`c04417b`](https://github.com/mastra-ai/mastra/commit/c04417ba0a2e4ded66da4352331ef29cd4bd1d79), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51), [`8a71261`](https://github.com/mastra-ai/mastra/commit/8a71261e3954ae617c6f8e25767b951f99438ab2), [`9e973b0`](https://github.com/mastra-ai/mastra/commit/9e973b010dacfa15ac82b0072897319f5234b90a), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`dd934a0`](https://github.com/mastra-ai/mastra/commit/dd934a0982ce0f78712fbd559e4f2410bf594b39), [`ba6b0c5`](https://github.com/mastra-ai/mastra/commit/ba6b0c51bfce358554fd33c7f2bcd5593633f2ff), [`a6dac0a`](https://github.com/mastra-ai/mastra/commit/a6dac0a40c7181161b1add4e8534f962bcbc9aa7), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`7d056b6`](https://github.com/mastra-ai/mastra/commit/7d056b6ecf603cacaa0f663ff1df025ed885b6c1), [`9cef83b`](https://github.com/mastra-ai/mastra/commit/9cef83b8a642b8098747772921e3523b492bafbc), [`d30e215`](https://github.com/mastra-ai/mastra/commit/d30e2156c746bc9fd791745cec1cc24377b66789), [`021a60f`](https://github.com/mastra-ai/mastra/commit/021a60f1f3e0135a70ef23c58be7a9b3aaffe6b4), [`73f2809`](https://github.com/mastra-ai/mastra/commit/73f2809721db24e98cdf122539652a455211b450), [`aedeea4`](https://github.com/mastra-ai/mastra/commit/aedeea48a94f728323f040478775076b9574be50), [`26f1f94`](https://github.com/mastra-ai/mastra/commit/26f1f9490574b864ba1ecedf2c9632e0767a23bd), [`441670a`](https://github.com/mastra-ai/mastra/commit/441670a02c9dc7731c52674f55481e7848a84523), [`441670a`](https://github.com/mastra-ai/mastra/commit/441670a02c9dc7731c52674f55481e7848a84523), [`8126d86`](https://github.com/mastra-ai/mastra/commit/8126d8638411eacfafdc29036ac998e8757ea66f), [`73b45fa`](https://github.com/mastra-ai/mastra/commit/73b45facdef4fbcb8af710c50f0646f18619dbaa), [`ae97520`](https://github.com/mastra-ai/mastra/commit/ae975206fdb0f6ef03c4d5bf94f7dc7c3f706c02), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`441670a`](https://github.com/mastra-ai/mastra/commit/441670a02c9dc7731c52674f55481e7848a84523)]:
+  - @mastra/core@1.29.0
+  - @mastra/client-js@1.15.0
+  - @mastra/react@0.2.30
+
+## 24.0.0-alpha.6
+
+### Patch Changes
+
+- Fixed the logs date filter button height to match other filter controls. ([#15801](https://github.com/mastra-ai/mastra/pull/15801))
+
+- Updated dependencies [[`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`ec4cb26`](https://github.com/mastra-ai/mastra/commit/ec4cb26919972eb2031fea510f8f013e1d5b7ee2)]:
+  - @mastra/client-js@1.15.0-alpha.6
+  - @mastra/core@1.29.0-alpha.6
+  - @mastra/react@0.2.30-alpha.6
+
 ## 24.0.0-alpha.5
 
 ### Patch Changes

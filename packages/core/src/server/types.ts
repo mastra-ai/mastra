@@ -30,6 +30,8 @@ export type ApiRoute =
       requiresAuth?: boolean;
       requiresPermission?: MastraFGAPermissionInput;
       fga?: RouteFGAConfig;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     }
   | {
       path: string;
@@ -40,6 +42,8 @@ export type ApiRoute =
       requiresAuth?: boolean;
       requiresPermission?: MastraFGAPermissionInput;
       fga?: RouteFGAConfig;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };

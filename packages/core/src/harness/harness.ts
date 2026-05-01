@@ -14,6 +14,11 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
+import {
+  CRITICAL_DISPLAY_STATE_EVENT_TYPES,
+  DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS,
+  DisplayStateScheduler,
+} from './display-state-scheduler';
 import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
 import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
@@ -21,6 +26,8 @@ import type {
   HeartbeatHandler,
   HarnessConfig,
   HarnessDisplayState,
+  HarnessDisplayStateListener,
+  HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -73,6 +80,7 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
+  private displayStateSchedulers = new Set<DisplayStateScheduler>();
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
@@ -869,7 +877,16 @@ export class Harness<TState = {}> {
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
   }
 
-  async listThreads(options?: { allResources?: boolean }): Promise<HarnessThread[]> {
+  async listThreads(options?: {
+    allResources?: boolean;
+    /**
+     * Include forked subagent fork threads. Defaults to false: forks are
+     * transient clones used by the runtime and should not show up in user-facing
+     * thread lists / pickers / startup flows. Set to true for admin / debug
+     * tooling that needs to see every thread.
+     */
+    includeForkedSubagents?: boolean;
+  }): Promise<HarnessThread[]> {
     if (!this.config.storage) return [];
 
     const memoryStorage = await this.getMemoryStorage();
@@ -879,7 +896,14 @@ export class Harness<TState = {}> {
 
     const result = await memoryStorage.listThreads({ filter, perPage: false });
 
-    return result.threads.map((thread: StorageThreadType) => ({
+    const threads = options?.includeForkedSubagents
+      ? result.threads
+      : result.threads.filter(thread => {
+          const metadata = thread.metadata as Record<string, unknown> | undefined;
+          return metadata?.forkedSubagent !== true;
+        });
+
+    return threads.map((thread: StorageThreadType) => ({
       id: thread.id,
       resourceId: thread.resourceId,
       title: thread.title,
@@ -2537,6 +2561,29 @@ export class Harness<TState = {}> {
     };
   }
 
+  /**
+   * Subscribe to coalesced display state snapshots.
+   *
+   * Use this for UI rendering paths that only need the latest display state.
+   * Raw event consumers should continue to use `subscribe()`.
+   */
+  subscribeDisplayState(
+    listener: HarnessDisplayStateListener,
+    options: HarnessDisplayStateSubscriptionOptions = {},
+  ): () => void {
+    const scheduler = new DisplayStateScheduler(
+      listener,
+      options.windowMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.windowMs,
+      options.maxWaitMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.maxWaitMs,
+    );
+    this.displayStateSchedulers.add(scheduler);
+
+    return () => {
+      this.displayStateSchedulers.delete(scheduler);
+      scheduler.dispose();
+    };
+  }
+
   private emit(event: HarnessEvent): void {
     // Update display state based on the event (before dispatching to listeners)
     this.applyDisplayStateUpdate(event);
@@ -2551,6 +2598,13 @@ export class Harness<TState = {}> {
         type: 'display_state_changed',
         displayState: this.displayState,
       });
+    }
+
+    if (event.type !== 'display_state_changed' && this.displayStateSchedulers.size > 0) {
+      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
+      for (const scheduler of Array.from(this.displayStateSchedulers)) {
+        scheduler.notify(this.displayState, isCritical);
+      }
     }
   }
 
@@ -2753,6 +2807,7 @@ export class Harness<TState = {}> {
           agentType: event.agentType,
           task: event.task,
           modelId: event.modelId,
+          forked: event.forked,
           toolCalls: [],
           textDelta: '',
           status: 'running',
@@ -2990,11 +3045,52 @@ export class Harness<TState = {}> {
     // Auto-create subagent tool if subagent definitions are configured
     if (this.config.subagents?.length && this.config.resolveModel) {
       const currentMode = this.getCurrentMode();
+      const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
         resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
+        getParentModelId: () => this.getCurrentModelId(),
+        // Resolved lazily so forked subagents see the current mode's agent
+        // even if the mode switches between tool-call scheduling and execution.
+        getParentAgent: () => {
+          try {
+            return this.getCurrentAgent();
+          } catch {
+            return undefined;
+          }
+        },
+        // Only wired up when memory is configured. Clones at the memory layer
+        // (not via Harness.cloneThread) so the parent thread stays the active
+        // thread while the forked subagent runs on the clone.
+        //
+        // The clone is tagged with `forkedSubagent: true` + `parentThreadId` so
+        // that thread pickers / startup flows can hide transient fork threads —
+        // see `listThreads` (filtered by default).
+        cloneThreadForFork: hasMemory
+          ? async ({ sourceThreadId, resourceId, title }) => {
+              const memory = await this.resolveMemory();
+              const result = await memory.cloneThread({
+                sourceThreadId,
+                resourceId: resourceId ?? this.resourceId,
+                title,
+                metadata: {
+                  forkedSubagent: true,
+                  parentThreadId: sourceThreadId,
+                },
+              });
+              return { id: result.thread.id, resourceId: result.thread.resourceId };
+            }
+          : undefined,
+        // Forks inherit the parent's toolsets verbatim so harness-injected
+        // tools (`ask_user`, `submit_plan`, user-configured harness tools, etc.)
+        // remain available inside the fork. The `subagent` entry itself is
+        // deliberately kept — its schema/description are part of the parent's
+        // prompt-cache prefix, and stripping it would invalidate the cache.
+        // Recursive forking is blocked at runtime instead: see the patched
+        // `subagent` execute that the forked tool path installs in `tools.ts`.
+        getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
       });
     }
 
@@ -3224,6 +3320,10 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
+    for (const scheduler of this.displayStateSchedulers) {
+      scheduler.dispose();
+    }
+    this.displayStateSchedulers.clear();
     await this.stopHeartbeats();
     await this.destroyWorkspace();
   }

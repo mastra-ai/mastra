@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
@@ -566,11 +566,13 @@ describe('subagent lifecycle', () => {
       agentType: 'explore',
       task: 'Find usages of X',
       modelId: 'gpt-4o',
+      forked: true,
     });
     const sub = harness.getDisplayState().activeSubagents.get('s1');
     expect(sub).toBeDefined();
     expect(sub!.agentType).toBe('explore');
     expect(sub!.task).toBe('Find usages of X');
+    expect(sub!.forked).toBe(true);
     expect(sub!.status).toBe('running');
     expect(sub!.toolCalls).toEqual([]);
   });
@@ -1201,6 +1203,273 @@ describe('display_state_changed emission', () => {
     // Just check the second subscriber's snapshots
     expect(snapshots[0]).toBe(true); // after agent_start
     expect(snapshots[1]).toBe(false); // after agent_end
+  });
+});
+
+describe('Harness.subscribeDisplayState()', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = createHarness();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('coalesces rapid high-frequency display mutations', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, { type: 'agent_start' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    listener.mockClear();
+
+    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
+    for (let i = 0; i < 100; i++) {
+      emit(harness, {
+        type: 'tool_input_delta',
+        toolCallId: 't1',
+        argsTextDelta: String(i),
+        toolName: 'write_file',
+      });
+    }
+
+    expect(listener).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(249);
+    expect(listener).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).not.toBe(harness.getDisplayState());
+    expect(listener.mock.calls[0]?.[0].toolInputBuffers.get('t1')?.text).toContain('99');
+  });
+
+  it('uses maxWaitMs to prevent starvation during constant streams', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, { type: 'agent_start' });
+    listener.mockClear();
+
+    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(100);
+      emit(harness, {
+        type: 'tool_input_delta',
+        toolCallId: 't1',
+        argsTextDelta: 'x',
+        toolName: 'write_file',
+      });
+    }
+
+    expect(listener).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(100);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes immediately for critical lifecycle events', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, { type: 'agent_start' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0].isRunning).toBe(true);
+
+    emit(harness, { type: 'agent_end', reason: 'complete' });
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls[1]?.[0].isRunning).toBe(false);
+  });
+
+  it('flushes immediately for approvals, suspensions, questions, plans, errors, and state changes', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, {
+      type: 'tool_approval_required',
+      toolCallId: 't1',
+      toolName: 'write_file',
+      args: {},
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0].pendingApproval?.toolCallId).toBe('t1');
+
+    emit(harness, {
+      type: 'tool_suspended',
+      toolCallId: 't2',
+      toolName: 'confirmAction',
+      args: {},
+      suspendPayload: {},
+    });
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls[1]?.[0].pendingSuspension?.toolCallId).toBe('t2');
+
+    emit(harness, {
+      type: 'ask_question',
+      questionId: 'q1',
+      question: 'Proceed?',
+    });
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener.mock.calls[2]?.[0].pendingQuestion?.questionId).toBe('q1');
+
+    emit(harness, {
+      type: 'plan_approval_required',
+      planId: 'p1',
+      title: 'Plan',
+      plan: '# Plan',
+    });
+    expect(listener).toHaveBeenCalledTimes(4);
+    expect(listener.mock.calls[3]?.[0].pendingPlanApproval?.planId).toBe('p1');
+
+    emit(harness, {
+      type: 'error',
+      error: new Error('boom'),
+    });
+    expect(listener).toHaveBeenCalledTimes(5);
+
+    emit(harness, {
+      type: 'state_changed',
+      state: { observationThreshold: 12_000 },
+      changedKeys: ['observationThreshold'],
+    });
+    expect(listener).toHaveBeenCalledTimes(6);
+    expect(listener.mock.calls[5]?.[0].omProgress.threshold).toBe(12_000);
+  });
+
+  it('critical events emit one latest post-critical snapshot when state is pending', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    const message = { id: 'm1', role: 'assistant' as const, content: [], createdAt: new Date() };
+    emit(harness, { type: 'message_update', message: message as any });
+    expect(listener).not.toHaveBeenCalled();
+
+    emit(harness, { type: 'agent_end', reason: 'complete' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0].isRunning).toBe(false);
+    expect(listener.mock.calls[0]?.[0].currentMessage?.id).toBe('m1');
+
+    vi.advanceTimersByTime(500);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes fresh snapshots to display state listeners', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, { type: 'agent_start' });
+    emit(harness, { type: 'agent_end', reason: 'complete' });
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls[0]?.[0]).not.toBe(listener.mock.calls[1]?.[0]);
+    expect(listener.mock.calls[1]?.[0]).not.toBe(harness.getDisplayState());
+  });
+
+  it('isolates listener snapshot mutations from live display state', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    const args = { path: 'original.ts', nested: { marker: 'original' } };
+    const firstModified = new Date('2026-01-01T00:00:00.000Z');
+    vi.setSystemTime(firstModified);
+
+    emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args });
+    emit(harness, { type: 'tool_end', toolCallId: 't1', result: { ok: true }, isError: false });
+
+    const snapshot = listener.mock.calls.at(-1)?.[0];
+    expect(snapshot).toBeDefined();
+
+    (snapshot!.activeTools.get('t1')!.args as typeof args).nested.marker = 'mutated';
+    snapshot!.modifiedFiles.get('original.ts')!.firstModified.setUTCFullYear(2030);
+    snapshot!.modifiedFiles.get('original.ts')!.operations.push('extra');
+
+    const liveToolArgs = harness.getDisplayState().activeTools.get('t1')!.args as typeof args;
+    const liveModifiedFile = harness.getDisplayState().modifiedFiles.get('original.ts')!;
+    expect(liveToolArgs.nested.marker).toBe('original');
+    expect(liveModifiedFile.firstModified).toEqual(firstModified);
+    expect(liveModifiedFile.operations).toEqual(['write_file']);
+  });
+
+  it('unsubscribe cancels pending timers and prevents later callbacks', () => {
+    const listener = vi.fn();
+    const unsubscribe = harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
+    emit(harness, {
+      type: 'tool_input_delta',
+      toolCallId: 't1',
+      argsTextDelta: 'x',
+      toolName: 'write_file',
+    });
+
+    unsubscribe();
+    vi.advanceTimersByTime(1000);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('destroy cancels pending display state callbacks', async () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
+
+    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
+    await harness.destroy();
+    vi.advanceTimersByTime(1000);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('honors custom coalescing options', () => {
+    const listener = vi.fn();
+    harness.subscribeDisplayState(listener, { windowMs: 50, maxWaitMs: 100 });
+
+    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
+    vi.advanceTimersByTime(49);
+    expect(listener).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('raw subscribe still receives every event and every display_state_changed', () => {
+    const raw = vi.fn();
+    const display = vi.fn();
+    harness.subscribe(raw);
+    harness.subscribeDisplayState(display, { windowMs: 250, maxWaitMs: 500 });
+
+    for (let i = 0; i < 5; i++) {
+      emit(harness, {
+        type: 'tool_input_delta',
+        toolCallId: 'missing',
+        argsTextDelta: String(i),
+      });
+    }
+
+    const rawEvents = raw.mock.calls.map(([event]) => event.type);
+    expect(rawEvents.filter(type => type === 'tool_input_delta')).toHaveLength(5);
+    expect(rawEvents.filter(type => type === 'display_state_changed')).toHaveLength(5);
+    expect(display).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(250);
+    expect(display).toHaveBeenCalledTimes(1);
+  });
+
+  it('listener errors do not break the harness or other display listeners', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const healthyListener = vi.fn();
+
+    harness.subscribeDisplayState(() => {
+      throw new Error('listener failed');
+    });
+    harness.subscribeDisplayState(healthyListener);
+
+    expect(() => emit(harness, { type: 'agent_start' })).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith('Error in harness display state listener:', expect.any(Error));
+    expect(healthyListener).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -9,7 +9,7 @@ import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
 
 /* ------------------------------------------------------------------ */
@@ -326,12 +326,7 @@ export async function serverDeployAction(
 
     await saveProjectConfig(
       targetDir,
-      {
-        projectId,
-        projectName,
-        projectSlug,
-        organizationId: orgId,
-      },
+      getProjectConfigToSave(projectId, projectName, projectSlug, orgId, projectConfig),
       opts.config,
     );
     p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
@@ -377,6 +372,7 @@ export async function serverDeployAction(
   const deployResult = await uploadServerDeploy(token, orgId, projectId, zipBuffer, {
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
+    disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 

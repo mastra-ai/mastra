@@ -23,7 +23,7 @@ export function AgentCombobox({
   emptyText = 'No agents found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();

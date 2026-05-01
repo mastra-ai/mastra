@@ -78,26 +78,22 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
- * 2. Children of the ambient span installed by executeWithContext()
- * 3. New root spans (when no current span exists)
+ * 2. New root spans (when no current span exists)
  *
  * @param options - Configuration object for span creation
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
-  const currentSpan =
-    tracingContext?.currentSpan ??
-    (tracingOptions?.traceId || tracingOptions?.parentSpanId ? undefined : resolveCurrentSpan());
 
   const metadata = {
     ...(rest.metadata ?? {}),
     ...(tracingOptions?.metadata ?? {}),
   };
 
-  // If we have a current span, create a child span.
-  if (currentSpan) {
-    return currentSpan.createChildSpan({
+  // If we have a current span, create a child span
+  if (tracingContext?.currentSpan) {
+    return tracingContext.currentSpan.createChildSpan({
       type,
       attributes,
       ...rest,

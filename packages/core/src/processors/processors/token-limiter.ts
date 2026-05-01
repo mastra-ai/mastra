@@ -36,7 +36,14 @@ export interface TokenLimiterOptions {
  * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
  * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor<'token-limiter', { systemTokens: number; limit: number }> {
+type TokenLimiterTripWireMetadata = {
+  systemTokens: number;
+  limit: number;
+  remainingBudget?: number;
+  messageCount?: number;
+};
+
+export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoderPromise: Promise<Tiktoken> | undefined;
@@ -150,6 +157,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
         }
         // best-fit → continue (existing behavior)
       }
+    }
+
+    if (messagesToKeep.length === 0) {
+      throw new TripWire(
+        'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
+        {
+          retry: false,
+          metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
+        },
+      );
     }
 
     // Remove messages that don't fit within the token budget

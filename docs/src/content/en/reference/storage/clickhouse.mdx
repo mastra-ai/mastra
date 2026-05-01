@@ -1,0 +1,329 @@
+---
+title: "Reference: ClickHouse storage | Storage"
+description: Documentation for the ClickHouse storage implementation in Mastra, including the vNext observability domain.
+packages:
+  - "@mastra/clickhouse"
+  - "@mastra/core"
+---
+
+# ClickHouse storage
+
+[ClickHouse](https://clickhouse.com/) is a columnar database designed for analytical workloads. The `@mastra/clickhouse` package provides storage adapters for several Mastra storage domains and is the recommended backend for production observability.
+
+ClickHouse is most commonly used as the dedicated observability backend in a [composite storage](/reference/storage/composite) setup, with another database serving the remaining domains.
+
+## When to use ClickHouse
+
+Production observability for traces, logs, metrics, scores, and feedback.
+
+For local development, use a composite store that combines [LibSQL](/reference/storage/libsql) (for memory and workflows) and `@mastra/duckdb` (for observability). Neither alone covers a development setup: LibSQL does not implement the observability domain, and DuckDB does not implement the other domains. See the [observability overview](/docs/observability/overview#get-started) for an example.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/clickhouse@latest
+```
+
+You will also need a running ClickHouse server. See [Hosting options](#hosting-options) for managed and self-hosted choices.
+
+## Usage
+
+### Observability with vNext (recommended)
+
+`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. It uses an insert-only schema backed by `ReplacingMergeTree` and is optimized for the volume produced by traces, logs, metrics, scores, and feedback.
+
+Compose it with another storage adapter so observability writes do not contend with your application data:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { PostgresStore } from '@mastra/pg'
+import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+import { Observability, DefaultExporter } from '@mastra/observability'
+
+const observabilityStore = new ObservabilityStorageClickhouseVNext({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+})
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new PostgresStore({
+      id: 'pg',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    domains: {
+      observability: observabilityStore,
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+})
+```
+
+`DefaultExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/tracing/exporters/default#tracing-strategies) for details.
+
+### Observability with the legacy domain
+
+`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that have not migrated to the vNext schema. The configuration shape is the same as the vNext class.
+
+```typescript
+import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+
+const observabilityStore = new ObservabilityStorageClickhouse({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+})
+```
+
+New projects should use `ObservabilityStorageClickhouseVNext` instead.
+
+### ClickHouse for every domain
+
+`ClickhouseStoreVNext` backs the `memory`, `workflows`, and `observability` domains with ClickHouse and uses the vNext observability adapter automatically. Use it when you want ClickHouse to back the entire application without wiring a composite store manually.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { ClickhouseStoreVNext } from '@mastra/clickhouse'
+
+export const mastra = new Mastra({
+  storage: new ClickhouseStoreVNext({
+    id: 'clickhouse-storage',
+    url: process.env.CLICKHOUSE_URL!,
+    username: process.env.CLICKHOUSE_USERNAME!,
+    password: process.env.CLICKHOUSE_PASSWORD!,
+  }),
+})
+```
+
+`ClickhouseStoreVNext` accepts the same configuration as `ClickhouseStore` and reuses the same ClickHouse client across every domain.
+
+#### Manual composition
+
+`ClickhouseStore` is the long-standing class that backs every domain with the legacy observability adapter. New projects should prefer `ClickhouseStoreVNext`. If you need to customize the composite (for example, to override one domain with a different backend), build it manually:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { ClickhouseStore, ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+
+const credentials = {
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+}
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new ClickhouseStore({ id: 'clickhouse-storage', ...credentials }),
+    domains: {
+      observability: new ObservabilityStorageClickhouseVNext(credentials),
+    },
+  }),
+})
+```
+
+### Bring your own ClickHouse client
+
+Pass a pre-configured client when you need custom connection settings such as request timeouts, compression, or interceptors:
+
+```typescript
+import { createClient } from '@clickhouse/client'
+import { ClickhouseStore } from '@mastra/clickhouse'
+
+const client = createClient({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  request_timeout: 60_000,
+  compression: { request: true, response: true },
+})
+
+const storage = new ClickhouseStore({ id: 'clickhouse-storage', client })
+```
+
+The same `client` form is accepted by `ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext`.
+
+## Configuration
+
+### `ClickhouseStore` options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description:
+      'ClickHouse server URL (for example, `https://your-instance.clickhouse.cloud:8443` or `http://localhost:8123`). Required when not passing a pre-configured `client`.',
+    isOptional: true,
+  },
+  {
+    name: 'username',
+    type: 'string',
+    description: 'ClickHouse username. Required when not passing a pre-configured `client`.',
+    isOptional: true,
+  },
+  {
+    name: 'password',
+    type: 'string',
+    description:
+      'ClickHouse password. Required when not passing a pre-configured `client`. It can be an empty string for the default user on a local instance.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'ClickHouseClient',
+    description:
+      'Pre-configured ClickHouse client from `@clickhouse/client`. Use this when you need custom request settings. Mutually exclusive with the credential fields above.',
+    isOptional: true,
+  },
+  {
+    name: 'ttl',
+    type: 'object',
+    description:
+      'Per-table TTL configuration applied at table creation time. Accepts row-level and column-level TTLs in interval units from `NANOSECOND` through `YEAR`.',
+    isOptional: true,
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When `true`, the store does not run table creation or migrations on first use. Call `storage.init()` explicitly from your deployment scripts.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+`ClickhouseStore` also accepts every option from `ClickHouseClientConfigOptions` (such as `database`, `request_timeout`, `compression`, `keep_alive`, and `max_open_connections`).
+
+### Observability domain options
+
+`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`).
+
+## Hosting options
+
+ClickHouse runs anywhere you can reach it over HTTP. Two common choices:
+
+- **[ClickHouse Cloud](https://clickhouse.com/cloud)**: Managed service with a free trial tier. Provides connection details directly compatible with `url`, `username`, and `password`.
+- **Self-hosted**: Run the official [`clickhouse/clickhouse-server`](https://hub.docker.com/r/clickhouse/clickhouse-server) container or install from the [official packages](https://clickhouse.com/docs/en/install). Suitable for VPS, dedicated hardware, or Kubernetes.
+
+For local development:
+
+```bash
+docker run -d --name mastra-clickhouse \
+  -p 8123:8123 -p 9000:9000 \
+  -e CLICKHOUSE_USER=default \
+  -e CLICKHOUSE_PASSWORD=password \
+  clickhouse/clickhouse-server
+```
+
+```typescript
+new ObservabilityStorageClickhouseVNext({
+  url: 'http://localhost:8123',
+  username: 'default',
+  password: 'password',
+})
+```
+
+## Deploying with Railway and similar platforms
+
+Platforms like [Railway](https://railway.com), [Fly.io](https://fly.io), [Render](https://render.com), and Heroku run application containers on ephemeral filesystems. Embedded observability backends such as DuckDB require a writable, persistent local file, so they either lose data on restart or fail to deploy entirely on these platforms.
+
+Use ClickHouse instead. Because ClickHouse is reached over HTTP, the same connection works from any host:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { PostgresStore } from '@mastra/pg'
+import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+import { Observability, DefaultExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new PostgresStore({
+      id: 'pg',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    domains: {
+      observability: new ObservabilityStorageClickhouseVNext({
+        url: process.env.CLICKHOUSE_URL!,
+        username: process.env.CLICKHOUSE_USERNAME!,
+        password: process.env.CLICKHOUSE_PASSWORD!,
+      }),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+})
+```
+
+Two ways to provision the database:
+
+- **Managed**: Use ClickHouse Cloud. Set `CLICKHOUSE_URL`, `CLICKHOUSE_USERNAME`, and `CLICKHOUSE_PASSWORD` as environment variables in your hosting platform.
+- **Self-hosted on Railway**: Add a ClickHouse service to your Railway project from the official Docker image, then reference it in the application service through Railway's private networking.
+
+The same approach applies to other hosts with ephemeral filesystems. For application data that should also live off-host, pair this setup with a managed PostgreSQL or LibSQL/Turso instance for the `default` storage.
+
+:::warning
+Do not point an embedded backend like DuckDB at a path inside an ephemeral container filesystem. Data written there is lost when the container restarts, and on some platforms the path is read-only.
+:::
+
+## Initialization
+
+When passed to the `Mastra` class, `ClickhouseStore` calls `init()` automatically to create the schema and run any pending migrations. The same applies to `ObservabilityStorageClickhouseVNext` when used through `MastraCompositeStore`.
+
+If you manage storage outside of `Mastra`, call `init()` explicitly:
+
+```typescript
+import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+
+const observability = new ObservabilityStorageClickhouseVNext({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+})
+
+await observability.init()
+```
+
+In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials can then be limited to read and insert.
+
+## Observability
+
+ClickHouse is the recommended backend for production observability:
+
+- **Insert-only strategy**: `DefaultExporter` writes completed spans in batches without per-span updates, which is the highest-throughput strategy available.
+- **Columnar compression**: Span attributes and log payloads compress well compared to the same data in row-oriented databases.
+
+For the full strategy matrix and production guidance, see the [`DefaultExporter` reference](/docs/observability/tracing/exporters/default#storage-provider-support).
+
+## Related
+
+- [Storage overview](/reference/storage/overview)
+- [Composite storage](/reference/storage/composite)
+- [`DefaultExporter`](/docs/observability/tracing/exporters/default)
+- [Observability overview](/docs/observability/overview)
