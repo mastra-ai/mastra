@@ -60,6 +60,9 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SKILLS]: `ReplacingMergeTree()`,
   [TABLE_SKILL_VERSIONS]: `MergeTree()`,
   [TABLE_SKILL_BLOBS]: `ReplacingMergeTree()`,
+  mastra_background_tasks: `ReplacingMergeTree()`,
+  mastra_channel_installations: `ReplacingMergeTree()`,
+  mastra_channel_config: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

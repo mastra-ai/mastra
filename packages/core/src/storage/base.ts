@@ -15,6 +15,8 @@ import type {
   BlobStore,
   DatasetsStorage,
   ExperimentsStorage,
+  BackgroundTasksStorage,
+  ChannelsStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -22,6 +24,7 @@ export type StorageDomains = {
   workflows?: WorkflowsStorage;
   scores?: ScoresStorage;
   memory?: MemoryStorage;
+  channels?: ChannelsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
@@ -33,6 +36,7 @@ export type StorageDomains = {
   workspaces?: WorkspacesStorage;
   skills?: SkillsStorage;
   blobs?: BlobStore;
+  backgroundTasks?: BackgroundTasksStorage;
 };
 
 /**
@@ -285,6 +289,8 @@ export class MastraCompositeStore extends MastraBase {
         workspaces: resolve('workspaces'),
         skills: resolve('skills'),
         blobs: resolve('blobs'),
+        backgroundTasks: resolve('backgroundTasks'),
+        channels: resolve('channels'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -377,8 +383,15 @@ export class MastraCompositeStore extends MastraBase {
       initTasks.push(this.stores.blobs.init());
     }
 
-    this.hasInitialized = Promise.all(initTasks).then(() => true);
+    if (this.stores?.backgroundTasks) {
+      initTasks.push(this.stores.backgroundTasks.init());
+    }
 
+    if (this.stores?.channels) {
+      initTasks.push(this.stores.channels.init());
+    }
+
+    this.hasInitialized = Promise.all(initTasks).then(() => true);
     await this.hasInitialized;
   }
 }

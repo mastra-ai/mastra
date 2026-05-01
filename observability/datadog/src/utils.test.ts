@@ -9,8 +9,8 @@ import { formatInput, formatOutput, kindFor, toDate, safeStringify, SPAN_TYPE_TO
 describe('kindFor', () => {
   it.each([
     [SpanType.AGENT_RUN, 'agent'],
-    [SpanType.MODEL_GENERATION, 'llm'],
-    [SpanType.MODEL_STEP, 'task'],
+    [SpanType.MODEL_GENERATION, 'workflow'],
+    [SpanType.MODEL_STEP, 'llm'],
     [SpanType.MODEL_CHUNK, 'task'],
     [SpanType.TOOL_CALL, 'tool'],
     [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -47,7 +47,8 @@ describe('SPAN_TYPE_TO_KIND mapping', () => {
     // Verify that only the expected span types have explicit mappings
     const expectedMappings = {
       [SpanType.AGENT_RUN]: 'agent',
-      [SpanType.MODEL_GENERATION]: 'llm',
+      [SpanType.MODEL_GENERATION]: 'workflow',
+      [SpanType.MODEL_STEP]: 'llm',
       [SpanType.TOOL_CALL]: 'tool',
       [SpanType.MCP_TOOL_CALL]: 'tool',
       [SpanType.WORKFLOW_RUN]: 'workflow',
@@ -63,7 +64,6 @@ describe('SPAN_TYPE_TO_KIND mapping', () => {
   it('defaults unmapped types to task', () => {
     // These should not have explicit mappings and should fall back to 'task'
     const taskTypes = [
-      SpanType.MODEL_STEP,
       SpanType.MODEL_CHUNK,
       SpanType.WORKFLOW_STEP,
       SpanType.WORKFLOW_CONDITIONAL,

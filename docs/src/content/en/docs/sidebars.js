@@ -101,6 +101,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/background-tasks',
+          label: 'Background Tasks',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/processors',
           label: 'Processors',
         },
@@ -235,6 +243,30 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Editor',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'editor/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'editor/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'editor/prompts',
+          label: 'Prompts',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Streaming',
       items: [
         {
@@ -256,6 +288,14 @@ const sidebars = {
           type: 'doc',
           id: 'streaming/workflow-streaming',
           label: 'Workflow Streaming',
+        },
+        {
+          type: 'doc',
+          id: 'streaming/background-task-streaming',
+          label: 'Background Task Streaming',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },
@@ -279,9 +319,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -336,6 +373,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser/stagehand',
           label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/browser-viewer',
+          label: 'BrowserViewer',
         },
       ],
     },
@@ -654,30 +696,20 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
+      label: 'Mastra Platform',
       customProps: {
-        tags: ['beta'],
+        tags: ['new'],
       },
       items: [
         {
           type: 'doc',
-          id: 'mastra-cloud/overview',
+          id: 'mastra-platform/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },

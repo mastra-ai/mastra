@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EntityHeader } from './entity-header';
 import { Bot, Workflow, Database, Settings } from 'lucide-react';
 import { Badge } from '../Badge';
+import { EntityHeader } from './entity-header';
 
 const meta: Meta<typeof EntityHeader> = {
   title: 'Composite/EntityHeader',

@@ -11,11 +11,11 @@ import type {
   LanguageModelRequestMetadata,
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -375,6 +375,67 @@ interface IsTaskCompletePayload {
   suppressFeedback: boolean;
 }
 
+export interface BackgroundTaskStartedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+}
+
+export interface BackgroundTaskResultPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  agentId: string;
+  result: unknown;
+  runId: string;
+  completedAt: Date;
+  isError?: boolean;
+}
+
+export interface BackgroundTaskFailedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  error: { message: string };
+  completedAt: Date;
+}
+
+export interface BackgroundTaskProgressPayload {
+  taskIds: string[];
+  runningCount: number;
+  elapsedMs: number;
+}
+
+export interface BackgroundTaskRunningPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
+export interface BackgroundTaskCancelledPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  completedAt: Date;
+}
+
+export interface BackgroundTaskOutputPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  payload: Extract<AgentChunkType, { type: 'tool-output' }>;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -684,7 +745,35 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & {
+      type: 'background-task-started';
+      payload: BackgroundTaskStartedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-completed';
+      payload: BackgroundTaskResultPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-failed';
+      payload: BackgroundTaskFailedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-progress';
+      payload: BackgroundTaskProgressPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-running';
+      payload: BackgroundTaskRunningPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-cancelled';
+      payload: BackgroundTaskCancelledPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-output';
+      payload: BackgroundTaskOutputPayload;
+    });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
@@ -823,6 +912,8 @@ export type ModelManagerModelConfig = {
   maxRetries: number;
   id: string;
   headers?: Record<string, string>;
+  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  providerOptions?: SharedProviderOptions;
 };
 
 /**
@@ -832,6 +923,7 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:

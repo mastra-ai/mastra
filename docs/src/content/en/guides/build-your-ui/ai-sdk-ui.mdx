@@ -248,6 +248,40 @@ export default function Chat() {
 
 Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
+## Using Mastra Memory
+
+When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
+
+Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
+
+```typescript
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat/weatherAgent',
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          messages: [messages[messages.length - 1]],
+          memory: {
+            thread: 'user-thread-123',
+            resource: 'user-123',
+          },
+        },
+      }
+    },
+  }),
+})
+```
+
+Set `memory.thread` and `memory.resource` from your app's own state, such as URL params, auth context, or your database.
+
+See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
+
+[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) already work with memory. Configure the client to send only the new message and include the thread and resource identifiers.
+
 ### `useCompletion()`
 
 The `useCompletion()` hook handles single-turn completions between your frontend and a Mastra agent, allowing you to send a prompt and receive a streamed response over HTTP.
@@ -372,7 +406,8 @@ Mastra streams data to the frontend as "parts" within messages. Each part has a 
 | Data Part Type | Source | Description |
 | - | - | - |
 | `tool-{toolKey}` | AI SDK built-in | Tool invocation with states: `input-available`, `output-available`, `output-error` |
-| `data-workflow` | `workflowRoute()` | Workflow execution with step inputs, outputs, and status |
+| `data-workflow` | `workflowRoute()` | Workflow execution state snapshots with step status and final outputs |
+| `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the step that just changed |
 | `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
 | `data-tool-agent` | Nested agent in tool | Agent output streamed from within a tool's `execute()` |
 | `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
@@ -491,11 +526,11 @@ The tool part type follows the pattern `tool-{toolKey}`, where `toolKey` is the 
 
 ### Rendering workflow data
 
-When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts that contain the workflow's execution state, including step statuses and outputs.
+When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts for workflow state snapshots and `data-workflow-step` parts for the full payload of the step that just changed. This keeps long-running workflows from repeating every completed step output in every intermediate snapshot.
 
 <Tabs>
   <TabItem value="backend" label="Backend">
-    Define a workflow with multiple steps that will emit `data-workflow` parts as it executes.
+    Define a workflow with multiple steps that will emit `data-workflow` and `data-workflow-step` parts as it executes.
 
     ```typescript title="src/mastra/workflows/activities-workflow.ts"
     import { createStep, createWorkflow } from '@mastra/core/workflows'
@@ -570,14 +605,15 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   </TabItem>
 
   <TabItem value="frontend" label="Frontend">
-    Check for `data-workflow` parts and render each step's status and output using the `WorkflowDataPart` type for type safety.
+    Check for `data-workflow` parts to render workflow status snapshots. If you need the full payload for the step that just changed, also read `data-workflow-step` parts.
 
-    ```typescript title="src/components/workflow-chat.tsx" {3,5,45-47}
+    ```typescript title="src/components/workflow-chat.tsx" {3,5,6,48-50}
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
-    import type { WorkflowDataPart } from '@mastra/ai-sdk'
+    import type { WorkflowDataPart, WorkflowStepDataPart } from '@mastra/ai-sdk'
 
     type WorkflowData = WorkflowDataPart['data']
+    type WorkflowStepData = WorkflowStepDataPart['data']
     type StepStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting'
 
     function StepIndicator({
@@ -636,6 +672,17 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
                         />
                       ))}
                     </div>
+                  )
+                }
+                if (part.type === 'data-workflow-step') {
+                  const stepData = part.data as WorkflowStepData
+                  return (
+                    <StepIndicator
+                      key={index}
+                      name={stepData.step.name}
+                      status={stepData.step.status}
+                      output={stepData.step.output}
+                    />
                   )
                 }
                 return null
@@ -893,10 +940,10 @@ Tools can also stream data using `context.writer.write()` for lower-level contro
 
 For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-dojo.mastra.ai/). The repository includes implementations for:
 
-- [Generative UIs](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces.tsx) - Custom components for tool outputs
-- [Workflows](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow.tsx) - Workflow step visualization
-- [Agent Networks](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/network.tsx) - Network execution display
-- [Custom Events](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces-with-custom-events.tsx) - Progress indicators with custom events
+- [Generative UIs](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces.tsx): Custom components for tool outputs
+- [Workflows](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow.tsx): Workflow step visualization
+- [Agent Networks](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/network.tsx): Network execution display
+- [Custom Events](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces-with-custom-events.tsx): Progress indicators with custom events
 
 ## Recipes
 

@@ -302,9 +302,11 @@ export class DatadogExporter extends BaseExporter {
       annotations.outputData = formatOutput(span.output, span.type);
     }
 
-    // Add token usage metrics (only on MODEL_GENERATION or MODEL_STEP spans)
-    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_STEP) {
-      const usage = (span.attributes as ModelGenerationAttributes | ModelStepAttributes)?.usage;
+    // Add token usage metrics on MODEL_STEP spans only.
+    // MODEL_STEP is the actual LLM API call; MODEL_GENERATION is its parent wrapper.
+    // Reporting on both would double-count cost in Datadog.
+    if (span.type === SpanType.MODEL_STEP) {
+      const usage = (span.attributes as ModelStepAttributes)?.usage;
       const metrics = formatUsageMetrics(usage);
       if (metrics) {
         annotations.metrics = metrics;
@@ -646,14 +648,22 @@ export class DatadogExporter extends BaseExporter {
    * Builds LLMObs span options from a Mastra span.
    * Handles trace context, timestamps, and conditional model information for LLM spans.
    */
-  private buildSpanOptions(span: AnyExportedSpan): { traceOptions: LLMObsSpanOptions; endTimeMs: number } {
+  private buildSpanOptions(
+    span: AnyExportedSpan,
+    inheritedModelAttrs?: { model?: string; provider?: string },
+  ): { traceOptions: LLMObsSpanOptions; endTimeMs: number } {
     const traceCtx = this.traceContext.get(span.traceId) || {
       userId: span.metadata?.userId,
       sessionId: span.metadata?.sessionId,
     };
 
     const kind = kindFor(span.type);
-    const attrs = span.attributes as ModelGenerationAttributes | undefined;
+    // MODEL_GENERATION carries model/provider; MODEL_STEP children inherit it from their parent.
+    const ownAttrs = span.attributes as ModelGenerationAttributes | undefined;
+    const attrs = {
+      model: ownAttrs?.model ?? inheritedModelAttrs?.model,
+      provider: ownAttrs?.provider ?? inheritedModelAttrs?.provider,
+    };
 
     const startTime = toDate(span.startTime);
     // Event spans are point-in-time markers; use startTime for endTime if not set (zero duration)
@@ -681,9 +691,23 @@ export class DatadogExporter extends BaseExporter {
    * This ensures parent-child relationships are properly established in Datadog
    * because child spans are created while their parent span is active in scope.
    */
-  private emitSpanTree(node: SpanNode, state: TraceState): void {
+  private emitSpanTree(
+    node: SpanNode,
+    state: TraceState,
+    inheritedModelAttrs?: { model?: string; provider?: string },
+  ): void {
     const span = node.span;
-    const { traceOptions, endTimeMs } = this.buildSpanOptions(span);
+    const { traceOptions, endTimeMs } = this.buildSpanOptions(span, inheritedModelAttrs);
+
+    // If this is a MODEL_GENERATION, propagate its model/provider to MODEL_STEP descendants
+    // so the LLM-kind step spans in Datadog have a model name attached.
+    const childInheritedModelAttrs =
+      span.type === SpanType.MODEL_GENERATION
+        ? {
+            model: (span.attributes as ModelGenerationAttributes | undefined)?.model,
+            provider: (span.attributes as ModelGenerationAttributes | undefined)?.provider,
+          }
+        : inheritedModelAttrs;
 
     // Use nested llmobs.trace() calls - children are emitted INSIDE the parent's callback
     // This ensures the Datadog SDK automatically establishes parent-child relationships
@@ -706,7 +730,7 @@ export class DatadogExporter extends BaseExporter {
       // Recursively emit children INSIDE this span's callback
       // This is the key to establishing proper parent-child relationships
       for (const child of node.children) {
-        this.emitSpanTree(child, state);
+        this.emitSpanTree(child, state, childInheritedModelAttrs);
       }
 
       // Explicitly finish with the correct end time. dd-trace's llmobs.trace() does not

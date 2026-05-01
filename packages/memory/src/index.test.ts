@@ -1874,6 +1874,12 @@ describe('Memory', () => {
             content: {
               format: 2,
               parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                systemReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
             },
             createdAt: new Date('2024-01-01T10:07:00Z'),
           },

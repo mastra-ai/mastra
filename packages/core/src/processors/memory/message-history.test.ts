@@ -647,7 +647,7 @@ describe('MessageHistory', () => {
         expect.objectContaining({
           role: 'user',
           content: expect.objectContaining({
-            parts: [{ type: 'text', text: reminderMarkup }],
+            parts: [expect.objectContaining({ type: 'text', text: reminderMarkup })],
           }),
         }),
       );

@@ -1,0 +1,307 @@
+---
+title: "Reference: BrowserViewer | Browser"
+description: "API reference for BrowserViewer, a CLI-based browser provider that launches Chrome via Playwright and exposes a CDP URL for CLI tools."
+packages:
+  - "@mastra/browser-viewer"
+---
+
+# BrowserViewer
+
+The `BrowserViewer` class provides browser automation for CLI-based tools. It launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through workspace tools.
+
+Use `BrowserViewer` when your agent drives a browser through a CLI tool like `browser-use`, `agent-browser`, or `browse`. For SDK-based browser automation, use [`AgentBrowser`](/reference/browser/agent-browser) or [`StagehandBrowser`](/reference/browser/stagehand-browser).
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+import { BrowserViewer } from '@mastra/browser-viewer'
+import { Agent } from '@mastra/core/agent'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  browser: new BrowserViewer({
+    cli: 'browser-use',
+    headless: false,
+  }),
+})
+
+const browserAgent = new Agent({
+  id: 'browser-agent',
+  model: 'openai/gpt-5.4',
+  workspace,
+  instructions: 'You are a web automation assistant.',
+})
+```
+
+### Connecting to an existing browser
+
+```typescript
+const viewer = new BrowserViewer({
+  cli: 'browser-use',
+  cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
+})
+```
+
+When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser instead of launching a new one. Scope defaults to `'shared'`.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cli',
+    type: "'agent-browser' | 'browser-use' | 'browse-cli'",
+    description: 'Which CLI the agent uses for browser automation. The CLI connects to Chrome via the CDP URL.',
+  },
+  {
+    name: 'headless',
+    type: 'boolean',
+    description: 'Whether to run Chrome in headless mode.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'cdpUrl',
+    type: 'string | (() => string | Promise<string>)',
+    description: 'CDP WebSocket URL for connecting to an existing browser instead of launching one.',
+    isOptional: true,
+  },
+  {
+    name: 'cdpPort',
+    type: 'number',
+    description: 'Port for Chrome remote debugging. Only used when launching Chrome (not when connecting via cdpUrl).',
+    isOptional: true,
+    defaultValue: '0 (auto-assign)',
+  },
+  {
+    name: 'scope',
+    type: "'shared' | 'thread'",
+    description:
+      "Browser instance scope. 'thread' gives each thread its own browser. 'shared' shares one browser across all threads. Defaults to 'shared' when cdpUrl is provided.",
+    isOptional: true,
+    defaultValue: "'thread'",
+  },
+  {
+    name: 'viewport',
+    type: '{ width: number; height: number }',
+    description: 'Browser viewport dimensions.',
+    isOptional: true,
+    defaultValue: '{ width: 1280, height: 720 }',
+  },
+  {
+    name: 'executablePath',
+    type: 'string',
+    description: "Path to a Chrome executable. Uses Playwright's bundled Chromium by default.",
+    isOptional: true,
+  },
+  {
+    name: 'onLaunch',
+    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+    description: 'Callback invoked after the browser is ready.',
+    isOptional: true,
+  },
+  {
+    name: 'onClose',
+    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+    description: 'Callback invoked before the browser closes.',
+    isOptional: true,
+  },
+  {
+    name: 'screencast',
+    type: 'ScreencastOptions',
+    description: 'Configuration for streaming browser frames to Studio.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: "Unique identifier for this browser instance. Generated as 'browser-viewer-{timestamp}'.",
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "'BrowserViewer'",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "'browser-viewer'",
+  },
+  {
+    name: 'providerType',
+    type: "'cli'",
+    description: "Always 'cli'. Distinguishes BrowserViewer from SDK-based providers like AgentBrowser.",
+  },
+  {
+    name: 'cli',
+    type: "'agent-browser' | 'browser-use' | 'browse-cli'",
+    description: 'The CLI provider this instance is configured for.',
+  },
+  {
+    name: 'status',
+    type: 'BrowserStatus',
+    description: "Current browser status: 'pending', 'launching', 'ready', 'error', 'closing', or 'closed'.",
+  },
+]}
+/>
+
+## Methods
+
+### Lifecycle
+
+#### `launch(threadId?)`
+
+Launches Chrome. For `'shared'` scope, launches a single shared browser. For `'thread'` scope, launches a browser for the specified thread.
+
+```typescript
+await viewer.launch()
+await viewer.launch('thread-123')
+```
+
+#### `ensureReady()`
+
+Ensures the browser is launched and ready. For `'thread'` scope, creates a new browser for the current thread if needed.
+
+```typescript
+await viewer.ensureReady()
+```
+
+#### `isBrowserRunning(threadId?)`
+
+Checks if a browser is running. For `'thread'` scope, checks the specified thread.
+
+```typescript
+const running = viewer.isBrowserRunning()
+const threadRunning = viewer.isBrowserRunning('thread-123')
+```
+
+Returns: `boolean`
+
+#### `close()`
+
+Closes all browser instances and cleans up resources.
+
+```typescript
+await viewer.close()
+```
+
+### CDP access
+
+#### `getCdpUrl(threadId?)`
+
+Returns the CDP WebSocket URL for the current or specified thread. CLI tools use this URL to connect to the managed browser.
+
+```typescript
+const cdpUrl = viewer.getCdpUrl()
+// => 'ws://127.0.0.1:52481/devtools/browser/abc...'
+```
+
+Returns: `string | null`
+
+#### `connectToExternalCdp(cdpUrl, threadId?)`
+
+Connects to an external browser via CDP URL for screencast. Use this when the agent provides its own browser endpoint (for example, a cloud browser service). BrowserViewer connects for screencast without managing the browser lifecycle.
+
+```typescript
+await viewer.connectToExternalCdp('wss://cloud.example.com/session', 'thread-123')
+```
+
+### Screencast
+
+#### `startScreencast(options?)`
+
+Starts streaming browser frames. Returns a `ScreencastStream` that emits frame events. Handles tab switching automatically by creating fresh CDP sessions when tabs change.
+
+```typescript
+const stream = await viewer.startScreencast({
+  format: 'jpeg',
+  quality: 80,
+})
+
+stream.on('frame', frame => {
+  console.log('Frame received:', frame.data.length, 'bytes')
+})
+
+stream.on('stop', reason => {
+  console.log('Screencast stopped:', reason)
+})
+```
+
+Returns: `Promise<ScreencastStream>`
+
+### Input injection
+
+#### `injectMouseEvent(params, threadId?)`
+
+Injects a mouse event into the browser via CDP. Used by Studio for live interaction.
+
+```typescript
+await viewer.injectMouseEvent({
+  type: 'mousePressed',
+  x: 100,
+  y: 200,
+  button: 'left',
+  clickCount: 1,
+})
+```
+
+#### `injectKeyboardEvent(params, threadId?)`
+
+Injects a keyboard event into the browser via CDP. Used by Studio for live interaction.
+
+```typescript
+await viewer.injectKeyboardEvent({
+  type: 'keyDown',
+  key: 'Enter',
+  code: 'Enter',
+})
+```
+
+## Supported CLIs
+
+Each CLI must be installed separately. Each also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the correct flag.
+
+Unlike SDK providers, `BrowserViewer` does not provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
+
+### [agent-browser](https://www.npmjs.com/package/agent-browser)
+
+Config value: `'agent-browser'` · CDP flag: `--cdp`
+
+```bash
+npm install -g agent-browser
+npx skills add vercel-labs/agent-browser
+```
+
+### [browser-use](https://pypi.org/project/browser-use/)
+
+Config value: `'browser-use'` · CDP flag: `--cdp-url`
+
+```bash
+pip install browser-use
+npx skills add browser-use/browser-use --skill browser-use
+```
+
+### [browse-cli](https://www.npmjs.com/package/@browserbasehq/browse-cli) (command: `browse`)
+
+Config value: `'browse-cli'` · CDP flag: `--ws`
+
+```bash
+npm install -g @browserbasehq/browse-cli
+npx skills add browserbase/skills
+```
+
+## Related
+
+- [BrowserViewer guide](/docs/browser/browser-viewer) — setup and usage walkthrough
+- [MastraBrowser](/reference/browser/mastra-browser) — base class API reference
+- [Workspace overview](/docs/workspace/overview) — workspace configuration

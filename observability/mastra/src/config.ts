@@ -15,7 +15,9 @@ import type {
   SerializationOptions,
   CardinalityConfig,
   LogLevel,
+  AnyExportedSpan,
 } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { z } from 'zod/v4';
 
 // ============================================================================
@@ -72,6 +74,36 @@ export interface ObservabilityInstanceConfig {
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
+   * Span types to exclude from export. Spans of these types are silently dropped
+   * before reaching exporters. This is useful for reducing noise and costs in
+   * observability platforms that charge per-span (e.g., Langfuse).
+   *
+   * @example
+   * ```typescript
+   * excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP]
+   * ```
+   */
+  excludeSpanTypes?: SpanType[];
+  /**
+   * Filter function to control which spans are exported. Return `true` to keep
+   * the span, `false` to drop it. This runs after `excludeSpanTypes` and
+   * `spanOutputProcessors`, giving you access to the final exported span data
+   * for fine-grained filtering by type, attributes, entity, metadata, or any
+   * combination.
+   *
+   * @example
+   * ```typescript
+   * spanFilter: (span) => {
+   *   // Drop all model chunks
+   *   if (span.type === SpanType.MODEL_CHUNK) return false;
+   *   // Only keep tool calls that failed
+   *   if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+   *   return true;
+   * }
+   * ```
+   */
+  spanFilter?: (span: AnyExportedSpan) => boolean;
+  /**
    * RequestContext keys to automatically extract as metadata for all spans
    * created with this tracing configuration.
    * Supports dot notation for nested values.
@@ -95,7 +127,7 @@ export interface ObservabilityInstanceConfig {
   logging?: {
     /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
     enabled?: boolean;
-    /** Minimum log level to write to observability storage. Defaults to `'debug'`. */
+    /** Minimum log level to write to observability storage. Defaults to `'warn'`. */
     level?: LogLevel;
   };
 }
@@ -154,6 +186,44 @@ export const serializationOptionsSchema = z
   })
   .optional();
 
+const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'fatal'] as const;
+
+const cardinalityConfigSchema = z
+  .object({
+    blockedLabels: z.array(z.string()).optional(),
+    blockUUIDs: z.boolean().optional(),
+  })
+  .optional();
+
+const loggingConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    level: z.enum(LOG_LEVELS).optional(),
+  })
+  .optional();
+
+const spanFilterSchema = z
+  .function({
+    input: z.tuple([z.any()]),
+    output: z.boolean(),
+  })
+  .optional();
+
+const observabilityInstanceConfigFields = {
+  serviceName: z.string().min(1, 'Service name is required'),
+  sampling: samplingStrategySchema.optional(),
+  exporters: z.array(z.any()).optional(),
+  bridge: z.any().optional(),
+  spanOutputProcessors: z.array(z.any()).optional(),
+  includeInternalSpans: z.boolean().optional(),
+  excludeSpanTypes: z.array(z.nativeEnum(SpanType)).optional(),
+  spanFilter: spanFilterSchema,
+  requestContextKeys: z.array(z.string()).optional(),
+  serializationOptions: serializationOptionsSchema,
+  cardinality: cardinalityConfigSchema,
+  logging: loggingConfigSchema,
+};
+
 /**
  * Zod schema for ObservabilityInstanceConfig
  * Note: exporters, spanOutputProcessors, bridge, and configSelector are validated as any
@@ -162,15 +232,7 @@ export const serializationOptionsSchema = z
 export const observabilityInstanceConfigSchema = z
   .object({
     name: z.string().min(1, 'Name is required'),
-    serviceName: z.string().min(1, 'Service name is required'),
-    sampling: samplingStrategySchema.optional(),
-    exporters: z.array(z.any()).optional(),
-    bridge: z.any().optional(),
-    spanOutputProcessors: z.array(z.any()).optional(),
-    includeInternalSpans: z.boolean().optional(),
-    requestContextKeys: z.array(z.string()).optional(),
-    serializationOptions: serializationOptionsSchema,
-    cardinality: z.any().optional(),
+    ...observabilityInstanceConfigFields,
   })
   .refine(
     data => {
@@ -188,28 +250,17 @@ export const observabilityInstanceConfigSchema = z
  * Zod schema for config values in the configs map
  * This is the config object without the name field
  */
-export const observabilityConfigValueSchema = z
-  .object({
-    serviceName: z.string().min(1, 'Service name is required'),
-    sampling: samplingStrategySchema.optional(),
-    exporters: z.array(z.any()).optional(),
-    bridge: z.any().optional(),
-    spanOutputProcessors: z.array(z.any()).optional(),
-    includeInternalSpans: z.boolean().optional(),
-    requestContextKeys: z.array(z.string()).optional(),
-    serializationOptions: serializationOptionsSchema,
-  })
-  .refine(
-    data => {
-      // At least one exporter or a bridge must be provided
-      const hasExporters = data.exporters && data.exporters.length > 0;
-      const hasBridge = !!data.bridge;
-      return hasExporters || hasBridge;
-    },
-    {
-      message: 'At least one exporter or a bridge is required',
-    },
-  );
+export const observabilityConfigValueSchema = z.object(observabilityInstanceConfigFields).refine(
+  data => {
+    // At least one exporter or a bridge must be provided
+    const hasExporters = data.exporters && data.exporters.length > 0;
+    const hasBridge = !!data.bridge;
+    return hasExporters || hasBridge;
+  },
+  {
+    message: 'At least one exporter or a bridge is required',
+  },
+);
 
 /**
  * Zod schema for ObservabilityRegistryConfig

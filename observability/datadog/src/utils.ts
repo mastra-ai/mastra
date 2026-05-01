@@ -16,7 +16,12 @@ export type DatadogSpanKind = 'llm' | 'agent' | 'workflow' | 'tool' | 'task' | '
  */
 export const SPAN_TYPE_TO_KIND: Partial<Record<SpanType, DatadogSpanKind>> = {
   [SpanType.AGENT_RUN]: 'agent',
-  [SpanType.MODEL_GENERATION]: 'llm',
+  // MODEL_GENERATION is the wrapper around 1..N MODEL_STEPs (the actual API calls).
+  // It maps to 'workflow' so Datadog doesn't double-count it as an LLM call.
+  [SpanType.MODEL_GENERATION]: 'workflow',
+  // MODEL_STEP is "Single model execution step within a generation (one API call)"
+  // per packages/core/src/observability/types/tracing.ts, so it is the real LLM span.
+  [SpanType.MODEL_STEP]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_RUN]: 'workflow',

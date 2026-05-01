@@ -24,7 +24,8 @@ const browser = new AgentBrowser({
 })
 
 export const browserAgent = new Agent({
-  name: 'browser-agent',
+  id: 'browser-agent',
+  name: 'Browser Agent',
   instructions: `You can browse the web. Use browser_snapshot to see the page structure,
 then interact with elements using their refs (e.g., @e5).`,
   model: 'openai/gpt-5.4',

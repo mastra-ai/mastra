@@ -1,84 +1,88 @@
-import type { LogRecord, FeaturedIds, LogsDatePreset } from '@mastra/playground-ui';
 import {
-  MainHeader,
-  LogsList,
+  ButtonWithTooltip,
+  DateTimeRangePicker,
+  LogDetailsView,
+  LogsErrorContent,
+  LogsLayout,
+  LogsListView,
   LogsToolbar,
-  isValidLogsDatePreset,
-  useLogsFilters,
-  EntityListPageLayout,
+  NoDataPageLayout,
+  NoLogsInfo,
+  PageHeader,
+  PageLayout,
+  PropertyFilterCreator,
+  SpanDetailsView,
+  TraceDetailsView,
+  buildLogsListFilters,
+  createLogsPropertyFilterFields,
+  neutralizeLogsFilterTokens,
+  useEntityNames,
+  useEnvironments,
+  useLogs,
+  useLogsFilterPersistence,
+  useLogsListNavigation,
+  useLogsUrlState,
+  useServiceNames,
+  useSpanDetail,
+  useTags,
+  useTraceLightSpans,
 } from '@mastra/playground-ui';
-import { LogsIcon } from 'lucide-react';
-import { useMemo, useCallback } from 'react';
+import { BookIcon, LogsIcon } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useLogs } from '@/domains/logs/hooks/use-logs';
 
-const PERIOD_PARAM = 'period';
-const LOG_PARAM = 'logId';
-const TRACE_PARAM = 'traceId';
-const SPAN_PARAM = 'spanId';
-
-const PRESET_TO_MS: Record<LogsDatePreset, number> = {
-  '24h': 24 * 60 * 60 * 1000,
-  '3d': 3 * 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
-  '14d': 14 * 24 * 60 * 60 * 1000,
-  '30d': 30 * 24 * 60 * 60 * 1000,
-};
-
-export default function Logs() {
+export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const url = useLogsUrlState(searchParams, setSearchParams);
+  const persistence = useLogsFilterPersistence(searchParams, setSearchParams);
 
-  const urlPreset = searchParams.get(PERIOD_PARAM);
-  const datePreset = isValidLogsDatePreset(urlPreset) ? urlPreset : '24h';
+  const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
+  const [logDetailsCollapsed, setLogDetailsCollapsed] = useState(false);
 
-  const featuredLogId = searchParams.get(LOG_PARAM);
-  const featuredTraceId = searchParams.get(TRACE_PARAM);
-  const featuredSpanId = searchParams.get(SPAN_PARAM);
+  const { data: availableTags = [], isPending: isTagsLoading } = useTags();
+  const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
+    entityType: url.selectedEntityOption?.entityType,
+    rootOnly: true,
+  });
+  const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
+  const { data: discoveredServiceNames = [], isPending: isServiceNamesLoading } = useServiceNames();
 
-  const handleTimePeriodChange = useCallback(
-    (preset: LogsDatePreset) => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          if (preset === '24h') {
-            next.delete(PERIOD_PARAM);
-          } else {
-            next.set(PERIOD_PARAM, preset);
-          }
-          return next;
+  const filterFields = useMemo(
+    () =>
+      createLogsPropertyFilterFields({
+        availableTags,
+        availableRootEntityNames: rootEntityNameSuggestions,
+        availableServiceNames: discoveredServiceNames,
+        availableEnvironments: discoveredEnvironments,
+        loading: {
+          tags: isTagsLoading,
+          entityNames: isEntityNamesLoading,
+          serviceNames: isServiceNamesLoading,
+          environments: isEnvironmentsLoading,
         },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
+      }),
+    [
+      availableTags,
+      rootEntityNameSuggestions,
+      discoveredServiceNames,
+      discoveredEnvironments,
+      isTagsLoading,
+      isEntityNamesLoading,
+      isServiceNamesLoading,
+      isEnvironmentsLoading,
+    ],
   );
 
-  const handleFeaturedChange = useCallback(
-    (ids: FeaturedIds) => {
-      setSearchParams(
-        prev => {
-          const next = new URLSearchParams(prev);
-          for (const [field, value] of Object.entries(ids)) {
-            const param = field === 'logId' ? LOG_PARAM : field === 'traceId' ? TRACE_PARAM : SPAN_PARAM;
-            if (value) {
-              next.set(param, value);
-            } else {
-              next.delete(param);
-            }
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
+  const logsFilters = useMemo(
+    () =>
+      buildLogsListFilters({
+        rootEntityType: url.selectedEntityOption?.entityType,
+        dateFrom: url.selectedDateFrom,
+        dateTo: url.selectedDateTo,
+        tokens: url.filterTokens,
+      }),
+    [url.filterTokens, url.selectedDateFrom, url.selectedDateTo, url.selectedEntityOption],
   );
-
-  const logsFilters = useMemo(() => {
-    const ms = PRESET_TO_MS[datePreset];
-    if (!ms) return undefined;
-    return { timestamp: { start: new Date(Date.now() - ms) } };
-  }, [datePreset]);
 
   const {
     data: logs = [],
@@ -89,62 +93,163 @@ export default function Logs() {
     setEndOfListElement,
   } = useLogs({ filters: logsFilters });
 
-  const {
-    searchQuery,
-    setSearchQuery,
-    filterGroups,
-    filterColumns,
-    toggleComparator,
-    removeFilterGroup,
-    clearAllFilters,
-    updateFilterGroups,
-    filteredLogs,
-  } = useLogsFilters(logs as LogRecord[]);
+  const { logIdMap, featuredLog, handleLogClick, handlePreviousLog, handleNextLog } = useLogsListNavigation(
+    logs,
+    url.featuredLogId,
+    url.handleFeaturedChange,
+    url.featuredTraceId,
+  );
+
+  const { data: lightSpansData, isLoading: isLoadingLightSpans } = useTraceLightSpans(url.featuredTraceId ?? null);
+  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(
+    url.featuredTraceId ?? '',
+    url.featuredSpanId ?? '',
+  );
+
+  const handleClear = useCallback(
+    () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),
+    [filterFields, url],
+  );
+
+  const handleLogClose = useCallback(() => url.handleFeaturedChange({ logId: null }), [url]);
+  const handleTraceClick = useCallback((traceId: string) => url.handleFeaturedChange({ traceId, spanId: null }), [url]);
+  const handleSpanClick = useCallback(
+    (traceId: string, spanId: string) => url.handleFeaturedChange({ traceId, spanId }),
+    [url],
+  );
+  const handleTraceClose = useCallback(() => {
+    url.handleFeaturedChange({ traceId: null, spanId: null });
+    setLogDetailsCollapsed(false);
+  }, [url]);
+  const handleSpanClose = useCallback(() => url.handleFeaturedChange({ spanId: null }), [url]);
+  const handleSpanSelect = useCallback(
+    (spanId: string | undefined) => url.handleFeaturedChange({ spanId: spanId ?? null }),
+    [url],
+  );
+
+  if (logsError) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
+      </NoDataPageLayout>
+    );
+  }
+
+  const hasActiveFilters = url.filterTokens.length > 0 || url.datePreset !== 'last-24h' || !!url.selectedDateTo;
+
+  if (logs.length === 0 && !isLoadingLogs && !hasActiveFilters) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <NoLogsInfo />
+      </NoDataPageLayout>
+    );
+  }
 
   return (
-    <EntityListPageLayout className="max-w-none">
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>
-              <LogsIcon /> Logs
-            </MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoadingLogs}>
+                <LogsIcon /> Logs
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end items-center gap-2">
+            <DateTimeRangePicker
+              preset={url.datePreset}
+              onPresetChange={url.handleDatePresetChange}
+              dateFrom={url.selectedDateFrom}
+              dateTo={url.selectedDateTo}
+              onDateChange={url.handleDateChange}
+              disabled={isLoadingLogs}
+              presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+            />
+            <PropertyFilterCreator
+              fields={filterFields}
+              tokens={url.filterTokens}
+              onTokensChange={url.handleFilterTokensChange}
+              disabled={isLoadingLogs}
+              onStartTextFilter={setAutoFocusFilterFieldId}
+            />
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/observability/logs/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Logs documentation"
+              tooltipContent="Go to Logs documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
 
         <LogsToolbar
-          onSearchChange={setSearchQuery}
-          datePreset={datePreset}
-          onDatePresetChange={handleTimePeriodChange}
-          filterGroups={filterGroups}
-          filterColumns={filterColumns}
-          onToggleComparator={toggleComparator}
-          onRemoveFilterGroup={removeFilterGroup}
-          onClearAllFilters={clearAllFilters}
-          onFilterGroupsChange={updateFilterGroups}
-          onReset={() => {
-            setSearchQuery('');
-            clearAllFilters();
-            handleTimePeriodChange('24h');
-          }}
           isLoading={isLoadingLogs}
-          hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h'}
+          filterFields={filterFields}
+          filterTokens={url.filterTokens}
+          onFilterTokensChange={url.handleFilterTokensChange}
+          onClear={handleClear}
+          onRemoveAll={url.handleRemoveAll}
+          onSave={persistence.handleSave}
+          onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
+          autoFocusFilterFieldId={autoFocusFilterFieldId}
         />
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
-      <LogsList
-        logs={filteredLogs}
-        isLoading={isLoadingLogs}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        error={logsError instanceof Error ? logsError : null}
-        hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0}
-        featuredLogId={featuredLogId}
-        featuredTraceId={featuredTraceId}
-        featuredSpanId={featuredSpanId}
-        onFeaturedChange={handleFeaturedChange}
+      <LogsLayout
+        logCollapsed={logDetailsCollapsed}
+        listSlot={
+          <LogsListView
+            logs={logs}
+            isLoading={isLoadingLogs}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+            setEndOfListElement={setEndOfListElement}
+            logIdMap={logIdMap}
+            featuredLogId={url.featuredLogId}
+            onLogClick={handleLogClick}
+          />
+        }
+        logPanelSlot={
+          featuredLog ? (
+            <LogDetailsView
+              log={featuredLog}
+              onClose={handleLogClose}
+              onTraceClick={handleTraceClick}
+              onSpanClick={handleSpanClick}
+              onPrevious={handlePreviousLog}
+              onNext={handleNextLog}
+              collapsed={logDetailsCollapsed}
+              onCollapsedChange={setLogDetailsCollapsed}
+            />
+          ) : null
+        }
+        tracePanelSlot={
+          url.featuredTraceId ? (
+            <TraceDetailsView
+              traceId={url.featuredTraceId}
+              spans={lightSpansData?.spans}
+              isLoading={isLoadingLightSpans}
+              onClose={handleTraceClose}
+              onSpanSelect={handleSpanSelect}
+              selectedSpanId={url.featuredSpanId}
+            />
+          ) : null
+        }
+        spanPanelSlot={
+          url.featuredTraceId && url.featuredSpanId ? (
+            <SpanDetailsView
+              spanId={url.featuredSpanId}
+              span={spanDetailData?.span}
+              isLoading={isLoadingSpanDetail}
+              onClose={handleSpanClose}
+            />
+          ) : null
+        }
       />
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }

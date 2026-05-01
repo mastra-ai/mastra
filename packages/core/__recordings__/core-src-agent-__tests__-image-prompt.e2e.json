@@ -1,9 +1,10 @@
 {
   "meta": {
     "name": "core-src-agent-__tests__-image-prompt.e2e",
-    "testFile": "packages/core/src/agent/__tests__/image-prompt.e2e.test.ts",
+    "testFile": "src/agent/__tests__/image-prompt.e2e.test.ts",
     "model": "gpt-4o",
-    "createdAt": "2026-03-09T19:12:47.438Z"
+    "createdAt": "2026-03-09T19:12:47.438Z",
+    "updatedAt": "2026-03-24T15:26:48.518Z"
   },
   "recordings": [
     {
@@ -36,7 +37,7 @@
             }
           ]
         },
-        "timestamp": 1773083563263
+        "timestamp": 1774366005188
       },
       "response": {
         "status": 200,
@@ -45,40 +46,40 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9d9c648efe7dba7b-BRU",
+          "cf-ray": "9e16b22d5b50b72d-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 09 Mar 2026 19:12:45 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1579",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:26:46 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "684",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-input-images": "50000",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
           "x-ratelimit-remaining-input-images": "49999",
-          "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "1999225",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "29225",
           "x-ratelimit-reset-input-images": "1ms",
-          "x-ratelimit-reset-requests": "6ms",
-          "x-ratelimit-reset-tokens": "23ms",
-          "x-request-id": "req_41f77e967c394a5cadd20b84dd8be83d"
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "1.55s",
+          "x-request-id": "req_7fb02990d3384e7c8b8878e4fbddf45b"
         },
         "body": {
-          "id": "chatcmpl-DHaJwdGs44eBegVmj30ivGe5OFdcG",
+          "id": "chatcmpl-DMxwUHDdMcy0hhKZGQVetvGUlkwzz",
           "object": "chat.completion",
-          "created": 1773083564,
+          "created": 1774366006,
           "model": "gpt-4o-2024-08-06",
           "choices": [
             {
               "index": 0,
               "message": {
                 "role": "assistant",
-                "content": "This is the logo of Google.",
+                "content": "This is the Google logo.",
                 "refusal": null,
                 "annotations": []
               },
@@ -88,8 +89,8 @@
           ],
           "usage": {
             "prompt_tokens": 273,
-            "completion_tokens": 7,
-            "total_tokens": 280,
+            "completion_tokens": 6,
+            "total_tokens": 279,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -102,7 +103,7 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_c7a156cce7"
+          "system_fingerprint": "fp_589c9f9262"
         },
         "isStreaming": false
       }
@@ -135,7 +136,7 @@
           ],
           "temperature": 0
         },
-        "timestamp": 1773083565437
+        "timestamp": 1774366006917
       },
       "response": {
         "status": 200,
@@ -143,35 +144,35 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9d9c649c3824ba7b-BRU",
+          "cf-ray": "9e16b2375f11b72d-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 09 Mar 2026 19:12:47 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1821",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:26:48 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1423",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "2000000",
-          "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "1999235",
-          "x-ratelimit-reset-requests": "6ms",
-          "x-ratelimit-reset-tokens": "22ms",
-          "x-request-id": "req_56acf88943da4716b146c42dd3d219f2"
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "28868",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "2.263s",
+          "x-request-id": "req_f0a5ef320e104cf281a231b1f2211764"
         },
         "body": {
-          "id": "resp_070d53963c19685a0069af1bad8f6081969c9a81343c9124c2",
+          "id": "resp_023aeb6fc01788720069c2ad3703c8819681914e68197e498d",
           "object": "response",
-          "created_at": 1773083565,
+          "created_at": 1774366007,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1773083567,
+          "completed_at": 1774366008,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -181,7 +182,7 @@
           "model": "gpt-4o-2024-08-06",
           "output": [
             {
-              "id": "msg_070d53963c19685a0069af1baef77c8196bb0da9ddc8bf3005",
+              "id": "msg_023aeb6fc01788720069c2ad3838708196a8597dbee316d2b1",
               "type": "message",
               "status": "completed",
               "content": [

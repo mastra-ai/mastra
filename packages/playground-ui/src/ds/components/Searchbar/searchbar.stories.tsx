@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Searchbar, SearchbarWrapper } from './searchbar';
 import { useState } from 'react';
+import { Searchbar, SearchbarWrapper } from './searchbar';
 
 const meta: Meta<typeof Searchbar> = {
   title: 'Composite/Searchbar',

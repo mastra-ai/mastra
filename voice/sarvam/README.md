@@ -23,16 +23,16 @@ import { SarvamVoice } from '@mastra/voice-sarvam';
 
 const voice = new SarvamVoice({
   speechModel: {
-    model: 'bulbul:v1',
+    model: 'bulbul:v3',
     apiKey: process.env.SARVAM_API_KEY!,
     language: 'en-IN',
   },
   listeningModel: {
     apiKey: process.env.SARVAM_API_KEY!,
-    model: 'saarika:v2',
-    languageCode: 'unknown', // By default only works with saarika:v2
+    model: 'saarika:v2.5',
+    languageCode: 'unknown',
   },
-  speaker: 'meera',
+  speaker: 'shubh',
 });
 
 // Create an agent with voice capabilities
@@ -78,26 +78,21 @@ const text = await voice.listen(audioStream);
 ## Features
 
 - High-quality Text-to-Speech and Speech-to-Text synthesis
-- Support for 10+ Indian languages
-- Choice of 10+ diverse speakers
-- Advanced voice customization options
+- Support for 11 Indian languages
+- 46 speakers across `bulbul:v2` and `bulbul:v3`
+- Multi-mode Speech-to-Text via `saaras:v3` (transcribe, translate, verbatim, translit, codemix)
 
 ## Available Voices
 
-### Speakers
+Speaker catalogs are not interchangeable between `bulbul:v2` and `bulbul:v3` — pick a speaker compatible with your selected TTS model.
 
-- `meera` (default)
-- `pavithra`
-- `maitreyi`
-- `arvind`
-- `amol`
-- `amartya`
-- `diya`
-- `neel`
-- `misha`
-- `vian`
-- `arjun`
-- `maya`
+### Speakers for `bulbul:v3` and `bulbul:v3-beta` (39 voices)
+
+`shubh` (default), `aditya`, `ritu`, `priya`, `neha`, `rahul`, `pooja`, `rohan`, `simran`, `kavya`, `amit`, `dev`, `ishita`, `shreya`, `ratan`, `varun`, `manan`, `sumit`, `roopa`, `kabir`, `aayan`, `ashutosh`, `advait`, `amelia`, `sophia`, `anand`, `tanya`, `tarun`, `sunny`, `mani`, `gokul`, `vijay`, `shruti`, `suhani`, `mohit`, `kavitha`, `rehan`, `soham`, `rupali`
+
+### Speakers for `bulbul:v2` (7 voices)
+
+`anushka` (default), `manisha`, `vidya`, `arya`, `abhilash`, `karun`, `hitesh`
 
 ### Languages
 

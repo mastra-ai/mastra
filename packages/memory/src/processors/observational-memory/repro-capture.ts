@@ -9,7 +9,9 @@ import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastr
 
 import type { ObserverExchange } from './observer-runner';
 
-const OM_REPRO_CAPTURE_DIR = process.env.OM_REPRO_CAPTURE_DIR ?? '.mastra-om-repro';
+function getOmReproCaptureDir(): string {
+  return process.env.OM_REPRO_CAPTURE_DIR ?? '.mastra-om-repro';
+}
 
 function sanitizeCapturePathSegment(value: string): string {
   const sanitized = value
@@ -236,6 +238,83 @@ function inferReproIdRemap(
   return remap;
 }
 
+function createOmReproCaptureDir(threadId: string, label: string): string {
+  const sanitizedThreadId = sanitizeCapturePathSegment(threadId);
+  const captureDir = join(
+    process.cwd(),
+    getOmReproCaptureDir(),
+    sanitizedThreadId,
+    `${Date.now()}-${label}-${randomUUID()}`,
+  );
+  mkdirSync(captureDir, { recursive: true });
+  return captureDir;
+}
+
+export function writeObserverExchangeReproCapture(params: {
+  threadId: string;
+  resourceId?: string;
+  label: string;
+  observerExchange?: ObserverExchange;
+  details?: Record<string, unknown>;
+  debug?: (message: string) => void;
+}) {
+  if (!isOmReproCaptureEnabled() || !params.observerExchange) {
+    return;
+  }
+
+  try {
+    const captureDir = createOmReproCaptureDir(params.threadId, params.label);
+    const payloads = [
+      {
+        fileName: 'input.json',
+        data: {
+          threadId: params.threadId,
+          resourceId: params.resourceId,
+          label: params.label,
+        },
+      },
+      {
+        fileName: 'output.json',
+        data: {
+          details: params.details ?? {},
+        },
+      },
+      {
+        fileName: 'observer-exchange.json',
+        data: params.observerExchange,
+      },
+    ] as const;
+
+    const captureErrors: Array<{ fileName: string; error: unknown }> = [];
+
+    for (const payload of payloads) {
+      const serialized = safeCaptureJsonOrError(payload.data);
+      if (serialized.ok) {
+        writeFileSync(join(captureDir, payload.fileName), `${JSON.stringify(serialized.value, null, 2)}\n`);
+        continue;
+      }
+
+      captureErrors.push({ fileName: payload.fileName, error: serialized.error });
+      writeFileSync(
+        join(captureDir, payload.fileName),
+        `${JSON.stringify({ __captureError: serialized.error }, null, 2)}\n`,
+      );
+    }
+
+    if (captureErrors.length > 0) {
+      writeFileSync(join(captureDir, 'capture-error.json'), `${JSON.stringify(captureErrors, null, 2)}\n`);
+      params.debug?.(
+        `[OM:repro-capture] wrote ${params.label} capture with ${captureErrors.length} serialization error(s) to ${captureDir}`,
+      );
+      return;
+    }
+
+    params.debug?.(`[OM:repro-capture] wrote ${params.label} capture to ${captureDir}`);
+  } catch (error) {
+    params.debug?.(`[OM:repro-capture] failed to write ${params.label} capture: ${String(error)}`);
+  }
+}
+
 export function writeProcessInputStepReproCapture(params: {
   threadId: string;
   resourceId?: string;
@@ -259,10 +338,7 @@ export function writeProcessInputStepReproCapture(params: {
   }
 
   try {
-    const sanitizedThreadId = sanitizeCapturePathSegment(params.threadId);
-    const runId = `${Date.now()}-step-${params.stepNumber}-${randomUUID()}`;
-    const captureDir = join(process.cwd(), OM_REPRO_CAPTURE_DIR, sanitizedThreadId, runId);
-    mkdirSync(captureDir, { recursive: true });
+    const captureDir = createOmReproCaptureDir(params.threadId, `step-${params.stepNumber}`);
 
     const contextMessages = params.messageList.get.all.db();
     const memoryContext = parseMemoryRequestContext(params.args.requestContext);

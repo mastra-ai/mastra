@@ -22,4 +22,7 @@ export function pruneChatContainer(state: TUIState): void {
   );
   state.allSlashCommandComponents = state.allSlashCommandComponents.filter(component => !removed.has(component));
   state.allSystemReminderComponents = state.allSystemReminderComponents.filter(component => !removed.has(component));
+  state.allShellComponents = state.allShellComponents.filter(
+    component => !removed.has(component as unknown as Component),
+  );
 }

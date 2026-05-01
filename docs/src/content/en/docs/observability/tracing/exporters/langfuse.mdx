@@ -110,6 +110,35 @@ new LangfuseExporter({
 })
 ```
 
+#### Batch Tuning for High-Volume Traces
+
+For self-hosted Langfuse deployments or streamed runs that produce many spans per second, you can tune the OTEL batch size and flush interval to reduce request pressure on the Langfuse ingestion endpoint:
+
+```typescript
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  flushAt: 500, // Maximum spans per OTEL export batch
+  flushInterval: 20, // Maximum seconds between flushes
+})
+```
+
+To suppress high-volume span types entirely (for example `MODEL_CHUNK` spans from streamed responses), use the observability-level [`excludeSpanTypes` option](/reference/observability/tracing/span-filtering) rather than configuring the exporter:
+
+```typescript
+import { SpanType } from '@mastra/core/observability'
+
+new Observability({
+  configs: {
+    langfuse: {
+      serviceName: 'my-service',
+      exporters: [new LangfuseExporter()],
+      excludeSpanTypes: [SpanType.MODEL_CHUNK],
+    },
+  },
+})
+```
+
 ### Complete Configuration
 
 ```typescript
@@ -121,6 +150,8 @@ new LangfuseExporter({
   // Optional settings
   baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
   realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
+  flushAt: 500, // Maximum spans per OTEL export batch
+  flushInterval: 20, // Maximum seconds between flushes
   logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
   // Langfuse-specific settings

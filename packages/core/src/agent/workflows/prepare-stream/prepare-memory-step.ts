@@ -71,6 +71,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         resourceId,
         generateMessageId: capabilities.generateMessageId,
         logger: capabilities.logger,
+        filterIncompleteToolCalls: memoryConfig?.filterIncompleteToolCalls,
         // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });

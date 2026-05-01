@@ -33,6 +33,7 @@ import type {
 import { AgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
+import { getBrowserPid } from './utils';
 
 /**
  * AgentBrowser - Browser automation using agent-browser (vercel-labs/agent-browser)
@@ -47,6 +48,8 @@ export class AgentBrowser extends MastraBrowser {
   /** Shared browser manager instance (for 'shared' scope) - narrowed type from base class */
   declare protected sharedManager: BrowserManager | null;
   private defaultTimeout = 30000;
+  /** Pending PID lookups — awaited in disconnect handlers to avoid racing. */
+  private pidLookups = new Set<Promise<void>>();
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -65,7 +68,7 @@ export class AgentBrowser extends MastraBrowser {
     // Initialize thread manager
     this.threadManager = new AgentBrowserThreadManager({
       scope: effectiveScope,
-      browserConfig: config,
+      browserConfig: { ...config, headless: this.headless },
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
@@ -100,14 +103,14 @@ export class AgentBrowser extends MastraBrowser {
 
     // For 'thread' scope, create the thread session first
     // This ensures checkBrowserAlive() has a browser to check
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID && !existingSession) {
+    if (scope === 'thread' && !existingSession) {
       await this.getManagerForThread(threadId);
     }
 
     await super.ensureReady();
 
     // For 'thread' scope with existing session, just verify it's accessible
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID && existingSession) {
+    if (scope === 'thread' && existingSession) {
       await this.getManagerForThread(threadId);
     }
   }
@@ -157,8 +160,11 @@ export class AgentBrowser extends MastraBrowser {
 
     const localConfig = this.config as BrowserConfig;
     const launchOptions: BrowserLaunchOptions = {
-      headless: localConfig.headless ?? true,
+      headless: this.headless,
       viewport: localConfig.viewport,
+      profile: localConfig.profile,
+      executablePath: localConfig.executablePath,
+      storageState: localConfig.storageState,
     };
 
     // Resolve CDP URL if provided (can be string or function)
@@ -181,11 +187,24 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForSharedScope(manager: BrowserManager): void {
     try {
+      // Capture the Chrome process PID via CDP while the browser is alive.
+      // The base class uses this to kill orphaned child processes on disconnect.
+      // Guard: only store if this manager is still the active shared manager,
+      // otherwise a stale lookup could overwrite a newer PID.
+      const pidLookup = getBrowserPid(manager)
+        .then(pid => {
+          if (pid && this.sharedManager === manager) this.sharedBrowserPid = pid;
+        })
+        .finally(() => this.pidLookups.delete(pidLookup));
+      this.pidLookups.add(pidLookup);
+
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        this.handleBrowserDisconnected();
+        // Wait for PID lookup to complete before cleanup, so killProcessGroup
+        // has the actual PID instead of undefined.
+        void pidLookup.catch(() => undefined).then(() => this.handleBrowserDisconnected());
       };
 
       // Listen for context close (fires when browser window is closed)
@@ -210,6 +229,11 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   protected override async doClose(): Promise<void> {
+    // Ensure all PID lookups have resolved before closing, so killProcessGroup
+    // (called by the base class after doClose) has the correct PID.
+    await Promise.allSettled([...this.pidLookups]);
+    this.pidLookups.clear();
+
     // Close all thread sessions via ThreadManager
     await this.threadManager.destroyAllSessions();
     this.setCurrentThread(undefined); // Reset to default thread
@@ -310,11 +334,26 @@ export class AgentBrowser extends MastraBrowser {
    */
   private setupCloseListenerForThread(manager: BrowserManager, threadId: string): void {
     try {
+      // Capture the Chrome process PID via CDP while the browser is alive.
+      // The base class uses this to kill orphaned child processes on disconnect.
+      // Guard: only store if this manager is still the active one for the thread,
+      // otherwise a stale lookup could overwrite a newer PID.
+      const pidLookup = getBrowserPid(manager)
+        .then(pid => {
+          if (pid && this.threadManager?.getExistingManagerForThread(threadId) === manager) {
+            this.threadBrowserPids.set(threadId, pid);
+          }
+        })
+        .finally(() => this.pidLookups.delete(pidLookup));
+      this.pidLookups.add(pidLookup);
+
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        this.handleThreadBrowserDisconnected(threadId);
+        // Wait for PID lookup to complete before cleanup, so killProcessGroup
+        // has the actual PID instead of undefined.
+        void pidLookup.catch(() => undefined).then(() => this.handleThreadBrowserDisconnected(threadId));
       };
 
       // Listen for context close (fires when browser window is closed)
@@ -546,6 +585,26 @@ export class AgentBrowser extends MastraBrowser {
     } catch {
       return 0;
     }
+  }
+
+  /**
+   * Export the current browser session's storage state (cookies, localStorage) to a JSON file.
+   * This can later be loaded via the `storageState` config option to restore the session.
+   *
+   * @param path - File path to save the storage state JSON
+   * @param threadId - Optional thread ID (defaults to current thread)
+   */
+  async exportStorageState(path: string, threadId?: string): Promise<void> {
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+    if (!manager) {
+      throw new Error('No browser is running. Launch a browser first before exporting storage state.');
+    }
+    const context = manager.getContext();
+    if (!context) {
+      throw new Error('Browser context not available');
+    }
+    await context.storageState({ path });
   }
 
   // ---------------------------------------------------------------------------
@@ -1239,9 +1298,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      // Wrap script in an async function to allow return statements
-      const wrappedScript = `(async () => { ${input.script} })()`;
-      const result = await page.evaluate(wrappedScript);
+      const result = await page.evaluate(input.script);
 
       return {
         success: true,

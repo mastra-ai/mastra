@@ -9,7 +9,7 @@
 import { EntityType, SpanType } from './types';
 import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
 
-const entityTypeValues = new Set(Object.values(EntityType));
+const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
 
 export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | undefined): void {
@@ -18,6 +18,11 @@ export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | u
 
 export function resolveCurrentSpan(): AnySpan | undefined {
   return currentSpanResolver?.();
+}
+
+/** Generate a unique id for an observability signal (log, metric, score, feedback). */
+export function generateSignalId(): string {
+  return crypto.randomUUID();
 }
 
 // --- Lazy resolvers for executeWithContext / executeWithContextSync ---
@@ -158,6 +163,8 @@ export function getEntityTypeForSpan(span: {
   switch (span.spanType) {
     case SpanType.AGENT_RUN:
       return EntityType.AGENT;
+    case SpanType.RAG_INGESTION:
+      return EntityType.RAG_INGESTION;
     case SpanType.SCORER_RUN:
     case SpanType.SCORER_STEP:
       return EntityType.SCORER;

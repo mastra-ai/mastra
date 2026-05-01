@@ -555,6 +555,65 @@ Line 3 conclusion`;
       expect(skills1).toBe(skills2);
     });
 
+    it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
+      await fs.mkdir(path.join(tempDir, '.agents', 'skills', 'mastra'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, '.agents', 'skills', 'mastra', 'SKILL.md'),
+        skillContent('mastra', 'helping with Mastra development'),
+      );
+      await fs.mkdir(path.join(tempDir, '.claude', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(tempDir, '.agents', 'skills', 'mastra'),
+        path.join(tempDir, '.claude', 'skills', 'mastra'),
+      );
+
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+      });
+      const workspace = new Workspace({
+        filesystem,
+        skills: ['.claude/skills', '.agents/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'mastra', path: '.agents/skills/mastra' },
+      ]);
+      await expect(workspace.skills!.get('mastra')).resolves.toMatchObject({
+        name: 'mastra',
+        path: expect.stringMatching(/\/mastra$/),
+      });
+    });
+
+    it('should list a skill through an allowed symlink root that points outside the workspace', async () => {
+      const externalSkillRoot = await fs.mkdtemp(path.join(tempDir, 'external-skill-root-'));
+      await fs.mkdir(path.join(externalSkillRoot, 'linked-tool'), { recursive: true });
+      await fs.writeFile(
+        path.join(externalSkillRoot, 'linked-tool', 'SKILL.md'),
+        skillContent('linked-tool', 'Query GitHub PR activity from a linked skill'),
+      );
+      await fs.mkdir(path.join(tempDir, '.mastracode', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(externalSkillRoot, 'linked-tool'),
+        path.join(tempDir, '.mastracode', 'skills', 'linked-tool'),
+      );
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [path.join(tempDir, '.mastracode', 'skills')],
+        }),
+        skills: ['.mastracode/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'linked-tool', path: '.mastracode/skills/linked-tool' },
+      ]);
+      await expect(workspace.skills!.get('linked-tool')).resolves.toMatchObject({
+        name: 'linked-tool',
+        path: '.mastracode/skills/linked-tool',
+      });
+    });
+
     // =========================================================================
     // Skills + search interaction (regression tests for shared SearchEngine)
     // =========================================================================
@@ -2131,6 +2190,127 @@ Line 3 conclusion`;
       } finally {
         warnSpy.mockRestore();
       }
+    });
+  });
+
+  // ===========================================================================
+  // Dynamic Filesystem (resolver function)
+  // ===========================================================================
+  describe('dynamic filesystem', () => {
+    it('should accept a filesystem resolver function', () => {
+      const resolver = ({ requestContext }: { requestContext: RequestContext }) => {
+        const role = requestContext.get('role') as string;
+        return new LocalFilesystem({ basePath: tempDir + '/' + role });
+      };
+      const workspace = new Workspace({ filesystem: resolver });
+
+      expect(workspace.hasFilesystemConfig()).toBe(true);
+      // Static getter returns undefined when using resolver
+      expect(workspace.filesystem).toBeUndefined();
+    });
+
+    it('should resolve different filesystems based on requestContext', async () => {
+      const dirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dyn-a-'));
+      const dirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dyn-b-'));
+      try {
+        await fs.writeFile(path.join(dirA, 'file.txt'), 'from A');
+        await fs.writeFile(path.join(dirB, 'file.txt'), 'from B');
+
+        const resolver = ({ requestContext }: { requestContext: RequestContext }) => {
+          const role = requestContext.get('role') as string;
+          return role === 'admin' ? new LocalFilesystem({ basePath: dirA }) : new LocalFilesystem({ basePath: dirB });
+        };
+        const workspace = new Workspace({ filesystem: resolver });
+
+        const adminCtx = new RequestContext([['role', 'admin']]);
+        const userCtx = new RequestContext([['role', 'user']]);
+
+        const adminFs = await workspace.resolveFilesystem({ requestContext: adminCtx });
+        const userFs = await workspace.resolveFilesystem({ requestContext: userCtx });
+
+        const adminContent = await adminFs!.readFile('file.txt', { encoding: 'utf-8' });
+        const userContent = await userFs!.readFile('file.txt', { encoding: 'utf-8' });
+
+        expect(adminContent).toBe('from A');
+        expect(userContent).toBe('from B');
+      } finally {
+        await fs.rm(dirA, { recursive: true, force: true });
+        await fs.rm(dirB, { recursive: true, force: true });
+      }
+    });
+
+    it('should support async resolver functions', async () => {
+      const resolver = async ({ requestContext: _requestContext }: { requestContext: RequestContext }) => {
+        // Simulate async work (e.g., looking up config)
+        await new Promise(resolve => setTimeout(resolve, 1));
+        return new LocalFilesystem({ basePath: tempDir });
+      };
+      const workspace = new Workspace({ filesystem: resolver });
+
+      const ctx = new RequestContext();
+      const resolved = await workspace.resolveFilesystem({ requestContext: ctx });
+
+      expect(resolved).toBeDefined();
+      expect(resolved!.provider).toBe('local');
+    });
+
+    it('should fall back to static filesystem in resolveFilesystem', async () => {
+      const staticFs = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem: staticFs });
+
+      const ctx = new RequestContext();
+      const resolved = await workspace.resolveFilesystem({ requestContext: ctx });
+
+      expect(resolved).toBe(staticFs);
+    });
+
+    it('should throw when using both filesystem resolver and mounts', () => {
+      const resolver = () => new LocalFilesystem({ basePath: tempDir });
+      expect(
+        () =>
+          new Workspace({
+            filesystem: resolver,
+            mounts: {
+              '/a': new LocalFilesystem({ basePath: tempDir }),
+            },
+          }),
+      ).toThrow('Cannot use both "filesystem" and "mounts"');
+    });
+
+    it('should throw when a class constructor is passed instead of an instance or resolver', () => {
+      expect(
+        () =>
+          new Workspace({
+            filesystem: LocalFilesystem as any,
+          }),
+      ).toThrow('class constructor');
+    });
+
+    it('should not throw NO_PROVIDERS when only filesystem resolver is provided', () => {
+      const resolver = () => new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem: resolver });
+
+      expect(workspace.hasFilesystemConfig()).toBe(true);
+      expect(workspace.status).toBe('pending');
+    });
+
+    it('should return undefined from resolveFilesystem when no filesystem configured', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      const ctx = new RequestContext();
+      const resolved = await workspace.resolveFilesystem({ requestContext: ctx });
+
+      expect(resolved).toBeUndefined();
+    });
+
+    it('should not propagate logger when using resolver', () => {
+      const resolver = () => new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem: resolver });
+
+      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      // Should not throw — no static filesystem instance to set logger on
+      expect(() => workspace.__setLogger(mockLogger)).not.toThrow();
     });
   });
 

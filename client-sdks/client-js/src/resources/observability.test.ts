@@ -55,6 +55,50 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('getTraceLight()', () => {
+    it('should fetch a lightweight trace by ID', async () => {
+      mockSuccessfulResponse();
+
+      await client.getTraceLight('trace-123');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/light`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getTraceLight('invalid-trace')).rejects.toThrow();
+    });
+  });
+
+  describe('getSpan()', () => {
+    it('should fetch a specific span by trace ID and span ID', async () => {
+      mockSuccessfulResponse();
+
+      await client.getSpan('trace-123', 'span-456');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/spans/span-456`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getSpan('trace-123', 'invalid-span')).rejects.toThrow();
+    });
+  });
+
   /**
    * Legacy getTraces() API tests
    * Uses the old parameter structure for backward compatibility:

@@ -18,6 +18,7 @@ function createState(childrenCount: number): TUIState {
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
+    allShellComponents: [],
   } as unknown as TUIState;
 }
 
@@ -31,17 +32,22 @@ describe('pruneChatContainer', () => {
     const keptSlash = new SlashCommandComponent('kept', 'echo kept');
     const removedReminder = new SystemReminderComponent({ message: 'Removed body' });
     const keptReminder = new SystemReminderComponent({ message: 'Kept body' });
+    const removedShell = { id: 'removed-shell' };
+    const keptShell = { id: 'kept-shell' };
 
     state.chatContainer.children[10] = removedTool as any;
     state.chatContainer.children[20] = removedSlash as any;
     state.chatContainer.children[30] = removedReminder as any;
+    state.chatContainer.children[40] = removedShell as any;
     state.chatContainer.children[220] = keptTool as any;
     state.chatContainer.children[230] = keptSlash as any;
     state.chatContainer.children[240] = keptReminder as any;
+    state.chatContainer.children[245] = keptShell as any;
 
     state.allToolComponents = [removedTool as any, keptTool as any];
     state.allSlashCommandComponents = [removedSlash, keptSlash];
     state.allSystemReminderComponents = [removedReminder, keptReminder];
+    state.allShellComponents = [removedShell as any, keptShell as any];
 
     pruneChatContainer(state);
 
@@ -49,9 +55,11 @@ describe('pruneChatContainer', () => {
     expect(state.chatContainer.children[70]).toBe(keptTool);
     expect(state.chatContainer.children[80]).toBe(keptSlash);
     expect(state.chatContainer.children[90]).toBe(keptReminder);
+    expect(state.chatContainer.children[95]).toBe(keptShell);
     expect(state.allToolComponents).toEqual([keptTool]);
     expect(state.allSlashCommandComponents).toEqual([keptSlash]);
     expect(state.allSystemReminderComponents).toEqual([keptReminder]);
+    expect(state.allShellComponents).toEqual([keptShell]);
   });
 
   it('does nothing when the container is already within the limit', () => {

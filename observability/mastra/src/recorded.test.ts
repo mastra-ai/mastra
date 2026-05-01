@@ -133,6 +133,7 @@ describe('RecordedTrace', () => {
       rootEntityName: 'workflow-root',
       executionSource: 'cloud',
       experimentId: 'exp-1',
+      environment: 'production',
     });
 
     expect(feedback.feedback[0]).toMatchObject({
@@ -146,6 +147,7 @@ describe('RecordedTrace', () => {
       rootEntityName: 'workflow-root',
       executionSource: 'cloud',
       experimentId: 'exp-1',
+      environment: 'production',
     });
 
     expect(onScoreEvent).toHaveBeenCalledWith(
@@ -157,6 +159,7 @@ describe('RecordedTrace', () => {
             parentEntityName: 'workflow-root',
             rootEntityName: 'workflow-root',
             experimentId: 'exp-1',
+            environment: 'production',
           }),
         }),
       }),
@@ -170,6 +173,7 @@ describe('RecordedTrace', () => {
             entityName: 'workflow-root',
             rootEntityName: 'workflow-root',
             experimentId: 'exp-1',
+            environment: 'production',
           }),
         }),
       }),

@@ -77,6 +77,14 @@ export interface StagehandSettings {
   env: StagehandEnv;
   apiKey?: string;
   projectId?: string;
+  /** Whether to preserve the user data directory after the browser closes. */
+  preserveUserDataDir?: boolean;
+}
+
+/** AgentBrowser-specific browser settings. */
+export interface AgentBrowserSettings {
+  /** Path to a Playwright storage state file (JSON) containing cookies and localStorage. */
+  storageState?: string;
 }
 
 /** Browser configuration persisted in global settings. */
@@ -91,8 +99,16 @@ export interface BrowserSettings {
   viewport?: { width: number; height: number };
   /** CDP URL for connecting to an existing browser. */
   cdpUrl?: string;
+  /** Path to a Chrome/Chromium user data directory (profile). */
+  profile?: string;
+  /** Path to the browser executable to use. */
+  executablePath?: string;
+  /** Browser scope — 'shared' (all threads share one browser) or 'thread' (each thread gets its own). */
+  scope?: 'shared' | 'thread';
   /** Stagehand-specific settings. */
   stagehand?: StagehandSettings;
+  /** AgentBrowser-specific settings. */
+  agentBrowser?: AgentBrowserSettings;
 }
 
 export interface GlobalSettings {
@@ -123,8 +139,22 @@ export interface GlobalSettings {
      * Cleared when the user manually overrides via /om (falls back to omModelOverride).
      */
     activeOmPackId: string | null;
-    /** Explicit OM model override — used for custom OM pack or /om manual changes. */
+    /**
+     * Shared OM model override — used for both observer and reflector when a
+     * role-specific override is not set. Kept for back-compat with older settings
+     * files and set by onboarding when the user picks a custom OM pack.
+     */
     omModelOverride: string | null;
+    /**
+     * Explicit Observer model override — takes precedence over `omModelOverride`
+     * when set. Written by `/om` when the observer model is changed independently.
+     */
+    observerModelOverride: string | null;
+    /**
+     * Explicit Reflector model override — takes precedence over `omModelOverride`
+     * when set. Written by `/om` when the reflector model is changed independently.
+     */
+    reflectorModelOverride: string | null;
     /** Default OM observation threshold used for new threads unless overridden per-thread. */
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
@@ -157,7 +187,26 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
+  observability: ObservabilitySettings;
 }
+
+export interface ObservabilityResourceConfig {
+  /** Cloud project ID for this resource */
+  projectId: string;
+  /** When this config was created */
+  configuredAt: string;
+}
+
+export interface ObservabilitySettings {
+  /** Per-resource cloud project configs, keyed by resourceId */
+  resources: Record<string, ObservabilityResourceConfig>;
+  /** Whether to store traces locally in DuckDB. Off by default to avoid disk usage. */
+  localTracing: boolean;
+}
+
+/** Auth key prefix for observability tokens stored per-resource in auth.json */
+export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -178,6 +227,8 @@ const DEFAULTS: GlobalSettings = {
     modeDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
+    observerModelOverride: null,
+    reflectorModelOverride: null,
     omObservationThreshold: null,
     omReflectionThreshold: null,
     subagentModels: {},
@@ -202,6 +253,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -301,6 +353,8 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const rawAgentBrowser =
+    raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
@@ -310,10 +364,14 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
         : DEFAULTS.browser.provider,
     headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
     cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
+    executablePath:
+      typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
     viewport: {
       width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
       height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
     },
+    scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
       env:
         typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
@@ -325,8 +383,38 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
+      ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
+        ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
+        : {}),
     },
+    agentBrowser:
+      typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()
+        ? { storageState: rawAgentBrowser.storageState.trim() }
+        : undefined,
   };
+}
+
+const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
+
+function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
+  if (!raw || typeof raw !== 'object') return { resources: {}, localTracing: false };
+  const obj = raw as Record<string, unknown>;
+  const localTracing = obj.localTracing === true;
+  const rawResources = obj.resources;
+  if (!rawResources || typeof rawResources !== 'object') return { resources: {}, localTracing };
+  const resources: Record<string, ObservabilityResourceConfig> = {};
+  for (const [key, val] of Object.entries(rawResources as Record<string, unknown>)) {
+    if (val && typeof val === 'object') {
+      const v = val as Record<string, unknown>;
+      if (typeof v.projectId === 'string' && VALID_PROJECT_ID.test(v.projectId)) {
+        resources[key] = {
+          projectId: v.projectId,
+          configuredAt: typeof v.configuredAt === 'string' ? v.configuredAt : new Date().toISOString(),
+        };
+      }
+    }
+  }
+  return { resources, localTracing };
 }
 
 /**
@@ -371,6 +459,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        observability: parseObservabilitySettings(raw.observability),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -489,6 +578,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      observability: parseObservabilitySettings(raw.observability),
     };
 
     // Migrate legacy omModelId → omModelOverride
@@ -620,29 +710,47 @@ export function resolveModelDefaults(
 }
 
 /**
- * Resolve the effective OM model ID.
+ * Resolve the effective model ID for one of the two OM roles.
  *
- * If `activeOmPackId` is set, looks up the matching OM pack and returns its
- * model. Falls back to the explicit `omModelOverride`.
+ * Lookup order:
+ *   1. The role-specific override (`observerModelOverride` /
+ *      `reflectorModelOverride`) if set.
+ *   2. If `activeOmPackId` points at a built-in pack, that pack's model.
+ *   3. The shared `omModelOverride` fallback.
  *
  * @param settings  The loaded global settings.
+ * @param role      Which OM role to resolve (`'observer'` or `'reflector'`).
  * @param builtinOmPacks  Built-in OM packs for the current provider access
  *                        (from `getAvailableOmPacks`). Pass `[]` if unavailable.
  */
-export function resolveOmModel(
+export function resolveOmRoleModel(
   settings: GlobalSettings,
+  role: 'observer' | 'reflector',
   builtinOmPacks: Array<{ id: string; modelId: string }>,
 ): string | null {
-  const { activeOmPackId, omModelOverride } = settings.models;
-  if (!activeOmPackId) return omModelOverride;
+  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
+  if (roleOverride) return roleOverride;
 
+  if (!activeOmPackId) return omModelOverride;
   if (activeOmPackId === 'custom') return omModelOverride;
 
   const pack = builtinOmPacks.find(p => p.id === activeOmPackId);
   if (pack) return pack.modelId;
 
-  // Unknown pack — fall back to override
   return omModelOverride;
+}
+
+/**
+ * @deprecated Use `resolveOmRoleModel(settings, 'observer' | 'reflector', ...)`.
+ * Equivalent to resolving the observer role (existing callers set both observer
+ * and reflector to the same value).
+ */
+export function resolveOmModel(
+  settings: GlobalSettings,
+  builtinOmPacks: Array<{ id: string; modelId: string }>,
+): string | null {
+  return resolveOmRoleModel(settings, 'observer', builtinOmPacks);
 }
 
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
@@ -651,6 +759,59 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
     mkdirSync(dir, { recursive: true });
   }
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/** Marker file name to track which provider last used a profile. */
+const PROFILE_PROVIDER_MARKER = '.mastra-provider';
+
+/**
+ * Check which provider last used a profile directory.
+ * Returns the provider name if the marker exists, undefined otherwise.
+ */
+export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(markerPath)) {
+    return undefined;
+  }
+  try {
+    const content = readFileSync(markerPath, 'utf-8').trim();
+    if (content === 'stagehand' || content === 'agent-browser') {
+      return content;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write the provider marker to a profile directory.
+ * Creates the directory if it doesn't exist.
+ */
+export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(profilePath)) {
+    mkdirSync(profilePath, { recursive: true });
+  }
+  writeFileSync(markerPath, provider, 'utf-8');
+}
+
+/**
+ * Check if a profile has a provider mismatch.
+ * Returns the existing provider if there's a mismatch, undefined otherwise.
+ */
+export function checkProfileProviderMismatch(
+  profilePath: string | undefined,
+  targetProvider: BrowserProvider,
+): BrowserProvider | undefined {
+  if (!profilePath) {
+    return undefined;
+  }
+  const existingProvider = getProfileProvider(profilePath);
+  if (existingProvider && existingProvider !== targetProvider) {
+    return existingProvider;
+  }
+  return undefined;
 }
 
 /**
@@ -663,25 +824,31 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     return undefined;
   }
 
-  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
+  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+
+  // Chrome only allows one process per profile directory, so force 'shared' scope
+  // when a profile is set. Otherwise use the user's setting (or provider default).
+  const scope = profile ? ('shared' as const) : settings.scope;
+
+  // Common launch options (no CDP)
+  const launchConfig = { headless, viewport, profile, executablePath, scope } as const;
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');
-    return new StagehandBrowser({
-      headless,
-      viewport,
-      cdpUrl,
+    const stagehandOpts = {
       env: stagehand?.env ?? 'LOCAL',
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
-    });
+      preserveUserDataDir: stagehand?.preserveUserDataDir,
+    };
+    return cdpUrl
+      ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
+      : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
-    return new AgentBrowser({
-      headless,
-      viewport,
-      cdpUrl,
-    });
+    return cdpUrl
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
+      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
   }
 
   throw new Error(`Unsupported browser provider: ${provider}`);

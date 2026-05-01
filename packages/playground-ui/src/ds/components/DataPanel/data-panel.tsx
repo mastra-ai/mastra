@@ -6,6 +6,7 @@ import { DataPanelLoadingData } from './data-panel-loading-data';
 import { DataPanelNextPrevNav } from './data-panel-next-prev-nav';
 import { DataPanelNoData } from './data-panel-no-data';
 import { DataPanelRoot } from './data-panel-root';
+import { DataCodeSection } from '@/ds/components/DataCodeSection';
 
 export const DataPanel = Object.assign(DataPanelRoot, {
   Header: DataPanelHeader,
@@ -15,4 +16,5 @@ export const DataPanel = Object.assign(DataPanelRoot, {
   LoadingData: DataPanelLoadingData,
   NoData: DataPanelNoData,
   Content: DataPanelContent,
+  CodeSection: DataCodeSection,
 });

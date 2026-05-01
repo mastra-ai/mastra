@@ -1,0 +1,42 @@
+The Theme Park agent is deployed and reachable over HTTP. In this lesson, you'll connect it to Slack using Mastra's Channels feature, so you can message it from anywhere Slack runs.
+
+You'll install the `@chat-adapter/slack` package, add a `channels` config to the Theme Park agent, and create a Slack app with the right scopes. Mastra exposes the webhook route automatically. Point Slack's Event Subscriptions at it, and messages go straight to the agent.
+
+The same tools, memory, and ticket purchase workflow with its approval gate run from a DM. Channels also supports Discord and Telegram through the same pattern: install the adapter, add it under `channels.adapters`, set the env vars, deploy, and point the platform webhook at Mastra's generated route.
+
+> "You don't build the webhook handler yourself. You don't verify Slack signatures yourself. The adapter handles all of that."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Webhook URL format:
+
+```
+https://<your-project>.server.mastra.cloud/api/agents/your-agent-id/channels/slack/webhook
+```
+
+Relevant Mastra docs:
+
+- [Channels overview](/docs/agents/channels)
+- [Slack adapter](https://chat-sdk.dev/adapters/slack)
+- [Mastra Server](https://mastra.ai/server)
+- [Mastra Platform](https://projects.mastra.ai/)
+- [Slack](https://app.slack.com/)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates

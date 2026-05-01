@@ -53,11 +53,31 @@ export interface paths {
     };
     /**
      * Verify CLI token
-     * @description Verify a CLI access token (WorkOS JWT) and return user info and organization.
+     * @description Verify a CLI bearer token (WorkOS JWT or WorkOS API key) and return user info and organization.
      */
     get: operations['getV1AuthVerify'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/auth/ingest/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Verify ingest token
+     * @description Verify a WorkOS Organization API key for telemetry ingest and confirm access to the requested project.
+     */
+    post: operations['postV1AuthIngestVerify'];
     delete?: never;
     options?: never;
     head?: never;
@@ -145,7 +165,11 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    patch?: never;
+    /**
+     * Update organization
+     * @description Update the current organization name. Requires admin role.
+     */
+    patch: operations['patchV1AuthOrgs'];
     trace?: never;
   };
   '/v1/auth/switch-org': {
@@ -276,7 +300,7 @@ export interface paths {
     patch: operations['patchV1OrgMembersById'];
     trace?: never;
   };
-  '/v1/gateway/projects': {
+  '/v1/gateway/projects/{id}/usage/has-activity': {
     parameters: {
       query?: never;
       header?: never;
@@ -284,32 +308,12 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * List gateway projects
-     * @description List all gateway projects for the current organization
+     * Check if project has any usage activity
+     * @description Lightweight check — returns true if the project has ever received at least one request.
      */
-    get: operations['getV1GatewayProjects'];
+    get: operations['getV1GatewayProjectsByIdUsageHasActivity'];
     put?: never;
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/gateway/projects/provision': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Provision gateway project
-     * @description Create a new gateway project with an API key
-     */
-    post: operations['postV1GatewayProjectsProvision'];
     delete?: never;
     options?: never;
     head?: never;
@@ -328,6 +332,26 @@ export interface paths {
      * @description Aggregated usage metrics for a project. Supports multiple granularities (1m, 5m, 15m, 1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source_category, api_key_id).
      */
     get: operations['getV1GatewayProjectsByIdUsageActivity'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/gateway/projects/{id}/usage/memory-activity': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get memory token activity
+     * @description Aggregated memory token totals for a project. Supports 1h, daily, weekly, and monthly granularities.
+     */
+    get: operations['getV1GatewayProjectsByIdUsageMemoryActivity'];
     put?: never;
     post?: never;
     delete?: never;
@@ -436,7 +460,7 @@ export interface paths {
     post?: never;
     /**
      * Delete project
-     * @description Soft-delete a project and all its deploys
+     * @description Delete a project and all its deploys
      */
     delete: operations['deleteV1StudioProjectsById'];
     options?: never;
@@ -498,6 +522,26 @@ export interface paths {
     get: operations['getV1StudioDeploysById'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/studio/deploys/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel studio deploy
+     * @description Cancel a queued or uploading deployment before the pipeline starts.
+     */
+    post: operations['postV1StudioDeploysByIdCancel'];
     delete?: never;
     options?: never;
     head?: never;
@@ -616,6 +660,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/server/projects/{id}/env/restart': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Update environment variables and restart service
+     * @description Update environment variables for a server project and restart the service to apply changes immediately
+     */
+    post: operations['postV1ServerProjectsByIdEnvRestart'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/server/projects/{id}/domains': {
     parameters: {
       query?: never;
@@ -674,6 +738,46 @@ export interface paths {
      * @description Trigger a new deployment for a server project
      */
     post: operations['postV1ServerProjectsByIdRedeploy'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/server/projects/{id}/pause': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause server
+     * @description Stop the currently running deploy for a server project. The server will no longer respond to requests until restarted.
+     */
+    post: operations['postV1ServerProjectsByIdPause'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/server/projects/{id}/restart': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Restart server
+     * @description Trigger a new deployment for a stopped, failed, crashed, or cancelled server project.
+     */
+    post: operations['postV1ServerProjectsByIdRestart'];
     delete?: never;
     options?: never;
     head?: never;
@@ -784,6 +888,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/support/tickets': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create a support ticket
+     * @description Submit a support ticket via Pylon.
+     */
+    post: operations['postV1SupportTickets'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -842,6 +966,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -861,6 +987,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -888,11 +1016,15 @@ export interface operations {
           'application/json': {
             user: {
               id: string;
-              email: string;
+              email: string | null;
               firstName: string | null;
               lastName: string | null;
             };
             organizationId: string;
+            role?: string;
+            /** @enum {string} */
+            authType?: 'user' | 'api-key';
+            memberOrgIds?: string[];
           };
         };
       };
@@ -908,6 +1040,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -927,6 +1061,102 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  postV1AuthIngestVerify: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          projectId: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Token valid for project ingest */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            organizationId: string;
+            projectId: string;
+            /** @constant */
+            authType: 'api-key';
+          };
+        };
+      };
+      /** @description Invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Valid bearer token but not a WorkOS API key */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Project not found or inaccessible */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -975,6 +1205,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1017,6 +1249,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1052,6 +1286,7 @@ export interface operations {
             organizationId: string | null;
             role: string | null;
             permissions: string[];
+            memberOrgIds: string[];
           };
         };
       };
@@ -1067,6 +1302,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1113,6 +1350,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1165,6 +1404,83 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  patchV1AuthOrgs: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          name: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Organization updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            organization: {
+              id: string;
+              name: string;
+              role: string | null;
+              isCurrent: boolean;
+            };
+          };
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Forbidden — not an admin */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1214,6 +1530,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1230,7 +1548,14 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          /** Format: uri */
+          returnTo?: string;
+        };
+      };
+    };
     responses: {
       /** @description Logged out */
       200: {
@@ -1289,6 +1614,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1308,6 +1635,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1355,6 +1684,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1374,6 +1705,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1430,6 +1763,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1449,6 +1784,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1493,6 +1830,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1512,6 +1851,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1556,6 +1897,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1575,6 +1918,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1635,6 +1980,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1654,6 +2001,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1663,41 +2012,30 @@ export interface operations {
       };
     };
   };
-  getV1GatewayProjects: {
+  getV1GatewayProjectsByIdUsageHasActivity: {
     parameters: {
       query?: never;
       header?: never;
-      path?: never;
+      path: {
+        id: string;
+      };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description List of gateway projects */
+      /** @description Activity check result */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           'application/json': {
-            projects: {
-              id: string;
-              name: string;
-              organizationId: string;
-              memoryConfig?: {
-                observationTokens?: number;
-                reflectionTokens?: number;
-                model?: string;
-                /** @enum {string} */
-                scope?: 'thread' | 'resource';
-              } | null;
-              gatewayTools?: 'web_search'[] | null;
-              createdAt: string;
-            }[];
+            has_activity: boolean;
           };
         };
       };
-      /** @description Not authenticated */
-      401: {
+      /** @description Project not found */
+      404: {
         headers: {
           [name: string]: unknown;
         };
@@ -1708,57 +2046,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
-            errors?: {
-              field: string;
-              message: string;
-            }[];
-          };
-        };
-      };
-    };
-  };
-  postV1GatewayProjectsProvision: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': {
-          name?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Provisioned project with API key */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            project: {
-              id: string;
-              name: string;
-            };
-            apiKey: string;
-          };
-        };
-      };
-      /** @description Not authenticated */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            type: string;
-            title: string;
-            status: number;
-            detail?: string;
-            instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1790,7 +2079,7 @@ export interface operations {
             from: string;
             to: string;
             /** @enum {string} */
-            granularity: 'daily' | 'weekly' | 'monthly' | '1m' | '5m' | '15m' | '1h';
+            granularity: 'daily' | 'weekly' | 'monthly' | '1h';
             group_by: string[];
             data:
               | {
@@ -1846,6 +2135,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1865,6 +2156,87 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  getV1GatewayProjectsByIdUsageMemoryActivity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Memory token activity data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            projectId: string;
+            from: string;
+            to: string;
+            /** @enum {string} */
+            granularity: '1h' | 'daily' | 'weekly' | 'monthly';
+            data: {
+              bucket: string;
+              promptTokens: number;
+              completionTokens: number;
+              totalTokens: number;
+              apiKeyId?: string | null;
+              apiKeyLabel?: string | null;
+              apiKeyPrefix?: string | null;
+            }[];
+          };
+        };
+      };
+      /** @description Invalid query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1937,6 +2309,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1956,6 +2330,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2030,6 +2406,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2049,6 +2427,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2126,6 +2506,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2153,14 +2535,20 @@ export interface operations {
           'application/json': {
             projects: {
               id: string;
+              slug: string;
               name: string;
-              slug: string | null;
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
               latestDeployId: string | null;
-              latestDeployStatus: string | null;
+              latestDeployStatus:
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
+              latestDeployCreatedAt: string | null;
+              latestServerDeployStatus: string | null;
+              customServerApiUrl: string | null;
               instanceUrl: string | null;
+              serverInstanceUrl: string | null;
               createdAt: string | null;
               updatedAt: string | null;
             }[];
@@ -2179,6 +2567,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2212,14 +2602,20 @@ export interface operations {
           'application/json': {
             project: {
               id: string;
+              slug: string;
               name: string;
-              slug: string | null;
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
               latestDeployId: string | null;
-              latestDeployStatus: string | null;
+              latestDeployStatus:
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
+              latestDeployCreatedAt: string | null;
+              latestServerDeployStatus: string | null;
+              customServerApiUrl: string | null;
               instanceUrl: string | null;
+              serverInstanceUrl: string | null;
               createdAt: string | null;
               updatedAt: string | null;
             };
@@ -2238,6 +2634,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2267,14 +2665,20 @@ export interface operations {
           'application/json': {
             project: {
               id: string;
+              slug: string;
               name: string;
-              slug: string | null;
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
               latestDeployId: string | null;
-              latestDeployStatus: string | null;
+              latestDeployStatus:
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
+              latestDeployCreatedAt: string | null;
+              latestServerDeployStatus: string | null;
+              customServerApiUrl: string | null;
               instanceUrl: string | null;
+              serverInstanceUrl: string | null;
               createdAt: string | null;
               updatedAt: string | null;
             };
@@ -2284,7 +2688,7 @@ export interface operations {
               organizationId: string;
               projectName: string;
               /** @enum {string} */
-              status: 'starting' | 'running' | 'stopped' | 'failed' | 'unknown';
+              status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown';
               instanceUrl: string | null;
               error: string | null;
               createdAt: string | null;
@@ -2304,6 +2708,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2348,6 +2754,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2364,11 +2772,21 @@ export interface operations {
         'x-project-id'?: string;
         'x-project-name'?: string;
         'x-git-branch'?: string;
+        'x-mastra-version'?: string;
       };
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': {
+          envVars?: {
+            [key: string]: string;
+          };
+          disablePlatformObservability?: boolean;
+        };
+      };
+    };
     responses: {
       /** @description Deploy queued */
       202: {
@@ -2398,6 +2816,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2442,6 +2862,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2475,7 +2897,7 @@ export interface operations {
               organizationId: string;
               projectName: string;
               /** @enum {string} */
-              status: 'starting' | 'running' | 'stopped' | 'failed' | 'unknown';
+              status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown';
               instanceUrl: string | null;
               error: string | null;
               createdAt: string | null;
@@ -2495,6 +2917,76 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  postV1StudioDeploysByIdCancel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deploy cancelled */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            id: string;
+            /** @enum {string} */
+            status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown';
+          };
+        };
+      };
+      /** @description Deploy cannot be cancelled (not in queued or uploading state) */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Deploy not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2541,6 +3033,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2582,6 +3076,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2614,6 +3110,7 @@ export interface operations {
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
+              alwaysOn: boolean;
               providerProjectId: string | null;
               providerServiceId: string | null;
               providerEnvironmentId: string | null;
@@ -2625,7 +3122,6 @@ export interface operations {
               latestDeployId: string | null;
               latestDeployStatus: string | null;
               instanceUrl: string | null;
-              publicUrl: string | null;
               createdAt: string | null;
               updatedAt: string | null;
             }[];
@@ -2677,6 +3173,7 @@ export interface operations {
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
+              alwaysOn: boolean;
               providerProjectId: string | null;
               providerServiceId: string | null;
               providerEnvironmentId: string | null;
@@ -2688,7 +3185,6 @@ export interface operations {
               latestDeployId: string | null;
               latestDeployStatus: string | null;
               instanceUrl: string | null;
-              publicUrl: string | null;
               createdAt: string | null;
               updatedAt: string | null;
             };
@@ -2700,7 +3196,10 @@ export interface operations {
               status: string;
               instanceUrl: string | null;
               error: string | null;
+              startedAt: string | null;
+              stoppedAt: string | null;
               createdAt: string | null;
+              updatedAt: string | null;
             }[];
           };
         };
@@ -2746,6 +3245,7 @@ export interface operations {
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
+              alwaysOn: boolean;
               providerProjectId: string | null;
               providerServiceId: string | null;
               providerEnvironmentId: string | null;
@@ -2757,7 +3257,6 @@ export interface operations {
               latestDeployId: string | null;
               latestDeployStatus: string | null;
               instanceUrl: string | null;
-              publicUrl: string | null;
               createdAt: string | null;
               updatedAt: string | null;
             };
@@ -2769,7 +3268,10 @@ export interface operations {
               status: string;
               instanceUrl: string | null;
               error: string | null;
+              startedAt: string | null;
+              stoppedAt: string | null;
               createdAt: string | null;
+              updatedAt: string | null;
             }[];
           };
         };
@@ -2873,9 +3375,59 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          envVars: {
+            [key: string]: string;
+          };
+        };
+      };
+    };
     responses: {
       /** @description Env vars updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
+  postV1ServerProjectsByIdEnvRestart: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          envVars: {
+            [key: string]: string;
+          };
+        };
+      };
+    };
+    responses: {
+      /** @description Env vars updated and service restarted */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2947,7 +3499,13 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          domain: string;
+        };
+      };
+    };
     responses: {
       /** @description Custom domain added */
       200: {
@@ -3062,6 +3620,108 @@ export interface operations {
       };
     };
   };
+  postV1ServerProjectsByIdPause: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server paused */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+      /** @description Server is not running */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
+  postV1ServerProjectsByIdRestart: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deploy queued */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            id: string;
+            status: string;
+            uploadUrl?: string;
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+      /** @description Server is already running or deploying */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
   postV1ServerDeploys: {
     parameters: {
       query?: never;
@@ -3074,6 +3734,10 @@ export interface operations {
         'application/json': {
           projectId: string;
           projectName?: string;
+          envVars?: {
+            [key: string]: string;
+          };
+          disablePlatformObservability?: boolean;
         };
       };
     };
@@ -3290,7 +3954,12 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': {
+            id: string;
+            status: string;
+          };
+        };
       };
       /** @description Deploy not found */
       404: {
@@ -3303,6 +3972,128 @@ export interface operations {
             title: string;
             status: number;
             detail?: string;
+          };
+        };
+      };
+    };
+  };
+  postV1SupportTickets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          title: string;
+          body: string;
+          context?: {
+            projectId?: string;
+            product?: string;
+            pageUrl?: string;
+            userAgent?: string;
+            viewport?: string;
+            timezone?: string;
+            appEnv?: string;
+          };
+        };
+      };
+    };
+    responses: {
+      /** @description Ticket created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            id: string;
+          };
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Forbidden — no organization selected */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Upstream Pylon error */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Support not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };

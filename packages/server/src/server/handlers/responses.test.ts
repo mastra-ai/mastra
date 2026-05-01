@@ -6,6 +6,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
+import { createResponseBodySchema } from '../schemas/responses';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { createTestServerContext } from './test-utils';
 
@@ -180,7 +181,11 @@ async function readSseEvents(response: Response): Promise<SseEventPayload[]> {
 }
 
 function mockAgentSpecVersion(agent: Agent, specificationVersion: 'v1' | 'v2' = 'v2') {
-  vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion } as never);
+  vi.spyOn(agent, 'getModel').mockResolvedValue({
+    specificationVersion,
+    provider: 'openai',
+    modelId: specificationVersion === 'v1' ? 'legacy-model' : 'test-model',
+  } as never);
 }
 
 class RootInjectedMockMemory extends MockMemory {
@@ -377,6 +382,44 @@ describe('Responses Handlers', () => {
     });
 
     expect(retrieved).toEqual(created);
+  });
+
+  it('accepts omitted model in the create response request schema', () => {
+    const result = createResponseBodySchema.safeParse({
+      agent_id: 'test-agent',
+      input: 'Hello',
+      stream: false,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('uses the agent default model when create requests omit model', async () => {
+    vi.spyOn(agent, 'getModel').mockResolvedValue({
+      specificationVersion: 'v2',
+      provider: 'openai.responses',
+      modelId: 'gpt-4o-mini',
+    } as never);
+    const generateSpy = vi
+      .spyOn(agent, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'Hello from Mastra' }));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agent_id: 'test-agent',
+      input: 'Hello',
+      store: false,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+
+    expect((generateSpy.mock.calls[0]?.[1] as Record<string, unknown>)?.model).toBeUndefined();
+    expect(created).toMatchObject({
+      object: 'response',
+      model: 'openai/gpt-4o-mini',
+      status: 'completed',
+    });
   });
 
   it('maps text.format json_object to structuredOutput for v2 generate requests', async () => {

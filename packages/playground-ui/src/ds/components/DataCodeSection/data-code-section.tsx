@@ -23,8 +23,8 @@ import {
   DialogDescription,
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { useTheme } from '@/ds/components/ThemeProvider';
 import { cn } from '@/lib/utils';
-import { useIsDarkMode } from '@/store/playground-store';
 
 // -- Search highlight extension -----------------------------------------------
 
@@ -129,7 +129,7 @@ function buildLightTheme(): Extension {
 }
 
 const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 
@@ -154,6 +154,7 @@ export function DataCodeSection({
 }: DataCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
+  const [searchMinimized, setSearchMinimized] = useState(true);
   const [searchQuery, setSearchQueryState] = useState('');
   const [expandedOpen, setExpandedOpen] = useState(false);
   const [expandedSearchQuery, setExpandedSearchQuery] = useState('');
@@ -174,7 +175,6 @@ export function DataCodeSection({
     const view = editorRef.current?.view;
     if (view) {
       view.dispatch({ effects: setSearchQuery.of(query) });
-      // Scroll to first match
       if (query) {
         const cursor = new SearchCursor(view.state.doc, query, 0, view.state.doc.length, (a: string) =>
           a.toLowerCase(),
@@ -264,6 +264,8 @@ export function DataCodeSection({
               onChange={handleSearchChange}
               onReset={handleSearchReset}
               size="sm"
+              isMinimized={searchMinimized}
+              onMinimizedChange={setSearchMinimized}
             />
           )}
           <ButtonsGroup>

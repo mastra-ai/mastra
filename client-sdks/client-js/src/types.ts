@@ -219,8 +219,8 @@ export type ResponsesDeleteResponse = {
 };
 
 export type CreateResponseParams = {
-  /** Target model identifier, such as `openai/gpt-5`. */
-  model: string;
+  /** Optional model override, such as `openai/gpt-5`. When omitted, the agent default model is used. */
+  model?: string;
   /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
   agent_id?: string;
   /** Input text or message history for the current turn. */
@@ -1620,8 +1620,10 @@ export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  observabilityEnabled: boolean;
   storageType?: string;
   observabilityStorageType?: string;
+  observabilityRuntimeStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
 }
 
 // ============================================================================
@@ -2660,6 +2662,58 @@ export interface ActivatePromptBlockVersionResponse {
 export interface DeletePromptBlockVersionResponse {
   success: boolean;
   message: string;
+}
+
+export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+
+export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
+
+export interface BackgroundTaskResponse {
+  id: string;
+  status: BackgroundTaskStatus;
+  toolName: string;
+  toolCallId: string;
+  args: Record<string, unknown>;
+  agentId: string;
+  threadId?: string;
+  resourceId?: string;
+  runId: string;
+  result?: unknown;
+  error?: { message: string; stack?: string };
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  retryCount: number;
+  maxRetries: number;
+  timeoutMs: number;
+}
+
+export interface ListBackgroundTasksParams {
+  agentId?: string;
+  status?: BackgroundTaskStatus;
+  runId?: string;
+  threadId?: string;
+  resourceId?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  dateFilterBy?: BackgroundTaskDateColumn;
+  orderBy?: BackgroundTaskDateColumn;
+  orderDirection?: 'asc' | 'desc';
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListBackgroundTasksResponse {
+  tasks: BackgroundTaskResponse[];
+  total: number;
+}
+
+export interface StreamBackgroundTasksParams {
+  agentId?: string;
+  runId?: string;
+  threadId?: string;
+  resourceId?: string;
+  taskId?: string;
 }
 
 export interface ExperimentReviewCounts {

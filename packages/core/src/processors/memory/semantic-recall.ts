@@ -506,6 +506,10 @@ export class SemanticRecall implements Processor {
         return messageList || messages;
       }
 
+      if (memoryContext.memoryConfig?.readOnly) {
+        return messageList || messages;
+      }
+
       const { thread, resourceId } = memoryContext;
       const threadId = thread?.id;
 

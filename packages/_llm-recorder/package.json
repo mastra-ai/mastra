@@ -1,6 +1,6 @@
 {
   "name": "@internal/llm-recorder",
-  "version": "0.0.16",
+  "version": "0.0.25",
   "description": "LLM response recording and replay for tests",
   "type": "module",
   "private": true,
@@ -45,7 +45,7 @@
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -131,4 +131,54 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('mastra/claude-opus-4.6');
     expect(rendered).not.toContain('anthropic/claude-opus-4.6');
   });
+
+  it('rewrites fireworks-ai long paths and kimi version separator at full width', () => {
+    const state = createState();
+    state.harness.getFullModelId.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
+    process.stdout.columns = 200;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('fireworks/kimi-k2.6');
+    expect(rendered).not.toContain('fireworks-ai/accounts/fireworks/models/');
+    expect(rendered).not.toContain('kimi-k2p6');
+  });
+
+  it('rewrites fireworks-ai long paths and kimi version separator when compacted', () => {
+    const state = createState();
+    state.harness.getFullModelId.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
+    process.stdout.columns = 25;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('fireworks/kimi-k2.6');
+    expect(rendered).not.toContain('fireworks-ai/accounts/fireworks/models/');
+    expect(rendered).not.toContain('kimi-k2p6');
+  });
+
+  it('rewrites kimi version separator for non-fireworks models', () => {
+    const state = createState();
+    state.harness.getFullModelId.mockReturnValue('moonshot/kimi-k1p5');
+    process.stdout.columns = 200;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('kimi-k1.5');
+    expect(rendered).not.toContain('kimi-k1p5');
+  });
+
+  it('rewrites minimax-m2p7 version separator', () => {
+    const state = createState();
+    state.harness.getFullModelId.mockReturnValue('fireworks-ai/accounts/fireworks/models/minimax-m2p7');
+    process.stdout.columns = 200;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('fireworks/minimax-m2.7');
+    expect(rendered).not.toContain('minimax-m2p7');
+  });
 });

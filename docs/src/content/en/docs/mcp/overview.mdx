@@ -91,6 +91,23 @@ Visit [Agent Class](/reference/agents/agent) for a full list of configuration op
 
 :::
 
+## Tool approval
+
+You can require human approval before MCP tools are executed by setting `requireToolApproval` on a server definition. This integrates with the existing [human-in-the-loop](/docs/workflows/human-in-the-loop) approval flow.
+
+```typescript
+export const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: true,
+    },
+  },
+})
+```
+
+You can also pass a function to decide dynamically per-call. See the [MCPClient reference](/reference/tools/mcp-client#tool-approval) for the full API.
+
 ## Configuring `MCPServer`
 
 To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.

@@ -53,7 +53,12 @@ export type ResponseTextConfig = z.infer<typeof responseTextSchema>;
 
 export const createResponseBodySchema = z
   .object({
-    model: z.string().describe('Model identifier used to generate the response, such as openai/gpt-5'),
+    model: z
+      .string()
+      .optional()
+      .describe(
+        'Optional model identifier override, such as openai/gpt-5. When omitted, the agent default model is used.',
+      ),
     agent_id: z.string().describe('Mastra agent ID for the request'),
     input: z.union([z.string(), z.array(responseInputMessageSchema)]),
     instructions: z.string().optional(),

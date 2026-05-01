@@ -60,10 +60,23 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
+    // Agents often pass pattern: [] or pattern: '' expecting "list everything".
+    // Empty/whitespace-only patterns would otherwise filter out every file, or
+    // throw from picomatch. Normalize them to undefined so the listing falls back
+    // to its unfiltered behavior.
+    const normalizedPattern = (() => {
+      if (pattern === undefined) return undefined;
+      if (Array.isArray(pattern)) {
+        const cleaned = pattern.filter(p => typeof p === 'string' && p.trim().length > 0);
+        return cleaned.length > 0 ? cleaned : undefined;
+      }
+      return pattern.trim().length > 0 ? pattern : undefined;
+    })();
+
     const span = startWorkspaceSpan(context, workspace, {
       category: 'filesystem',
       operation: 'listFiles',
-      input: { path, maxDepth, pattern },
+      input: { path, maxDepth, pattern: normalizedPattern },
       attributes: { filesystemProvider: filesystem.provider },
     });
 
@@ -74,7 +87,7 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
         dirsOnly,
         exclude: exclude || undefined,
         extension: extension || undefined,
-        pattern: pattern || undefined,
+        pattern: normalizedPattern,
         respectGitignore,
       });
 
