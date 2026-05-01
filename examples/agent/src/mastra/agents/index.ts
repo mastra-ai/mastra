@@ -257,7 +257,7 @@ Your tools open interactive UIs that render directly in the chat. When you use a
 Available tools:
 - calculatorWithUI: Opens an interactive calculator. Use when asked to do math.
 - greetUserWithUI: Opens an interactive greeting app. Use when asked to greet someone.`,
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-5-mini',
   tools: {
     calculatorWithUI,
     greetUserWithUI,

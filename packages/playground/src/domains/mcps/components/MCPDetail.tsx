@@ -177,8 +177,8 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
 function hasAppUi(meta?: Record<string, unknown>): boolean {
   if (!meta) return false;
   const ui = meta.ui as { resourceUri?: string } | undefined;
-  if (ui?.resourceUri) return true;
-  if (typeof meta['ui/resourceUri'] === 'string') return true;
+  if (typeof ui?.resourceUri === 'string' && ui.resourceUri.startsWith('ui://')) return true;
+  if (typeof meta['ui/resourceUri'] === 'string' && (meta['ui/resourceUri'] as string).startsWith('ui://')) return true;
   return false;
 }
 

@@ -33,8 +33,6 @@ type ToolListResult = {
  *
  * Tool and resource operations are delegated lazily to the underlying
  * InternalMastraMCPClient connection.
- *
- * @internal
  */
 export class MCPClientServerProxy extends MCPServerBase {
   private clientGetter: () => Promise<InternalMastraMCPClient>;
@@ -108,10 +106,9 @@ export class MCPClientServerProxy extends MCPServerBase {
    * Returns the cached tool list synchronously, or triggers an async fetch.
    * The Studio API handlers are async and will auto-await a returned Promise.
    */
-  public getToolListInfo(): ToolListResult {
+  public getToolListInfo(): ToolListResult | Promise<ToolListResult> {
     if (this._cachedToolList) return this._cachedToolList;
-    // The caller (handler) is async, so returning a Promise works at runtime
-    return this.fetchToolList() as any;
+    return this.fetchToolList();
   }
 
   public getToolInfo(toolId: string):
@@ -123,14 +120,22 @@ export class MCPClientServerProxy extends MCPServerBase {
         toolType?: MCPToolType;
         _meta?: Record<string, unknown>;
       }
-    | undefined {
+    | undefined
+    | Promise<
+        | {
+            name: string;
+            description?: string;
+            inputSchema: any;
+            outputSchema?: any;
+            toolType?: MCPToolType;
+            _meta?: Record<string, unknown>;
+          }
+        | undefined
+      > {
     if (this._cachedToolList) {
       return this._cachedToolList.tools.find(t => t.id === toolId || t.name === toolId);
     }
-    // Cache not yet populated — trigger a lazy fetch.  The API handler is
-    // async, so returning a Promise works at runtime (same pattern as
-    // getToolListInfo).
-    return this.fetchToolList().then(list => list.tools.find(t => t.id === toolId || t.name === toolId)) as any;
+    return this.fetchToolList().then(list => list.tools.find(t => t.id === toolId || t.name === toolId));
   }
 
   public async executeTool(
@@ -144,7 +149,10 @@ export class MCPClientServerProxy extends MCPServerBase {
     if (!tool) {
       throw new Error(`Tool '${toolId}' not found on remote MCP server '${this.name}'`);
     }
-    return tool.execute!(args, _executionContext as any);
+    if (!tool.execute) {
+      throw new Error(`Tool '${toolId}' on remote MCP server '${this.name}' has no execute method`);
+    }
+    return tool.execute(args, _executionContext as any);
   }
 
   public async listResources(): Promise<{
