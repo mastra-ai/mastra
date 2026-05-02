@@ -4,9 +4,9 @@ import z from 'zod';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
-import type { WorkflowRunState } from '../workflows';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { createTool } from '../tools';
+import type { WorkflowRunState } from '../workflows';
 
 import { Harness } from './harness';
 
@@ -73,10 +73,14 @@ function createSuspendedSnapshot({
   runId,
   toolCallId,
   suspendPayload,
+  threadId = 'thread-1',
+  resourceId = 'resource-1',
 }: {
   runId: string;
   toolCallId: string;
   suspendPayload: Record<string, unknown>;
+  threadId?: string;
+  resourceId?: string;
 }): WorkflowRunState {
   return {
     runId,
@@ -85,8 +89,8 @@ function createSuspendedSnapshot({
     context: {
       input: {
         state: {
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
+          threadId,
+          resourceId,
         },
       },
       'tool-call': {
@@ -289,6 +293,7 @@ describe('Harness awaiting input durability', () => {
     });
     await otherHarness.init();
     await expect(otherHarness.getAwaitingInput({ id: 'approval-call' })).resolves.toBeNull();
+    await expect(otherHarness.listAwaitingInputs()).resolves.toEqual([]);
 
     const harness = new Harness({
       id: 'approval-harness',
@@ -340,6 +345,111 @@ describe('Harness awaiting input durability', () => {
     );
   });
 
+  it('lists durable awaiting inputs scoped by resource and thread', async () => {
+    const storage = new InMemoryStore();
+    await storage.init();
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error('Expected workflows store to be available for awaiting-input test setup');
+    }
+
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: 'thread-1-run',
+      resourceId: 'resource-1',
+      snapshot: createSuspendedSnapshot({
+        runId: 'thread-1-run',
+        toolCallId: 'thread-1-call',
+        threadId: 'thread-1',
+        suspendPayload: {
+          type: 'approval',
+          toolCallId: 'thread-1-call',
+          toolName: 'writeFile',
+          args: { path: 'THREAD_1.md' },
+        },
+      }),
+      updatedAt: new Date(Date.now() + 1_000),
+    });
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: 'thread-2-run',
+      resourceId: 'resource-1',
+      snapshot: createSuspendedSnapshot({
+        runId: 'thread-2-run',
+        toolCallId: 'thread-2-call',
+        threadId: 'thread-2',
+        suspendPayload: {
+          type: 'suspension',
+          toolCallId: 'thread-2-call',
+          toolName: 'confirmAction',
+          args: { action: 'deploy' },
+        },
+      }),
+      updatedAt: new Date(Date.now() + 2_000),
+    });
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: 'other-resource-run',
+      resourceId: 'other-resource',
+      snapshot: createSuspendedSnapshot({
+        runId: 'other-resource-run',
+        toolCallId: 'other-resource-call',
+        resourceId: 'other-resource',
+        suspendPayload: {
+          type: 'approval',
+          toolCallId: 'other-resource-call',
+          toolName: 'writeFile',
+        },
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'list-awaiting-inputs-agent',
+      name: 'List Awaiting Inputs Agent',
+      instructions: 'You write files.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+
+    const harness = new Harness({
+      id: 'list-awaiting-inputs-harness',
+      resourceId: 'resource-1',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    await harness.init();
+
+    await expect(harness.listAwaitingInputs()).resolves.toMatchObject([
+      {
+        id: 'thread-2-call',
+        kind: 'tool_suspension',
+        durable: true,
+        runId: 'thread-2-run',
+        threadId: 'thread-2',
+        resourceId: 'resource-1',
+      },
+      {
+        id: 'thread-1-call',
+        kind: 'tool_approval',
+        durable: true,
+        runId: 'thread-1-run',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      },
+    ]);
+
+    await expect(harness.listAwaitingInputs({ threadId: 'thread-1' })).resolves.toMatchObject([
+      {
+        id: 'thread-1-call',
+        kind: 'tool_approval',
+        threadId: 'thread-1',
+      },
+    ]);
+
+    await expect(harness.listAwaitingInputs({ resourceId: 'other-resource' })).resolves.toEqual([]);
+  });
+
   it('reports questions and plans as live-session-only awaiting inputs', async () => {
     const agent = new Agent({
       id: 'live-only-agent',
@@ -369,8 +479,43 @@ describe('Harness awaiting input durability', () => {
       durable: false,
       questionId: 'q-1',
     });
+    await expect(harness.listAwaitingInputs()).resolves.toMatchObject([
+      {
+        id: 'q-1',
+        kind: 'question',
+        durable: false,
+        questionId: 'q-1',
+      },
+    ]);
 
     const result = await harness.resumeAwaitingInput({ id: 'q-1', resumeData: 'Yes' });
     expect(result.status).toBe('live_session_only');
+  });
+
+  it('keeps live awaiting inputs scoped to the resource where they were created', async () => {
+    const agent = new Agent({
+      id: 'live-scope-agent',
+      name: 'Live Scope Agent',
+      instructions: 'You ask questions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+
+    const harness = new Harness({
+      id: 'live-scope-harness',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+
+    (harness as any).emit({
+      type: 'ask_question',
+      questionId: 'q-1',
+      question: 'Continue?',
+    });
+    harness.setResourceId({ resourceId: 'resource-2' });
+
+    await expect(harness.listAwaitingInputs()).resolves.toEqual([]);
+    await expect(harness.getAwaitingInput({ id: 'q-1' })).resolves.toBeNull();
   });
 });

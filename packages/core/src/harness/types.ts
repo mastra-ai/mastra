@@ -589,6 +589,9 @@ export type HarnessAwaitingInput =
       id: string;
       kind: 'question';
       durable: false;
+      modeId?: string;
+      threadId?: string;
+      resourceId?: string;
       questionId: string;
       question: string;
       options?: HarnessQuestionOption[];
@@ -598,6 +601,9 @@ export type HarnessAwaitingInput =
       id: string;
       kind: 'plan_approval';
       durable: false;
+      modeId?: string;
+      threadId?: string;
+      resourceId?: string;
       planId: string;
       title?: string;
       plan: string;
@@ -611,6 +617,11 @@ export interface HarnessWaitForAwaitingInputReadyOptions {
 
 export interface HarnessGetAwaitingInputOptions {
   id: string;
+}
+
+export interface HarnessListAwaitingInputsOptions {
+  resourceId?: string;
+  threadId?: string;
 }
 
 export interface HarnessResumeAwaitingInputOptions {
@@ -674,6 +685,9 @@ export interface HarnessDisplayState {
     toolCallId: string;
     toolName: string;
     args: unknown;
+    modeId?: string;
+    threadId?: string;
+    resourceId?: string;
   } | null;
 
   // ── Tool suspension ─────────────────────────────────────────────────
@@ -684,6 +698,9 @@ export interface HarnessDisplayState {
     args: unknown;
     suspendPayload: unknown;
     resumeSchema?: string;
+    modeId?: string;
+    threadId?: string;
+    resourceId?: string;
   } | null;
 
   // ── Interactive prompts ──────────────────────────────────────────────
@@ -693,6 +710,9 @@ export interface HarnessDisplayState {
     question: string;
     options?: HarnessQuestionOption[];
     selectionMode?: HarnessQuestionSelectionMode;
+    modeId?: string;
+    threadId?: string;
+    resourceId?: string;
   } | null;
 
   /** A plan awaiting user approval (null when none) */
@@ -700,6 +720,9 @@ export interface HarnessDisplayState {
     planId: string;
     title?: string;
     plan: string;
+    modeId?: string;
+    threadId?: string;
+    resourceId?: string;
   } | null;
 
   // ── Subagent tracking ────────────────────────────────────────────────

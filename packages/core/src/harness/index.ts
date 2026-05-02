@@ -19,6 +19,7 @@ export type {
   HarnessMessage,
   HarnessMessageContent,
   HarnessMode,
+  HarnessListAwaitingInputsOptions,
   HarnessOMConfig,
   HarnessQuestionAnswer,
   HarnessQuestionOption,
