@@ -278,6 +278,17 @@ describe('authorship', () => {
         }),
       ).toThrow(HTTPException);
     });
+
+    it('allows access to private owned record when auth is not configured (no caller identity)', () => {
+      expect(() =>
+        assertReadAccess({
+          requestContext: new RequestContext(),
+          resource: 'agents',
+          resourceId: 'a1',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
   });
 
   describe('assertExecuteAccess', () => {
@@ -367,6 +378,17 @@ describe('authorship', () => {
         }),
       ).toThrow(HTTPException);
     });
+
+    it('allows execution of private owned record when auth is not configured (no caller identity)', () => {
+      expect(() =>
+        assertExecuteAccess({
+          requestContext: new RequestContext(),
+          resource: 'agents',
+          resourceId: 'a1',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
+    });
   });
 
   describe('assertWriteAccess', () => {
@@ -429,6 +451,18 @@ describe('authorship', () => {
           record: { authorId: 'owner', visibility: 'private' },
         }),
       ).toThrow(HTTPException);
+    });
+
+    it('allows write to private owned record when auth is not configured (no caller identity)', () => {
+      expect(() =>
+        assertWriteAccess({
+          requestContext: new RequestContext(),
+          resource: 'agents',
+          resourceId: 'a1',
+          action: 'edit',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
     });
   });
 
@@ -629,6 +663,16 @@ describe('authorship', () => {
           record: { authorId: 'owner', visibility: 'private' },
         }),
       ).toThrow(HTTPException);
+    });
+
+    it('allows sharing of private owned record when auth is not configured (no caller identity)', () => {
+      expect(() =>
+        assertShareAccess({
+          requestContext: new RequestContext(),
+          resource: 'stored-agents',
+          record: { authorId: 'owner', visibility: 'private' },
+        }),
+      ).not.toThrow();
     });
   });
 });
