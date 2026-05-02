@@ -14,13 +14,14 @@ import type {
   ObservabilityExporter,
   ObservabilityBridge,
   ObservabilityEvent,
+  ObservabilityDropEvent,
   SerializationOptions,
 } from '@mastra/core/observability';
 
 import type { DeepCleanOptions } from '../spans/serialization';
 import { deepClean, mergeSerializationOptions } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
-import { routeToHandler } from './route-event';
+import { routeDropToHandler, routeToHandler } from './route-event';
 
 /**
  * Apply deepClean() to non-tracing observability events. Tracing events are
@@ -170,6 +171,22 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
     // Deliver to subscribers (base class tracks its own pending promises)
     super.emit(cleaned);
+  }
+
+  /**
+   * Emit exporter pipeline drop telemetry to exporters and the bridge.
+   *
+   * Drop events describe exporter health, not user observability data, so they
+   * are intentionally not delivered to generic event-bus subscribers.
+   */
+  emitDropEvent(event: ObservabilityDropEvent): void {
+    for (const exporter of this.exporters) {
+      this.trackPromise(routeDropToHandler(exporter, event, this.logger));
+    }
+
+    if (this.bridge) {
+      this.trackPromise(routeDropToHandler(this.bridge, event, this.logger));
+    }
   }
 
   /**

@@ -12,6 +12,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
   AnyExportedSpan,
+  ObservabilityDropEvent,
 } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ObservabilityBus } from './observability-bus';
@@ -98,6 +99,19 @@ function createFeedbackEvent(): FeedbackEvent {
       feedbackType: 'thumbs',
       value: 1,
     },
+  };
+}
+
+function createDropEvent(): ObservabilityDropEvent {
+  return {
+    type: 'drop',
+    signal: 'log',
+    reason: 'unsupported-storage',
+    count: 2,
+    timestamp: new Date(),
+    exporterName: 'mastra-default-observability-exporter',
+    storageName: 'MockStorage',
+    error: { message: 'Unsupported logs' },
   };
 }
 
@@ -287,6 +301,48 @@ describe('ObservabilityBus', () => {
       bus.registerExporter(exporter);
 
       bus.emit(createFeedbackEvent());
+    });
+  });
+
+  describe('drop event routing', () => {
+    it('should route drop events to exporters and bridge', () => {
+      const exporterDrop = vi.fn();
+      const bridgeDrop = vi.fn();
+      bus.registerExporter(createMockExporter({ onDroppedEvent: exporterDrop }));
+      bus.registerBridge(createMockBridge({ onDroppedEvent: bridgeDrop }));
+
+      const event = createDropEvent();
+      bus.emitDropEvent(event);
+
+      expect(exporterDrop).toHaveBeenCalledWith(event);
+      expect(bridgeDrop).toHaveBeenCalledWith(event);
+    });
+
+    it('should skip handlers without onDroppedEvent', () => {
+      bus.registerExporter(createMockExporter());
+      bus.registerBridge(createMockBridge());
+
+      expect(() => bus.emitDropEvent(createDropEvent())).not.toThrow();
+    });
+
+    it('should await async drop handlers during flush', async () => {
+      let resolved = false;
+      const onDroppedEvent = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            setTimeout(() => {
+              resolved = true;
+              resolve();
+            }, 0);
+          }),
+      );
+      bus.registerExporter(createMockExporter({ onDroppedEvent }));
+
+      bus.emitDropEvent(createDropEvent());
+      await bus.flush();
+
+      expect(onDroppedEvent).toHaveBeenCalledTimes(1);
+      expect(resolved).toBe(true);
     });
   });
 
