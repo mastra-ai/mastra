@@ -16,7 +16,7 @@ const workflow = createWorkflow({
   .commit();
 ```
 
-**After:** `commit()` produces a compile-time error when the final output type is incompatible. Object-style `map({...})` uses an opaque `ObjectMapOutput` brand instead of `any`, so it correctly allows `commit()` without leaking `any` through the rest of the type system.
+**After:** `commit()` produces a compile-time error when the final output type is incompatible. Object-style `map({...})` now infers the mapped output shape, so it can validate `outputSchema` without leaking `any` through the rest of the type system.
 
 ```ts
 const workflow = createWorkflow({

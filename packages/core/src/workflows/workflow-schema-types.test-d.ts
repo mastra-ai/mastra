@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
-import { createStep, createWorkflow } from './workflow';
+import { createStep, createWorkflow, mapVariable } from './workflow';
 
 describe('Workflow schema type inference', () => {
   describe('schemas with .optional().default()', () => {
@@ -461,18 +461,65 @@ describe('Workflow schema type inference', () => {
         execute: async () => ({ value: 1 }),
       });
 
-      // Object-style map({ key: { step, path } }) does not bypass outputSchema validation.
-      // `as any` is required here: the map overload's mappingConfig is a wide union of several
-      // variant shapes, and TS cannot narrow a plain object literal to the correct variant
-      // without an explicit cast.
       const workflow = createWorkflow({
         id: 'object-map-workflow',
         inputSchema: z.object({ query: z.string() }),
         outputSchema: z.object({ summary: z.string(), items: z.array(z.string()) }),
       })
         .then(step)
-        .map({ summary: { step, path: 'value' } } as any)
+        .map({ summary: { step, path: 'value' } })
         // @ts-expect-error object-style map output does not satisfy outputSchema
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should reject invalid object-style map configs', () => {
+      const workflow = createWorkflow({
+        id: 'invalid-object-map-config-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+      });
+
+      // @ts-expect-error - object-style map entries must be supported mapping references
+      workflow.map({ summary: 'value' });
+    });
+
+    it('should allow direct object-style map configs when outputSchema matches', () => {
+      const step = createStep({
+        id: 'direct-object-map-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ value: z.number(), label: z.string() }),
+        execute: async () => ({ value: 1, label: 'one' }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'direct-object-map-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.number() }),
+      })
+        .then(step)
+        .map({ summary: { step, path: 'value' } })
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should preserve mapVariable path literals for object-style map output validation', () => {
+      const step = createStep({
+        id: 'multi-field-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ value: z.number(), label: z.string() }),
+        execute: async () => ({ value: 1, label: 'one' }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'object-map-variable-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.number() }),
+      })
+        .then(step)
+        .map({ summary: mapVariable({ step, path: 'value' }) })
         .commit();
 
       expectTypeOf(workflow).not.toBeNever();

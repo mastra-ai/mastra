@@ -2021,10 +2021,6 @@ export async function createNetworkLoop({
         step: [agentStep, workflowStep, toolStep, finishStep],
         path: 'isComplete',
       },
-      completionReason: {
-        step: [routingStep, agentStep, workflowStep, toolStep, finishStep],
-        path: 'completionReason',
-      },
       result: {
         step: [agentStep, workflowStep, toolStep, finishStep],
         path: 'result',
@@ -2036,6 +2032,10 @@ export async function createNetworkLoop({
       primitiveType: {
         step: [routingStep, agentStep, workflowStep, toolStep],
         path: 'primitiveType',
+      },
+      prompt: {
+        step: routingStep,
+        path: 'prompt',
       },
       iteration: {
         step: [routingStep, agentStep, workflowStep, toolStep],
