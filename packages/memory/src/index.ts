@@ -72,6 +72,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+  skipEmptyAssistantMessages?: boolean;
 };
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
@@ -80,6 +81,7 @@ type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+  skipEmptyAssistantMessages?: boolean;
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
@@ -97,6 +99,10 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * with packages/core/src/memory/working-memory-utils.ts and
  * packages/core/src/memory/system-reminders.ts. Those source files also carry
  * compatibility notes that point back here.
+ *
+ * The empty-assistant helpers below follow the same rule: keep them in sync
+ * with packages/core/src/processors/memory/message-history.ts rather than
+ * importing new runtime helpers from @mastra/core.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
@@ -104,6 +110,75 @@ const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/*
+ * Compatibility note: the following empty-message detection helpers are
+ * intentionally copied from packages/core/src/processors/memory/message-history.ts.
+ * Keep both implementations in sync when changing this logic.
+ */
+function isEmptyAssistantMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'assistant') {
+    return false;
+  }
+
+  if (typeof (message.content as unknown) === 'string') {
+    return (message.content as unknown as string).trim().length === 0;
+  }
+
+  const content = message.content;
+  if (typeof content?.content === 'string' && content.content.trim().length > 0) {
+    return false;
+  }
+
+  if (!Array.isArray(content?.parts) || content.parts.length === 0) {
+    return true;
+  }
+
+  return !content.parts.some(part => isMeaningfulAssistantPart(part));
+}
+
+function isMeaningfulAssistantPart(part: unknown): boolean {
+  if (!isRecord(part)) {
+    return false;
+  }
+
+  if (part.type === 'text') {
+    return typeof part.text === 'string' && part.text.trim().length > 0;
+  }
+
+  if (part.type === 'reasoning') {
+    return (
+      hasNonEmptyString(part.text) || hasNonEmptyString(part.reasoning) || hasMeaningfulReasoningDetails(part.details)
+    );
+  }
+
+  if (part.type === 'thinking') {
+    return typeof part.thinking === 'string' && part.thinking.trim().length > 0;
+  }
+
+  if (part.type === 'step-start' || part.type === 'step-end') {
+    return false;
+  }
+
+  return true;
+}
+
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasMeaningfulReasoningDetails(details: unknown): boolean {
+  return (
+    Array.isArray(details) &&
+    details.some(detail => {
+      if (!isRecord(detail)) {
+        return false;
+      }
+
+      return hasNonEmptyString(detail.text) || hasNonEmptyString(detail.data);
+    })
+  );
 }
 
 export function extractWorkingMemoryTags(text: string): string[] | null {
@@ -1014,14 +1089,27 @@ ${workingMemory}`;
     });
 
     try {
+      const config = this.getMergedThreadConfig(memoryConfig);
+
       // Then strip working memory tags from all messages
       const updatedMessages = messages
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
-        .filter((m): m is MastraDBMessage => Boolean(m));
+        .filter((m): m is MastraDBMessage => Boolean(m))
+        .filter(message => !config.skipEmptyAssistantMessages || !isEmptyAssistantMessage(message));
 
-      const config = this.getMergedThreadConfig(memoryConfig);
+      if (updatedMessages.length === 0) {
+        const saveResult = { messages: [] };
+        span?.end({
+          output: { success: true },
+          attributes: {
+            messageCount: 0,
+            semanticRecallEnabled: Boolean(config.semanticRecall),
+          },
+        });
+        return saveResult;
+      }
 
       // Convert messages to MastraDBMessage format if needed
       const dbMessages = new MessageList({

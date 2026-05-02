@@ -708,6 +708,7 @@ https://mastra.ai/en/docs/memory/overview`,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
             saveMessages: this.saveMessages.bind(this),
             deleteMessages: this.deleteMessages.bind(this),
+            skipEmptyAssistantMessages: effectiveConfig.skipEmptyAssistantMessages,
           }),
         );
       }
@@ -869,6 +870,7 @@ https://mastra.ai/en/docs/memory/overview`,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
             saveMessages: this.saveMessages.bind(this),
             deleteMessages: this.deleteMessages.bind(this),
+            skipEmptyAssistantMessages: effectiveConfig.skipEmptyAssistantMessages,
           }),
         );
       }

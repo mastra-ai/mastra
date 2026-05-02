@@ -271,6 +271,255 @@ describe('Memory', () => {
       expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
 
+    it('should skip empty assistant messages when configured', async () => {
+      const threadId = 'thread-skip-empty-assistant';
+      const resourceId = 'resource-skip-empty-assistant';
+      const configuredMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          skipEmptyAssistantMessages: true,
+        },
+      });
+
+      await configuredMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      const result = await configuredMemory.saveMessages({
+        messages: [
+          {
+            id: 'empty-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'text', text: '   ' }],
+            },
+          },
+          {
+            id: 'real-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'text', text: 'Useful answer' }],
+            },
+          },
+          {
+            id: 'reasoning-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'reasoning', reasoning: '', details: [{ type: 'text', text: 'Useful reasoning' }] }],
+            },
+          },
+          {
+            id: 'tool-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: { state: 'call', toolName: 'lookup', toolCallId: 'call-1', args: {} },
+                },
+              ],
+            },
+          },
+          {
+            id: 'step-only-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:04:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'step-start' }],
+            },
+          },
+        ],
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual([
+        'real-assistant',
+        'reasoning-assistant',
+        'tool-assistant',
+      ]);
+
+      const recalled = await configuredMemory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+      expect(recalled.messages.map(message => message.id)).toEqual([
+        'real-assistant',
+        'reasoning-assistant',
+        'tool-assistant',
+      ]);
+    });
+
+    it('should keep assistant messages with content text and empty parts when configured to skip empty assistant messages', async () => {
+      const threadId = 'thread-keep-content-text';
+      const resourceId = 'resource-keep-content-text';
+      const configuredMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          skipEmptyAssistantMessages: true,
+        },
+      });
+
+      await configuredMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      const result = await configuredMemory.saveMessages({
+        messages: [
+          {
+            id: 'assistant-content-text',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+            content: {
+              format: 2,
+              content: 'Useful answer from content.content',
+              experimental_attachments: [],
+              parts: [],
+            },
+          },
+        ],
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual(['assistant-content-text']);
+
+      const recalled = await configuredMemory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+      expect(recalled.messages.map(message => message.id)).toEqual(['assistant-content-text']);
+    });
+
+    it('should return without saving when all messages are empty assistants', async () => {
+      const threadId = 'thread-all-empty-assistant';
+      const resourceId = 'resource-all-empty-assistant';
+      const storage = new InMemoryStore();
+      const configuredMemory = new Memory({
+        storage,
+        options: {
+          skipEmptyAssistantMessages: true,
+        },
+      });
+
+      await configuredMemory.createThread({
+        threadId,
+        resourceId,
+      });
+      const memoryStore = await storage.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      const saveMessagesSpy = vi.spyOn(memoryStore!, 'saveMessages');
+      saveMessagesSpy.mockClear();
+
+      const result = await configuredMemory.saveMessages({
+        messages: [
+          {
+            id: 'empty-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'text', text: '   ' }],
+            },
+          },
+        ],
+      });
+
+      expect(result.messages).toEqual([]);
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
+    });
+
+    it('should honor per-call skipEmptyAssistantMessages memory config', async () => {
+      const threadId = 'thread-runtime-skip-empty-assistant';
+      const resourceId = 'resource-runtime-skip-empty-assistant';
+      const configuredMemory = new Memory({
+        storage: new InMemoryStore(),
+      });
+
+      await configuredMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      const result = await configuredMemory.saveMessages({
+        memoryConfig: {
+          skipEmptyAssistantMessages: true,
+        },
+        messages: [
+          {
+            id: 'empty-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'text', text: '   ' }],
+            },
+          },
+          {
+            id: 'real-assistant',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+            content: {
+              format: 2,
+              content: '',
+              experimental_attachments: [],
+              parts: [{ type: 'text', text: 'Useful answer' }],
+            },
+          },
+        ],
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual(['real-assistant']);
+
+      const recalled = await configuredMemory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+      expect(recalled.messages.map(message => message.id)).toEqual(['real-assistant']);
+    });
+
     it('should preserve the original createdAt when saving the same message id again', async () => {
       const threadId = 'thread-save-duplicate';
       const resourceId = 'resource-save-duplicate';

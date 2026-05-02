@@ -16,6 +16,7 @@ export interface MessageHistoryOptions {
   lastMessages?: number;
   saveMessages?: (args: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }>;
   deleteMessages?: (messageIds: string[], observabilityContext?: Partial<ObservabilityContext>) => Promise<void>;
+  skipEmptyAssistantMessages?: boolean;
 }
 
 type RegenerateState = {
@@ -26,6 +27,76 @@ type RegenerateState = {
 type MemoryHistoryOverride = MastraMemoryHistoryOverride;
 
 const INCOMPLETE_RESPONSE_STATUSES = new Set(['partial', 'aborted', 'cancelled', 'canceled']);
+
+function isEmptyAssistantMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'assistant') {
+    return false;
+  }
+
+  if (typeof (message.content as unknown) === 'string') {
+    return (message.content as unknown as string).trim().length === 0;
+  }
+
+  const content = message.content;
+  if (typeof content?.content === 'string' && content.content.trim().length > 0) {
+    return false;
+  }
+
+  if (!Array.isArray(content?.parts) || content.parts.length === 0) {
+    return true;
+  }
+
+  return !content.parts.some(part => isMeaningfulAssistantPart(part));
+}
+
+function isMeaningfulAssistantPart(part: unknown): boolean {
+  if (!part || typeof part !== 'object') {
+    return false;
+  }
+
+  const record = part as Record<string, unknown>;
+  const type = record.type;
+
+  if (type === 'text') {
+    return typeof record.text === 'string' && record.text.trim().length > 0;
+  }
+
+  if (type === 'reasoning') {
+    return (
+      hasNonEmptyString(record.text) ||
+      hasNonEmptyString(record.reasoning) ||
+      hasMeaningfulReasoningDetails(record.details)
+    );
+  }
+
+  if (type === 'thinking') {
+    return typeof record.thinking === 'string' && record.thinking.trim().length > 0;
+  }
+
+  if (type === 'step-start' || type === 'step-end') {
+    return false;
+  }
+
+  return true;
+}
+
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasMeaningfulReasoningDetails(details: unknown): boolean {
+  return (
+    Array.isArray(details) &&
+    details.some(detail => {
+      if (!detail || typeof detail !== 'object') {
+        return false;
+      }
+
+      const record = detail as Record<string, unknown>;
+      return hasNonEmptyString(record.text) || hasNonEmptyString(record.data);
+    })
+  );
+}
 
 /**
  * Hybrid processor that handles both retrieval and persistence of message history.
@@ -42,12 +113,14 @@ export class MessageHistory implements Processor {
   private lastMessages?: number;
   private saveMessages?: MessageHistoryOptions['saveMessages'];
   private deleteMessages?: MessageHistoryOptions['deleteMessages'];
+  private skipEmptyAssistantMessages: boolean;
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
     this.saveMessages = options.saveMessages;
     this.deleteMessages = options.deleteMessages;
+    this.skipEmptyAssistantMessages = options.skipEmptyAssistantMessages ?? false;
   }
 
   /**
@@ -312,7 +385,10 @@ export class MessageHistory implements Processor {
    */
   private filterMessagesForPersistence(
     messages: MastraDBMessage[],
-    { includeIncompleteAssistantMessages = false }: { includeIncompleteAssistantMessages?: boolean } = {},
+    {
+      includeIncompleteAssistantMessages = false,
+      skipEmptyAssistantMessages = false,
+    }: { includeIncompleteAssistantMessages?: boolean; skipEmptyAssistantMessages?: boolean } = {},
   ): MastraDBMessage[] {
     return messages
       .map(m => {
@@ -354,10 +430,20 @@ export class MessageHistory implements Processor {
             })
             .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
-          // If all parts were filtered out, skip the whole message
+          // If all parts were filtered out, skip the whole message only when
+          // it has no fallback text content left.
           if (newMessage.content.parts.length === 0) {
-            return null;
+            const hasContentText =
+              typeof newMessage.content.content === 'string' && newMessage.content.content.trim().length > 0;
+
+            if (!skipEmptyAssistantMessages || !hasContentText) {
+              return null;
+            }
           }
+        }
+
+        if (skipEmptyAssistantMessages && isEmptyAssistantMessage(newMessage)) {
+          return null;
         }
 
         return newMessage;
@@ -382,6 +468,7 @@ export class MessageHistory implements Processor {
     // Check if readOnly from memoryConfig
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
+    const skipEmptyAssistantMessages = memoryContext?.memoryConfig?.skipEmptyAssistantMessages === true;
 
     if (!context || readOnly) {
       return messageList;
@@ -408,6 +495,7 @@ export class MessageHistory implements Processor {
         threadId,
         resourceId,
         includeIncompleteAssistantMessages: override?.type === 'server-history',
+        skipEmptyAssistantMessages,
       });
 
       const regenerateState = args.state?.regenerate as RegenerateState | undefined;
@@ -453,14 +541,18 @@ export class MessageHistory implements Processor {
     threadId: string;
     resourceId?: string;
     includeIncompleteAssistantMessages?: boolean;
+    skipEmptyAssistantMessages?: boolean;
   }): Promise<MastraDBMessage[]> {
-    const { messages, threadId, resourceId, includeIncompleteAssistantMessages } = args;
+    const { messages, threadId, resourceId, includeIncompleteAssistantMessages, skipEmptyAssistantMessages } = args;
 
     if (messages.length === 0) {
       return [];
     }
 
-    const filtered = this.filterMessagesForPersistence(messages, { includeIncompleteAssistantMessages });
+    const filtered = this.filterMessagesForPersistence(messages, {
+      includeIncompleteAssistantMessages,
+      skipEmptyAssistantMessages: this.skipEmptyAssistantMessages || skipEmptyAssistantMessages === true,
+    });
 
     if (filtered.length === 0) {
       return [];

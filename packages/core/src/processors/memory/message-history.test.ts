@@ -1107,6 +1107,177 @@ describe('MessageHistory', () => {
       });
     });
 
+    it('should skip empty assistant messages when configured', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage, skipEmptyAssistantMessages: true });
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'empty-assistant',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: '   ' }] },
+          createdAt: new Date(),
+        },
+        {
+          id: 'real-assistant',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Useful answer' }] },
+          createdAt: new Date(),
+        },
+        {
+          id: 'reasoning-assistant',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'reasoning', reasoning: '', details: [{ type: 'text', text: 'Useful reasoning' }] }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'tool-assistant',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolName: 'lookup', toolCallId: 'call-1', args: {} },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'step-only-assistant',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'step-start' }] },
+          createdAt: new Date(),
+        },
+      ];
+
+      await processor.persistMessages({
+        messages,
+        threadId: 'thread-1',
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [
+          expect.objectContaining({ id: 'real-assistant' }),
+          expect.objectContaining({ id: 'reasoning-assistant' }),
+          expect.objectContaining({ id: 'tool-assistant' }),
+        ],
+      });
+    });
+
+    it('should preserve assistant messages with content text and empty parts when skipping empty assistant messages', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage, skipEmptyAssistantMessages: true });
+      const response: MastraDBMessage = {
+        id: 'assistant-content-text',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Useful answer',
+          parts: [],
+        },
+        createdAt: new Date(),
+      };
+
+      await processor.persistMessages({
+        messages: [response],
+        threadId: 'thread-1',
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'assistant-content-text' })],
+      });
+    });
+
+    it('should keep default empty-parts filtering unchanged when skipEmptyAssistantMessages is not configured', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const response: MastraDBMessage = {
+        id: 'assistant-content-text',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Useful answer',
+          parts: [],
+        },
+        createdAt: new Date(),
+      };
+
+      await processor.persistMessages({
+        messages: [response],
+        threadId: 'thread-1',
+      });
+
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+    });
+
+    it('should honor skipEmptyAssistantMessages from runtime memory config', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const response: MastraDBMessage = {
+        id: 'empty-assistant',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: '   ' }] },
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add(response, 'response');
+      const requestContext = createRuntimeContextWithMemory('thread-1');
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-1' },
+        memoryConfig: { skipEmptyAssistantMessages: true },
+      } as MemoryRuntimeContext);
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [response],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext,
+      });
+
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+    });
+
     it('should preserve existing message IDs', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
