@@ -270,6 +270,13 @@ describe('harnessToUIMessageStream', () => {
       { type: 'data-mastra-harness-snapshot', data: { sequence: 3 } },
     ]);
 
+    harness.emit(completed);
+
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 4 },
+    });
+
     await reader.cancel();
   });
 
@@ -283,7 +290,8 @@ describe('harnessToUIMessageStream', () => {
       isError: true,
     });
 
-    const reader = harnessToUIMessageStream(new FakeHarness(state), {
+    const harness = new FakeHarness(state);
+    const reader = harnessToUIMessageStream(harness, {
       include: ['tools'],
       sendStart: false,
     }).getReader();
@@ -298,6 +306,21 @@ describe('harnessToUIMessageStream', () => {
       { type: 'tool-output-error', toolCallId: 'tool-1', errorText: 'not found' },
       { type: 'data-mastra-harness-snapshot', data: { sequence: 1 } },
     ]);
+
+    const repeated = createState({ isRunning: true });
+    repeated.activeTools.set('tool-1', {
+      name: 'read_file',
+      args: { path: 'missing.ts' },
+      status: 'error',
+      result: new Error('not found'),
+      isError: true,
+    });
+    harness.emit(repeated);
+
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 2 },
+    });
   });
 
   it('supports delta mode with an initial snapshot and append-only changed-domain parts', async () => {

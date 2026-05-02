@@ -156,6 +156,7 @@ type EmitContext = {
   text: StreamTextState;
   reasoning: StreamTextState;
   tools: Map<string, NativeToolStreamState>;
+  finalizedTools: Set<string>;
   lastSnapshot: HarnessUISnapshotData | null;
   sequence: number;
   sendStart: boolean;
@@ -188,6 +189,7 @@ export function harnessToUIMessageStream(
         text: { id: null, value: '', open: false },
         reasoning: { id: null, value: '', open: false },
         tools: new Map(),
+        finalizedTools: new Set(),
         lastSnapshot: null,
         sequence: 0,
         sendStart,
@@ -370,6 +372,10 @@ function closeOpenTextPart(
 
 function emitNativeToolChunks(state: HarnessDisplayState, context: EmitContext): void {
   for (const [toolCallId, tool] of state.activeTools) {
+    if (context.finalizedTools.has(toolCallId)) {
+      continue;
+    }
+
     const toolState = context.tools.get(toolCallId) ?? {
       inputStarted: false,
       inputBuffer: '',
@@ -420,6 +426,8 @@ function emitNativeToolChunks(state: HarnessDisplayState, context: EmitContext):
         output: tool.result,
       });
       toolState.outputEmitted = true;
+      context.finalizedTools.add(toolCallId);
+      context.tools.delete(toolCallId);
     }
 
     if (!toolState.outputEmitted && tool.status === 'error') {
@@ -429,6 +437,20 @@ function emitNativeToolChunks(state: HarnessDisplayState, context: EmitContext):
         errorText: stringifyToolError(tool.result ?? tool.partialResult ?? 'Tool execution failed'),
       });
       toolState.outputEmitted = true;
+      context.finalizedTools.add(toolCallId);
+      context.tools.delete(toolCallId);
+    }
+  }
+
+  for (const toolCallId of context.tools.keys()) {
+    if (!state.activeTools.has(toolCallId)) {
+      context.tools.delete(toolCallId);
+    }
+  }
+
+  for (const toolCallId of context.finalizedTools) {
+    if (!state.activeTools.has(toolCallId)) {
+      context.finalizedTools.delete(toolCallId);
     }
   }
 }
