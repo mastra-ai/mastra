@@ -30,6 +30,49 @@ function formatQuestionAnswer(answer: HarnessQuestionAnswer): string {
   return Array.isArray(answer) ? answer.join(', ') : answer;
 }
 
+function readQuestionAnswer(value: unknown): HarnessQuestionAnswer | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.every(item => typeof item === 'string')) return value;
+  if (value && typeof value === 'object' && 'answer' in value) {
+    return readQuestionAnswer((value as { answer?: unknown }).answer);
+  }
+  return undefined;
+}
+
+function readPlanApprovalResponse(value: unknown): { action: 'approved' | 'rejected'; feedback?: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const response = value as { action?: unknown; feedback?: unknown };
+  if (response.action !== 'approved' && response.action !== 'rejected') return undefined;
+  return {
+    action: response.action,
+    ...(typeof response.feedback === 'string' ? { feedback: response.feedback } : {}),
+  };
+}
+
+function readToolResumeData(context: any): unknown {
+  return context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+}
+
+function readToolSuspend(context: any): ((payload: any, options?: any) => Promise<unknown>) | undefined {
+  return context?.suspend ?? context?.agent?.suspend ?? context?.workflow?.suspend;
+}
+
+function readToolCallId(context: any): string | undefined {
+  return context?.toolCallId ?? context?.agent?.toolCallId ?? context?.workflow?.toolCallId;
+}
+
+async function suspendForHarnessInput(
+  suspend: (payload: any, options?: any) => Promise<unknown>,
+  payload: Record<string, unknown>,
+  resumeLabel: string,
+  resumeSchema: Record<string, unknown>,
+): Promise<void> {
+  await suspend(payload, {
+    resumeLabel,
+    resumeSchema: JSON.stringify(resumeSchema),
+  });
+}
+
 /**
  * Built-in harness tool: ask the user a question and wait for their response.
  *
@@ -68,8 +111,14 @@ export const askUserTool = createTool({
   }),
   execute: async ({ question, options, selectionMode }, context) => {
     try {
+      const toolContext = context as any;
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
       const resolvedSelectionMode = options?.length ? (selectionMode ?? 'single_select') : undefined;
+      const resumedAnswer = readQuestionAnswer(readToolResumeData(toolContext));
+
+      if (resumedAnswer !== undefined) {
+        return { content: `User answered: ${formatQuestionAnswer(resumedAnswer)}`, isError: false };
+      }
 
       if (selectionMode && !options?.length) {
         return {
@@ -78,7 +127,10 @@ export const askUserTool = createTool({
         };
       }
 
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
+      const suspend = readToolSuspend(toolContext);
+      const canSuspendDurably = Boolean(harnessCtx?.durableAwaitingInputs && harnessCtx?.emitEvent && suspend);
+
+      if (!harnessCtx?.emitEvent || (!harnessCtx?.registerQuestion && !canSuspendDurably)) {
         return {
           content: `[Question for user]: ${question}${
             options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
@@ -88,6 +140,34 @@ export const askUserTool = createTool({
       }
 
       const questionId = `q_${++questionCounter}_${Date.now()}`;
+
+      if (harnessCtx.durableAwaitingInputs && suspend) {
+        harnessCtx.emitEvent!({
+          type: 'ask_question',
+          questionId,
+          question,
+          options,
+          selectionMode: resolvedSelectionMode,
+        });
+        await suspendForHarnessInput(
+          suspend,
+          {
+            type: 'question',
+            toolCallId: readToolCallId(toolContext),
+            toolName: 'ask_user',
+            args: { question, options, selectionMode },
+            questionId,
+            question,
+            ...(options ? { options } : {}),
+            ...(resolvedSelectionMode ? { selectionMode: resolvedSelectionMode } : {}),
+          },
+          questionId,
+          {
+            anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+          },
+        );
+        return { content: `[Question for user]: ${question}`, isError: false };
+      }
 
       const answer = await new Promise<HarnessQuestionAnswer>((resolve, reject) => {
         const signal = harnessCtx.abortSignal;
@@ -141,9 +221,29 @@ export const submitPlanTool = createTool({
   }),
   execute: async ({ title, plan }, context) => {
     try {
+      const toolContext = context as any;
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const resumedResponse = readPlanApprovalResponse(readToolResumeData(toolContext));
 
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerPlanApproval) {
+      if (resumedResponse) {
+        if (resumedResponse.action === 'approved') {
+          return {
+            content: 'Plan approved. Proceed with implementation following the approved plan.',
+            isError: false,
+          };
+        }
+
+        const feedback = resumedResponse.feedback ? `\n\nUser feedback: ${resumedResponse.feedback}` : '';
+        return {
+          content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+          isError: false,
+        };
+      }
+
+      const suspend = readToolSuspend(toolContext);
+      const canSuspendDurably = Boolean(harnessCtx?.durableAwaitingInputs && harnessCtx?.emitEvent && suspend);
+
+      if (!harnessCtx?.emitEvent || (!harnessCtx?.registerPlanApproval && !canSuspendDurably)) {
         return {
           content: `[Plan submitted for review]\n\nTitle: ${title || 'Implementation Plan'}\n\n${plan}`,
           isError: false,
@@ -151,6 +251,40 @@ export const submitPlanTool = createTool({
       }
 
       const planId = `plan_${++planCounter}_${Date.now()}`;
+
+      if (harnessCtx.durableAwaitingInputs && suspend) {
+        harnessCtx.emitEvent!({
+          type: 'plan_approval_required',
+          planId,
+          title: title || 'Implementation Plan',
+          plan,
+        });
+        await suspendForHarnessInput(
+          suspend,
+          {
+            type: 'plan_approval',
+            toolCallId: readToolCallId(toolContext),
+            toolName: 'submit_plan',
+            args: { title, plan },
+            planId,
+            title: title || 'Implementation Plan',
+            plan,
+          },
+          planId,
+          {
+            type: 'object',
+            properties: {
+              action: { enum: ['approved', 'rejected'] },
+              feedback: { type: 'string' },
+            },
+            required: ['action'],
+          },
+        );
+        return {
+          content: `[Plan submitted for review]\n\nTitle: ${title || 'Implementation Plan'}\n\n${plan}`,
+          isError: false,
+        };
+      }
 
       const result = await new Promise<{ action: 'approved' | 'rejected'; feedback?: string }>((resolve, reject) => {
         const signal = harnessCtx.abortSignal;

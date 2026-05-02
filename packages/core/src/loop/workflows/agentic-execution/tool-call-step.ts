@@ -619,15 +619,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // Flush messages before suspension to ensure they are persisted
               await flushMessagesBeforeSuspension();
 
+              const resumeLabel = options?.resumeLabel ?? inputData.toolCallId;
               return await suspend(
                 {
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   toolName: inputData.toolName,
-                  resumeLabel: options?.resumeLabel,
+                  resumeLabel,
                 },
                 {
-                  resumeLabel: inputData.toolCallId,
+                  resumeLabel,
                 },
               );
             }

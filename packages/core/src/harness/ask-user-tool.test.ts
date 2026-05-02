@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { RequestContext } from '../request-context';
 
-import { askUserTool } from './tools';
+import { askUserTool, submitPlanTool } from './tools';
 import type { HarnessEvent, HarnessQuestionAnswer, HarnessRequestContext } from './types';
 
 function createAskUserContext() {
@@ -102,5 +102,92 @@ describe('askUserTool', () => {
     });
 
     expect(emitEvent).not.toHaveBeenCalled();
+  });
+
+  it('uses durable suspension without a live question resolver', async () => {
+    const events: HarnessEvent[] = [];
+    const requestContext = new RequestContext();
+    const suspend = vi.fn(async () => undefined);
+    requestContext.set('harness', {
+      durableAwaitingInputs: true,
+      emitEvent: event => events.push(event),
+    } satisfies Partial<HarnessRequestContext>);
+
+    await expect(
+      (askUserTool as any).execute(
+        {
+          question: 'Pick any?',
+          options: [{ label: 'A' }, { label: 'B' }],
+          selectionMode: 'multi_select',
+        },
+        { requestContext, suspend, toolCallId: 'ask-call' },
+      ),
+    ).resolves.toEqual({
+      content: '[Question for user]: Pick any?',
+      isError: false,
+    });
+
+    expect(events[0]).toMatchObject({
+      type: 'ask_question',
+      question: 'Pick any?',
+      options: [{ label: 'A' }, { label: 'B' }],
+      selectionMode: 'multi_select',
+    });
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'question',
+        toolCallId: 'ask-call',
+        toolName: 'ask_user',
+        question: 'Pick any?',
+        options: [{ label: 'A' }, { label: 'B' }],
+        selectionMode: 'multi_select',
+      }),
+      expect.objectContaining({
+        resumeLabel: expect.stringMatching(/^q_/),
+        resumeSchema: expect.any(String),
+      }),
+    );
+  });
+
+  it('uses durable plan suspension without a live plan resolver', async () => {
+    const events: HarnessEvent[] = [];
+    const requestContext = new RequestContext();
+    const suspend = vi.fn(async () => undefined);
+    requestContext.set('harness', {
+      durableAwaitingInputs: true,
+      emitEvent: event => events.push(event),
+    } satisfies Partial<HarnessRequestContext>);
+
+    await expect(
+      (submitPlanTool as any).execute(
+        {
+          title: 'Plan',
+          plan: '# Plan',
+        },
+        { requestContext, suspend, toolCallId: 'plan-call' },
+      ),
+    ).resolves.toEqual({
+      content: '[Plan submitted for review]\n\nTitle: Plan\n\n# Plan',
+      isError: false,
+    });
+
+    expect(events[0]).toMatchObject({
+      type: 'plan_approval_required',
+      title: 'Plan',
+      plan: '# Plan',
+    });
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'plan_approval',
+        toolCallId: 'plan-call',
+        toolName: 'submit_plan',
+        title: 'Plan',
+        plan: '# Plan',
+      }),
+      expect.objectContaining({
+        resumeLabel: expect.stringMatching(/^plan_/),
+        resumeSchema: expect.any(String),
+      }),
+    );
   });
 });

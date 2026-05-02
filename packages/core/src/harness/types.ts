@@ -594,10 +594,12 @@ export type HarnessAwaitingInput =
   | {
       id: string;
       kind: 'question';
-      durable: false;
+      durable: boolean;
+      runId?: string;
       modeId?: string;
       threadId?: string;
       resourceId?: string;
+      toolCallId?: string;
       questionId: string;
       question: string;
       options?: HarnessQuestionOption[];
@@ -606,10 +608,12 @@ export type HarnessAwaitingInput =
   | {
       id: string;
       kind: 'plan_approval';
-      durable: false;
+      durable: boolean;
+      runId?: string;
       modeId?: string;
       threadId?: string;
       resourceId?: string;
+      toolCallId?: string;
       planId: string;
       title?: string;
       plan: string;
@@ -1139,6 +1143,9 @@ export interface HarnessRequestContext<TState = unknown> {
     planId: string;
     resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
   }) => void;
+
+  /** Whether built-in Harness tools can use durable workflow suspension for awaiting input */
+  durableAwaitingInputs?: boolean;
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;

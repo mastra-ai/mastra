@@ -43,6 +43,7 @@ import type {
   HarnessMessageContent,
   HarnessMode,
   HarnessQuestionAnswer,
+  HarnessQuestionOption,
   HarnessResumeAwaitingInputOptions,
   HarnessResumeAwaitingInputResult,
   HarnessRequestContext,
@@ -129,6 +130,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function readQuestionAnswer(value: unknown): HarnessQuestionAnswer | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.every(item => typeof item === 'string')) return value;
+  if (isRecord(value)) return readQuestionAnswer(value.answer);
+  return undefined;
+}
+
+function readQuestionOptions(value: unknown): HarnessQuestionOption[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const options: HarnessQuestionOption[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.label !== 'string') return undefined;
+    options.push({
+      label: item.label,
+      ...(typeof item.description === 'string' ? { description: item.description } : {}),
+    });
+  }
+  return options;
+}
+
+function readPlanApprovalResponse(value: unknown): { action: 'approved' | 'rejected'; feedback?: string } | undefined {
+  if (!isRecord(value)) return undefined;
+  const action = value.action;
+  if (action !== 'approved' && action !== 'rejected') return undefined;
+  return {
+    action,
+    ...(typeof value.feedback === 'string' ? { feedback: value.feedback } : {}),
+  };
 }
 
 function getWorkflowInputState(snapshot: WorkflowRunState): Record<string, unknown> | undefined {
@@ -2505,13 +2536,7 @@ export class Harness<TState = {}> {
 
     while (true) {
       const awaitingInput = await this.getAwaitingInput({ id });
-      if (
-        awaitingInput &&
-        (awaitingInput.durable ||
-          awaitingInput.kind === 'question' ||
-          awaitingInput.kind === 'plan_approval' ||
-          Date.now() - startedAt >= timeoutMs)
-      ) {
+      if (awaitingInput && (awaitingInput.durable || Date.now() - startedAt >= timeoutMs)) {
         return awaitingInput;
       }
 
@@ -2577,18 +2602,27 @@ export class Harness<TState = {}> {
       };
     }
 
-    if (awaitingInput.kind === 'question' || awaitingInput.kind === 'plan_approval') {
-      return {
-        status: 'live_session_only',
-        awaitingInput,
-        message: `${awaitingInput.kind} awaiting inputs are live-session-only and cannot be durably resumed.`,
-      };
+    const liveResumeResult = await this.resumeLiveAwaitingInput(awaitingInput, resumeData);
+    if (liveResumeResult) {
+      return liveResumeResult;
     }
 
     if (!awaitingInput.durable || !awaitingInput.runId) {
+      const readyAwaitingInput = await this.waitForAwaitingInputReady({ id });
+      if (readyAwaitingInput && readyAwaitingInput !== awaitingInput) {
+        const readyLiveResumeResult = await this.resumeLiveAwaitingInput(readyAwaitingInput, resumeData);
+        if (readyLiveResumeResult) {
+          return readyLiveResumeResult;
+        }
+
+        if (readyAwaitingInput.durable && readyAwaitingInput.runId) {
+          return this.resumeAwaitingInput({ id, resumeData, requestContext });
+        }
+      }
+
       return {
         status: 'live_session_only',
-        awaitingInput,
+        awaitingInput: readyAwaitingInput ?? awaitingInput,
         message: `Awaiting input "${id}" is not backed by a durable workflow snapshot yet.`,
       };
     }
@@ -2616,6 +2650,13 @@ export class Harness<TState = {}> {
       }
     }
 
+    if (awaitingInput.kind === 'plan_approval' && readPlanApprovalResponse(resumeData)?.action === 'approved') {
+      const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
+      if (defaultMode && defaultMode.id !== this.currentModeId) {
+        await this.switchMode({ modeId: defaultMode.id });
+      }
+    }
+
     this.emit({ type: 'agent_start' });
 
     try {
@@ -2632,12 +2673,18 @@ export class Harness<TState = {}> {
             })
           : await this.handleToolResumeByRunId({
               runId: awaitingInput.runId,
-              toolCallId: awaitingInput.toolCallId,
+              toolCallId:
+                awaitingInput.kind === 'question'
+                  ? awaitingInput.questionId
+                  : awaitingInput.kind === 'plan_approval'
+                    ? awaitingInput.planId
+                    : awaitingInput.toolCallId,
               resumeData,
               requestContext,
               threadId: awaitingInput.threadId,
               resourceId: awaitingInput.resourceId,
-              requireToolApproval: awaitingInput.requireToolApproval,
+              requireToolApproval:
+                awaitingInput.kind === 'tool_suspension' ? awaitingInput.requireToolApproval : undefined,
             });
 
       const reason = streamResult.suspended ? 'suspended' : 'complete';
@@ -2667,6 +2714,29 @@ export class Harness<TState = {}> {
       this.emit({ type: 'agent_end', reason: 'error' });
       throw err;
     }
+  }
+
+  private async resumeLiveAwaitingInput(
+    awaitingInput: HarnessAwaitingInput,
+    resumeData: unknown,
+  ): Promise<HarnessResumeAwaitingInputResult | null> {
+    if (awaitingInput.kind === 'question' && !awaitingInput.durable) {
+      const answer = readQuestionAnswer(resumeData);
+      if (answer !== undefined && this.pendingQuestions.has(awaitingInput.questionId)) {
+        this.respondToQuestion({ questionId: awaitingInput.questionId, answer });
+        return { status: 'resumed', awaitingInput };
+      }
+    }
+
+    if (awaitingInput.kind === 'plan_approval' && !awaitingInput.durable) {
+      const response = readPlanApprovalResponse(resumeData);
+      if (response && this.pendingPlanApprovals.has(awaitingInput.planId)) {
+        await this.respondToPlanApproval({ planId: awaitingInput.planId, response });
+        return { status: 'resumed', awaitingInput };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -2776,7 +2846,12 @@ export class Harness<TState = {}> {
     if (resolve) {
       this.pendingQuestions.delete(questionId);
       resolve(answer);
+      return;
     }
+
+    void this.resumeAwaitingInput({ id: questionId, resumeData: answer }).catch(error => {
+      this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+    });
   }
 
   /**
@@ -2806,7 +2881,10 @@ export class Harness<TState = {}> {
     response: { action: 'approved' | 'rejected'; feedback?: string };
   }): Promise<void> {
     const resolve = this.pendingPlanApprovals.get(planId);
-    if (!resolve) return;
+    if (!resolve) {
+      await this.resumeAwaitingInput({ id: planId, resumeData: response });
+      return;
+    }
 
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
@@ -3026,7 +3104,10 @@ export class Harness<TState = {}> {
       readString(harnessContext?.resourceId) ??
       readString(streamMemoryInfo?.resourceId) ??
       run.resourceId;
-    const payloadType = readString(suspendPayload.type);
+    const suspendedToolPayload = isRecord(suspendPayload.toolCallSuspended)
+      ? suspendPayload.toolCallSuspended
+      : undefined;
+    const payloadType = readString(suspendedToolPayload?.type) ?? readString(suspendPayload.type);
     const streamToolPayload = getStreamToolPayload(suspendPayload);
     const requireToolApproval = harnessState?.yolo !== true;
 
@@ -3051,6 +3132,52 @@ export class Harness<TState = {}> {
         args: approvalPayload.args,
         resumeSchema: readString(suspendPayload.resumeSchema),
         requireToolApproval,
+      };
+    }
+
+    if (payloadType === 'question') {
+      const questionPayload = suspendedToolPayload ?? suspendPayload;
+      const questionId = readString(questionPayload.questionId) ?? id;
+      const question = readString(questionPayload.question);
+      if (!question) return null;
+
+      return {
+        id,
+        kind: 'question',
+        durable: true,
+        runId: run.runId,
+        modeId,
+        threadId,
+        resourceId,
+        toolCallId: readString(questionPayload.toolCallId) ?? readString(streamToolPayload?.toolCallId),
+        questionId,
+        question,
+        options: readQuestionOptions(questionPayload.options),
+        selectionMode:
+          questionPayload.selectionMode === 'single_select' || questionPayload.selectionMode === 'multi_select'
+            ? questionPayload.selectionMode
+            : undefined,
+      };
+    }
+
+    if (payloadType === 'plan_approval') {
+      const planPayload = suspendedToolPayload ?? suspendPayload;
+      const planId = readString(planPayload.planId) ?? id;
+      const plan = readString(planPayload.plan);
+      if (!plan) return null;
+
+      return {
+        id,
+        kind: 'plan_approval',
+        durable: true,
+        runId: run.runId,
+        modeId,
+        threadId,
+        resourceId,
+        toolCallId: readString(planPayload.toolCallId) ?? readString(streamToolPayload?.toolCallId),
+        planId,
+        title: readString(planPayload.title),
+        plan,
       };
     }
 
@@ -3904,6 +4031,7 @@ export class Harness<TState = {}> {
       emitEvent: event => this.emit(event),
       registerQuestion: params => this.registerQuestion(params),
       registerPlanApproval: params => this.registerPlanApproval(params),
+      durableAwaitingInputs: Boolean(this.config.storage),
       getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
