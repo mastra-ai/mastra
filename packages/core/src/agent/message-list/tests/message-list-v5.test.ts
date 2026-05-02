@@ -1908,6 +1908,76 @@ describe('MessageList V5 Support', () => {
       expect(rawToolPart.toolInvocation.result).toEqual({ displayName: 'Acme', apiKey: 'secret-value' });
     });
 
+    it('should preserve explicit null payload projections in UI and drained transcript', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-null-projected-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-null-projected',
+                toolName: 'lookupCustomer',
+                state: 'result',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                result: { displayName: 'Acme', apiKey: 'secret-value' },
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'input-available': { projected: null },
+                      'output-available': { projected: null },
+                    },
+                    transcript: {
+                      'input-available': { projected: null },
+                      'output-available': { projected: null },
+                    },
+                  },
+                },
+              },
+            },
+            {
+              type: 'data-tool-call-approval',
+              data: {
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                metadata: {
+                  mastra: {
+                    toolPayloadProjection: {
+                      transcript: {
+                        approval: { projected: null },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const uiToolPart = list.get.all.aiV5.ui()[0]!.parts.find(part => isToolUIPart(part)) as any;
+      expect(uiToolPart.input).toBeNull();
+      expect(uiToolPart.output).toBeNull();
+
+      const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
+      const drainedToolPart = drainedParts.find(part => part.type === 'tool-invocation') as any;
+      expect(drainedToolPart.toolInvocation.args).toBeNull();
+      expect(drainedToolPart.toolInvocation.result).toBeNull();
+
+      const drainedApprovalPart = drainedParts.find(part => part.type === 'data-tool-call-approval') as any;
+      expect(drainedApprovalPart.data.args).toBeNull();
+    });
+
     it('should preserve modelOutput metadata across db to model to db conversion', () => {
       const list = new MessageList({ threadId, resourceId });
       const toolResultMessage: MastraDBMessage = {

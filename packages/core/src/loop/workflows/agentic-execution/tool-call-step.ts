@@ -10,6 +10,7 @@ import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import {
   getProjectedToolPayload,
+  hasProjectedToolPayload,
   projectToolPayloadForTargets,
   withToolPayloadProjectionMetadata,
   withToolPayloadProjectionProviderMetadata,
@@ -857,15 +858,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       logger,
                     ),
                   );
-                  const transcriptArgs =
-                    getProjectedToolPayload(projectionCarrier.metadata, 'transcript', 'input-available')?.projected ??
-                    args;
-                  const transcriptResult =
-                    getProjectedToolPayload(
-                      projectionCarrier.metadata,
-                      'transcript',
-                      params.status === 'failed' ? 'error' : 'output-available',
-                    )?.projected ?? result;
+                  const transcriptArgsProjection = getProjectedToolPayload(
+                    projectionCarrier.metadata,
+                    'transcript',
+                    'input-available',
+                  );
+                  const transcriptResultProjection = getProjectedToolPayload(
+                    projectionCarrier.metadata,
+                    'transcript',
+                    params.status === 'failed' ? 'error' : 'output-available',
+                  );
+                  const transcriptArgs = hasProjectedToolPayload(transcriptArgsProjection)
+                    ? transcriptArgsProjection.projected
+                    : args;
+                  const transcriptResult = hasProjectedToolPayload(transcriptResultProjection)
+                    ? transcriptResultProjection.projected
+                    : result;
                   const providerMetadata = withToolPayloadProjectionProviderMetadata(
                     inputData.providerMetadata as ProviderMetadata | undefined,
                     projectionCarrier.metadata,

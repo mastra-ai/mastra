@@ -1,7 +1,7 @@
 import * as AIV5 from '@internal/ai-sdk-v5';
 import * as AIV6 from '@internal/ai-v6';
 
-import { getProjectedToolPayload } from '../../../tools/payload-projection';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -35,7 +35,8 @@ function getDisplayProjection(
   phase: 'input-available' | 'output-available' | 'error',
   fallback: unknown,
 ) {
-  return getProjectedToolPayload(providerMetadata, 'display', phase)?.projected ?? fallback;
+  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
+  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
 }
 
 function getToolNameFromType(type: string): string {

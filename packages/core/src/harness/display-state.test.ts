@@ -415,6 +415,102 @@ describe('tool lifecycle', () => {
     );
   });
 
+  it('preserves explicit null display projections', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const result = await (harness as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call-delta',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                argsTextDelta: '{"internalPath":"/workspace/private',
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'input-delta': { projected: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'input-available': { projected: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-result',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                result: { displayName: 'Acme', apiKey: 'secret-output' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'output-available': { projected: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(result.message.content).toEqual([
+      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: null },
+      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: null, isError: false },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_input_delta',
+        argsTextDelta: null,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_start',
+        args: null,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_end',
+        result: null,
+      }),
+    );
+  });
+
   describe('tool_approval_required', () => {
     it('sets pendingApproval', () => {
       emit(harness, {

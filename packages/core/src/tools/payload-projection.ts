@@ -129,6 +129,12 @@ export function getProjectedToolPayload(
   return projection?.[target]?.[phase];
 }
 
+export function hasProjectedToolPayload(
+  projection: ProjectedToolPayloadState | undefined,
+): projection is ProjectedToolPayloadState & { projected: unknown } {
+  return Boolean(projection && Object.prototype.hasOwnProperty.call(projection, 'projected'));
+}
+
 function mergeProjectionMetadata(
   existing: ToolPayloadProjectionMetadata | undefined,
   next: ToolPayloadProjectionMetadata | undefined,

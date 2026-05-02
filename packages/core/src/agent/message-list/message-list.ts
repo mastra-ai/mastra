@@ -5,7 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import { getProjectedToolPayload } from '../../tools/payload-projection';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '../../tools/payload-projection';
 import type { IdGeneratorContext } from '../../types';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -754,12 +754,22 @@ export class MessageList {
 
     const stateData = data as Record<string, unknown>;
     const metadata = stateData.metadata ?? stateData.providerMetadata;
-    const phaseProjection = getProjectedToolPayload(metadata, 'transcript', phase)?.projected;
-    const inputProjection = getProjectedToolPayload(metadata, 'transcript', 'input-available')?.projected;
+    const phaseProjection = getProjectedToolPayload(metadata, 'transcript', phase);
+    const inputProjection = getProjectedToolPayload(metadata, 'transcript', 'input-available');
     const projectedArgs =
-      phase === 'approval' ? (phaseProjection ?? inputProjection) : (inputProjection ?? phaseProjection);
+      phase === 'approval'
+        ? hasProjectedToolPayload(phaseProjection)
+          ? phaseProjection.projected
+          : hasProjectedToolPayload(inputProjection)
+            ? inputProjection.projected
+            : undefined
+        : hasProjectedToolPayload(inputProjection)
+          ? inputProjection.projected
+          : hasProjectedToolPayload(phaseProjection)
+            ? phaseProjection.projected
+            : undefined;
     const projectedSuspendPayload =
-      phase === 'suspend' ? getProjectedToolPayload(metadata, 'transcript', 'suspend')?.projected : undefined;
+      phase === 'suspend' && hasProjectedToolPayload(phaseProjection) ? phaseProjection.projected : undefined;
 
     return {
       ...stateData,
@@ -790,10 +800,14 @@ export class MessageList {
         }
 
         changed = true;
-        const projectedArgs = inputProjection?.projected ?? part.toolInvocation.args;
+        const projectedArgs = hasProjectedToolPayload(inputProjection)
+          ? inputProjection.projected
+          : part.toolInvocation.args;
         const projectedResult =
           part.toolInvocation.state === 'result'
-            ? (outputProjection?.projected ?? part.toolInvocation.result)
+            ? hasProjectedToolPayload(outputProjection)
+              ? outputProjection.projected
+              : part.toolInvocation.result
             : undefined;
         projectedByToolCallId.set(part.toolInvocation.toolCallId, {
           args: projectedArgs,

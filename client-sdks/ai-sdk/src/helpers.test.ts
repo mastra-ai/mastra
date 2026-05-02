@@ -59,6 +59,35 @@ describe('tool payload projection conversion', () => {
     expect(result.output).toEqual({ displayName: 'Acme' });
   });
 
+  it('preserves explicit null display projections', () => {
+    const result = convertMastraChunkToAISDKv5({
+      chunk: {
+        type: 'tool-result',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+          result: { displayName: 'Acme', apiKey: 'secret-output' },
+        },
+        metadata: {
+          mastra: {
+            toolPayloadProjection: {
+              display: {
+                'input-available': { projected: null },
+                'output-available': { projected: null },
+              },
+            },
+          },
+        },
+      },
+    }) as any;
+
+    expect(result.input).toBeNull();
+    expect(result.output).toBeNull();
+  });
+
   it('suppresses projected input deltas marked as unsafe', () => {
     const result = convertMastraChunkToAISDKv5({
       chunk: {

@@ -10,7 +10,7 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
-import { getProjectedToolPayload } from '../tools/payload-projection';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '../tools/payload-projection';
 import type { ToolPayloadProjectionPhase } from '../tools/types';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
@@ -76,7 +76,7 @@ function addOptionalUsageField(
 
 function getDisplayProjection(metadata: unknown, phase: ToolPayloadProjectionPhase, fallback: unknown) {
   const projection = getProjectedToolPayload(metadata, 'display', phase);
-  return projection?.projected ?? fallback;
+  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
 }
 
 /**
@@ -1870,7 +1870,7 @@ export class Harness<TState = {}> {
             this.emit({
               type: 'tool_input_delta',
               toolCallId,
-              argsTextDelta: projection?.projected ?? argsTextDelta,
+              argsTextDelta: hasProjectedToolPayload(projection) ? projection.projected : argsTextDelta,
               toolName,
             });
           }
@@ -1934,9 +1934,10 @@ export class Harness<TState = {}> {
         case 'tool-call-approval': {
           const toolCallId = chunk.payload.toolCallId;
           const toolName = chunk.payload.toolName;
-          const toolArgs =
-            getProjectedToolPayload(chunk.metadata, 'display', 'approval')?.projected ??
-            getDisplayProjection(chunk.metadata, 'input-available', chunk.payload.args);
+          const approvalProjection = getProjectedToolPayload(chunk.metadata, 'display', 'approval');
+          const toolArgs = hasProjectedToolPayload(approvalProjection)
+            ? approvalProjection.projected
+            : getDisplayProjection(chunk.metadata, 'input-available', chunk.payload.args);
 
           const policy = this.resolveToolApproval(toolName);
 

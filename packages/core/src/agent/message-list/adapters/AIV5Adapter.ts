@@ -2,7 +2,7 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
-import { getProjectedToolPayload } from '../../../tools/payload-projection';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
@@ -92,7 +92,8 @@ function getDisplayProjection(
   if (!enabled) {
     return fallback;
   }
-  return getProjectedToolPayload(providerMetadata, 'display', phase)?.projected ?? fallback;
+  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
+  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
 }
 
 function projectToolStateDataForDisplay(data: unknown, phase: 'approval' | 'suspend', enabled = true): unknown {
@@ -105,16 +106,26 @@ function projectToolStateDataForDisplay(data: unknown, phase: 'approval' | 'susp
 
   const stateData = data as Record<string, unknown>;
   const metadata = stateData.metadata ?? stateData.providerMetadata;
-  const projectedArgs = getProjectedToolPayload(metadata, 'display', phase)?.projected;
-  const projectedInput = getProjectedToolPayload(metadata, 'display', 'input-available')?.projected;
+  const argsProjection = getProjectedToolPayload(metadata, 'display', phase);
+  const inputProjection = getProjectedToolPayload(metadata, 'display', 'input-available');
+  const projectedArgs =
+    phase === 'approval'
+      ? hasProjectedToolPayload(argsProjection)
+        ? argsProjection.projected
+        : hasProjectedToolPayload(inputProjection)
+          ? inputProjection.projected
+          : undefined
+      : hasProjectedToolPayload(inputProjection)
+        ? inputProjection.projected
+        : hasProjectedToolPayload(argsProjection)
+          ? argsProjection.projected
+          : undefined;
   const projectedSuspendPayload =
-    phase === 'suspend' ? getProjectedToolPayload(metadata, 'display', 'suspend')?.projected : undefined;
+    phase === 'suspend' && hasProjectedToolPayload(argsProjection) ? argsProjection.projected : undefined;
 
   return {
     ...stateData,
-    ...(projectedInput !== undefined || projectedArgs !== undefined
-      ? { args: phase === 'approval' ? (projectedArgs ?? projectedInput) : (projectedInput ?? projectedArgs) }
-      : {}),
+    ...(projectedArgs !== undefined ? { args: projectedArgs } : {}),
     ...(projectedSuspendPayload !== undefined ? { suspendPayload: projectedSuspendPayload } : {}),
   };
 }

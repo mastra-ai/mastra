@@ -5,7 +5,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
-import { getProjectedToolPayload } from '../../../tools/payload-projection';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
 import { TypeDetector } from '../detection/TypeDetector';
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri, imageContentToString } from '../prompt/image-utils';
@@ -28,7 +28,8 @@ function getDisplayProjection(
   if (!enabled) {
     return fallback;
   }
-  return getProjectedToolPayload(providerMetadata, 'display', phase)?.projected ?? fallback;
+  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
+  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
 }
 
 function projectV4ToolInvocationForDisplay(
