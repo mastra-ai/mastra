@@ -91,7 +91,7 @@ describe('NestJS Adapter - RequestContext parsing', () => {
     const expressApp = app.getHttpAdapter().getInstance() as Application;
     const response = await executeExpressRequest(expressApp, {
       method: 'POST',
-      path: '/agents/test-agent/generate',
+      path: '/api/agents/test-agent/generate',
       body: {
         messages: [{ role: 'user', content: 'hello' }],
         requestContext: { sessionId: 'session-42' },
@@ -124,14 +124,43 @@ describe('NestJS Adapter - RequestContext parsing', () => {
     const expressApp = app.getHttpAdapter().getInstance() as Application;
     const response = await executeExpressRequest(expressApp, {
       method: 'GET',
-      path: '/agents?tag=1&tag=2&requestContext=%7B%22traceId%22%3A%22trace-99%22%7D',
+      path: '/api/agents?tag=1&tag=2&requestContext=%7B%22traceId%22%3A%22trace-99%22%7D',
     });
 
     expect(response.status).toBe(200);
     expect(executeHandler).toHaveBeenCalledOnce();
     expect(executeHandler.mock.calls[0]?.[1].queryParams).toMatchObject({
-      tag: [1, 2],
+      tag: ['1', '2'],
     });
     expect(executeHandler.mock.calls[0]?.[1].requestContext.get('traceId')).toBe('trace-99');
+  });
+
+  it('preserves numeric-looking query identifiers as strings', async () => {
+    const context = await createDefaultTestContext();
+    const moduleRef = await Test.createTestingModule({
+      imports: [MastraModule.register({ mastra: context.mastra })],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+
+    const routeHandler = app.get(RouteHandlerService);
+    const executeHandler = vi.spyOn(routeHandler, 'executeHandler').mockResolvedValue({
+      data: { ok: true },
+      responseType: 'json',
+    });
+
+    const expressApp = app.getHttpAdapter().getInstance() as Application;
+    const response = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/api/agents?resourceId=123&runId=456',
+    });
+
+    expect(response.status).toBe(200);
+    expect(executeHandler).toHaveBeenCalledOnce();
+    expect(executeHandler.mock.calls[0]?.[1].queryParams).toMatchObject({
+      resourceId: '123',
+      runId: '456',
+    });
   });
 });

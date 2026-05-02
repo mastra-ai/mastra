@@ -53,6 +53,10 @@ export class MastraController {
 
     const routePath = getMastraRoutePath(path, this.options.prefix);
 
+    if (!routePath) {
+      throw new NotFoundException(`Route not found: ${method} ${path}`);
+    }
+
     // Reject paths with double slashes (e.g., /api//agents)
     if (routePath.includes('//')) {
       throw new NotFoundException(`Route not found: ${method} ${path}`);
@@ -80,7 +84,7 @@ export class MastraController {
 
   /**
    * Parse and normalize query parameters.
-   * Handles type coercion for numbers, booleans, arrays, and JSON strings.
+   * Handles type coercion for booleans, arrays, and JSON strings.
    */
   private parseQueryParams(query: Record<string, unknown>): Record<string, unknown> {
     const result: Record<string, unknown> = {};
@@ -108,21 +112,7 @@ export class MastraController {
    * Type coercion rules:
    * - "true"/"false" → boolean
    * - "null" → null
-   * - Numeric strings → number (except IDs with leading zeros like "007")
    * - JSON objects/arrays → parsed object/array
-   *
-   * @example
-   * // Numbers
-   * coerceQueryValue("42")      // → 42
-   * coerceQueryValue("3.14")    // → 3.14
-   * coerceQueryValue("007")     // → "007" (preserved as string)
-   *
-   * // Booleans
-   * coerceQueryValue("true")    // → true
-   * coerceQueryValue("false")   // → false
-   *
-   * // JSON
-   * coerceQueryValue('{"a":1}') // → { a: 1 }
    */
   private coerceQueryValue(value: unknown): unknown {
     // Handle arrays
@@ -138,14 +128,6 @@ export class MastraController {
 
       // Null coercion
       if (value === 'null') return null;
-
-      // Number coercion (only if the entire string is a valid number)
-      if (value !== '' && !isNaN(Number(value)) && isFinite(Number(value))) {
-        // Don't coerce strings that look like phone numbers or IDs with leading zeros
-        if (!value.startsWith('0') || value === '0' || value.includes('.')) {
-          return Number(value);
-        }
-      }
 
       // JSON object/array coercion
       if ((value.startsWith('{') && value.endsWith('}')) || (value.startsWith('[') && value.endsWith(']'))) {
