@@ -116,12 +116,14 @@ describe('createToolCallStep background task stream replay', () => {
         },
       }),
     );
-    await Promise.resolve();
-    await Promise.resolve();
+    let replayedToolCalls: any[] = [];
+    await vi.waitFor(() => {
+      replayedToolCalls = controller.enqueue.mock.calls
+        .map(([chunk]) => chunk)
+        .filter(chunk => chunk.type === 'tool-call');
+      expect(replayedToolCalls).toHaveLength(1);
+    });
 
-    const replayedToolCalls = controller.enqueue.mock.calls
-      .map(([chunk]) => chunk)
-      .filter(chunk => chunk.type === 'tool-call');
     expect(replayedToolCalls).toHaveLength(1);
     expect(replayedToolCalls[0]).toMatchObject({
       type: 'tool-call',

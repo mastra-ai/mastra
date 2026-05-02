@@ -812,11 +812,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       }
                     })
                     .catch(error => {
-                      logger?.debug?.('Error projecting background task stream chunk', {
+                      logger?.warn?.('Error projecting background task stream chunk', {
                         toolCallId: chunk.payload.toolCallId,
                         toolName: chunk.payload.toolName,
                         runId: chunk.payload.runId,
                         error,
+                        errorMessage: error instanceof Error ? error.message : undefined,
+                        errorStack: error instanceof Error ? error.stack : undefined,
                       });
                     });
                 },
