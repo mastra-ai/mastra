@@ -134,11 +134,16 @@ export type ServerRoute<
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
    *
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (logical OR). This is useful for routes that serve multiple resource types,
+   * e.g. a streaming endpoint used by both runtime and stored agents.
+   *
    * @example
    * requiresPermission: 'agents:read'
    * requiresPermission: 'workflows:execute'
+   * requiresPermission: ['agents:execute', 'stored-agents:execute']
    */
-  requiresPermission?: string;
+  requiresPermission?: string | string[];
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;

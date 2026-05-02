@@ -448,6 +448,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
    * 3. Routes with `requiresAuth: false` skip permission checks
    *
+   * When the route specifies an array of permissions, the user needs ANY ONE
+   * of them (logical OR).
+   *
    * @param route - The route being accessed
    * @param userPermissions - The user's permissions from the request context
    * @returns Error response if permission denied, null if allowed
@@ -472,12 +475,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return null;
     }
 
-    // Check if user has the required permission
-    if (!userPermissions || !hasPermissionFn(userPermissions, requiredPermission)) {
+    // Check if user has the required permission(s)
+    // When an array is provided, user needs ANY ONE of them (logical OR)
+    const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
+
+    if (!hasAny) {
       return {
         status: 403,
         error: 'Forbidden',
-        message: `Missing required permission: ${requiredPermission}`,
+        message: `Missing required permission: ${permissions.join(' or ')}`,
       };
     }
 

@@ -524,6 +524,15 @@ describe('getEffectivePermission', () => {
       // Would derive to agents:execute, but explicit takes precedence
       expect(getEffectivePermission(route)).toBe('agents:admin');
     });
+
+    it('should return array when requiresPermission is an array', () => {
+      const route = createRoute({
+        path: '/agents/:agentId/stream-until-idle',
+        method: 'POST',
+        requiresPermission: ['agents:execute', 'stored-agents:execute'],
+      });
+      expect(getEffectivePermission(route)).toEqual(['agents:execute', 'stored-agents:execute']);
+    });
   });
 
   describe('public routes', () => {

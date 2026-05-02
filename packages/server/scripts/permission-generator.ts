@@ -118,13 +118,16 @@ export function derivePermissionData(): PermissionData {
   const permissionSet = new Set<string>();
 
   for (const route of SERVER_ROUTES) {
-    const permission = getEffectivePermission(route);
-    if (permission) {
-      const [resource, action] = permission.split(':');
-      if (resource && action) {
-        resourceSet.add(resource);
-        actionSet.add(action);
-        permissionSet.add(permission);
+    const effective = getEffectivePermission(route);
+    if (effective) {
+      const permissions = Array.isArray(effective) ? effective : [effective];
+      for (const permission of permissions) {
+        const [resource, action] = permission.split(':');
+        if (resource && action) {
+          resourceSet.add(resource);
+          actionSet.add(action);
+          permissionSet.add(permission);
+        }
       }
     }
   }

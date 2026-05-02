@@ -936,7 +936,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: ['agents:read', 'stored-agents:read'],
   handler: async ({ mastra, requestContext, partial }) => {
     try {
       const codeAgents = mastra.listAgents();
@@ -1343,6 +1343,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
   requiresAuth: true,
+  requiresPermission: ['agents:read', 'stored-agents:read'],
   handler: async ({ mastra }) => {
     try {
       const allProviders: Record<string, ProviderConfig> = {};
@@ -1512,7 +1513,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     'Executes an agent with the provided messages and streams the response in real-time, also listens for background task completions and streams them in real-time',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: ['agents:execute', 'stored-agents:execute'],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,

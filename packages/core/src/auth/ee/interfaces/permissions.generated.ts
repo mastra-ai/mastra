@@ -15,6 +15,7 @@ export const RESOURCES = [
   'a2a',
   'agent-builder',
   'agents',
+  'auth',
   'background-tasks',
   'channels',
   'datasets',
@@ -91,6 +92,8 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to auth */
+  'auth:*': 'auth:*',
   /** Full access to background-tasks */
   'background-tasks:*': 'background-tasks:*',
   /** Full access to channels */
@@ -163,6 +166,8 @@ export const PERMISSION_PATTERNS = {
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** View auth */
+  'auth:read': 'auth:read',
   /** View background-tasks */
   'background-tasks:read': 'background-tasks:read',
   /** View channels */
@@ -219,6 +224,8 @@ export const PERMISSION_PATTERNS = {
   'scores:write': 'scores:write',
   /** Delete stored agents */
   'stored-agents:delete': 'stored-agents:delete',
+  /** Execute stored agents */
+  'stored-agents:execute': 'stored-agents:execute',
   /** Publish, activate, or restore stored agents */
   'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
@@ -333,6 +340,7 @@ export const PERMISSIONS = [
   'agents:execute',
   'agents:read',
   'agents:write',
+  'auth:read',
   'background-tasks:read',
   'channels:read',
   'channels:write',
@@ -361,6 +369,7 @@ export const PERMISSIONS = [
   'scores:read',
   'scores:write',
   'stored-agents:delete',
+  'stored-agents:execute',
   'stored-agents:publish',
   'stored-agents:read',
   'stored-agents:share',
