@@ -351,6 +351,37 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     ```
   </TabItem>
 
+  <TabItem value="apify" label="Apify">
+    [Apify](https://apify.com?utm_source=mastra-docs) is the largest marketplace of web scraping and automation tools, called [Actors](https://apify.com/store?utm_source=mastra-docs). The [Apify MCP Server](https://mcp.apify.com) gives agents access to 5,000+ ready-made Actors for scraping social media, search engines, e-commerce sites, maps, and more.
+
+    ```typescript
+    import { MCPClient } from '@mastra/mcp'
+
+    export const mcp = new MCPClient({
+      servers: {
+        apify: {
+          url: new URL('https://mcp.apify.com'),
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${process.env.APIFY_TOKEN}`,
+            },
+          },
+        },
+      },
+    })
+    ```
+
+    Get your API token from the [Apify Console](https://console.apify.com/settings/integrations) and store it as `APIFY_TOKEN` in your environment.
+
+    To restrict the agent to specific Actors, append the `tools` query parameter:
+
+    ```typescript
+    url: new URL('https://mcp.apify.com?tools=apify/rag-web-browser,apify/google-search-scraper'),
+    ```
+
+    For more details, see the [Apify MCP documentation](https://docs.apify.com/platform/integrations/mcp).
+  </TabItem>
+
   <TabItem value="ampersand" label="Ampersand">
     [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
 
