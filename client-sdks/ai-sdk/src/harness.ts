@@ -102,7 +102,22 @@ export type HarnessUIErrorDataPart = {
   };
 };
 
-export type HarnessUIDataPart = HarnessUISnapshotDataPart | HarnessUIDeltaDataPart | HarnessUIErrorDataPart;
+export type HarnessUIPlanApprovalRequestDataPart = {
+  type: 'data-mastra-plan-approval-request';
+  id: string;
+  data: {
+    approvalId: string;
+    planId: string;
+    title?: string;
+    plan: string;
+  };
+};
+
+export type HarnessUIDataPart =
+  | HarnessUISnapshotDataPart
+  | HarnessUIDeltaDataPart
+  | HarnessUIErrorDataPart
+  | HarnessUIPlanApprovalRequestDataPart;
 
 type HarnessUITextChunk =
   | { type: 'start'; messageId?: string }
@@ -160,6 +175,7 @@ type EmitContext = {
   tools: Map<string, NativeToolStreamState>;
   finalizedTools: Set<string>;
   emittedApprovalKey: string | null;
+  emittedPlanApprovalKey: string | null;
   lastSnapshot: HarnessUISnapshotData | null;
   sequence: number;
   sendStart: boolean;
@@ -197,6 +213,7 @@ export function harnessToUIMessageStream(
         tools: new Map(),
         finalizedTools: new Set(),
         emittedApprovalKey: null,
+        emittedPlanApprovalKey: null,
         lastSnapshot: null,
         sequence: 0,
         sendStart,
@@ -300,6 +317,10 @@ function emitDisplayState(state: HarnessDisplayState, context: EmitContext): voi
 
   if (context.include.has('tools') || context.include.has('hitl')) {
     emitNativeToolApprovalRequest(state, context);
+  }
+
+  if (context.include.has('hitl')) {
+    emitNativePlanApprovalRequest(state, context);
   }
 
   context.sequence += 1;
@@ -488,8 +509,34 @@ function emitNativeToolApprovalRequest(state: HarnessDisplayState, context: Emit
   context.emittedApprovalKey = approvalKey;
 }
 
-function createApprovalId(runId: string | null, toolCallId: string): string {
-  return runId ? `${runId}${APPROVAL_ID_SEPARATOR}${toolCallId}` : toolCallId;
+function emitNativePlanApprovalRequest(state: HarnessDisplayState, context: EmitContext): void {
+  const approval = state.pendingPlanApproval;
+  if (!approval) {
+    context.emittedPlanApprovalKey = null;
+    return;
+  }
+
+  const approvalId = createApprovalId(context.getCurrentRunId(), approval.planId);
+  const approvalKey = `${approvalId}:${approval.planId}`;
+  if (context.emittedPlanApprovalKey === approvalKey) {
+    return;
+  }
+
+  context.controller.enqueue({
+    type: 'data-mastra-plan-approval-request',
+    id: approvalId,
+    data: {
+      approvalId,
+      planId: approval.planId,
+      ...(approval.title ? { title: approval.title } : {}),
+      plan: approval.plan,
+    },
+  });
+  context.emittedPlanApprovalKey = approvalKey;
+}
+
+function createApprovalId(runId: string | null, awaitingInputId: string): string {
+  return runId ? `${runId}${APPROVAL_ID_SEPARATOR}${awaitingInputId}` : awaitingInputId;
 }
 
 function createSnapshotData(

@@ -247,6 +247,70 @@ describe('harnessToUIMessageStream', () => {
     await reader.cancel();
   });
 
+  it('emits native plan approval request data once from pending HITL plan state', async () => {
+    const state = createState({
+      isRunning: true,
+      pendingPlanApproval: {
+        planId: 'plan-1',
+        title: 'Implementation Plan',
+        plan: '# Plan\n\n1. Build it.',
+      },
+    });
+    const harness = new FakeHarness(state);
+    harness.currentRunId = 'run-123';
+    const reader = harnessToUIMessageStream(harness, { include: ['hitl'], sendStart: false }).getReader();
+
+    expect(await readChunks(reader, 2)).toMatchObject([
+      {
+        type: 'data-mastra-plan-approval-request',
+        id: 'run-123::plan-1',
+        data: {
+          approvalId: 'run-123::plan-1',
+          planId: 'plan-1',
+          title: 'Implementation Plan',
+          plan: '# Plan\n\n1. Build it.',
+        },
+      },
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 1 } },
+    ]);
+
+    harness.emit(state);
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 2 },
+    });
+
+    harness.emit(createState({ isRunning: true }));
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 3 },
+    });
+
+    harness.emit(
+      createState({
+        isRunning: true,
+        pendingPlanApproval: {
+          planId: 'plan-1',
+          title: 'Implementation Plan',
+          plan: '# Plan\n\n1. Build it.',
+        },
+      }),
+    );
+    expect(await readChunks(reader, 2)).toMatchObject([
+      {
+        type: 'data-mastra-plan-approval-request',
+        id: 'run-123::plan-1',
+        data: {
+          approvalId: 'run-123::plan-1',
+          planId: 'plan-1',
+        },
+      },
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 4 } },
+    ]);
+
+    await reader.cancel();
+  });
+
   it('represents HITL state appearing and clearing in replacing snapshots', async () => {
     const harness = new FakeHarness(createState({ isRunning: true }));
     const reader = harnessToUIMessageStream(harness, { include: ['hitl'], sendStart: false }).getReader();
