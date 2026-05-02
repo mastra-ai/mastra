@@ -5,6 +5,7 @@ import { MessageList } from '../message-list';
 
 describe('Agent#executeOnFinish single-flight', () => {
   let agent: Agent;
+  let handles: ReturnType<Agent['__testHandles']>;
   let coreSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -14,7 +15,8 @@ describe('Agent#executeOnFinish single-flight', () => {
       instructions: 'test',
     });
 
-    coreSpy = vi.spyOn(agent as any, '#executeOnFinishCore');
+    handles = agent.__testHandles();
+    coreSpy = vi.spyOn(handles, 'executeOnFinishCore');
   });
 
   afterEach(() => {
@@ -48,20 +50,14 @@ describe('Agent#executeOnFinish single-flight', () => {
     const runId = 'run-1-single-flight';
     const options = createMinimalOptions(runId);
 
-    const [result1, result2] = await Promise.all([
-      (agent as any).#executeOnFinish(options),
-      (agent as any).#executeOnFinish(options),
-    ]);
+    const [result1, result2] = await Promise.all([handles.executeOnFinish(options), handles.executeOnFinish(options)]);
 
     expect(coreSpy).toHaveBeenCalledTimes(1);
     expect(result1).toBeUndefined();
     expect(result2).toBeUndefined();
 
-    const inProgressMap = (agent as any).#inProgressRunIds;
-    expect(inProgressMap.has(runId)).toBe(false);
-
-    const completedCache = (agent as any).#completedRunIds;
-    expect(completedCache.has(runId)).toBe(true);
+    expect(handles.inProgressRunIds.has(runId)).toBe(false);
+    expect(handles.completedRunIds.has(runId)).toBe(true);
   });
 
   it('should wait for in-flight execution and return when second call awaits same runId', async () => {
@@ -74,10 +70,7 @@ describe('Agent#executeOnFinish single-flight', () => {
       coreCompleted = true;
     });
 
-    const [result1, result2] = await Promise.all([
-      (agent as any).#executeOnFinish(options),
-      (agent as any).#executeOnFinish(options),
-    ]);
+    const [result1, result2] = await Promise.all([handles.executeOnFinish(options), handles.executeOnFinish(options)]);
 
     expect(coreSpy).toHaveBeenCalledTimes(1);
     expect(coreCompleted).toBe(true);
@@ -96,8 +89,8 @@ describe('Agent#executeOnFinish single-flight', () => {
     });
 
     const [promise1, promise2] = await Promise.allSettled([
-      (agent as any).#executeOnFinish(options),
-      (agent as any).#executeOnFinish(options),
+      handles.executeOnFinish(options),
+      handles.executeOnFinish(options),
     ]);
 
     expect(coreSpy).toHaveBeenCalledTimes(1);
@@ -107,8 +100,7 @@ describe('Agent#executeOnFinish single-flight', () => {
     expect((promise1 as any).reason).toBe(error);
     expect((promise2 as any).reason).toBe(error);
 
-    const inProgressMap = (agent as any).#inProgressRunIds;
-    expect(inProgressMap.has(runId)).toBe(false);
+    expect(handles.inProgressRunIds.has(runId)).toBe(false);
   });
 
   it('should allow retry after first execution failed', async () => {
@@ -118,16 +110,16 @@ describe('Agent#executeOnFinish single-flight', () => {
 
     coreSpy.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
 
-    const firstAttempt = (agent as any).#executeOnFinish(options);
+    const firstAttempt = handles.executeOnFinish(options);
     await expect(firstAttempt).rejects.toBe(error);
 
-    expect((agent as any).#completedRunIds.has(runId)).toBe(false);
+    expect(handles.completedRunIds.has(runId)).toBe(false);
 
-    const secondAttempt = (agent as any).#executeOnFinish(options);
+    const secondAttempt = handles.executeOnFinish(options);
     await expect(secondAttempt).resolves.toBeUndefined();
 
     expect(coreSpy).toHaveBeenCalledTimes(2);
-    expect((agent as any).#completedRunIds.has(runId)).toBe(true);
+    expect(handles.completedRunIds.has(runId)).toBe(true);
   });
 
   it('should track different runIds independently', async () => {
@@ -137,22 +129,22 @@ describe('Agent#executeOnFinish single-flight', () => {
     const optionsA = createMinimalOptions(runIdA);
     const optionsB = createMinimalOptions(runIdB);
 
-    await Promise.all([(agent as any).#executeOnFinish(optionsA), (agent as any).#executeOnFinish(optionsB)]);
+    await Promise.all([handles.executeOnFinish(optionsA), handles.executeOnFinish(optionsB)]);
 
     expect(coreSpy).toHaveBeenCalledTimes(2);
 
-    expect((agent as any).#completedRunIds.has(runIdA)).toBe(true);
-    expect((agent as any).#completedRunIds.has(runIdB)).toBe(true);
+    expect(handles.completedRunIds.has(runIdA)).toBe(true);
+    expect(handles.completedRunIds.has(runIdB)).toBe(true);
   });
 
   it('should skip execution for already completed runId', async () => {
     const runId = 'run-6-skip-completed';
     const options = createMinimalOptions(runId);
 
-    await (agent as any).#executeOnFinish(options);
+    await handles.executeOnFinish(options);
     expect(coreSpy).toHaveBeenCalledTimes(1);
 
-    await (agent as any).#executeOnFinish(options);
+    await handles.executeOnFinish(options);
     expect(coreSpy).toHaveBeenCalledTimes(1);
   });
 });

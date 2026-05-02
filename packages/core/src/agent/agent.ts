@@ -5559,6 +5559,23 @@ export class Agent<
   }
 
   /**
+   * @internal - Test hook for accessing internal single-flight state.
+   */
+  __testHandles(): {
+    executeOnFinish: typeof this.#executeOnFinish;
+    executeOnFinishCore: typeof this.#executeOnFinishCore;
+    inProgressRunIds: typeof this.#inProgressRunIds;
+    completedRunIds: typeof this.#completedRunIds;
+  } {
+    return {
+      executeOnFinish: this.#executeOnFinish.bind(this),
+      executeOnFinishCore: this.#executeOnFinishCore.bind(this),
+      inProgressRunIds: this.#inProgressRunIds,
+      completedRunIds: this.#completedRunIds,
+    };
+  }
+
+  /**
    * Executes a network loop where multiple agents can collaborate to handle messages.
    * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
    *
