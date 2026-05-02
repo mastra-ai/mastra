@@ -207,6 +207,53 @@ describe('server history', () => {
     ).rejects.toThrow('Server-history resume requests cannot include a message');
   });
 
+  it('rejects malformed server-history validation edge cases', async () => {
+    const { mastra } = createMockMastra();
+    const message: UIMessage = { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] };
+    const options = {
+      mastra: mastra as any,
+      agentId: 'test-agent',
+      historySource: 'server' as const,
+      defaultOptions: {
+        memory: {
+          resource: 'resource-1',
+        },
+      } as any,
+    };
+
+    await expect(
+      handleChatStream({
+        ...options,
+        params: {
+          trigger: 'submit-message',
+          message,
+        } as any,
+      }),
+    ).rejects.toThrow('Server-history requests require an id');
+
+    await expect(
+      handleChatStream({
+        ...options,
+        params: {
+          id: 'thread-1',
+          resumeData: { approved: true },
+        },
+      }),
+    ).rejects.toThrow('runId is required when resumeData is provided');
+
+    await expect(
+      handleChatStream({
+        ...options,
+        defaultOptions: {} as any,
+        params: {
+          id: 'thread-1',
+          trigger: 'submit-message',
+          message,
+        },
+      }),
+    ).rejects.toThrow('Server-history requests require a server-controlled resourceId when using body.id as thread');
+  });
+
   it('does not mutate a default requestContext with internal history overrides', async () => {
     const { agent, mastra } = createMockMastra();
     const requestContext = new RequestContext();

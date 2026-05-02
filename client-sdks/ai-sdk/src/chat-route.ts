@@ -344,7 +344,7 @@ function normalizeServerHistoryParams<OUTPUT>({
 
   return {
     messages,
-    lastMessageId: typeof messageId === 'string' ? messageId : undefined,
+    lastMessageId: undefined,
     resumeData,
     runId,
     requestContext,
