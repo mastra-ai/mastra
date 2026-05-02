@@ -1358,19 +1358,24 @@ function createStepFromProcessor<TProcessorId extends string>(
                 }
               }
 
-              // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps.
               const nextModelContextMessages =
                 validatedResult.modelContextMessages ??
                 (returnPassThrough.modelContextMessages !== undefined && validatedResult.messages
                   ? stripPromptOnlySystemMessages(validatedResult.messages)
                   : undefined);
-              const nextMessages = nextModelContextMessages ?? validatedResult.messages ?? returnMessages;
+              if (nextModelContextMessages !== undefined) {
+                const { messages: _messages, ...validatedWithoutMessages } = validatedResult;
+                return {
+                  ...returnPassThrough,
+                  ...validatedWithoutMessages,
+                  modelContextMessages: nextModelContextMessages,
+                  ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
+                };
+              }
               return {
                 ...returnPassThrough,
-                messages: nextMessages,
+                messages: validatedResult.messages ?? returnMessages,
                 ...validatedResult,
-                ...(nextModelContextMessages !== undefined ? { modelContextMessages: nextModelContextMessages } : {}),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
