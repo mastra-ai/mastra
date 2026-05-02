@@ -114,12 +114,13 @@ The stream emits normal AI SDK UI chunks for assistant text and reasoning when t
   { "type": "tool-input-start", "toolCallId": "call-1", "toolName": "write_file" },
   { "type": "tool-input-delta", "toolCallId": "call-1", "inputTextDelta": "{\"path\"" },
   { "type": "tool-input-available", "toolCallId": "call-1", "toolName": "write_file", "input": {} },
+  { "type": "tool-approval-request", "approvalId": "run-1::call-1", "toolCallId": "call-1" },
   { "type": "tool-output-available", "toolCallId": "call-1", "output": {} },
   { "type": "tool-output-error", "toolCallId": "call-1", "errorText": "Tool execution failed" }
 ]
 ```
 
-Tool approvals, suspensions, questions, and plan approvals remain in the structured snapshot because those states need stable Harness identifiers and resume metadata.
+Tool approvals are also included in the structured `hitl` snapshot so UIs that render Harness-specific approval controls still have the tool name and arguments. Suspensions, questions, and plan approvals remain snapshot-only because those states need stable Harness identifiers and resume metadata.
 
 It also emits a durable custom data part with a stable ID:
 

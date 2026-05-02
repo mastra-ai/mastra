@@ -11,6 +11,7 @@ class FakeHarness {
   options: { windowMs?: number; maxWaitMs?: number } | undefined;
   unsubscribed = false;
   subscribeCalls = 0;
+  currentRunId: string | null = null;
 
   constructor(state: HarnessDisplayState) {
     this.state = state;
@@ -18,6 +19,10 @@ class FakeHarness {
 
   getDisplayState(): Readonly<HarnessDisplayState> {
     return this.state;
+  }
+
+  getCurrentRunId(): string | null {
+    return this.currentRunId;
   }
 
   subscribeDisplayState(
@@ -173,9 +178,14 @@ describe('harnessToUIMessageStream', () => {
     const harness = new FakeHarness(state);
     const reader = harnessToUIMessageStream(harness, { include: ['hitl'] }).getReader();
 
-    const chunks = await readChunks(reader, 3);
+    const chunks = await readChunks(reader, 4);
     expect(chunks[0]).toEqual({ type: 'start', messageId: 'm1' });
-    const snapshot = expectSnapshot(chunks[1]);
+    expect(chunks[1]).toEqual({
+      type: 'tool-approval-request',
+      approvalId: 'call-1',
+      toolCallId: 'call-1',
+    });
+    const snapshot = expectSnapshot(chunks[2]);
     expect(snapshot.data.domains).toEqual({
       hitl: {
         approval: { toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } },
@@ -186,7 +196,55 @@ describe('harnessToUIMessageStream', () => {
     });
     expect(snapshot.data.currentMessage?.text).toBeUndefined();
     expect(snapshot.data.currentMessage?.content).toEqual([]);
-    expect(chunks[2]).toEqual({ type: 'finish' });
+    expect(chunks[3]).toEqual({ type: 'finish' });
+  });
+
+  it('emits native AI SDK approval requests once from pending HITL approval state', async () => {
+    const state = createState({
+      isRunning: true,
+      pendingApproval: { toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } },
+    });
+    const harness = new FakeHarness(state);
+    harness.currentRunId = 'run-123';
+    const reader = harnessToUIMessageStream(harness, { include: ['hitl'], sendStart: false }).getReader();
+
+    expect(await readChunks(reader, 2)).toMatchObject([
+      {
+        type: 'tool-approval-request',
+        approvalId: 'run-123::call-1',
+        toolCallId: 'call-1',
+      },
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 1 } },
+    ]);
+
+    harness.emit(state);
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 2 },
+    });
+
+    harness.emit(createState({ isRunning: true }));
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 3 },
+    });
+
+    harness.emit(
+      createState({
+        isRunning: true,
+        pendingApproval: { toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } },
+      }),
+    );
+    expect(await readChunks(reader, 2)).toMatchObject([
+      {
+        type: 'tool-approval-request',
+        approvalId: 'run-123::call-1',
+        toolCallId: 'call-1',
+      },
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 4 } },
+    ]);
+
+    await reader.cancel();
   });
 
   it('represents HITL state appearing and clearing in replacing snapshots', async () => {

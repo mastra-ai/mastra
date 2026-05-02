@@ -33,6 +33,7 @@ export interface HarnessToUIMessageStreamOptions {
 
 export interface HarnessLike {
   getDisplayState(): Readonly<HarnessDisplayState>;
+  getCurrentRunId?(): string | null;
   subscribeDisplayState(
     listener: HarnessDisplayStateListener,
     options?: HarnessDisplayStateSubscriptionOptions,
@@ -115,6 +116,7 @@ type HarnessUITextChunk =
   | { type: 'tool-input-start'; toolCallId: string; toolName: string }
   | { type: 'tool-input-delta'; toolCallId: string; inputTextDelta: string }
   | { type: 'tool-input-available'; toolCallId: string; toolName: string; input: unknown }
+  | { type: 'tool-approval-request'; approvalId: string; toolCallId: string }
   | { type: 'tool-output-available'; toolCallId: string; output: unknown }
   | { type: 'tool-output-error'; toolCallId: string; errorText: string };
 
@@ -157,12 +159,16 @@ type EmitContext = {
   reasoning: StreamTextState;
   tools: Map<string, NativeToolStreamState>;
   finalizedTools: Set<string>;
+  emittedApprovalKey: string | null;
   lastSnapshot: HarnessUISnapshotData | null;
   sequence: number;
   sendStart: boolean;
   sendFinish: boolean;
   started: boolean;
+  getCurrentRunId: () => string | null;
 };
+
+const APPROVAL_ID_SEPARATOR = '::';
 
 export function harnessToUIMessageStream(
   harness: HarnessLike,
@@ -190,11 +196,13 @@ export function harnessToUIMessageStream(
         reasoning: { id: null, value: '', open: false },
         tools: new Map(),
         finalizedTools: new Set(),
+        emittedApprovalKey: null,
         lastSnapshot: null,
         sequence: 0,
         sendStart,
         sendFinish,
         started: false,
+        getCurrentRunId: () => harness.getCurrentRunId?.() ?? null,
       };
 
       const closeStream = () => {
@@ -288,6 +296,10 @@ function emitDisplayState(state: HarnessDisplayState, context: EmitContext): voi
 
   if (context.include.has('tools')) {
     emitNativeToolChunks(state, context);
+  }
+
+  if (context.include.has('tools') || context.include.has('hitl')) {
+    emitNativeToolApprovalRequest(state, context);
   }
 
   context.sequence += 1;
@@ -453,6 +465,31 @@ function emitNativeToolChunks(state: HarnessDisplayState, context: EmitContext):
       context.finalizedTools.delete(toolCallId);
     }
   }
+}
+
+function emitNativeToolApprovalRequest(state: HarnessDisplayState, context: EmitContext): void {
+  const approval = state.pendingApproval;
+  if (!approval) {
+    context.emittedApprovalKey = null;
+    return;
+  }
+
+  const approvalId = createApprovalId(context.getCurrentRunId(), approval.toolCallId);
+  const approvalKey = `${approvalId}:${approval.toolCallId}`;
+  if (context.emittedApprovalKey === approvalKey) {
+    return;
+  }
+
+  context.controller.enqueue({
+    type: 'tool-approval-request',
+    approvalId,
+    toolCallId: approval.toolCallId,
+  });
+  context.emittedApprovalKey = approvalKey;
+}
+
+function createApprovalId(runId: string | null, toolCallId: string): string {
+  return runId ? `${runId}${APPROVAL_ID_SEPARATOR}${toolCallId}` : toolCallId;
 }
 
 function createSnapshotData(
