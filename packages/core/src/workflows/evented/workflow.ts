@@ -1308,6 +1308,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 processorMessageList.stopRecording();
                 throw error;
               }
+              if (
+                passThrough.modelContextMessages !== undefined &&
+                result &&
+                !(result instanceof MessageList) &&
+                !Array.isArray(result) &&
+                'messages' in result &&
+                'modelContextMessages' in result
+              ) {
+                const { messages: _messages, ...resultWithoutMessages } = result;
+                result = resultWithoutMessages;
+              }
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
                 messageList: processorMessageList,
@@ -1376,25 +1387,23 @@ function createStepFromProcessor<TProcessorId extends string>(
                 }
               }
 
-              // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps.
-              if (validatedResult.modelContextMessages) {
+              const nextModelContextMessages =
+                validatedResult.modelContextMessages ??
+                (returnPassThrough.modelContextMessages !== undefined && validatedResult.messages
+                  ? stripPromptOnlySystemMessages(validatedResult.messages)
+                  : undefined);
+              if (nextModelContextMessages !== undefined) {
+                const { messages: _messages, ...validatedWithoutMessages } = validatedResult;
                 return {
                   ...returnPassThrough,
-                  ...validatedResult,
-                  ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
-                };
-              }
-              if (returnPassThrough.modelContextMessages) {
-                return {
-                  ...returnPassThrough,
-                  ...validatedResult,
+                  ...validatedWithoutMessages,
+                  modelContextMessages: nextModelContextMessages,
                   ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
                 };
               }
               return {
                 ...returnPassThrough,
-                messages: returnMessages,
+                messages: validatedResult.messages ?? returnMessages,
                 ...validatedResult,
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };

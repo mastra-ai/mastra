@@ -18,6 +18,8 @@ import type {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
@@ -32,6 +34,20 @@ import { createStep, createWorkflow } from '.';
 
 // Shared storage instance
 const sharedStorage = new MockStore();
+
+const createDbMessage = (
+  id: string,
+  text: string,
+  role: 'user' | 'assistant' | 'system' = 'user',
+): MastraDBMessage => ({
+  id,
+  role,
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text }],
+  },
+  createdAt: new Date(),
+});
 
 // @ts-expect-error - TS2589: EventedWorkflow types cause excessively deep type instantiation
 createWorkflowTestSuite({
@@ -408,6 +424,41 @@ describe('Workflow (Evented Engine Specific)', () => {
     } finally {
       await mastra.stopEventEngine();
     }
+  });
+
+  it('should return only prompt-only modelContextMessages when inputStep returns both message fields', async () => {
+    const canonicalMessage = createDbMessage('canonical', 'canonical input');
+    const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+    const rewrittenPromptMessage = createDbMessage('rewritten-prompt', 'rewritten prompt input');
+    const messageList = new MessageList().add([canonicalMessage], 'input');
+
+    const processor: Processor = {
+      id: 'evented-prompt-only-step-both-fields',
+      processInputStep: async () => ({
+        messages: [canonicalMessage],
+        modelContextMessages: [rewrittenPromptMessage],
+      }),
+    };
+
+    const step = createStep(processor);
+    const result = await step.execute({
+      inputData: {
+        phase: 'inputStep',
+        messages: [canonicalMessage],
+        modelContextMessages: [promptOnlyMessage],
+        messageList,
+        stepNumber: 0,
+        systemMessages: [],
+      },
+    } as Parameters<typeof step.execute>[0]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        modelContextMessages: [rewrittenPromptMessage],
+      }),
+    );
+    expect(result).not.toHaveProperty('messages');
+    expect(messageList.get.all.db()).toEqual([canonicalMessage]);
   });
 
   // Note: Streaming Legacy tests removed - they duplicated Streaming tests.

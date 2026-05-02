@@ -485,6 +485,41 @@ describe('createStep with Processor', () => {
       expect(messageList.get.all.db()).toEqual(messages);
     });
 
+    it('should drop canonical messages when prompt-only inputStep returns both message fields', async () => {
+      const canonicalMessage = createDbMessage('canonical', 'canonical input');
+      const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');
+      const rewrittenPromptMessage = createDbMessage('rewritten-prompt', 'rewritten prompt input');
+      const messageList = new MessageList().add([canonicalMessage], 'input');
+
+      const processor: Processor = {
+        id: 'prompt-only-step-both-fields',
+        processInputStep: async () => ({
+          messages: [canonicalMessage],
+          modelContextMessages: [rewrittenPromptMessage],
+        }),
+      };
+
+      const step = createStep(processor);
+      const result = await step.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: [canonicalMessage],
+          modelContextMessages: [promptOnlyMessage],
+          messageList,
+          stepNumber: 0,
+          systemMessages: [],
+        },
+      } as Parameters<typeof step.execute>[0]);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          modelContextMessages: [rewrittenPromptMessage],
+        }),
+      );
+      expect(result).not.toHaveProperty('messages');
+      expect(messageList.get.all.db()).toEqual([canonicalMessage]);
+    });
+
     it('should keep prompt-only processInputStep MessageList mutations prompt-only', async () => {
       const canonicalMessage = createDbMessage('canonical', 'canonical input');
       const promptOnlyMessage = createDbMessage('prompt-only', 'prompt-only input');

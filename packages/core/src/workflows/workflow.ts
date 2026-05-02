@@ -1286,6 +1286,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 processorMessageList.stopRecording();
                 throw error;
               }
+              if (
+                passThrough.modelContextMessages !== undefined &&
+                result &&
+                !(result instanceof MessageList) &&
+                !Array.isArray(result) &&
+                'messages' in result &&
+                'modelContextMessages' in result
+              ) {
+                const { messages: _messages, ...resultWithoutMessages } = result;
+                result = resultWithoutMessages;
+              }
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
                 messageList: processorMessageList,
