@@ -1035,9 +1035,11 @@ ${workingMemory}`;
         dbMessages.length > 0
           ? await memoryStore.listMessagesById({ messageIds: dbMessages.map(message => message.id) })
           : { messages: [] };
-      const existingById = new Map(existingMessages.messages.map(message => [message.id, message]));
+      const getMessageScopeKey = (message: Pick<MastraDBMessage, 'id' | 'resourceId' | 'threadId'>): string =>
+        `${message.threadId ?? ''}\u0000${message.resourceId ?? ''}\u0000${message.id}`;
+      const existingById = new Map(existingMessages.messages.map(message => [getMessageScopeKey(message), message]));
       const messagesToSave = dbMessages.map(message => {
-        const existing = existingById.get(message.id);
+        const existing = existingById.get(getMessageScopeKey(message));
         if (
           existing &&
           existing.threadId === message.threadId &&

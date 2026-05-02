@@ -146,6 +146,67 @@ describe('server history', () => {
     expect(agent.stream).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed server-history trigger and field combinations', async () => {
+    const { mastra } = createMockMastra();
+    const options = {
+      mastra: mastra as any,
+      agentId: 'test-agent',
+      historySource: 'server' as const,
+      defaultOptions: {
+        memory: {
+          resource: 'resource-1',
+        },
+      } as any,
+    };
+
+    await expect(
+      handleChatStream({
+        ...options,
+        params: {
+          id: 'thread-1',
+          trigger: 'bad-trigger',
+          message: { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] },
+        } as any,
+      }),
+    ).rejects.toThrow('Server-history trigger must be "submit-message" or "regenerate-message"');
+
+    await expect(
+      handleChatStream({
+        ...options,
+        params: {
+          id: 'thread-1',
+          trigger: 'submit-message',
+          message: { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] },
+          messageId: 'assistant-1',
+        },
+      }),
+    ).rejects.toThrow('Server-history submit requests cannot include messageId');
+
+    await expect(
+      handleChatStream({
+        ...options,
+        params: {
+          id: 'thread-1',
+          trigger: 'regenerate-message',
+          messageId: 'assistant-1',
+          message: { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      }),
+    ).rejects.toThrow('Server-history regenerate requests cannot include a message');
+
+    await expect(
+      handleChatStream({
+        ...options,
+        params: {
+          id: 'thread-1',
+          runId: 'run-1',
+          resumeData: { approved: true },
+          message: { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      }),
+    ).rejects.toThrow('Server-history resume requests cannot include a message');
+  });
+
   it('does not mutate a default requestContext with internal history overrides', async () => {
     const { mastra } = createMockMastra();
     const requestContext = new RequestContext();

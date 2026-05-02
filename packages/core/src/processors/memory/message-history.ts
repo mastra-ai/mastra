@@ -491,11 +491,11 @@ export class MessageHistory implements Processor {
 
     // Persist messages after thread is guaranteed to exist
     if (this.saveMessages) {
-      await this.saveMessages({ messages: filtered });
-      return filtered;
+      const result = await this.saveMessages({ messages: filtered });
+      return result?.messages ?? filtered;
     }
 
-    await this.storage.saveMessages({ messages: filtered });
-    return filtered;
+    const result = await this.storage.saveMessages({ messages: filtered });
+    return result?.messages ?? filtered;
   }
 }

@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     name: 'params.id',
     type: 'string',
     description:
-      "Chat ID from AI SDK UI. Required when `historySource` is `'server'`. If the server provides a memory resource but no thread, Mastra uses this value as the thread ID.",
+      "Client-supplied thread hint from AI SDK UI. Required when `historySource` is `'server'`, but the server's memory/thread selection remains authoritative; Mastra only falls back to `params.id` when the server provides a memory resource but no thread.",
     isOptional: true,
   },
   {

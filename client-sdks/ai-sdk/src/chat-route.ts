@@ -165,6 +165,12 @@ function validateServerHistoryParams(params: unknown): asserts params is Record<
   }
 }
 
+function validateServerHistoryTrigger(trigger: unknown): asserts trigger is 'submit-message' | 'regenerate-message' {
+  if (trigger !== 'submit-message' && trigger !== 'regenerate-message') {
+    throw new ServerHistoryRequestError('Server-history trigger must be "submit-message" or "regenerate-message"');
+  }
+}
+
 function getMemoryOptionParts(memory: unknown): { threadId?: string; resourceId?: string; options?: unknown } {
   if (!isRecord(memory)) return {};
   const rawThread = memory.thread;
@@ -241,17 +247,28 @@ function normalizeServerHistoryParams<OUTPUT>({
     messageId,
     resumeData,
     runId,
-    trigger = 'submit-message',
+    trigger: rawTrigger = 'submit-message',
     requestContext: rawRequestContext,
     ...restOptions
   } = params as ChatStreamHandlerParams<SupportedUIMessage, OUTPUT> & { requestContext?: RequestContext };
+  validateServerHistoryTrigger(rawTrigger);
+  const trigger = rawTrigger;
 
   if (!id || typeof id !== 'string') {
     throw new ServerHistoryRequestError('Server-history requests require an id');
   }
 
-  if (resumeData && !runId) {
+  const hasResumeData = resumeData !== undefined;
+  if (hasResumeData && !isRecord(resumeData)) {
+    throw new ServerHistoryRequestError('Server-history resumeData must be an object');
+  }
+
+  if (hasResumeData && !runId) {
     throw new ServerHistoryRequestError('runId is required when resumeData is provided');
+  }
+
+  if (hasResumeData && message !== undefined) {
+    throw new ServerHistoryRequestError('Server-history resume requests cannot include a message');
   }
 
   if (rawRequestContext !== undefined && !(rawRequestContext instanceof RequestContext)) {
@@ -270,9 +287,27 @@ function normalizeServerHistoryParams<OUTPUT>({
     type: 'server-history',
   } satisfies MastraMemoryHistoryOverride);
 
+  if (hasResumeData) {
+    return {
+      messages: [],
+      lastMessageId: typeof messageId === 'string' ? messageId : undefined,
+      resumeData,
+      runId,
+      requestContext,
+      restOptions: {
+        ...restOptions,
+        ...(memory ? { memory } : {}),
+      },
+    };
+  }
+
   if (trigger === 'regenerate-message') {
     if (!messageId || typeof messageId !== 'string') {
       throw new ServerHistoryRequestError('messageId is required when regenerating with server history');
+    }
+
+    if (message !== undefined) {
+      throw new ServerHistoryRequestError('Server-history regenerate requests cannot include a message');
     }
 
     requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, {
@@ -291,6 +326,10 @@ function normalizeServerHistoryParams<OUTPUT>({
         ...(memory ? { memory } : {}),
       },
     };
+  }
+
+  if (messageId !== undefined) {
+    throw new ServerHistoryRequestError('Server-history submit requests cannot include messageId');
   }
 
   const messages = message ? [message] : [];
@@ -562,6 +601,72 @@ export function chatRoute<OUTPUT = undefined>({
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
 
+  const clientHistoryRequestSchema: any = {
+    type: 'object',
+    properties: {
+      resumeData: {
+        type: 'object',
+        description: 'Resume data for the agent',
+      },
+      runId: {
+        type: 'string',
+        description: 'The run ID required when resuming an agent execution',
+      },
+      messages: {
+        type: 'array',
+        description: 'Array of messages in the conversation',
+        items: {
+          type: 'object',
+          properties: {
+            role: {
+              type: 'string',
+              enum: ['user', 'assistant', 'system'],
+              description: 'The role of the message sender',
+            },
+            content: {
+              type: 'string',
+              description: 'The content of the message',
+            },
+          },
+          required: ['role', 'content'],
+        },
+      },
+    },
+    required: ['messages'],
+  };
+  const serverHistoryRequestSchema: any = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      id: {
+        type: 'string',
+        description: 'Chat ID used as a thread hint when the server provides a memory resource but no thread.',
+      },
+      message: {
+        type: 'object',
+        description: 'Latest submitted UI message for submit-message requests.',
+      },
+      messageId: {
+        type: 'string',
+        description: 'Assistant message ID for regenerate-message requests or compact resume continuity.',
+      },
+      trigger: {
+        type: 'string',
+        enum: ['submit-message', 'regenerate-message'],
+        description: 'AI SDK UI request trigger.',
+      },
+      resumeData: {
+        type: 'object',
+        description: 'Resume data for suspended executions or tool approvals.',
+      },
+      runId: {
+        type: 'string',
+        description: 'The run ID required when resumeData is provided.',
+      },
+    },
+    required: ['id'],
+  };
+
   return registerApiRoute(path, {
     method: 'POST',
     openapi: {
@@ -603,39 +708,7 @@ export function chatRoute<OUTPUT = undefined>({
         required: true,
         content: {
           'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                resumeData: {
-                  type: 'object',
-                  description: 'Resume data for the agent',
-                },
-                runId: {
-                  type: 'string',
-                  description: 'The run ID required when resuming an agent execution',
-                },
-                messages: {
-                  type: 'array',
-                  description: 'Array of messages in the conversation',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      role: {
-                        type: 'string',
-                        enum: ['user', 'assistant', 'system'],
-                        description: 'The role of the message sender',
-                      },
-                      content: {
-                        type: 'string',
-                        description: 'The content of the message',
-                      },
-                    },
-                    required: ['role', 'content'],
-                  },
-                },
-              },
-              required: ['messages'],
-            },
+            schema: historySource === 'server' ? serverHistoryRequestSchema : clientHistoryRequestSchema,
           },
         },
       },
