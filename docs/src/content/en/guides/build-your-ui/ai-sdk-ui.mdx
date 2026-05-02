@@ -409,6 +409,7 @@ Mastra streams data to the frontend as "parts" within messages. Each part has a 
 | `data-workflow` | `workflowRoute()` | Workflow execution state snapshots with step status and final outputs |
 | `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the step that just changed |
 | `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
+| `data-mastra-harness-snapshot` / `data-mastra-harness-delta` | `harnessToUIMessageStream()` | Harness display-state snapshots and append-only deltas for tools, human-in-the-loop state, tasks, observational memory progress, file changes, and subagents |
 | `data-tool-agent` | Nested agent in tool | Agent output streamed from within a tool's `execute()` |
 | `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
 | `data-tool-network` | Nested network in tool | Network output streamed from within a tool's `execute()` |

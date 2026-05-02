@@ -49,6 +49,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'ai-sdk/chat-route', label: 'chatRoute()' },
+        { type: 'doc', id: 'ai-sdk/harness-to-ui-message-stream', label: 'harnessToUIMessageStream()' },
         { type: 'doc', id: 'ai-sdk/handle-chat-stream', label: 'handleChatStream()' },
         { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },
         { type: 'doc', id: 'ai-sdk/handle-workflow-stream', label: 'handleWorkflowStream()' },
