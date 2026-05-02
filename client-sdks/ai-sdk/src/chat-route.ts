@@ -11,7 +11,13 @@ import {
 import type { UIMessageStreamOptions as UIMessageStreamOptionsV6 } from '@internal/ai-v6';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
+import {
+  MASTRA_MEMORY_HISTORY_OVERRIDE_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '@mastra/core/request-context';
+import type { MastraMemoryHistoryOverride } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
 import { APPROVAL_ID_SEPARATOR } from './helpers';
@@ -67,11 +73,16 @@ export type ChatStreamHandlerParams<
   UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage,
   OUTPUT = undefined,
 > = AgentExecutionOptions<OUTPUT> & {
-  messages: UI_MESSAGE[];
+  messages?: UI_MESSAGE[];
+  id?: string;
+  message?: UI_MESSAGE;
+  messageId?: string;
   resumeData?: Record<string, any>;
   /** The trigger for the request - sent by AI SDK's useChat hook */
   trigger?: 'submit-message' | 'regenerate-message';
 };
+
+export type HistorySource = 'client' | 'server';
 
 /**
  * Extracted from the second parameter of `Mastra.getAgentById` so the type
@@ -86,6 +97,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = Sup
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
   version?: 'v5' | 'v6';
+  historySource?: HistorySource;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
@@ -113,6 +125,235 @@ type ChatStreamHandlerOptionsV6<UI_MESSAGE extends V6UIMessage = V6UIMessage, OU
   version: 'v6';
   messageMetadata?: UIMessageStreamOptionsV6<UI_MESSAGE>['messageMetadata'];
 };
+
+const SERVER_HISTORY_BODY_FIELDS = ['id', 'message', 'messageId', 'resumeData', 'runId', 'trigger'] as const;
+const SERVER_HISTORY_PARAM_FIELDS = [...SERVER_HISTORY_BODY_FIELDS, 'abortSignal', 'requestContext'] as const;
+
+class ServerHistoryRequestError extends Error {
+  readonly name = 'ServerHistoryRequestError';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function cloneRequestContext(requestContext: RequestContext): RequestContext {
+  return new RequestContext(requestContext.entries() as Iterable<readonly [string, unknown]>);
+}
+
+function validateServerHistoryBody(body: unknown): asserts body is Record<string, unknown> {
+  if (!isRecord(body)) {
+    throw new ServerHistoryRequestError('Server-history requests must be JSON objects');
+  }
+
+  const allowedFields = new Set<string>(SERVER_HISTORY_BODY_FIELDS);
+  const forbiddenField = Object.keys(body).find(field => !allowedFields.has(field));
+  if (forbiddenField) {
+    throw new ServerHistoryRequestError(`Server-history requests cannot include "${forbiddenField}"`);
+  }
+}
+
+function validateServerHistoryParams(params: unknown): asserts params is Record<string, unknown> {
+  if (!isRecord(params)) {
+    throw new ServerHistoryRequestError('Server-history requests must be JSON objects');
+  }
+
+  const allowedFields = new Set<string>(SERVER_HISTORY_PARAM_FIELDS);
+  const forbiddenField = Object.keys(params).find(field => !allowedFields.has(field));
+  if (forbiddenField) {
+    throw new ServerHistoryRequestError(`Server-history requests cannot include "${forbiddenField}"`);
+  }
+}
+
+function validateServerHistoryTrigger(trigger: unknown): asserts trigger is 'submit-message' | 'regenerate-message' {
+  if (trigger !== 'submit-message' && trigger !== 'regenerate-message') {
+    throw new ServerHistoryRequestError('Server-history trigger must be "submit-message" or "regenerate-message"');
+  }
+}
+
+function getMemoryOptionParts(memory: unknown): { threadId?: string; resourceId?: string; options?: unknown } {
+  if (!isRecord(memory)) return {};
+  const rawThread = memory.thread;
+  const threadId =
+    typeof rawThread === 'string'
+      ? rawThread
+      : isRecord(rawThread) && typeof rawThread.id === 'string'
+        ? rawThread.id
+        : undefined;
+  const resourceId = typeof memory.resource === 'string' ? memory.resource : undefined;
+  return { threadId, resourceId, options: memory.options };
+}
+
+function getTrustedMemoryScope(args: {
+  bodyId?: string;
+  requestContext?: RequestContext;
+  defaultOptions?: AgentExecutionOptions<any>;
+}): { memory?: AgentExecutionOptionsBase<unknown>['memory']; requestContext: RequestContext } {
+  const requestContext = args.requestContext ?? new RequestContext();
+  const contextThreadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+  const contextResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  const defaultMemory = getMemoryOptionParts(args.defaultOptions?.memory);
+
+  if (contextThreadId) {
+    return { requestContext };
+  }
+
+  if (defaultMemory.threadId) {
+    return { requestContext };
+  }
+
+  if (!args.bodyId) {
+    return { requestContext };
+  }
+
+  const resourceId = contextResourceId ?? defaultMemory.resourceId;
+  if (!resourceId) {
+    throw new ServerHistoryRequestError(
+      'Server-history requests require a server-controlled resourceId when using body.id as thread',
+    );
+  }
+
+  return {
+    requestContext,
+    memory: {
+      thread: args.bodyId,
+      resource: resourceId,
+      ...(isRecord(args.defaultOptions?.memory) && 'options' in args.defaultOptions.memory
+        ? { options: args.defaultOptions.memory.options as any }
+        : {}),
+    },
+  };
+}
+
+function normalizeServerHistoryParams<OUTPUT>({
+  params,
+  defaultOptions,
+}: {
+  params: ChatStreamHandlerParams<SupportedUIMessage, OUTPUT>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
+}): {
+  messages: SupportedUIMessage[];
+  lastMessageId?: string;
+  resumeData?: Record<string, any>;
+  runId?: string;
+  requestContext: RequestContext;
+  restOptions: Record<string, any>;
+} {
+  validateServerHistoryParams(params);
+
+  const {
+    id,
+    message,
+    messageId,
+    resumeData,
+    runId,
+    trigger: rawTrigger = 'submit-message',
+    requestContext: rawRequestContext,
+    ...restOptions
+  } = params as ChatStreamHandlerParams<SupportedUIMessage, OUTPUT> & { requestContext?: RequestContext };
+  validateServerHistoryTrigger(rawTrigger);
+  const trigger = rawTrigger;
+
+  if (!id || typeof id !== 'string') {
+    throw new ServerHistoryRequestError('Server-history requests require an id');
+  }
+
+  const hasResumeData = resumeData !== undefined;
+  if (hasResumeData && !isRecord(resumeData)) {
+    throw new ServerHistoryRequestError('Server-history resumeData must be an object');
+  }
+
+  if (hasResumeData && !runId) {
+    throw new ServerHistoryRequestError('runId is required when resumeData is provided');
+  }
+
+  if (hasResumeData && message !== undefined) {
+    throw new ServerHistoryRequestError('Server-history resume requests cannot include a message');
+  }
+
+  if (rawRequestContext !== undefined && !(rawRequestContext instanceof RequestContext)) {
+    throw new ServerHistoryRequestError('Server-history requestContext must be provided by server code');
+  }
+
+  const trustedScope = getTrustedMemoryScope({
+    bodyId: id,
+    requestContext:
+      rawRequestContext instanceof RequestContext
+        ? rawRequestContext
+        : defaultOptions?.requestContext instanceof RequestContext
+          ? defaultOptions.requestContext
+          : undefined,
+    defaultOptions,
+  });
+  const requestContext = cloneRequestContext(trustedScope.requestContext);
+  const { memory } = trustedScope;
+
+  requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, {
+    type: 'server-history',
+  } satisfies MastraMemoryHistoryOverride);
+
+  if (hasResumeData) {
+    return {
+      messages: [],
+      lastMessageId: typeof messageId === 'string' ? messageId : undefined,
+      resumeData,
+      runId,
+      requestContext,
+      restOptions: {
+        ...restOptions,
+        ...(memory ? { memory } : {}),
+      },
+    };
+  }
+
+  if (trigger === 'regenerate-message') {
+    if (!messageId || typeof messageId !== 'string') {
+      throw new ServerHistoryRequestError('messageId is required when regenerating with server history');
+    }
+
+    if (message !== undefined) {
+      throw new ServerHistoryRequestError('Server-history regenerate requests cannot include a message');
+    }
+
+    requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, {
+      type: 'regenerate',
+      targetMessageId: messageId,
+    } satisfies MastraMemoryHistoryOverride);
+
+    return {
+      messages: [],
+      lastMessageId: messageId,
+      resumeData,
+      runId,
+      requestContext,
+      restOptions: {
+        ...restOptions,
+        ...(memory ? { memory } : {}),
+      },
+    };
+  }
+
+  if (messageId !== undefined) {
+    throw new ServerHistoryRequestError('Server-history submit requests cannot include messageId');
+  }
+
+  const messages = message ? [message] : [];
+  if (!resumeData && messages.length === 0) {
+    throw new ServerHistoryRequestError('Server-history submit requests require a message');
+  }
+
+  return {
+    messages,
+    lastMessageId: undefined,
+    resumeData,
+    runId,
+    requestContext,
+    restOptions: {
+      ...restOptions,
+      ...(memory ? { memory } : {}),
+    },
+  };
+}
 
 /**
  * Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
@@ -149,6 +390,7 @@ export async function handleChatStream<OUTPUT = undefined>({
   params,
   defaultOptions,
   version = 'v5',
+  historySource = 'client',
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -156,7 +398,30 @@ export async function handleChatStream<OUTPUT = undefined>({
   onError,
   messageMetadata,
 }: ChatStreamHandlerOptions<any, OUTPUT>): Promise<ReadableStream<any>> {
-  const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
+  const normalized =
+    historySource === 'server'
+      ? normalizeServerHistoryParams({ params, defaultOptions })
+      : {
+          messages: params.messages,
+          lastMessageId: undefined as string | undefined,
+          resumeData: params.resumeData,
+          runId: (params as any).runId,
+          requestContext: params.requestContext,
+          restOptions: (() => {
+            const {
+              messages: _messages,
+              resumeData: _resumeData,
+              runId: _runId,
+              requestContext: _requestContext,
+              trigger: _trigger,
+              ...rest
+            } = params;
+            return rest;
+          })(),
+        };
+
+  const { messages, resumeData, runId, requestContext, restOptions: rest } = normalized;
+  const trigger = params.trigger;
 
   if (resumeData && !runId) {
     throw new Error('runId is required when resumeData is provided');
@@ -181,7 +446,7 @@ export async function handleChatStream<OUTPUT = undefined>({
 
   // Capture the last assistant message ID for the stream response.
   // This helps the frontend identify which message the response corresponds to.
-  let lastMessageId: string | undefined;
+  let lastMessageId: string | undefined = normalized.lastMessageId;
   let messagesToSend = messages;
 
   if (messages.length > 0) {
@@ -264,6 +529,7 @@ export async function handleChatStream<OUTPUT = undefined>({
 export type chatRouteOptions<OUTPUT = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
   version?: 'v5' | 'v6';
+  historySource?: HistorySource;
   agentVersion?: AgentVersionOptions;
 } & (
   | {
@@ -329,6 +595,7 @@ export function chatRoute<OUTPUT = undefined>({
   agent,
   defaultOptions,
   version = 'v5',
+  historySource = 'client',
   agentVersion,
   sendStart = true,
   sendFinish = true,
@@ -338,6 +605,72 @@ export function chatRoute<OUTPUT = undefined>({
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
+
+  const clientHistoryRequestSchema: any = {
+    type: 'object',
+    properties: {
+      resumeData: {
+        type: 'object',
+        description: 'Resume data for the agent',
+      },
+      runId: {
+        type: 'string',
+        description: 'The run ID required when resuming an agent execution',
+      },
+      messages: {
+        type: 'array',
+        description: 'Array of messages in the conversation',
+        items: {
+          type: 'object',
+          properties: {
+            role: {
+              type: 'string',
+              enum: ['user', 'assistant', 'system'],
+              description: 'The role of the message sender',
+            },
+            content: {
+              type: 'string',
+              description: 'The content of the message',
+            },
+          },
+          required: ['role', 'content'],
+        },
+      },
+    },
+    required: ['messages'],
+  };
+  const serverHistoryRequestSchema: any = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      id: {
+        type: 'string',
+        description: 'Chat ID used as a thread hint when the server provides a memory resource but no thread.',
+      },
+      message: {
+        type: 'object',
+        description: 'Latest submitted UI message for submit-message requests.',
+      },
+      messageId: {
+        type: 'string',
+        description: 'Assistant message ID for regenerate-message requests or compact resume continuity.',
+      },
+      trigger: {
+        type: 'string',
+        enum: ['submit-message', 'regenerate-message'],
+        description: 'AI SDK UI request trigger.',
+      },
+      resumeData: {
+        type: 'object',
+        description: 'Resume data for suspended executions or tool approvals.',
+      },
+      runId: {
+        type: 'string',
+        description: 'The run ID required when resumeData is provided.',
+      },
+    },
+    required: ['id'],
+  };
 
   return registerApiRoute(path, {
     method: 'POST',
@@ -380,39 +713,7 @@ export function chatRoute<OUTPUT = undefined>({
         required: true,
         content: {
           'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                resumeData: {
-                  type: 'object',
-                  description: 'Resume data for the agent',
-                },
-                runId: {
-                  type: 'string',
-                  description: 'The run ID required when resuming an agent execution',
-                },
-                messages: {
-                  type: 'array',
-                  description: 'Array of messages in the conversation',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      role: {
-                        type: 'string',
-                        enum: ['user', 'assistant', 'system'],
-                        description: 'The role of the message sender',
-                      },
-                      content: {
-                        type: 'string',
-                        description: 'The content of the message',
-                      },
-                    },
-                    required: ['role', 'content'],
-                  },
-                },
-              },
-              required: ['messages'],
-            },
+            schema: historySource === 'server' ? serverHistoryRequestSchema : clientHistoryRequestSchema,
           },
         },
       },
@@ -465,6 +766,14 @@ export function chatRoute<OUTPUT = undefined>({
       const mastra = c.get('mastra');
       const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
+      try {
+        if (historySource === 'server') {
+          validateServerHistoryBody(params);
+        }
+      } catch (error) {
+        return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
+      }
+
       let agentToUse: string | undefined = agent;
       if (!agent) {
         const agentId = c.req.param('agentId');
@@ -479,8 +788,12 @@ export function chatRoute<OUTPUT = undefined>({
           );
       }
 
-      // Prioritize requestContext from middleware/route options over body
-      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+      // Prioritize requestContext from middleware/route options over body.
+      // Server-history mode never accepts browser-provided requestContext.
+      const effectiveRequestContext =
+        contextRequestContext ||
+        defaultOptions?.requestContext ||
+        (historySource === 'server' ? undefined : params.requestContext);
 
       if (
         (contextRequestContext && defaultOptions?.requestContext) ||
@@ -525,23 +838,31 @@ export function chatRoute<OUTPUT = undefined>({
           abortSignal: c.req.raw.signal,
         } as any,
         defaultOptions,
+        historySource,
         sendStart,
         sendFinish,
         sendReasoning,
         sendSources,
       };
 
-      if (version === 'v6') {
-        const uiMessageStream = await handleChatStream({
-          ...handlerOptions,
-          version: 'v6',
-        });
+      try {
+        if (version === 'v6') {
+          const uiMessageStream = await handleChatStream({
+            ...handlerOptions,
+            version: 'v6',
+          });
 
-        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+          return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+        }
+
+        const uiMessageStream = await handleChatStream(handlerOptions);
+        return createUIMessageStreamResponseV5({ stream: uiMessageStream });
+      } catch (error) {
+        if (historySource === 'server' && error instanceof ServerHistoryRequestError) {
+          return Response.json({ error: error.message }, { status: 400 });
+        }
+        throw error;
       }
-
-      const uiMessageStream = await handleChatStream(handlerOptions);
-      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
     },
   });
 }

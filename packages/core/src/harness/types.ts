@@ -5,6 +5,7 @@ import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
+import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -423,6 +424,10 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  raw?: unknown;
 }
 
 // =============================================================================
@@ -507,6 +512,19 @@ export interface ActiveSubagentState {
   result?: string;
 }
 
+export type HarnessSubagentHistoryStatus = 'completed' | 'error' | 'aborted';
+
+/**
+ * Terminal subagent activity retained for display snapshots after the parent run ends.
+ */
+export interface HarnessSubagentHistoryEntry extends Omit<ActiveSubagentState, 'status'> {
+  toolCallId: string;
+  status: HarnessSubagentHistoryStatus;
+  endedAt: Date;
+  order: number;
+  parentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+}
+
 /**
  * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
  *
@@ -534,6 +552,90 @@ export interface HarnessQuestionOption {
  * resolve with a string array containing each selected option label.
  */
 export type HarnessQuestionAnswer = string | string[];
+
+export type HarnessAwaitingInputKind = 'tool_approval' | 'tool_suspension' | 'question' | 'plan_approval';
+
+export type HarnessAwaitingInput =
+  | {
+      id: string;
+      kind: 'tool_approval';
+      durable: boolean;
+      runId?: string;
+      modeId?: string;
+      threadId?: string;
+      resourceId?: string;
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      resumeSchema?: string;
+      requireToolApproval?: boolean;
+    }
+  | {
+      id: string;
+      kind: 'tool_suspension';
+      durable: boolean;
+      runId?: string;
+      modeId?: string;
+      threadId?: string;
+      resourceId?: string;
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      suspendPayload?: unknown;
+      resumeSchema?: string;
+      requireToolApproval?: boolean;
+    }
+  | {
+      id: string;
+      kind: 'question';
+      durable: false;
+      questionId: string;
+      question: string;
+      options?: HarnessQuestionOption[];
+      selectionMode?: HarnessQuestionSelectionMode;
+    }
+  | {
+      id: string;
+      kind: 'plan_approval';
+      durable: false;
+      planId: string;
+      title?: string;
+      plan: string;
+    };
+
+export interface HarnessWaitForAwaitingInputReadyOptions {
+  id: string;
+  timeoutMs?: number;
+  intervalMs?: number;
+}
+
+export interface HarnessGetAwaitingInputOptions {
+  id: string;
+}
+
+export interface HarnessResumeAwaitingInputOptions {
+  id: string;
+  resumeData: unknown;
+  requestContext?: RequestContext;
+}
+
+export type HarnessResumeAwaitingInputResult =
+  | {
+      status: 'resumed';
+      awaitingInput: HarnessAwaitingInput;
+      message?: HarnessMessage;
+      suspended?: boolean;
+    }
+  | {
+      status: 'already_resolved';
+      id: string;
+      message: string;
+    }
+  | {
+      status: 'live_session_only';
+      awaitingInput: HarnessAwaitingInput;
+      message: string;
+    };
 
 /**
  * Canonical display state maintained by the Harness.
@@ -604,6 +706,9 @@ export interface HarnessDisplayState {
   /** Active subagent executions keyed by parent toolCallId */
   activeSubagents: Map<string, ActiveSubagentState>;
 
+  /** Terminal subagent executions retained after they leave activeSubagents */
+  subagentHistory: HarnessSubagentHistoryEntry[];
+
   // ── Observational Memory ─────────────────────────────────────────────
   /** Full OM progress state (status, tokens, thresholds, buffered) */
   omProgress: OMProgressState;
@@ -649,6 +754,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     pendingQuestion: null,
     pendingPlanApproval: null,
     activeSubagents: new Map(),
+    subagentHistory: [],
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
     bufferingObservations: false,

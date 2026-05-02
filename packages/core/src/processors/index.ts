@@ -235,11 +235,6 @@ export type ProcessInputStepResult = ProcessInputStepMessageResult & {
   toolChoice?: ToolChoice<any>;
   activeTools?: string[];
   messageList?: MessageList;
-  /**
-   * Replace the messages used to build the next model prompt without mutating the canonical MessageList.
-   * Later processInputStep processors in the same step receive these messages as their `messages` argument.
-   */
-  modelContextMessages?: MastraDBMessage[];
   /** Replace all system messages with these */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;

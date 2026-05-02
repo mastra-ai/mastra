@@ -36,6 +36,7 @@ import type {
   ModelManagerModelConfig,
   StreamTransportRef,
 } from '../stream/types';
+import type { ToolPayloadProjectionPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -66,6 +67,8 @@ export type StreamInternal = {
   backgroundTaskManager?: BackgroundTaskManager;
   // Agent-level background task config
   agentBackgroundConfig?: AgentBackgroundConfig;
+  // Projection policy for display/transcript tool payloads.
+  toolPayloadProjection?: ToolPayloadProjectionPolicy;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
   // When true, backgroundTaskCheckStep returns immediately without waiting for

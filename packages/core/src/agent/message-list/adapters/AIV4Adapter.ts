@@ -5,6 +5,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
 import { TypeDetector } from '../detection/TypeDetector';
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri, imageContentToString } from '../prompt/image-utils';
@@ -17,6 +18,40 @@ import type {
   UIMessageWithMetadata,
 } from '../state/types';
 import { findToolCallArgs } from '../utils/provider-compat';
+
+function getDisplayProjection(
+  providerMetadata: unknown,
+  phase: 'input-available' | 'output-available' | 'error',
+  fallback: unknown,
+  enabled = true,
+) {
+  if (!enabled) {
+    return fallback;
+  }
+  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
+  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
+}
+
+function projectV4ToolInvocationForDisplay(
+  invocation: NonNullable<MastraMessageContentV2['toolInvocations']>[number],
+  providerMetadata: unknown,
+  enabled: boolean,
+) {
+  return {
+    ...invocation,
+    args: getDisplayProjection(providerMetadata, 'input-available', invocation.args, enabled),
+    ...(invocation.state === 'result'
+      ? {
+          result: getDisplayProjection(
+            providerMetadata,
+            'output-available',
+            getDisplayProjection(providerMetadata, 'error', invocation.result, enabled),
+            enabled,
+          ),
+        }
+      : {}),
+  };
+}
 
 /**
  * Cast Mastra parts (including data-* extensions) to the V4 UI parts type.
@@ -65,7 +100,8 @@ export class AIV4Adapter {
   /**
    * Convert MastraDBMessage to AI SDK V4 UIMessage
    */
-  static toUIMessage(m: MastraDBMessage): UIMessageWithMetadata {
+  static toUIMessage(m: MastraDBMessage, options?: { projectToolPayloads?: boolean }): UIMessageWithMetadata {
+    const projectToolPayloads = options?.projectToolPayloads ?? true;
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]
@@ -115,7 +151,30 @@ export class AIV4Adapter {
           continue;
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
-          const toolInvocation = { ...part.toolInvocation };
+          const toolInvocation = {
+            ...part.toolInvocation,
+            args: getDisplayProjection(
+              part.providerMetadata,
+              'input-available',
+              part.toolInvocation.args,
+              projectToolPayloads,
+            ),
+            ...(part.toolInvocation.state === 'result'
+              ? {
+                  result: getDisplayProjection(
+                    part.providerMetadata,
+                    'output-available',
+                    getDisplayProjection(
+                      part.providerMetadata,
+                      'error',
+                      part.toolInvocation.result,
+                      projectToolPayloads,
+                    ),
+                    projectToolPayloads,
+                  ),
+                }
+              : {}),
+          };
 
           // Find the step number for this tool invocation
           let currentStep = -1;
@@ -185,7 +244,17 @@ export class AIV4Adapter {
         parts: v4Parts,
         reasoning: undefined,
         toolInvocations:
-          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
+          `toolInvocations` in m.content
+            ? m.content.toolInvocations
+                ?.filter(t => t.state === 'result')
+                .map(toolInvocation => {
+                  const partProviderMetadata = m.content.parts?.find(
+                    part =>
+                      part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolInvocation.toolCallId,
+                  )?.providerMetadata;
+                  return projectV4ToolInvocationForDisplay(toolInvocation, partProviderMetadata, projectToolPayloads);
+                })
+            : undefined,
       };
       // Preserve metadata if present
       if (m.content.metadata) {

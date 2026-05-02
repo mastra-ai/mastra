@@ -1103,19 +1103,36 @@ export class ProcessorRunner {
           const mutations = messageList.stopRecording();
           recordingStopped = true;
           const rawResult = result as RunProcessInputStepResult & { phase?: string };
-          const workflowProcessInputStepResult: ProcessInputStepResult = {
-            ...rawResult,
-            messageList: undefined,
-            messages:
-              rawResult.messages &&
-              (rawResult.modelContextMessages === undefined ||
-                !areProcessorMessageArraysEqual(rawResult.messages, rawResult.modelContextMessages)) &&
-              !areProcessorMessageArraysEqual(processableMessages, rawResult.messages)
-                ? rawResult.messages
-                : undefined,
-            modelContextMessages: rawResult.modelContextMessages,
-          };
-          delete (workflowProcessInputStepResult as { phase?: string }).phase;
+          const {
+            phase: _phase,
+            messages: rawMessages,
+            modelContextMessages: rawModelContextMessages,
+            ...rawRest
+          } = rawResult;
+          const normalizedMessages =
+            rawMessages &&
+            (rawModelContextMessages === undefined ||
+              !areProcessorMessageArraysEqual(rawMessages, rawModelContextMessages)) &&
+            !areProcessorMessageArraysEqual(processableMessages, rawMessages)
+              ? rawMessages
+              : undefined;
+          const workflowProcessInputStepResult: ProcessInputStepResult =
+            'modelContextMessages' in rawResult
+              ? {
+                  ...rawRest,
+                  messageList: undefined,
+                  modelContextMessages: rawModelContextMessages,
+                }
+              : normalizedMessages
+                ? {
+                    ...rawRest,
+                    messageList: undefined,
+                    messages: normalizedMessages,
+                  }
+                : {
+                    ...rawRest,
+                    messageList: undefined,
+                  };
           const {
             messages,
             systemMessages,

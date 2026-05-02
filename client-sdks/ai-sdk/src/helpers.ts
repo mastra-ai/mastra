@@ -17,6 +17,7 @@ import type {
 } from '@internal/ai-v6';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
 import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
+import { getProjectedToolPayload, hasProjectedToolPayload } from '@mastra/core/tools';
 import { isDataChunkType } from './utils';
 
 /**
@@ -67,6 +68,13 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
   normalizeFinishReason,
   includeRawFinishReason = false,
 }: ConvertMastraChunkToAISDKOptions<OUTPUT>): OutputChunkType<OUTPUT> {
+  const displayInputProjection = getProjectedToolPayload(chunk.metadata, 'display', 'input-available');
+  const displayInputDeltaProjection = getProjectedToolPayload(chunk.metadata, 'display', 'input-delta');
+  const displayOutputProjection = getProjectedToolPayload(chunk.metadata, 'display', 'output-available');
+  const displayErrorProjection = getProjectedToolPayload(chunk.metadata, 'display', 'error');
+  const displayApprovalProjection = getProjectedToolPayload(chunk.metadata, 'display', 'approval');
+  const displaySuspendProjection = getProjectedToolPayload(chunk.metadata, 'display', 'suspend');
+
   switch (chunk.type) {
     case 'start':
       return {
@@ -174,7 +182,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
-        input: chunk.payload.args,
+        input: hasProjectedToolPayload(displayInputProjection) ? displayInputProjection.projected : chunk.payload.args,
       };
     case 'tool-call-approval':
       return {
@@ -185,7 +193,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
-          args: chunk.payload.args,
+          args: hasProjectedToolPayload(displayApprovalProjection)
+            ? displayApprovalProjection.projected
+            : chunk.payload.args,
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
@@ -198,7 +208,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
-          suspendPayload: chunk.payload.suspendPayload,
+          suspendPayload: hasProjectedToolPayload(displaySuspendProjection)
+            ? displaySuspendProjection.projected
+            : chunk.payload.suspendPayload,
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
@@ -218,10 +230,13 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'tool-call-delta':
+      if (displayInputDeltaProjection?.suppress) {
+        return;
+      }
       return {
         type: 'tool-input-delta',
         id: chunk.payload.toolCallId,
-        delta: chunk.payload.argsTextDelta,
+        delta: (displayInputDeltaProjection?.projected as string | undefined) ?? chunk.payload.argsTextDelta,
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'step-finish': {
@@ -262,18 +277,20 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
     case 'tool-result':
       return {
         type: 'tool-result',
-        input: chunk.payload.args,
+        input: hasProjectedToolPayload(displayInputProjection) ? displayInputProjection.projected : chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
-        output: chunk.payload.result,
+        output: hasProjectedToolPayload(displayOutputProjection)
+          ? displayOutputProjection.projected
+          : chunk.payload.result,
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
     case 'tool-error':
       return {
         type: 'tool-error',
-        error: chunk.payload.error,
-        input: chunk.payload.args,
+        error: hasProjectedToolPayload(displayErrorProjection) ? displayErrorProjection.projected : chunk.payload.error,
+        input: hasProjectedToolPayload(displayInputProjection) ? displayInputProjection.projected : chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
@@ -406,6 +423,7 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
   mode?: 'generate' | 'stream';
 }): OutputChunkType<OUTPUT> | OutputChunkType<OUTPUT>[] {
   if (chunk.type === 'tool-call-approval') {
+    const displayProjection = getProjectedToolPayload(chunk.metadata, 'display', 'approval');
     // Emit both the native v6 tool-approval-request AND the legacy data-tool-call-approval
     // so that consumers using the data stream protocol remain backwards-compatible.
     return [
@@ -422,7 +440,7 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
-          args: chunk.payload.args,
+          args: hasProjectedToolPayload(displayProjection) ? displayProjection.projected : chunk.payload.args,
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType,

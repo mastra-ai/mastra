@@ -237,7 +237,7 @@ export class CloudExporter extends BaseExporter {
     const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
     const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
+      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;

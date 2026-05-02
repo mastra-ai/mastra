@@ -71,7 +71,7 @@ import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool } from '../tools/types';
+import type { CoreTool, ToolPayloadProjectionPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -260,6 +260,7 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  #toolPayloadProjection?: ToolPayloadProjectionPolicy;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -355,6 +356,7 @@ export class Agent<
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
+    this.#toolPayloadProjection = config.toolPayloadProjection;
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -5290,6 +5292,8 @@ export class Agent<
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
+      toolPayloadProjection:
+        options.toolPayloadProjection ?? this.#toolPayloadProjection ?? this.#mastra?.getToolPayloadProjection(),
       ...(options.disableBackgroundTasks
         ? {}
         : {
