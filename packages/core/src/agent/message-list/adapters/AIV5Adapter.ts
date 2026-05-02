@@ -231,6 +231,21 @@ export class AIV5Adapter {
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-error') {
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: getDisplayProjection(part.providerMetadata, 'input-available', inv.args, projectToolPayloads),
+              errorText: getDisplayProjection(
+                part.providerMetadata,
+                'error',
+                inv.errorText || '',
+                projectToolPayloads,
+              ) as string,
+              state: 'output-error',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
               type: `tool-${inv.toolName}`,

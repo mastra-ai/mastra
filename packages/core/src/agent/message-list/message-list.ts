@@ -784,7 +784,7 @@ export class MessageList {
     }
 
     let changed = false;
-    const projectedByToolCallId = new Map<string, { args?: unknown; result?: unknown }>();
+    const projectedByToolCallId = new Map<string, { args?: unknown; result?: unknown; errorText?: string }>();
 
     const parts = message.content.parts.map(part => {
       if (part.type === 'tool-invocation' && part.toolInvocation) {
@@ -793,7 +793,9 @@ export class MessageList {
           part.toolInvocation.state === 'result'
             ? (getProjectedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
               getProjectedToolPayload(part.providerMetadata, 'transcript', 'error'))
-            : undefined;
+            : part.toolInvocation.state === 'output-error'
+              ? getProjectedToolPayload(part.providerMetadata, 'transcript', 'error')
+              : undefined;
 
         if (!inputProjection && !outputProjection) {
           return part;
@@ -809,9 +811,16 @@ export class MessageList {
               ? outputProjection.projected
               : part.toolInvocation.result
             : undefined;
+        const projectedErrorText =
+          part.toolInvocation.state === 'output-error'
+            ? hasProjectedToolPayload(outputProjection)
+              ? (outputProjection.projected as string)
+              : part.toolInvocation.errorText
+            : undefined;
         projectedByToolCallId.set(part.toolInvocation.toolCallId, {
           args: projectedArgs,
           ...(part.toolInvocation.state === 'result' ? { result: projectedResult } : {}),
+          ...(part.toolInvocation.state === 'output-error' ? { errorText: projectedErrorText } : {}),
         });
 
         return {
@@ -820,6 +829,7 @@ export class MessageList {
             ...part.toolInvocation,
             args: projectedArgs,
             ...(part.toolInvocation.state === 'result' ? { result: projectedResult } : {}),
+            ...(part.toolInvocation.state === 'output-error' ? { errorText: projectedErrorText } : {}),
           },
         };
       }
@@ -844,11 +854,15 @@ export class MessageList {
         return invocation;
       }
 
+      const invocationState = invocation.state as string;
       changed = true;
       return {
         ...invocation,
         ...(projected.args !== undefined ? { args: projected.args } : {}),
         ...(invocation.state === 'result' && projected.result !== undefined ? { result: projected.result } : {}),
+        ...(invocationState === 'output-error' && projected.errorText !== undefined
+          ? { errorText: projected.errorText }
+          : {}),
       };
     });
 

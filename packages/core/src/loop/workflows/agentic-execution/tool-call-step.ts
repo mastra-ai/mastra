@@ -699,6 +699,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               throw new ToolNotFoundError(inputData.toolName);
             }
             let backgroundChunkProjectionQueue: Promise<void> = Promise.resolve();
+            const emittedReplayedToolCalls = new Set<string>();
 
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
@@ -743,7 +744,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   backgroundChunkProjectionQueue = backgroundChunkProjectionQueue
                     .then(async () => {
                       const bgRunId = chunk.payload.runId;
-                      if (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) {
+                      const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
+                      if (
+                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) &&
+                        !emittedReplayedToolCalls.has(replayKey)
+                      ) {
                         controller.enqueue(
                           await projectChunk(
                             {
@@ -761,6 +766,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                             'input-available',
                           ),
                         );
+                        emittedReplayedToolCalls.add(replayKey);
                       }
 
                       if (chunk.type === 'background-task-completed') {

@@ -455,9 +455,11 @@ export class AIV6Adapter {
               ...base,
               state: 'output-error',
               input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
-              errorText: String(
-                getDisplayProjection(part.providerMetadata, 'error', part.toolInvocation.errorText || ''),
-              ),
+              errorText: getDisplayProjection(
+                part.providerMetadata,
+                'error',
+                part.toolInvocation.errorText || '',
+              ) as string,
             },
             {
               rawInput: part.toolInvocation.rawInput,

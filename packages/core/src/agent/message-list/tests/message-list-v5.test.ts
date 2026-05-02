@@ -1877,6 +1877,30 @@ describe('MessageList V5 Support', () => {
                 },
               },
             },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-projected-error',
+                toolName: 'lookupCustomer',
+                state: 'output-error',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                errorText: 'stack with /private/customer.json',
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'input-available': { projected: { customerId: 'cus_123' } },
+                      error: { projected: { message: 'Tool failed' } },
+                    },
+                    transcript: {
+                      'input-available': { projected: { customerId: 'cus_123' } },
+                      error: { projected: { message: 'Tool failed' } },
+                    },
+                  },
+                },
+              },
+            },
           ],
         },
       };
@@ -1890,22 +1914,43 @@ describe('MessageList V5 Support', () => {
         value: { displayName: 'Acme', apiKey: 'secret-value' },
       });
 
-      const uiToolPart = list.get.all.aiV5.ui()[0]!.parts.find(part => isToolUIPart(part)) as any;
+      const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
+      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-projected') as any;
       expect(uiToolPart.input).toEqual({ customerId: 'cus_123' });
       expect(uiToolPart.output).toEqual({ displayName: 'Acme' });
+      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-projected-error') as any;
+      expect(uiErrorToolPart.input).toEqual({ customerId: 'cus_123' });
+      expect(uiErrorToolPart.errorText).toEqual({ message: 'Tool failed' });
 
-      const drainedToolPart = list
-        .drainUnsavedMessages()[0]!
-        .content.parts!.find(part => part.type === 'tool-invocation') as any;
+      const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
+      const drainedToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected',
+      ) as any;
       expect(drainedToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
       expect(drainedToolPart.toolInvocation.result).toEqual({ displayName: 'Acme' });
+      const drainedErrorToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected-error',
+      ) as any;
+      expect(drainedErrorToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
+      expect(drainedErrorToolPart.toolInvocation.errorText).toEqual({ message: 'Tool failed' });
 
-      const rawToolPart = list.get.all.db()[0]!.content.parts!.find(part => part.type === 'tool-invocation') as any;
+      const rawParts = list.get.all.db()[0]!.content.parts!;
+      const rawToolPart = rawParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected',
+      ) as any;
       expect(rawToolPart.toolInvocation.args).toEqual({
         customerId: 'cus_123',
         internalPath: '/private/customer.json',
       });
       expect(rawToolPart.toolInvocation.result).toEqual({ displayName: 'Acme', apiKey: 'secret-value' });
+      const rawErrorToolPart = rawParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected-error',
+      ) as any;
+      expect(rawErrorToolPart.toolInvocation.args).toEqual({
+        customerId: 'cus_123',
+        internalPath: '/private/customer.json',
+      });
+      expect(rawErrorToolPart.toolInvocation.errorText).toBe('stack with /private/customer.json');
     });
 
     it('should preserve explicit null payload projections in UI and drained transcript', () => {
@@ -1945,6 +1990,30 @@ describe('MessageList V5 Support', () => {
               },
             },
             {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-null-projected-error',
+                toolName: 'lookupCustomer',
+                state: 'output-error',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                errorText: 'stack with /private/customer.json',
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'input-available': { projected: null },
+                      error: { projected: null },
+                    },
+                    transcript: {
+                      'input-available': { projected: null },
+                      error: { projected: null },
+                    },
+                  },
+                },
+              },
+            },
+            {
               type: 'data-tool-call-approval',
               data: {
                 args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
@@ -1965,14 +2034,25 @@ describe('MessageList V5 Support', () => {
 
       list.add(toolResultMessage, 'response');
 
-      const uiToolPart = list.get.all.aiV5.ui()[0]!.parts.find(part => isToolUIPart(part)) as any;
+      const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
+      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-projected') as any;
       expect(uiToolPart.input).toBeNull();
       expect(uiToolPart.output).toBeNull();
+      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-projected-error') as any;
+      expect(uiErrorToolPart.input).toBeNull();
+      expect(uiErrorToolPart.errorText).toBeNull();
 
       const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
-      const drainedToolPart = drainedParts.find(part => part.type === 'tool-invocation') as any;
+      const drainedToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-projected',
+      ) as any;
       expect(drainedToolPart.toolInvocation.args).toBeNull();
       expect(drainedToolPart.toolInvocation.result).toBeNull();
+      const drainedErrorToolPart = drainedParts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-projected-error',
+      ) as any;
+      expect(drainedErrorToolPart.toolInvocation.args).toBeNull();
+      expect(drainedErrorToolPart.toolInvocation.errorText).toBeNull();
 
       const drainedApprovalPart = drainedParts.find(part => part.type === 'data-tool-call-approval') as any;
       expect(drainedApprovalPart.data.args).toBeNull();
