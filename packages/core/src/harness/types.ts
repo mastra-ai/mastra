@@ -277,6 +277,12 @@ export interface HarnessConfig<TState = {}> {
   };
 
   /**
+   * Defer auto-approved or auto-denied tool approvals until the current stream
+   * has drained, so durable suspension state can be persisted before resume.
+   */
+  deferredAutoApproval?: boolean;
+
+  /**
    * Observability entrypoint for tracing, scoring, and feedback.
    * When provided, the internal Mastra instance is configured with this
    * observability backend so that agent runs produce trace spans.

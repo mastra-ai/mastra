@@ -3,6 +3,7 @@ import z from 'zod';
 
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { createTool } from '../tools';
@@ -66,6 +67,30 @@ async function* createHarnessTextFullStream(runId: string) {
   yield { type: 'text-start', runId, payload: { id: 'text-1' } };
   yield { type: 'text-delta', runId, payload: { id: 'text-1', text: 'Approved.' } };
   yield { type: 'text-end', runId, payload: { id: 'text-1' } };
+  yield { type: 'finish', runId, payload: { stepResult: { reason: 'stop' } } };
+}
+
+async function* createApprovalFullStream({
+  runId = 'approval-run',
+  toolCallIds = ['approval-call'],
+  afterApproval,
+}: {
+  runId?: string;
+  toolCallIds?: string[];
+  afterApproval?: () => Promise<void> | void;
+} = {}) {
+  for (const toolCallId of toolCallIds) {
+    yield {
+      type: 'tool-call-approval',
+      runId,
+      payload: {
+        toolCallId,
+        toolName: 'writeFile',
+        args: { path: 'README.md' },
+      },
+    };
+  }
+  await afterApproval?.();
   yield { type: 'finish', runId, payload: { stepResult: { reason: 'stop' } } };
 }
 
@@ -517,5 +542,152 @@ describe('Harness awaiting input durability', () => {
 
     await expect(harness.listAwaitingInputs()).resolves.toEqual([]);
     await expect(harness.getAwaitingInput({ id: 'q-1' })).resolves.toBeNull();
+  });
+
+  it('keeps auto-approved tool approvals inline by default', async () => {
+    let streamDrained = false;
+    const agent = new Agent({
+      id: 'inline-auto-approval-agent',
+      name: 'Inline Auto Approval Agent',
+      instructions: 'You write files.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+    const harness = new Harness({
+      id: 'inline-auto-approval-harness',
+      initialState: { yolo: true } as any,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    const approvedMessage = {
+      id: 'approved-message',
+      role: 'assistant' as const,
+      content: [{ type: 'text' as const, text: 'Approved.' }],
+      createdAt: new Date(),
+    };
+    const handleToolApprove = vi.fn(async () => {
+      expect(streamDrained).toBe(false);
+      return { message: approvedMessage };
+    });
+    (harness as any).handleToolApprove = handleToolApprove;
+
+    const result = await (harness as any).processStream(
+      {
+        fullStream: createApprovalFullStream({
+          afterApproval: () => {
+            streamDrained = true;
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(result.message).toBe(approvedMessage);
+    expect(handleToolApprove).toHaveBeenCalledWith({
+      toolCallId: 'approval-call',
+      requestContext: expect.any(RequestContext),
+    });
+    expect(streamDrained).toBe(false);
+  });
+
+  it('defers auto-approved tool approvals until the stream drains when configured', async () => {
+    let releaseStream: (() => void) | undefined;
+    const afterApproval = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          releaseStream = resolve;
+        }),
+    );
+    const agent = new Agent({
+      id: 'deferred-auto-approval-agent',
+      name: 'Deferred Auto Approval Agent',
+      instructions: 'You write files.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+    const harness = new Harness({
+      id: 'deferred-auto-approval-harness',
+      initialState: { yolo: true } as any,
+      deferredAutoApproval: true,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    const approvedMessage = {
+      id: 'deferred-approved-message',
+      role: 'assistant' as const,
+      content: [{ type: 'text' as const, text: 'Approved after drain.' }],
+      createdAt: new Date(),
+    };
+    const handleToolApprove = vi.fn(async () => ({ message: approvedMessage }));
+    const waitForAwaitingInputReady = vi.spyOn(harness, 'waitForAwaitingInputReady').mockResolvedValue(null);
+    (harness as any).handleToolApprove = handleToolApprove;
+
+    const resultPromise = (harness as any).processStream(
+      { fullStream: createApprovalFullStream({ afterApproval }) },
+      new RequestContext(),
+    );
+
+    await vi.waitFor(() => expect(afterApproval).toHaveBeenCalled());
+    expect(handleToolApprove).not.toHaveBeenCalled();
+
+    releaseStream?.();
+    await expect(resultPromise).resolves.toMatchObject({ message: approvedMessage });
+    expect(waitForAwaitingInputReady).toHaveBeenCalledWith({ id: 'approval-call' });
+    expect(handleToolApprove).toHaveBeenCalledWith({
+      toolCallId: 'approval-call',
+      requestContext: expect.any(RequestContext),
+    });
+    expect(waitForAwaitingInputReady.mock.invocationCallOrder[0]!).toBeLessThan(
+      handleToolApprove.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('replays all deferred auto-approved tool approvals sequentially', async () => {
+    const agent = new Agent({
+      id: 'deferred-auto-approval-queue-agent',
+      name: 'Deferred Auto Approval Queue Agent',
+      instructions: 'You write files.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+    const harness = new Harness({
+      id: 'deferred-auto-approval-queue-harness',
+      initialState: { yolo: true } as any,
+      deferredAutoApproval: true,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    const approvedMessage = {
+      id: 'deferred-approved-message',
+      role: 'assistant' as const,
+      content: [{ type: 'text' as const, text: 'Approved after drain.' }],
+      createdAt: new Date(),
+    };
+    const handleToolApprove = vi.fn(async () => ({ message: approvedMessage }));
+    const waitForAwaitingInputReady = vi.spyOn(harness, 'waitForAwaitingInputReady').mockResolvedValue(null);
+    (harness as any).handleToolApprove = handleToolApprove;
+
+    await expect(
+      (harness as any).processStream(
+        { fullStream: createApprovalFullStream({ toolCallIds: ['approval-call-1', 'approval-call-2'] }) },
+        new RequestContext(),
+      ),
+    ).resolves.toMatchObject({ message: approvedMessage });
+
+    expect(waitForAwaitingInputReady).toHaveBeenNthCalledWith(1, { id: 'approval-call-1' });
+    expect(waitForAwaitingInputReady).toHaveBeenNthCalledWith(2, { id: 'approval-call-2' });
+    expect(handleToolApprove).toHaveBeenNthCalledWith(1, {
+      toolCallId: 'approval-call-1',
+      requestContext: expect.any(RequestContext),
+    });
+    expect(handleToolApprove).toHaveBeenNthCalledWith(2, {
+      toolCallId: 'approval-call-2',
+      requestContext: expect.any(RequestContext),
+    });
+    const [wait1, wait2] = waitForAwaitingInputReady.mock.invocationCallOrder;
+    const [approve1, approve2] = handleToolApprove.mock.invocationCallOrder;
+    expect(wait1!).toBeLessThan(approve1!);
+    expect(approve1!).toBeLessThan(wait2!);
+    expect(wait2!).toBeLessThan(approve2!);
   });
 });
