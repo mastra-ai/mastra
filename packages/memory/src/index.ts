@@ -1031,13 +1031,36 @@ ${workingMemory}`;
         .get.all.db();
 
       const memoryStore = await this.getMemoryStore();
+      const existingMessages =
+        dbMessages.length > 0
+          ? await memoryStore.listMessagesById({ messageIds: dbMessages.map(message => message.id) })
+          : { messages: [] };
+      const existingById = new Map(existingMessages.messages.map(message => [message.id, message]));
+      const messagesToSave = dbMessages.map(message => {
+        const existing = existingById.get(message.id);
+        if (
+          existing &&
+          existing.threadId === message.threadId &&
+          existing.resourceId === message.resourceId &&
+          existing.createdAt
+        ) {
+          return {
+            ...message,
+            createdAt: existing.createdAt,
+          };
+        }
+        return message;
+      });
+
       const result = await memoryStore.saveMessages({
-        messages: dbMessages,
+        messages: messagesToSave,
       });
 
       let totalTokens = 0;
 
       if (this.vector && config.semanticRecall) {
+        await this.deleteMessageVectors(messagesToSave.map(message => message.id));
+
         // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
         const embeddingData: Array<{
           embeddings: number[][];
@@ -1047,7 +1070,7 @@ ${workingMemory}`;
 
         // Process embeddings concurrently - this doesn't use DB connections
         await Promise.all(
-          updatedMessages.map(async message => {
+          messagesToSave.map(async message => {
             let textForEmbedding: string | null = null;
 
             if (

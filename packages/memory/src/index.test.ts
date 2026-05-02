@@ -270,6 +270,58 @@ describe('Memory', () => {
       expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
       expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
+
+    it('should preserve the original createdAt when saving the same message id again', async () => {
+      const threadId = 'thread-save-duplicate';
+      const resourceId = 'resource-save-duplicate';
+      const originalCreatedAt = new Date('2024-01-01T10:00:00Z');
+
+      await memory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'duplicate-msg',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: originalCreatedAt,
+            content: { format: 2, parts: [{ type: 'text', text: 'Original answer' }] },
+          },
+        ],
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'duplicate-msg',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-02T10:00:00Z'),
+            content: { format: 2, parts: [{ type: 'text', text: 'Updated answer' }] },
+          },
+        ],
+      });
+
+      const recalled = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(1);
+      expect(recalled.messages[0]).toEqual(
+        expect.objectContaining({
+          id: 'duplicate-msg',
+          createdAt: originalCreatedAt,
+          content: { format: 2, parts: [{ type: 'text', text: 'Updated answer' }] },
+        }),
+      );
+    });
   });
 
   describe('cloneThread', () => {
@@ -2151,6 +2203,69 @@ describe('Memory', () => {
           filter: { message_id: { $in: [messageId] } },
         });
       });
+    });
+
+    it('should delete existing message vectors before upserting replacements', async () => {
+      const mockVector: MastraVector = {
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        query: vi.fn(),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        createIndex: vi.fn(),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 2 }),
+        id: 'mock-vector',
+      } as any;
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2]],
+        }),
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: {
+          semanticRecall: true,
+          generateTitle: false,
+        },
+      });
+      const threadId = 'thread-vector-replace';
+      const resourceId = 'resource-vector-replace';
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Vector replace',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-vector-replace',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Replacement text' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      expect(mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { message_id: { $in: ['msg-vector-replace'] } },
+      });
+      expect(mockVector.upsert).toHaveBeenCalled();
+      expect((mockVector.deleteVectors as any).mock.invocationCallOrder[0]).toBeLessThan(
+        (mockVector.upsert as any).mock.invocationCallOrder[0],
+      );
     });
 
     it('should delete thread vectors with default separator', async () => {

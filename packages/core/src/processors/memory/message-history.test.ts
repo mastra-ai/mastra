@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
 import type { MemoryRuntimeContext } from '../../memory';
-import { RequestContext } from '../../request-context';
+import { MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
 import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../storage/types';
 
@@ -24,8 +24,10 @@ class MockStorage extends MemoryStorage {
   private messages: MastraDBMessage[] = [];
 
   async listMessages(params: any): Promise<any> {
-    const { threadId, perPage = false, page = 1, orderBy } = params;
-    const threadMessages = this.messages.filter(m => m.threadId === threadId);
+    const { threadId, resourceId, perPage = false, page = 1, orderBy } = params;
+    const threadMessages = this.messages.filter(
+      m => m.threadId === threadId && (resourceId === undefined || m.resourceId === resourceId),
+    );
 
     // Sort by createdAt if orderBy is specified
     let sortedMessages = threadMessages;
@@ -80,6 +82,9 @@ class MockStorage extends MemoryStorage {
   async saveMessages(args: { messages: MastraDBMessage[] }) {
     return { messages: args.messages };
   }
+  deleteMessages = vi.fn(async (messageIds: string[]) => {
+    this.messages = this.messages.filter(message => !message.id || !messageIds.includes(message.id));
+  });
   async updateMessages(args: any) {
     return args.messages || [];
   }
@@ -166,6 +171,95 @@ describe('MessageHistory', () => {
       expect(resultMessages[0].id).toBe('msg-2');
       expect(resultMessages[1].id).toBe('msg-3');
       expect(resultMessages[2].id).toBe('msg-4');
+    });
+
+    it('should recall only messages before the assistant target when regenerating', async () => {
+      const storedMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Question 1' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Answer 1' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Question 2' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:02:00Z'),
+        },
+        {
+          id: 'msg-4',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Answer 2' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:03:00Z'),
+        },
+      ];
+      mockStorage.setMessages(storedMessages);
+      const requestContext = createRuntimeContextWithMemory('thread-1', 'resource-1');
+      requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, {
+        type: 'regenerate',
+        targetMessageId: 'msg-2',
+      });
+      const state: Record<string, unknown> = {};
+      processor = new MessageHistory({ storage: mockStorage });
+
+      const result = await processor.processInput({
+        messages: [],
+        messageList: new MessageList(),
+        abort: mockAbort,
+        requestContext,
+        state,
+      });
+
+      expect(result).toBeInstanceOf(MessageList);
+      expect((result as MessageList).get.all.db().map(message => message.id)).toEqual(['msg-1']);
+      expect(state.regenerate).toEqual({
+        type: 'regenerate',
+        branchMessageIds: ['msg-2', 'msg-3', 'msg-4'],
+      });
+    });
+
+    it('should reject regenerate targets that are not assistant messages', async () => {
+      mockStorage.setMessages([
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Question' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      ]);
+      const requestContext = createRuntimeContextWithMemory('thread-1', 'resource-1');
+      requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, {
+        type: 'regenerate',
+        targetMessageId: 'msg-1',
+      });
+      processor = new MessageHistory({ storage: mockStorage });
+
+      await expect(
+        processor.processInput({
+          messages: [],
+          messageList: new MessageList(),
+          abort: mockAbort,
+          requestContext,
+          state: {},
+        }),
+      ).rejects.toThrow('Cannot regenerate non-assistant message "msg-1"');
     });
 
     it('should merge historical messages with new messages', async () => {
@@ -270,6 +364,54 @@ describe('MessageHistory', () => {
       expect(resultMessages[1].id).toBe('msg-2');
       expect(resultMessages[1].content.content).toBe('Message 2 (new)'); // New version kept
       expect(resultMessages[2].id).toBe('msg-3');
+    });
+
+    it('should delete incomplete assistant messages before recalling server history', async () => {
+      const storedMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Question 1' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Partial answer' }],
+            metadata: { mastra: { responseStatus: 'aborted' } },
+          },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Question 2' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2024-01-01T10:02:00Z'),
+        },
+      ];
+      mockStorage.setMessages(storedMessages);
+      processor = new MessageHistory({ storage: mockStorage });
+      const requestContext = createRuntimeContextWithMemory('thread-1', 'resource-1');
+      requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, { type: 'server-history' });
+      const messageList = new MessageList();
+
+      const result = await processor.processInput({
+        messages: [],
+        messageList,
+        abort: mockAbort,
+        requestContext,
+      });
+
+      expect((result as MessageList).get.all.db().map(message => message.id)).toEqual(['msg-1', 'msg-3']);
+      expect(mockStorage.deleteMessages).toHaveBeenCalledWith(['msg-2']);
     });
 
     it('should handle empty storage', async () => {
@@ -750,6 +892,210 @@ describe('MessageHistory', () => {
       });
 
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+    });
+
+    it('should delete the regenerated branch only after a replacement response is saved', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        deleteMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const response: MastraDBMessage = {
+        id: 'new-assistant',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Replacement answer' }] },
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add(response, 'response');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [response],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+        state: {
+          regenerate: {
+            type: 'regenerate',
+            branchMessageIds: ['old-assistant', 'follow-up-user', 'follow-up-assistant'],
+          },
+        },
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
+      expect(mockStorage.deleteMessages).toHaveBeenCalledWith([
+        'old-assistant',
+        'follow-up-user',
+        'follow-up-assistant',
+      ]);
+    });
+
+    it('should not delete a regenerated branch when no replacement response is produced', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        deleteMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const input: MastraDBMessage = {
+        id: 'new-user',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'New question' }] },
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add(input, 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [input],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+        state: {
+          regenerate: {
+            type: 'regenerate',
+            branchMessageIds: ['old-assistant'],
+          },
+        },
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
+      expect(mockStorage.deleteMessages).not.toHaveBeenCalled();
+    });
+
+    it('should not delete a regenerated branch when the replacement response is incomplete', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        deleteMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const response: MastraDBMessage = {
+        id: 'partial-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Partial replacement' }],
+          metadata: { mastra: { responseStatus: 'aborted' } },
+        },
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add(response, 'response');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [response],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+        state: {
+          regenerate: {
+            type: 'regenerate',
+            branchMessageIds: ['old-assistant'],
+          },
+        },
+      });
+
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+      expect(mockStorage.deleteMessages).not.toHaveBeenCalled();
+    });
+
+    it('should not persist incomplete assistant responses in client-history mode', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const response: MastraDBMessage = {
+        id: 'partial-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Partial answer' }],
+          metadata: { mastra: { responseStatus: 'aborted' } },
+        },
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add(response, 'response');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [response],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+    });
+
+    it('should persist incomplete assistant responses when server-history recovery is enabled', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const response: MastraDBMessage = {
+        id: 'partial-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Partial answer' }],
+          metadata: { mastra: { responseStatus: 'aborted' } },
+        },
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add(response, 'response');
+      const requestContext = createRuntimeContextWithMemory('thread-1');
+      requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, { type: 'server-history' });
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [response],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext,
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'partial-assistant' })],
+      });
     });
 
     it('should preserve existing message IDs', async () => {

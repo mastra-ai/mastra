@@ -57,6 +57,51 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMes
 
 `chatRoute()` forwards the incoming request `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation. If you need generation to continue and persist server-side after disconnect, build a custom route around `agent.stream()`, avoid passing the request signal, and call `consumeStream()` on the returned `MastraModelOutput`.
 
+### Server-side message history
+
+When your agent uses Mastra memory, set `historySource: 'server'` and send only the new user message from the browser. Mastra loads the stored thread history on the server.
+
+```typescript
+import { chatRoute } from '@mastra/ai-sdk';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+        historySource: 'server',
+        defaultOptions: {
+          memory: {
+            resource: 'user-123',
+          },
+        },
+      }),
+    ],
+  },
+});
+```
+
+Use the transport helper with AI SDK UI so submit, regenerate, and approval resume requests do not include the full browser history.
+
+```typescript
+import { prepareServerHistoryRequest } from '@mastra/ai-sdk/transport';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+
+const { sendMessage, regenerate } = useChat({
+  id: 'thread-123',
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest: prepareServerHistoryRequest(),
+  }),
+});
+```
+
+In server history mode, the request body may include only `id`, `message`, `messageId`, `trigger`, `resumeData`, and `runId`. Browser-provided `messages`, `memory`, `threadId`, `resourceId`, `requestContext`, and execution options are rejected.
+
+If a streamed assistant response is aborted and an incomplete response is persisted, the next server-history turn removes that incomplete response before loading history. Regenerate still uses server-stored messages as the source of truth.
+
 ### Workflow route
 
 Stream a workflow in AI SDK-compatible format.
