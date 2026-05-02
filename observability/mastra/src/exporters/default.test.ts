@@ -1353,6 +1353,41 @@ describe('DefaultExporter', () => {
         );
       });
 
+      it('should emit unsupported-storage for deferred updates carried into an unsupported tracing update', async () => {
+        const emitDropEvent = vi.fn();
+        const notImplementedError = new MastraError({
+          id: 'OBSERVABILITY_STORAGE_BATCH_UPDATE_SPANS_NOT_IMPLEMENTED',
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.SYSTEM,
+          text: 'This storage provider does not support batch updating spans',
+        });
+        const exporter = new DefaultExporter({ strategy: 'batch-with-updates', maxRetries: 0, logger: mockLogger });
+        await exporter.init({ mastra: mockMastra, emitDropEvent });
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        await exporter.flush();
+
+        mockObservabilityStore.batchUpdateSpans.mockRejectedValue(notImplementedError);
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'missing-span'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-1'));
+        await exporter.flush();
+
+        expect(emitDropEvent).toHaveBeenCalledTimes(1);
+        expect(emitDropEvent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            signal: 'tracing',
+            reason: 'unsupported-storage',
+            count: 2,
+            error: {
+              id: 'OBSERVABILITY_STORAGE_BATCH_UPDATE_SPANS_NOT_IMPLEMENTED',
+              domain: ErrorDomain.MASTRA_OBSERVABILITY,
+              message: 'This storage provider does not support batch updating spans',
+            },
+          }),
+        );
+      });
+
       it('signal handlers should be no-ops when storage not initialized', async () => {
         const exporter = new DefaultExporter({ logger: mockLogger });
         // Don't call init — storage is not available

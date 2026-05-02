@@ -297,6 +297,7 @@ export class DefaultExporter extends BaseExporter {
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
   ): Promise<void> {
+    const deferredCountAtEntry = deferredUpdates.length;
     if (events.length === 0) return;
     if (this.#unsupportedSignals.has('tracing')) {
       this.emitDrop('tracing', 'unsupported-storage', events.length);
@@ -332,7 +333,8 @@ export class DefaultExporter extends BaseExporter {
       ) {
         this.logger.warn(error.message);
         this.#unsupportedSignals.add('tracing');
-        this.emitDrop('tracing', 'unsupported-storage', events.length, error);
+        deferredUpdates.length = 0;
+        this.emitDrop('tracing', 'unsupported-storage', events.length + deferredCountAtEntry, error);
       } else {
         // Clear deferred to avoid double-adding — re-add all original events instead
         deferredUpdates.length = 0;
@@ -446,8 +448,13 @@ export class DefaultExporter extends BaseExporter {
     await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true);
 
     if (deferredUpdates.length > 0) {
-      const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
-      this.emitDrop('tracing', 'retry-exhausted', dropped.length);
+      if (this.#unsupportedSignals.has('tracing')) {
+        this.emitDrop('tracing', 'unsupported-storage', deferredUpdates.length);
+        deferredUpdates.length = 0;
+      } else {
+        const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
+        this.emitDrop('tracing', 'retry-exhausted', dropped.length);
+      }
     }
 
     const elapsed = Date.now() - startTime;
