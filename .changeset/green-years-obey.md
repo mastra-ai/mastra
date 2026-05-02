@@ -2,8 +2,8 @@
 '@mastra/ai-sdk': minor
 ---
 
-Added a Harness display-state adapter for AI SDK UI.
+Added a Harness display-state adapter for the AI SDK UI.
 
-Use harnessToUIMessageStream from @mastra/ai-sdk/harness to stream Harness snapshots, assistant text, reasoning, and native AI SDK tool lifecycle chunks into AI SDK UI routes. The adapter emits a stable data-mastra-harness-snapshot baseline for tools, human-in-the-loop state, tasks, observational memory progress, modified files, usage, and subagents.
+Use `harnessToUIMessageStream` from `@mastra/ai-sdk/harness` to stream Harness display state into AI SDK UI output, including assistant text, reasoning, tool updates, human-in-the-loop state, tasks, files, usage, and subagent progress.
 
-It also supports delta mode, which starts with a full snapshot and then emits append-only data-mastra-harness-delta parts for changed fields and domains. This gives apps one supported bridge from Harness display state to AI SDK UI instead of rebuilding the mapping in each route.
+It sends a full initial snapshot and can switch to delta mode for incremental updates, so apps can reuse one supported mapping instead of rebuilding it in every route.
