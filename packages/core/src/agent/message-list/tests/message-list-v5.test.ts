@@ -1841,6 +1841,73 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
     });
 
+    it('should apply payload projections to UI and drained transcript without mutating model messages', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-projected-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-projected',
+                toolName: 'lookupCustomer',
+                state: 'result',
+                args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
+                result: { displayName: 'Acme', apiKey: 'secret-value' },
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadProjection: {
+                    display: {
+                      'input-available': { projected: { customerId: 'cus_123' } },
+                      'output-available': { projected: { displayName: 'Acme' } },
+                    },
+                    transcript: {
+                      'input-available': { projected: { customerId: 'cus_123' } },
+                      'output-available': { projected: { displayName: 'Acme' } },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const modelToolMessage = list.get.all.aiV5.model().find(message => message.role === 'tool');
+      const modelToolResult = (modelToolMessage as any).content.find((part: any) => part.type === 'tool-result');
+      expect(modelToolResult.output).toEqual({
+        type: 'json',
+        value: { displayName: 'Acme', apiKey: 'secret-value' },
+      });
+
+      const uiToolPart = list.get.all.aiV5.ui()[0]!.parts.find(part => isToolUIPart(part)) as any;
+      expect(uiToolPart.input).toEqual({ customerId: 'cus_123' });
+      expect(uiToolPart.output).toEqual({ displayName: 'Acme' });
+
+      const drainedToolPart = list
+        .drainUnsavedMessages()[0]!
+        .content.parts!.find(part => part.type === 'tool-invocation') as any;
+      expect(drainedToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
+      expect(drainedToolPart.toolInvocation.result).toEqual({ displayName: 'Acme' });
+
+      const rawToolPart = list.get.all.db()[0]!.content.parts!.find(part => part.type === 'tool-invocation') as any;
+      expect(rawToolPart.toolInvocation.args).toEqual({
+        customerId: 'cus_123',
+        internalPath: '/private/customer.json',
+      });
+      expect(rawToolPart.toolInvocation.result).toEqual({ displayName: 'Acme', apiKey: 'secret-value' });
+    });
+
     it('should preserve modelOutput metadata across db to model to db conversion', () => {
       const list = new MessageList({ threadId, resourceId });
       const toolResultMessage: MastraDBMessage = {
