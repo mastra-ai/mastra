@@ -411,10 +411,9 @@ export class MessageHistory implements Processor {
       });
 
       const regenerateState = args.state?.regenerate as RegenerateState | undefined;
-      const persistedMessageIds = new Set(persistedMessages.map(message => message.id).filter(Boolean));
-      const newOutputIds = new Set(newOutput.map(message => message.id).filter(Boolean));
-      const persistedNewOutput = [...newOutputIds].some(messageId => persistedMessageIds.has(messageId));
-      if (regenerateState?.type === 'regenerate' && persistedNewOutput) {
+      const persistedReplacementOutput =
+        newOutput.length > 0 && persistedMessages.some(message => message.role === 'assistant');
+      if (regenerateState?.type === 'regenerate' && persistedReplacementOutput) {
         const savedMessageIds = new Set(messagesToSave.map(message => message.id).filter(Boolean));
         const messageIdsToDelete = regenerateState.branchMessageIds.filter(
           messageId => !savedMessageIds.has(messageId),

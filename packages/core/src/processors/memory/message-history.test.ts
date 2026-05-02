@@ -894,9 +894,18 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
     });
 
-    it('should delete the regenerated branch only after a replacement response is saved', async () => {
+    it('should delete the regenerated branch after a storage-assigned replacement response is saved', async () => {
       const mockStorage = {
-        saveMessages: vi.fn().mockResolvedValue(undefined),
+        saveMessages: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              id: 'stored-new-assistant',
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Replacement answer' }] },
+              createdAt: new Date(),
+            },
+          ],
+        }),
         deleteMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
           id: 'thread-1',

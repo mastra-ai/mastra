@@ -2,7 +2,7 @@ import type { UIMessage } from '@internal/ai-sdk-v5';
 import { MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { chatRoute, handleChatStream } from '../chat-route';
+import { chatRoute, handleChatStream } from './chat-route';
 
 const emptyAgentStream = {
   fullStream: new ReadableStream({
@@ -208,8 +208,9 @@ describe('server history', () => {
   });
 
   it('does not mutate a default requestContext with internal history overrides', async () => {
-    const { mastra } = createMockMastra();
+    const { agent, mastra } = createMockMastra();
     const requestContext = new RequestContext();
+    requestContext.set('tenant', 'tenant-1');
 
     await handleChatStream({
       mastra: mastra as any,
@@ -229,6 +230,12 @@ describe('server history', () => {
     });
 
     expect(requestContext.has(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY)).toBe(false);
+    const [, options] = agent.stream.mock.calls[0]!;
+    expect(options?.requestContext).not.toBe(requestContext);
+    expect(options?.requestContext.get('tenant')).toBe('tenant-1');
+    expect(options?.requestContext.get(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY)).toEqual({
+      type: 'server-history',
+    });
   });
 
   it('rejects execution options in server history mode', async () => {

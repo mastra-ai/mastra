@@ -277,7 +277,12 @@ function normalizeServerHistoryParams<OUTPUT>({
 
   const trustedScope = getTrustedMemoryScope({
     bodyId: id,
-    requestContext: rawRequestContext instanceof RequestContext ? rawRequestContext : undefined,
+    requestContext:
+      rawRequestContext instanceof RequestContext
+        ? rawRequestContext
+        : defaultOptions?.requestContext instanceof RequestContext
+          ? defaultOptions.requestContext
+          : undefined,
     defaultOptions,
   });
   const requestContext = cloneRequestContext(trustedScope.requestContext);
