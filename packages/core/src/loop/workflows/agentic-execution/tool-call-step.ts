@@ -149,16 +149,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
           // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
-          const projectionPhase = type === 'suspension' ? 'suspend' : 'approval';
+          const inputProjection = getProjectedToolPayload(
+            toolStateProjectionMetadata,
+            'transcript',
+            'input-available',
+          )?.projected;
+          const approvalProjection = getProjectedToolPayload(
+            toolStateProjectionMetadata,
+            'transcript',
+            'approval',
+          )?.projected;
+          const suspendProjection = getProjectedToolPayload(
+            toolStateProjectionMetadata,
+            'transcript',
+            'suspend',
+          )?.projected;
           const projectedArgs =
-            getProjectedToolPayload(toolStateProjectionMetadata, 'transcript', 'input-available')?.projected ??
-            getProjectedToolPayload(toolStateProjectionMetadata, 'transcript', projectionPhase)?.projected ??
-            args;
-          const projectedSuspendPayload =
-            type === 'suspension'
-              ? (getProjectedToolPayload(toolStateProjectionMetadata, 'transcript', 'suspend')?.projected ??
-                suspendPayload)
-              : undefined;
+            type === 'approval'
+              ? (approvalProjection ?? inputProjection ?? args)
+              : (inputProjection ?? suspendProjection ?? args);
+          const projectedSuspendPayload = type === 'suspension' ? (suspendProjection ?? suspendPayload) : undefined;
           metadata[metadataKey][toolName] = {
             toolCallId,
             toolName,
@@ -772,7 +782,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                             { output: chunk.payload.result },
                           ),
                         );
-                      } else {
+                      } else if (chunk.type === 'background-task-failed') {
                         controller.enqueue(
                           await projectChunk(
                             {

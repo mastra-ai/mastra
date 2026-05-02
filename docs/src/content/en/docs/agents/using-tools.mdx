@@ -299,6 +299,7 @@ export const customerAgent = new Agent({
   model: 'openai/gpt-5.4',
   tools: { customerTool },
   toolPayloadProjection: {
+    targets: ['display', 'transcript'],
     projectToolPayload: ({ phase, toolName, input, output }) => {
       if (toolName !== 'customerTool') return undefined
 

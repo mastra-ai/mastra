@@ -76,6 +76,7 @@ export type ToolPayloadProjection<TInput = unknown, TOutput = unknown, TError = 
 
 export type ToolPayloadProjectionPolicy = {
   projectToolPayload?: ToolPayloadProjectionFunction;
+  targets?: ToolPayloadProjectionTarget[];
 };
 
 /**

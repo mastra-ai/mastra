@@ -34,8 +34,15 @@ const PHASE_TO_TOOL_PROJECTOR: Record<ToolPayloadProjectionPhase, keyof NonNulla
     resume: 'resume',
   };
 
+function isPolicyConfiguredForTarget(
+  policy: ToolPayloadProjectionPolicy | undefined,
+  target: ToolPayloadProjectionTarget,
+) {
+  return Boolean(policy?.projectToolPayload && (!policy.targets || policy.targets.includes(target)));
+}
+
 function isProjectionConfigured(source: ToolPayloadProjectionSource | undefined, target: ToolPayloadProjectionTarget) {
-  return Boolean(source?.policy?.projectToolPayload || source?.toolProjection?.[target]);
+  return Boolean(isPolicyConfiguredForTarget(source?.policy, target) || source?.toolProjection?.[target]);
 }
 
 function getToolProjector(
@@ -63,7 +70,7 @@ async function projectOneTarget(
   }
 
   const projectors = [
-    source?.policy?.projectToolPayload,
+    isPolicyConfiguredForTarget(source?.policy, context.target) ? source?.policy?.projectToolPayload : undefined,
     getToolProjector(source, context.target, context.phase),
   ].filter(Boolean) as ToolPayloadProjectionFunction[];
 

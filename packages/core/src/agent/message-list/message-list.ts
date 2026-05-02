@@ -578,11 +578,11 @@ export class MessageList {
     ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
     /* @deprecated use list.get.remembered.aiV4.core() */
     core: (): CoreMessageV4[] =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { projectToolPayloads: false })),
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { projectToolPayloads: false })),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
       core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { projectToolPayloads: false })),
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { projectToolPayloads: false })),
     },
   };
   private rememberedPersisted = {

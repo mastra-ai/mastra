@@ -1934,7 +1934,9 @@ export class Harness<TState = {}> {
         case 'tool-call-approval': {
           const toolCallId = chunk.payload.toolCallId;
           const toolName = chunk.payload.toolName;
-          const toolArgs = getDisplayProjection(chunk.metadata, 'approval', chunk.payload.args);
+          const toolArgs =
+            getProjectedToolPayload(chunk.metadata, 'display', 'approval')?.projected ??
+            getDisplayProjection(chunk.metadata, 'input-available', chunk.payload.args);
 
           const policy = this.resolveToolApproval(toolName);
 

@@ -32,6 +32,7 @@ describe('tool payload projection', () => {
       },
       {
         policy: {
+          targets: ['display'],
           projectToolPayload: ({ target, input }) =>
             target === 'display' ? { customerId: (input as { customerId: string }).customerId } : undefined,
         },
@@ -43,9 +44,29 @@ describe('tool payload projection', () => {
     expect(getProjectedToolPayload(chunk.metadata, 'display', 'input-available')).toEqual({
       projected: { customerId: 'cus_123' },
     });
-    expect(getProjectedToolPayload(chunk.metadata, 'transcript', 'input-available')).toEqual({
+    expect(getProjectedToolPayload(chunk.metadata, 'transcript', 'input-available')).toBeUndefined();
+  });
+
+  it('fails closed per target when a scoped central policy returns undefined', async () => {
+    const projection = await projectToolPayloadForTargets(
+      {
+        phase: 'input-available',
+        toolName: 'lookupCustomer',
+        toolCallId: 'call-1',
+        input: { customerId: 'cus_123', secret: 'raw-input' },
+      },
+      {
+        policy: {
+          targets: ['display'],
+          projectToolPayload: () => undefined,
+        },
+      },
+    );
+
+    expect(projection?.display?.['input-available']).toEqual({
       projected: { message: 'Tool input-available payload unavailable' },
     });
+    expect(projection?.transcript).toBeUndefined();
   });
 
   it('suppresses input deltas when projection is configured without a delta projector', async () => {
