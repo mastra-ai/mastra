@@ -65,13 +65,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Fall back to the original tools from the closure if not set
       const stepTools = (_internal?.stepTools as Tools) || tools;
       const stepActiveTools = _internal?.stepActiveTools;
-      const resolvedStepTool =
+      const tool =
         stepTools?.[inputData.toolName] ||
         findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
       const projectionSource = {
         policy: _internal?.toolPayloadProjection,
-        toolProjection: (resolvedStepTool as { payloadProjection?: unknown } | undefined)?.payloadProjection as any,
+        toolProjection: (tool as { payloadProjection?: unknown } | undefined)?.payloadProjection as any,
       };
       const projectChunk = async (
         chunk: ChunkType<OUTPUT>,
@@ -120,10 +120,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           payloadProjection,
         ) as ChunkType<OUTPUT>;
       };
-      const tool =
-        stepTools?.[inputData.toolName] ||
-        findProviderToolByName(stepTools, inputData.toolName) ||
-        Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
       const addToolMetadata = ({
         toolCallId,
