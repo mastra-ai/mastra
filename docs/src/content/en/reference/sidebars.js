@@ -310,7 +310,10 @@ const sidebars = {
             {
               type: 'category',
               label: 'Bridges',
-              items: [{ type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' }],
+              items: [
+                { type: 'doc', id: 'observability/tracing/bridges/datadog', label: 'DatadogBridge' },
+                { type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' },
+              ],
             },
             {
               type: 'category',
@@ -420,7 +423,12 @@ const sidebars = {
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
-        { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
+        {
+          type: 'doc',
+          id: 'server/mastra-server',
+          label: 'MastraServer',
+        },
+        { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
       ],
@@ -496,6 +504,7 @@ const sidebars = {
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
+        { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
         { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
@@ -528,6 +537,7 @@ const sidebars = {
       label: 'Voice',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'voice/aws-nova-sonic', label: 'AWS Nova Sonic' },
         { type: 'doc', id: 'voice/azure', label: 'Azure' },
         { type: 'doc', id: 'voice/cloudflare', label: 'Cloudflare' },
         { type: 'doc', id: 'voice/composite-voice', label: 'Composite Voice' },

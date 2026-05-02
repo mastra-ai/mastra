@@ -136,11 +136,12 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       // Combine all text deltas
       const combinedText = textChunks.map(part => (part.type === 'text-delta' ? part.payload.text : '')).join('');
 
-      // Create a new combined text part
+      // Create a new combined text part, preserving id and runId from the first chunk
+      const firstChunk = textChunks[0] as ChunkType & { type: 'text-delta' };
       const combinedChunk: ChunkType = {
         type: 'text-delta',
-        payload: { text: combinedText, id: 'text-1' },
-        runId: '1',
+        payload: { text: combinedText, id: firstChunk.payload.id },
+        runId: firstChunk.runId,
         from: ChunkFrom.AGENT,
       };
 

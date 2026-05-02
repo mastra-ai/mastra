@@ -140,7 +140,16 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You use tools that create child spans"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Use child span tool to process test-data"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -301,7 +310,24 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You use tools that create child spans"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Use child span tool to process test-data"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: childSpanTool]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: childSpanTool]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]

@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 1.6.1-alpha.0
+
+### Patch Changes
+
+- Fixed trace parenting for long-lived MCP Stream connections. ([#15716](https://github.com/mastra-ai/mastra/pull/15716))
+
+- Updated dependencies [[`6dcd65f`](https://github.com/mastra-ai/mastra/commit/6dcd65f2a34069e6dc43ba35f1d11119b9b40bef), [`1c2dda8`](https://github.com/mastra-ai/mastra/commit/1c2dda805fbfccc0abf55d4cb20cc34402dc3f0c)]:
+  - @mastra/core@1.31.1-alpha.0
+
 ## 1.6.0
 
 ### Minor Changes

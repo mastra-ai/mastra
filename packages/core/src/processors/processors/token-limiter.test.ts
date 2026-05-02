@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { IMastraLogger } from '../../logger';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ChunkType } from '../../stream';
@@ -868,6 +869,54 @@ describe('TokenLimiterProcessor', () => {
           steps: [],
         }),
       ).rejects.toThrow('System messages alone exceed token limit');
+    });
+
+    it('should throw TripWire when no messages fit within the remaining token budget', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 25 });
+      const messageList = new MessageList();
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+
+      try {
+        await processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+          systemMessages: [],
+          state: {},
+          retryCount: 0,
+          abort: (() => {
+            throw new Error('aborted');
+          }) as any,
+        });
+        expect.fail('Expected TokenLimiterProcessor to throw a TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+        expect(error).toHaveProperty(
+          'message',
+          'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
+        );
+        expect((error as TripWire).options).toEqual({
+          retry: false,
+          metadata: {
+            systemTokens: 0,
+            limit: 25,
+            remainingBudget: 1,
+            messageCount: 1,
+          },
+        });
+      }
+
+      expect(messageList.get.all.db()).toHaveLength(1);
     });
 
     it('should handle tool call messages in token counting', async () => {

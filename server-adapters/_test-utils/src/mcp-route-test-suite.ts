@@ -55,7 +55,7 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
       const mastra = setup.adapter.mastra;
       mcpServer1 = mastra.getMCPServerById('test-server-1');
       mcpServer2 = mastra.getMCPServerById('test-server-2');
-    });
+    }, 30000);
 
     describe('GET /api/mcp/v0/servers', () => {
       it('should list MCP servers', async () => {

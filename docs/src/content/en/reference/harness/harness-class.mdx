@@ -347,6 +347,14 @@ Return a read-only snapshot of the current harness state.
 const state = harness.getState()
 ```
 
+#### `getDisplayState()`
+
+Return the current `HarnessDisplayState` snapshot for UI rendering.
+
+```typescript
+const displayState = harness.getDisplayState()
+```
+
 #### `setState(updates)`
 
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
@@ -917,9 +925,34 @@ Forked mode trades isolation for context inheritance. If the subagent should run
 
 ### Events
 
+#### `subscribeDisplayState(listener, options?)`
+
+Register a listener for coalesced display state snapshots. Use this method for UI, Server-Sent Events (SSE), terminal UI (TUI), and bridge rendering paths that only need the latest `HarnessDisplayState`. Use [`subscribe`](#subscribelistener) when you need the raw event log.
+
+```typescript
+const unsubscribe = harness.subscribeDisplayState(displayState => {
+  render(displayState)
+})
+
+// Optional tuning:
+harness.subscribeDisplayState(render, {
+  windowMs: 250,
+  maxWaitMs: 500,
+})
+
+// Later:
+unsubscribe()
+```
+
+Returns: `() => void`
+
+`subscribeDisplayState()` does not call the listener immediately. Call [`getDisplayState`](#getdisplaystate) first if the UI needs an initial render before the next harness event.
+
 #### `subscribe(listener)`
 
 Register an event listener. Returns an unsubscribe function.
+
+Use this method for audit logs, debugging, analytics, deterministic replay, or consumers that need every raw event. For display rendering, prefer [`subscribeDisplayState`](#subscribedisplaystatelistener-options) so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the latest display state snapshot.
 
 ```typescript
 const unsubscribe = harness.subscribe(event => {

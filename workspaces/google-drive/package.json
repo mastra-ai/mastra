@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-drive",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Google Drive filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
