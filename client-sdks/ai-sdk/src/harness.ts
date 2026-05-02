@@ -29,7 +29,6 @@ export interface HarnessToUIMessageStreamOptions {
   messageId?: string | ((state: HarnessDisplayState) => string);
   sendStart?: boolean;
   sendFinish?: boolean;
-  version?: 'v5' | 'v6';
 }
 
 export interface HarnessLike {
@@ -547,7 +546,7 @@ function createDeltaData(previous: HarnessUISnapshotData, current: HarnessUISnap
     delta.isRunning = current.isRunning;
   }
 
-  if (stableStringify(previous.currentMessage) !== stableStringify(current.currentMessage)) {
+  if (stringifyForComparison(previous.currentMessage) !== stringifyForComparison(current.currentMessage)) {
     delta.currentMessage = current.currentMessage;
   }
 
@@ -557,7 +556,7 @@ function createDeltaData(previous: HarnessUISnapshotData, current: HarnessUISnap
   >);
 
   for (const key of domainKeys) {
-    if (stableStringify(previous.domains[key]) !== stableStringify(current.domains[key])) {
+    if (stringifyForComparison(previous.domains[key]) !== stringifyForComparison(current.domains[key])) {
       domains[key] = current.domains[key] ?? null;
     }
   }
@@ -641,7 +640,7 @@ function stringifyToolError(error: unknown): string {
   return typeof json === 'string' ? json : (JSON.stringify(json) ?? 'Tool execution failed');
 }
 
-function stableStringify(value: unknown): string {
+function stringifyForComparison(value: unknown): string {
   return JSON.stringify(value);
 }
 

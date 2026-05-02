@@ -2,8 +2,8 @@ import { defaultDisplayState } from '@mastra/core/harness';
 import type { HarnessDisplayState, HarnessDisplayStateListener, HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it } from 'vitest';
 
-import { harnessToUIMessageStream } from '../harness';
-import type { HarnessUIMessageStreamChunk, HarnessUISnapshotDataPart } from '../harness';
+import { harnessToUIMessageStream } from './harness';
+import type { HarnessUIMessageStreamChunk, HarnessUISnapshotDataPart } from './harness';
 
 class FakeHarness {
   state: HarnessDisplayState;
