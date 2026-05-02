@@ -279,15 +279,28 @@ export function createMapResultsStep<OUTPUT = undefined>({
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
           const aborted = options.abortSignal?.aborted;
+          const runOnFinishCallback = () =>
+            options?.onFinish?.({
+              ...payload,
+              runId,
+              messages: messageList.get.response.aiV5.model(),
+              usage: payload.usage,
+              totalUsage: payload.totalUsage,
+            });
 
           if (!aborted) {
-            try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+            const outputText =
+              typeof payload.text === 'string' && payload.text.length > 0
+                ? payload.text
+                : payload.object !== undefined
+                  ? (JSON.stringify(payload.object) ?? String(payload.object))
+                  : messageList.get.all
+                      .core()
+                      .map(m => m.content)
+                      .join('\n');
 
-              await capabilities.executeOnFinish({
+            const executeFinish = () =>
+              capabilities.executeOnFinish({
                 result: payload,
                 outputText,
                 thread: result.thread,
@@ -296,45 +309,68 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 resourceId,
                 memoryConfig,
                 requestContext,
-                agentSpan: agentSpan,
+                agentSpan,
                 runId,
                 messageList,
                 threadExists: memoryData.threadExists,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
               });
-            } catch (e) {
-              capabilities.logger.error('Error saving memory on finish', {
-                error: e,
-                runId,
-              });
 
-              const spanError =
-                e instanceof Error
-                  ? e
-                  : new MastraError(
-                      {
-                        id: 'AGENT_ON_FINISH_ERROR',
-                        domain: ErrorDomain.AGENT,
-                        category: ErrorCategory.SYSTEM,
-                        details: { runId },
-                      },
-                      e,
-                    );
+            void (async () => {
+              try {
+                await executeFinish();
+              } catch (e) {
+                capabilities.logger.error('Error saving memory on finish (first attempt)', {
+                  error: e,
+                  runId,
+                });
 
-              agentSpan?.error({ error: spanError, endSpan: true });
-            }
+                try {
+                  await executeFinish();
+                } catch (retryError) {
+                  capabilities.logger.error('Error saving memory on finish (retry failed)', {
+                    error: retryError,
+                    runId,
+                  });
+
+                  const spanError =
+                    retryError instanceof Error
+                      ? retryError
+                      : new MastraError(
+                          {
+                            id: 'AGENT_ON_FINISH_ERROR',
+                            domain: ErrorDomain.AGENT,
+                            category: ErrorCategory.SYSTEM,
+                            details: { runId },
+                          },
+                          retryError,
+                        );
+
+                  agentSpan?.error({ error: spanError, endSpan: true });
+                }
+              } finally {
+                try {
+                  await runOnFinishCallback();
+                } catch (onFinishError) {
+                  capabilities.logger.error('Error in onFinish callback', {
+                    error: onFinishError,
+                    runId,
+                  });
+                }
+              }
+            })();
           } else {
             agentSpan?.end();
+            try {
+              await runOnFinishCallback();
+            } catch (onFinishError) {
+              capabilities.logger.error('Error in onFinish callback', {
+                error: onFinishError,
+                runId,
+              });
+            }
           }
-
-          await options?.onFinish?.({
-            ...payload,
-            runId,
-            messages: messageList.get.response.aiV5.model(),
-            usage: payload.usage,
-            totalUsage: payload.totalUsage,
-          });
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
