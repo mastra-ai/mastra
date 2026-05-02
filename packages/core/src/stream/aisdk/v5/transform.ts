@@ -4,11 +4,12 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV3FinishReason, LanguageModelV3Usage } from '@ai-sdk/provider-v6';
+import type { LanguageModelV3FinishReason } from '@ai-sdk/provider-v6';
 import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
-import type { ChunkType, LanguageModelUsage } from '../../types';
+import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
+import { normalizeLanguageModelUsage } from '../../usage-normalization';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
 /**
@@ -321,7 +322,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           },
           output: {
             // Normalize usage to handle both V2 (flat) and V3 (nested) formats
-            usage: normalizeUsage(value.usage),
+            usage: normalizeLanguageModelUsage(value.usage),
           },
           metadata: {
             providerMetadata: value.providerMetadata,
@@ -573,70 +574,6 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
       }
       return;
   }
-}
-
-/**
- * Type guard to check if usage is in V3 format (nested objects)
- */
-function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
-  if (!usage || typeof usage !== 'object') return false;
-  const u = usage as Record<string, unknown>;
-  return (
-    typeof u.inputTokens === 'object' &&
-    u.inputTokens !== null &&
-    'total' in (u.inputTokens as object) &&
-    typeof u.outputTokens === 'object' &&
-    u.outputTokens !== null &&
-    'total' in (u.outputTokens as object)
-  );
-}
-
-/**
- * Normalizes usage from either V2 (flat) or V3 (nested) format to Mastra's flat format.
- * V2 format: { inputTokens: number, outputTokens: number, totalTokens?: number }
- * V3 format: { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
- *
- * The original usage data is preserved in the `raw` field for advanced use cases.
- */
-function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined): LanguageModelUsage {
-  if (!usage) {
-    return {
-      inputTokens: undefined,
-      outputTokens: undefined,
-      totalTokens: undefined,
-      reasoningTokens: undefined,
-      cachedInputTokens: undefined,
-      cacheCreationInputTokens: undefined,
-      raw: undefined,
-    };
-  }
-
-  if (isV3Usage(usage)) {
-    // V3 format - extract from nested structure
-    const inputTokens = usage.inputTokens.total;
-    const outputTokens = usage.outputTokens.total;
-    return {
-      inputTokens,
-      outputTokens,
-      totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
-      reasoningTokens: usage.outputTokens.reasoning,
-      cachedInputTokens: usage.inputTokens.cacheRead,
-      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
-      raw: usage,
-    };
-  }
-
-  // V2 format - already flat
-  const v2Usage = usage as LanguageModelV2Usage;
-  return {
-    inputTokens: v2Usage.inputTokens,
-    outputTokens: v2Usage.outputTokens,
-    totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
-    reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
-    cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
-    cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
-    raw: usage,
-  };
 }
 
 /**

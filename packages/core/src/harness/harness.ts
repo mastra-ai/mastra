@@ -10,6 +10,8 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, WorkflowRun } from '../storage/types';
+import type { LanguageModelUsage } from '../stream/types';
+import { normalizeLanguageModelUsage } from '../stream/usage-normalization';
 import { getProjectedToolPayload, hasProjectedToolPayload } from '../tools/payload-projection';
 import type { ToolPayloadProjectionPhase } from '../tools/types';
 import { safeStringify } from '../utils';
@@ -87,18 +89,24 @@ function createEmptyTokenUsage(): TokenUsage {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 }
 
-function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
-  const value = usage[key];
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+function toHarnessTokenUsage(usage: LanguageModelUsage): TokenUsage {
+  const promptTokens = usage.inputTokens ?? 0;
+  const completionTokens = usage.outputTokens ?? 0;
+  const normalized: TokenUsage = {
+    promptTokens,
+    completionTokens,
+    totalTokens: usage.totalTokens ?? promptTokens + completionTokens,
+  };
+
+  addOptionalUsageField(normalized, 'reasoningTokens', usage.reasoningTokens);
+  addOptionalUsageField(normalized, 'cachedInputTokens', usage.cachedInputTokens);
+  addOptionalUsageField(normalized, 'cacheCreationInputTokens', usage.cacheCreationInputTokens);
+
+  if (usage.raw !== undefined) {
+    normalized.raw = usage.raw;
   }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const numericValue = Number(value);
-    if (Number.isFinite(numericValue)) {
-      return numericValue;
-    }
-  }
-  return undefined;
+
+  return normalized;
 }
 
 function addOptionalUsageField(
@@ -2124,31 +2132,11 @@ export class Harness<TState = {}> {
         case 'step-finish': {
           const usage = chunk.payload?.output?.usage;
           if (usage) {
-            const usageRecord = usage as Record<string, unknown>;
-            const promptTokens =
-              getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-            const completionTokens =
-              getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-            const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-            const stepUsage: TokenUsage = {
-              promptTokens,
-              completionTokens,
-              totalTokens,
-            };
-            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-            addOptionalUsageField(
-              stepUsage,
-              'cacheCreationInputTokens',
-              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-            );
-            if (usageRecord.raw !== undefined) {
-              stepUsage.raw = usageRecord.raw;
-            }
+            const stepUsage = toHarnessTokenUsage(normalizeLanguageModelUsage(usage));
 
-            this.tokenUsage.promptTokens += promptTokens;
-            this.tokenUsage.completionTokens += completionTokens;
-            this.tokenUsage.totalTokens += totalTokens;
+            this.tokenUsage.promptTokens += stepUsage.promptTokens;
+            this.tokenUsage.completionTokens += stepUsage.completionTokens;
+            this.tokenUsage.totalTokens += stepUsage.totalTokens;
             addOptionalUsageField(this.tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
             addOptionalUsageField(this.tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
             addOptionalUsageField(this.tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
