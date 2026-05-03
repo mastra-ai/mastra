@@ -1404,6 +1404,71 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15883
+    // Tools that return AI SDK v5 image-data blocks via toModelOutput must not
+    // dump the base64 payload into the observer's text body — it blows the
+    // observer's context and causes degenerate output.
+    it('should replace image-data tool-result blocks with attachment placeholders', () => {
+      const base64 = 'A'.repeat(2000);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Captured screenshot of the homepage.' },
+                    { type: 'image-data', data: base64, mediaType: 'image/png' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result screenshot');
+      expect(formatted).toContain('Captured screenshot of the homepage.');
+      expect(formatted).toContain('[Image #1: image/png]');
+      expect(formatted).not.toContain(base64);
+    });
+
+    it('should leave non-content tool-result outputs unchanged', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-2',
+              toolName: 'getWeather',
+              args: { city: 'NYC' },
+              result: { temperature: 72, conditions: 'sunny' },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result getWeather');
+      expect(formatted).toContain('"temperature": 72');
+      expect(formatted).toContain('"conditions": "sunny"');
+    });
+
     // Regression test for https://github.com/mastra-ai/mastra/issues/15573
     // Anthropic rejects bodies containing lone UTF-16 surrogates with
     // `The request body is not valid JSON: no low surrogate in string`.
@@ -1496,6 +1561,56 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15883
+    it('should hoist image-data tool-result blocks into observer input attachments', () => {
+      const base64 = 'B'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Captured.' },
+                    { type: 'image-data', data: base64, mediaType: 'image/png' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+
+      const textParts = content.filter(part => part.type === 'text');
+      const imageParts = content.filter(part => part.type === 'image');
+
+      expect(imageParts).toHaveLength(1);
+      expect(imageParts[0]).toMatchObject({
+        type: 'image',
+        image: `data:image/png;base64,${base64}`,
+        mimeType: 'image/png',
+      });
+
+      const joinedText = textParts.map(part => part.text).join('\n');
+      expect(joinedText).toContain('Tool Result screenshot');
+      expect(joinedText).toContain('[Image #1: image/png]');
+      expect(joinedText).not.toContain(base64);
     });
 
     it('should reuse part-level date grouping without message separators', () => {
