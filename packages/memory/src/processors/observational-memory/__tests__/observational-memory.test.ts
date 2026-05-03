@@ -1441,7 +1441,8 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain(base64);
     });
 
-    it('should leave non-content tool-result outputs unchanged', () => {
+    it('should hoist file-data tool-result blocks under the file counter', () => {
+      const base64 = 'C'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
         format: 2,
@@ -1450,19 +1451,32 @@ describe('Observer Agent Helpers', () => {
             type: 'tool-invocation',
             toolInvocation: {
               state: 'result',
-              toolCallId: 'tool-2',
-              toolName: 'getWeather',
-              args: { city: 'NYC' },
-              result: { temperature: 72, conditions: 'sunny' },
+              toolCallId: 'tool-3',
+              toolName: 'fetchInvoice',
+              args: { id: 'inv-42' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Invoice retrieved.' },
+                    { type: 'file-data', data: base64, mediaType: 'application/pdf', filename: 'invoice-42.pdf' },
+                  ],
+                },
+              },
             },
           },
         ],
       } as any;
 
       const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('Tool Result getWeather');
-      expect(formatted).toContain('"temperature": 72');
-      expect(formatted).toContain('"conditions": "sunny"');
+      expect(formatted).toContain('Tool Result fetchInvoice');
+      expect(formatted).toContain('Invoice retrieved.');
+      expect(formatted).toContain('[File #1: invoice-42.pdf]');
+      expect(formatted).not.toContain('[Image #1');
+      expect(formatted).not.toContain(base64);
     });
 
     // Regression test for https://github.com/mastra-ai/mastra/issues/15573
