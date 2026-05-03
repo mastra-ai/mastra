@@ -15,6 +15,7 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
+import { summarizePromptAndTools } from '../../../observability/prompt-tool-waterfall';
 import { executeWithContextSync } from '../../../observability/utils';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { createPromptOnlyMessageList } from '../../../processors/index';
@@ -498,6 +499,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   workspace,
   modelContextMessages,
   outputWriter,
+  promptToolWaterfallRecorder,
+  promptToolWaterfallAgentSpan,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialSystemMessages = messageList.getAllSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
@@ -605,68 +608,116 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               : inputData.modelContextMessages,
           };
 
-          const inputStepProcessors = [
-            ...(inputProcessors || []),
-            ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
-          ];
-          if (inputStepProcessors && inputStepProcessors.length > 0) {
+          const runInputStepProcessors = async (
+            processorsToRun: NonNullable<typeof inputProcessors>,
+            phaseKind: 'input_processors' | 'prepare_step',
+          ) => {
             const processorRunner = new ProcessorRunner({
-              inputProcessors: inputStepProcessors,
+              inputProcessors: processorsToRun,
               outputProcessors: [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
               processorStates,
             });
 
+            // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+            const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+            // Create a ProcessorStreamWriter from outputWriter if available.
+            // Forward any processor-supplied options (e.g. a future `transient`
+            // flag) and override messageId so the step always owns the
+            // response id for persisted data-* chunks.
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? {
+                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                    outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
+                }
+              : undefined;
+
+            return processorRunner.runProcessInputStep({
+              messageList,
+              stepNumber: inputData.output?.steps?.length || 0,
+              ...createObservabilityContext(stepTracingContext),
+              requestContext,
+              model,
+              steps: inputData.output?.steps || [],
+              messageId: currentStep.messageId,
+              rotateResponseMessageId: () => {
+                currentMessageId = _internal?.generateId?.() ?? generateId();
+                currentStep.messageId = currentMessageId;
+                return currentMessageId;
+              },
+              tools,
+              toolChoice,
+              activeTools: activeTools as string[] | undefined,
+              providerOptions,
+              modelSettings,
+              structuredOutput,
+              modelContextMessages: currentStep.modelContextMessages,
+              retryCount: inputData.processorRetryCount || 0,
+              writer: inputStepWriter,
+              abortSignal: options?.abortSignal,
+              onProcessorResult: ({
+                processorId,
+                processorIndex,
+                processorExecutor,
+                processorWorkflowId,
+                processorStepId,
+                processorStepIndex,
+                processorStepStatus,
+                output,
+                result,
+              }) => {
+                promptToolWaterfallRecorder?.recordPhase({
+                  kind: phaseKind,
+                  stepIndex: currentIteration - 1,
+                  ...summarizePromptAndTools({
+                    prompt: output ?? result.modelContextMessages ?? messageList,
+                    tools: result.tools ?? currentStep.tools,
+                    toolChoice: result.toolChoice ?? currentStep.toolChoice,
+                    activeTools: (result.activeTools ?? currentStep.activeTools) as string[] | undefined,
+                  }),
+                  meta: {
+                    processorId,
+                    processorIndex,
+                    ...(processorExecutor ? { processorExecutor } : {}),
+                    ...(processorWorkflowId ? { processorWorkflowId } : {}),
+                    ...(processorStepId ? { processorStepId } : {}),
+                    ...(processorStepIndex !== undefined ? { processorStepIndex } : {}),
+                    ...(processorStepStatus ? { processorStepStatus } : {}),
+                  },
+                });
+              },
+            });
+          };
+
+          const inputStepProcessors = inputProcessors || [];
+          if (inputStepProcessors.length > 0 || options?.prepareStep) {
             try {
-              // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
-              const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+              let latestInputStepResult: Awaited<ReturnType<typeof runInputStepProcessors>> | undefined;
+              if (inputStepProcessors.length > 0) {
+                const processInputStepResult = await runInputStepProcessors(inputStepProcessors, 'input_processors');
+                latestInputStepResult = processInputStepResult;
+                Object.assign(currentStep, processInputStepResult);
+              }
 
-              // Create a ProcessorStreamWriter from outputWriter if available.
-              // Forward any processor-supplied options (e.g. a future `transient`
-              // flag) and override messageId so the step always owns the
-              // response id for persisted data-* chunks.
-              const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? {
-                    custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                      outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
-                  }
-                : undefined;
-
-              const processInputStepResult = await processorRunner.runProcessInputStep({
-                messageList,
-                stepNumber: inputData.output?.steps?.length || 0,
-                ...createObservabilityContext(stepTracingContext),
-                requestContext,
-                model,
-                steps: inputData.output?.steps || [],
-                messageId: currentStep.messageId,
-                rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
-                  currentStep.messageId = currentMessageId;
-                  return currentMessageId;
-                },
-                tools,
-                toolChoice,
-                activeTools: activeTools as string[] | undefined,
-                providerOptions,
-                modelSettings,
-                structuredOutput,
-                modelContextMessages: currentStep.modelContextMessages,
-                retryCount: inputData.processorRetryCount || 0,
-                writer: inputStepWriter,
-                abortSignal: options?.abortSignal,
-              });
-              Object.assign(currentStep, processInputStepResult);
+              if (options?.prepareStep) {
+                const prepareStepResult = await runInputStepProcessors(
+                  [new PrepareStepProcessor({ prepareStep: options.prepareStep })],
+                  'prepare_step',
+                );
+                latestInputStepResult = prepareStepResult;
+                Object.assign(currentStep, prepareStepResult);
+              }
               executedStepModel =
                 currentStep.model.provider && currentStep.model.modelId
                   ? `${currentStep.model.provider}/${currentStep.model.modelId}`
                   : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
-              const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+              const modelChanged = latestInputStepResult?.model && latestInputStepResult.model !== model;
               const modelSettingsChanged =
-                processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+                latestInputStepResult?.modelSettings && latestInputStepResult.modelSettings !== modelSettings;
               if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
                 modelSpanTracker.updateGeneration({
                   ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
@@ -683,14 +734,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               }
 
               // Update AGENT_RUN span if processor actually changed available tools
-              const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+              const toolsChanged = latestInputStepResult?.tools && latestInputStepResult.tools !== tools;
               const activeToolsChanged =
-                processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+                latestInputStepResult?.activeTools && latestInputStepResult.activeTools !== activeTools;
               if (toolsChanged || activeToolsChanged) {
                 const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
                 if (agentSpan) {
                   const toolNames = activeToolsChanged
-                    ? (processInputStepResult.activeTools as string[])
+                    ? (latestInputStepResult?.activeTools as string[])
                     : currentStep.tools
                       ? Object.keys(currentStep.tools)
                       : undefined;
@@ -706,7 +757,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
               // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
               // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
-              if (processInputStepResult.tools && currentStep.tools) {
+              if (latestInputStepResult?.tools && currentStep.tools) {
                 const convertedTools: Record<string, unknown> = {};
                 for (const [name, tool] of Object.entries(currentStep.tools)) {
                   if (isMastraTool(tool)) {
@@ -755,6 +806,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   },
                 });
 
+                const waterfallTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+                const agentSpan = (promptToolWaterfallAgentSpan ??
+                  (waterfallTracingContext?.currentSpan?.type === SpanType.AGENT_RUN
+                    ? waterfallTracingContext.currentSpan
+                    : waterfallTracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN))) as
+                  | typeof promptToolWaterfallAgentSpan
+                  | undefined;
+                promptToolWaterfallRecorder?.finalizeSpan({
+                  agentSpan,
+                  status: 'tripwire',
+                  tripwire: {
+                    reason: error.message,
+                    processorId: error.processorId,
+                  },
+                });
+
                 // Create a minimal runState for the bail response
                 const runState = new AgenticRunState({
                   _internal: _internal!,
@@ -777,7 +844,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     }),
                     messageList,
                     messageId: currentStep.messageId,
-                    options: { runId },
+                    options: { runId, promptToolWaterfallRecorder },
                   }),
                   runState,
                   stepTools: tools,
@@ -908,6 +975,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
+          promptToolWaterfallRecorder?.recordPhase({
+            kind: 'pre_model',
+            stepIndex: currentIteration - 1,
+            ...summarizePromptAndTools({
+              prompt: inputMessages,
+              tools: currentStep.tools,
+              toolChoice: currentStep.toolChoice,
+              activeTools: currentStep.activeTools as string[] | undefined,
+            }),
+          });
+
           if (isSupportedLanguageModel(currentStep.model)) {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -946,6 +1024,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   })(),
                   methodType,
                   generateId: _internal?.generateId,
+                  promptToolWaterfallRecorder,
+                  promptToolWaterfallStepIndex: currentIteration - 1,
                   onResult: ({
                     warnings: warningsFromStream,
                     request: requestFromStream,
@@ -999,6 +1079,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               outputProcessors,
               isLLMExecutionStep: true,
               tracingContext,
+              promptToolWaterfallRecorder,
               processorStates,
               requestContext,
             },

@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { execute } from './execute';
 import { testUsage } from './test-utils';
@@ -101,5 +101,74 @@ describe('execute structured output prompt handling', () => {
     const promptJson = JSON.stringify(capturedPrompt);
     expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
     expect(promptJson).toContain('suggestions');
+  });
+
+  it('records processor structured output mutation state in the waterfall recorder', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Main agent summary.' },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+        ]),
+        request: { body: '' },
+        response: { headers: {} },
+        warnings: [] as any[],
+      }),
+    });
+    const recorder = {
+      recordPhase: vi.fn(),
+    };
+
+    const injectedStream = execute({
+      runId: 'test-run-id',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: {
+        schema,
+        model: model as any,
+      },
+      promptToolWaterfallRecorder: recorder as any,
+      promptToolWaterfallStepIndex: 2,
+    });
+    await readStream(injectedStream);
+
+    expect(recorder.recordPhase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'structured_output',
+        stepIndex: 2,
+        structuredOutput: { mode: 'processor', mutated: true },
+      }),
+    );
+
+    recorder.recordPhase.mockClear();
+    const reuseAgentStream = execute({
+      runId: 'test-run-id',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: {
+        schema,
+        model: model as any,
+        useAgent: true,
+      },
+      promptToolWaterfallRecorder: recorder as any,
+      promptToolWaterfallStepIndex: 3,
+    });
+    await readStream(reuseAgentStream);
+
+    expect(recorder.recordPhase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'structured_output',
+        stepIndex: 3,
+        structuredOutput: { mode: 'processor', mutated: false },
+      }),
+    );
   });
 });

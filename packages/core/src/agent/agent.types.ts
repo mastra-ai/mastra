@@ -7,6 +7,7 @@ import type { CompletionConfig, CompletionRunResult } from '../loop/network/vali
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
+import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { ToolPayloadProjectionPolicy } from '../tools';
@@ -662,4 +663,5 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     snapshot: any;
   };
   toolCallId?: string;
+  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
 } & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

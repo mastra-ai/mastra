@@ -19,6 +19,7 @@ import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ObservabilityContext } from '../observability';
+import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -967,6 +968,7 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
+  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   transportRef?: StreamTransportRef;

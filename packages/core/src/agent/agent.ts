@@ -51,6 +51,7 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
+import { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -2814,12 +2815,14 @@ export class Agent<
     messageList,
     inputProcessorOverrides,
     processorStates,
+    onProcessorResult,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
+    onProcessorResult?: Parameters<ProcessorRunner['runInputProcessors']>[4];
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
     modelContextMessages?: MastraDBMessage[];
@@ -2853,6 +2856,7 @@ export class Agent<
           observabilityContext,
           requestContext,
           0,
+          onProcessorResult,
         ));
       } catch (error) {
         if (error instanceof TripWire) {
@@ -5213,6 +5217,7 @@ export class Agent<
       requestContext,
       mastra: this.#mastra,
     });
+    const promptToolWaterfallRecorder = new PromptToolWaterfallRecorder({ runId });
 
     const memory = await this.getMemory({ requestContext });
     // Reuse early workspace (resolved earlier for browser context) to avoid
@@ -5295,6 +5300,7 @@ export class Agent<
       workspace,
       toolPayloadProjection:
         options.toolPayloadProjection ?? this.#toolPayloadProjection ?? this.#mastra?.getToolPayloadProjection(),
+      promptToolWaterfallRecorder,
       ...(options.disableBackgroundTasks
         ? {}
         : {
@@ -5306,7 +5312,21 @@ export class Agent<
 
     const run = await executionWorkflow.createRun();
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    const result = await run.start({ ...observabilityContext });
+    let result;
+    try {
+      result = await run.start({ ...observabilityContext });
+    } catch (error) {
+      promptToolWaterfallRecorder.finalizeSpan({
+        agentSpan,
+        status: 'error',
+        error,
+      });
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      if (!agentSpan?.endTime) {
+        agentSpan?.error({ error: normalizedError, endSpan: true });
+      }
+      throw error;
+    }
 
     return result;
   }
@@ -5368,6 +5388,7 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    promptToolWaterfallRecorder,
   }: AgentExecuteOnFinishOptions) {
     if (this.#completedRunIds.has(runId)) {
       this.logger.debug('Skipping executeOnFinish - already completed for runId', { runId, threadId });
@@ -5396,12 +5417,20 @@ export class Agent<
       threadExists,
       structuredOutput,
       overrideScorers,
+      promptToolWaterfallRecorder,
     })
       .then(() => {
         this.#completedRunIds.set(runId, true);
         this.#inProgressRunIds.delete(runId);
       })
       .catch(error => {
+        promptToolWaterfallRecorder?.finalizeSpan({
+          agentSpan,
+          status: 'error',
+          error,
+        });
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        agentSpan?.error({ error: normalizedError, endSpan: true });
         this.#inProgressRunIds.delete(runId);
         throw error;
       });
@@ -5429,6 +5458,7 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    promptToolWaterfallRecorder,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -5601,6 +5631,19 @@ export class Agent<
       threadId,
       resourceId,
       ...observabilityContext,
+    });
+
+    promptToolWaterfallRecorder?.finalizeSpan({
+      agentSpan,
+      status: result.tripwire ? 'tripwire' : 'finished',
+      ...(result.tripwire
+        ? {
+            tripwire: {
+              reason: result.tripwire.reason,
+              processorId: result.tripwire.processorId,
+            },
+          }
+        : {}),
     });
 
     agentSpan?.end({

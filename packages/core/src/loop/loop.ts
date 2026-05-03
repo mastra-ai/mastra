@@ -152,6 +152,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
+      promptToolWaterfallRecorder: rest.promptToolWaterfallRecorder,
       ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,

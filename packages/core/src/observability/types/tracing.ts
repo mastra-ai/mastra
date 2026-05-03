@@ -12,6 +12,7 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
+import type { PromptToolWaterfallAttributes } from '../prompt-tool-waterfall';
 import type {
   CustomSamplerOptions,
   ObservabilityInstance,
@@ -34,6 +35,8 @@ import type { ScoreInput } from './scores';
 export enum SpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
+  /** Prompt and tool surface summaries across an agent run */
+  PROMPT_TOOL_WATERFALL = 'prompt_tool_waterfall',
   /** Scorer execution */
   SCORER_RUN = 'scorer_run',
   /** Individual scorer pipeline step */
@@ -123,6 +126,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     metadata?: unknown;
   };
 }
+
+export interface PromptToolWaterfallSpanAttributes extends AIBaseAttributes, PromptToolWaterfallAttributes {}
 
 /**
  * Scorer Run attributes
@@ -565,6 +570,7 @@ export interface GraphActionAttributes extends AIBaseAttributes {
  */
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
+  [SpanType.PROMPT_TOOL_WATERFALL]: PromptToolWaterfallSpanAttributes;
   [SpanType.SCORER_RUN]: ScorerRunAttributes;
   [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;

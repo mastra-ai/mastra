@@ -3,7 +3,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { ConsoleLogger } from '../../logger';
-import { createObservabilityContext } from '../../observability';
+import { createObservabilityContext, SpanType } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
@@ -252,6 +252,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
 
       if (executionResult.status !== 'success') {
+        const waterfallTracingContext = rest.modelSpanTracker?.getTracingContext();
+        const agentSpan = (rest.promptToolWaterfallAgentSpan ??
+          (waterfallTracingContext?.currentSpan?.type === SpanType.AGENT_RUN
+            ? waterfallTracingContext.currentSpan
+            : waterfallTracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN))) as
+          | typeof rest.promptToolWaterfallAgentSpan
+          | undefined;
+
         if (executionResult.status === 'failed') {
           const error = getErrorFromUnknown(executionResult.error, {
             fallbackMessage: 'Unknown error in agent workflow stream',
@@ -264,9 +272,22 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: { error },
           });
 
-          if (rest.options?.onError) {
-            await rest.options?.onError?.({ error });
+          try {
+            if (rest.options?.onError) {
+              await rest.options?.onError?.({ error });
+            }
+          } finally {
+            rest.promptToolWaterfallRecorder?.finalizeSpan({
+              agentSpan,
+              status: 'error',
+              error,
+            });
           }
+        } else if (executionResult.status === 'suspended') {
+          rest.promptToolWaterfallRecorder?.finalizeSpan({
+            agentSpan,
+            status: 'suspended',
+          });
         }
 
         if (executionResult.status !== 'suspended') {

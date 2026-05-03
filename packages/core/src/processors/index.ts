@@ -200,6 +200,18 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
+export type ProcessorResultCallback = (args: {
+  processorId: string;
+  processorName?: string;
+  processorIndex: number;
+  processorExecutor?: 'legacy' | 'workflow';
+  processorWorkflowId?: string;
+  processorStepId?: string;
+  processorStepIndex?: number;
+  processorStepStatus?: string;
+  output?: ProcessorStepOutput;
+}) => void;
+
 export type RunProcessInputStepArgs = Omit<
   ProcessInputStepArgs,
   'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
@@ -208,6 +220,18 @@ export type RunProcessInputStepArgs = Omit<
   rotateResponseMessageId?: () => string;
   modelContextMessages?: MastraDBMessage[];
   retryCount?: number;
+  onProcessorResult?: (args: {
+    processorId: string;
+    processorName?: string;
+    processorIndex: number;
+    processorExecutor?: 'legacy' | 'workflow';
+    processorWorkflowId?: string;
+    processorStepId?: string;
+    processorStepIndex?: number;
+    processorStepStatus?: string;
+    output?: ProcessorStepOutput;
+    result: RunProcessInputStepResult;
+  }) => void;
 };
 
 /**

@@ -19,6 +19,24 @@ Traces are created by:
 - **Set sampling strategies** → control which traces are collected
 - **Run agents and workflows** → Mastra auto-instruments them with Tracing
 
+## Prompt and tool waterfall
+
+Agent runs expose a typed `promptWaterfall` summary on `agent.generate()` results and on `stream.getFullOutput()` results. When tracing has a valid agent span, agent runs also emit the same payload on a `prompt_tool_waterfall` child span. The payload is typed as `PromptToolWaterfall` and includes ordered checkpoints for the initial prompt, the memory-enabled preparation branch, configured input processors, input processor phases for nested processor workflows, `prepare_step`, pre-model execution, and structured output handling.
+
+```typescript
+const result = await agent.generate('Summarize the thread')
+
+const phases = result.promptWaterfall?.phases.map(phase => ({
+  kind: phase.kind,
+  promptChars: phase.prompt.totalChars,
+  toolCount: phase.toolSurface.toolCount,
+}))
+```
+
+The waterfall stores summary data only: message counts, character counts by role, serialized schema sizes, terminal error or tripwire message lengths, deltas between phases, and configured identifiers such as tool names, active tool names, tool choice names, processor ids, processor-workflow step ids, and error class names. It does not store raw prompt text, raw tool descriptions, raw tool schemas, tool inputs, tool outputs, error messages, or tripwire reasons.
+
+`promptWaterfall` is available on the vNext `generate()` and `stream()` paths. Legacy `generateLegacy()` and `streamLegacy()` results do not include this field.
+
 ## Configuration
 
 ### Basic Config

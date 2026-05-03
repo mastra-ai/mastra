@@ -4,6 +4,15 @@ export type { OutputFormat } from './message-list';
 export * from './types';
 export * from './agent';
 export * from './utils';
+export type {
+  PromptToolWaterfall,
+  PromptToolWaterfallDelta,
+  PromptToolWaterfallPhase,
+  PromptToolWaterfallPhaseKind,
+  PromptSummary,
+  ToolSurfaceSummary,
+  ToolSummary,
+} from '../observability/prompt-tool-waterfall';
 
 // Note: DurableAgent is NOT re-exported here to avoid circular dependencies.
 // Import from '@mastra/core/agent/durable' instead:

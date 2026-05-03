@@ -6,6 +6,7 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
+import type { PromptToolWaterfallRecorder } from '../../../observability/prompt-tool-waterfall';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { ToolPayloadProjectionPolicy } from '../../../tools';
@@ -53,6 +54,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
+  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -80,6 +82,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentBackgroundConfig,
   toolPayloadProjection,
   skipBgTaskWait,
+  promptToolWaterfallRecorder,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -106,6 +109,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     memory,
     isResume: !!resumeContext,
+    promptToolWaterfallRecorder,
   });
 
   const streamStep = createStreamStep({
@@ -144,6 +148,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentId,
     methodType,
     saveQueueManager,
+    promptToolWaterfallRecorder,
   });
 
   return createWorkflow({

@@ -19,7 +19,8 @@ import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptio
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
-import type { IModelSpanTracker, ObservabilityContext } from '../observability';
+import type { IModelSpanTracker, ObservabilityContext, Span, SpanType } from '../observability';
+import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -141,6 +142,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
+  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
+  promptToolWaterfallAgentSpan?: Span<SpanType.AGENT_RUN>;
   requireToolApproval?: boolean;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
