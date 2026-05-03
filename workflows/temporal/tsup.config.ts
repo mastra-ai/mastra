@@ -7,7 +7,7 @@ const runtimeDistPath = 'dist/temporal-workflow-runtime.mjs';
 
 export default defineConfig([
   {
-    entry: ['src/index.ts'],
+    entry: ['src/index.ts', 'src/worker.ts'],
     format: ['esm', 'cjs'],
     clean: true,
     dts: false,

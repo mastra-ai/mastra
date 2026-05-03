@@ -66,7 +66,7 @@ Create a worker, install `MastraPlugin`, and call `await plugin.init()` before `
 
 ```ts
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { MastraPlugin } from '@mastra/temporal';
+import { MastraPlugin } from '@mastra/temporal/worker';
 
 const connection = await NativeConnection.connect({
   address: 'localhost:7233',
