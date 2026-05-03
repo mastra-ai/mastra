@@ -799,6 +799,7 @@ Use this tool when:
         type: 'subagent_start',
         toolCallId,
         agentType,
+        displayName: definition.name,
         task: displayTask,
         modelId: resolvedModelId,
         forked: runAsForked,

@@ -1425,6 +1425,10 @@ export class Harness<TState = {}> {
     return typeof global === 'string' ? global : null;
   }
 
+  private getSubagentDisplayName(agentType: string): string | undefined {
+    return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
+  }
+
   async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
     void this.setState({ [key]: modelId } as unknown as Partial<TState>);
@@ -3754,8 +3758,8 @@ export class Harness<TState = {}> {
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
-      case 'subagent_start':
-        ds.activeSubagents.set(event.toolCallId, {
+      case 'subagent_start': {
+        const subagentState: ActiveSubagentState = {
           agentType: event.agentType,
           task: event.task,
           modelId: event.modelId,
@@ -3763,8 +3767,14 @@ export class Harness<TState = {}> {
           toolCalls: [],
           textDelta: '',
           status: 'running',
-        });
+        };
+        const displayName = event.displayName ?? this.getSubagentDisplayName(event.agentType);
+        if (displayName) {
+          subagentState.displayName = displayName;
+        }
+        ds.activeSubagents.set(event.toolCallId, subagentState);
         break;
+      }
 
       case 'subagent_text_delta': {
         const sub = ds.activeSubagents.get(event.toolCallId);

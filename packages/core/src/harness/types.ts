@@ -510,6 +510,7 @@ export interface ActiveToolState {
  */
 export interface ActiveSubagentState {
   agentType: string;
+  displayName?: string;
   task: string;
   modelId?: string;
   forked?: boolean;
@@ -985,7 +986,15 @@ export type HarnessEvent =
       plan: string;
     }
   | { type: 'plan_approved' }
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
+  | {
+      type: 'subagent_start';
+      toolCallId: string;
+      agentType: string;
+      task: string;
+      modelId: string;
+      forked?: boolean;
+      displayName?: string;
+    }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
       type: 'subagent_tool_start';

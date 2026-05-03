@@ -4,7 +4,7 @@ import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
+import type { HarnessEvent, HarnessSubagent } from './types';
 import { defaultDisplayState } from './types';
 
 function createHarness(storage?: InMemoryStore) {
@@ -18,6 +18,21 @@ function createHarness(storage?: InMemoryStore) {
     id: 'test-harness',
     storage: storage ?? new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
+  });
+}
+
+function createHarnessWithSubagents(subagents: HarnessSubagent[]) {
+  const agent = new Agent({
+    name: 'test-agent',
+    instructions: 'You are a test agent.',
+    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+  });
+
+  return new Harness({
+    id: 'test-harness',
+    storage: new InMemoryStore(),
+    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    subagents,
   });
 }
 
@@ -856,6 +871,7 @@ describe('subagent lifecycle', () => {
       type: 'subagent_start',
       toolCallId: 's1',
       agentType: 'explore',
+      displayName: 'Explore',
       task: 'Find usages of X',
       modelId: 'gpt-4o',
       forked: true,
@@ -863,10 +879,33 @@ describe('subagent lifecycle', () => {
     const sub = harness.getDisplayState().activeSubagents.get('s1');
     expect(sub).toBeDefined();
     expect(sub!.agentType).toBe('explore');
+    expect(sub!.displayName).toBe('Explore');
     expect(sub!.task).toBe('Find usages of X');
     expect(sub!.forked).toBe(true);
     expect(sub!.status).toBe('running');
     expect(sub!.toolCalls).toEqual([]);
+  });
+
+  it('resolves subagent displayName from configured subagents', () => {
+    const configuredHarness = createHarnessWithSubagents([
+      {
+        id: 'execute',
+        name: 'Execute',
+        description: 'Run execution tasks',
+        instructions: 'Execute the task.',
+      },
+    ]);
+
+    emit(configuredHarness, {
+      type: 'subagent_start',
+      toolCallId: 's1',
+      agentType: 'execute',
+      task: 'Run checks',
+      modelId: 'gpt-4o',
+    });
+
+    const sub = configuredHarness.getDisplayState().activeSubagents.get('s1');
+    expect(sub!.displayName).toBe('Execute');
   });
 
   it('appends text on subagent_text_delta', () => {
@@ -912,7 +951,14 @@ describe('subagent lifecycle', () => {
   });
 
   it('marks subagent as completed on subagent_end', () => {
-    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_start',
+      toolCallId: 's1',
+      agentType: 'execute',
+      displayName: 'Execute',
+      task: 't',
+      modelId: 'm',
+    });
     emit(harness, {
       type: 'subagent_end',
       toolCallId: 's1',
@@ -928,7 +974,14 @@ describe('subagent lifecycle', () => {
   });
 
   it('records completed subagent history on subagent_end', () => {
-    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_start',
+      toolCallId: 's1',
+      agentType: 'execute',
+      displayName: 'Execute',
+      task: 't',
+      modelId: 'm',
+    });
     emit(harness, {
       type: 'subagent_tool_start',
       toolCallId: 's1',
@@ -952,6 +1005,7 @@ describe('subagent lifecycle', () => {
       expect.objectContaining({
         toolCallId: 's1',
         agentType: 'execute',
+        displayName: 'Execute',
         task: 't',
         modelId: 'm',
         status: 'completed',
@@ -962,6 +1016,7 @@ describe('subagent lifecycle', () => {
     );
     expect(ds.subagentHistory[0]!.endedAt).toBeInstanceOf(Date);
     expect(ds.subagentHistory[0]!.toolCalls).toEqual([{ name: 'read_file', isError: false }]);
+    expect(ds.subagentHistory[0]!.displayName).toBe('Execute');
   });
 
   it('marks subagent as error on failed subagent_end', () => {
