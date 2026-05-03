@@ -1323,7 +1323,23 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
-              return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+              // Sanitize the error message to prevent leaking internal details,
+              // stack traces, or provider-specific error metadata to the client.
+              // See: https://github.com/mastra-ai/mastra/issues/15827
+              if (error instanceof Error) {
+                const safeMessage = error.message
+                  // Strip file paths (e.g. /home/user/..., C:\users\...)
+                  .replace(/([A-Za-z]:)?[\/][^\s,)]+/g, '<path>')
+                  // Strip stack-trace lines ("at Foo (bar.js:10:5)")
+                  .replace(/\s+at\s+[^\n]*/g, '')
+                  // Strip aiohttp/provider response bodies embedded in messages
+                  .replace(/Response body:.*/s, '')
+                  .trim();
+                return `An error occurred while processing your request. ${safeMessage || 'Unknown error'}`;
+              }
+              // For non-Error objects, avoid JSON.stringify which could dump
+              // entire error payloads (including secrets from provider responses).
+              return 'An error occurred while processing your request.';
             },
           });
 
