@@ -3,12 +3,12 @@ import type { RouteEntry } from '@loopback/rest';
 import { RequestContext as MastraRequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MastraLoopbackBindings } from '../../bindings.js';
-import { toLoopbackMethods } from '../../internal/path-utils.js';
-import { toWebRequest } from '../../internal/request-utils.js';
-import { LoopbackResponseWriter } from '../../internal/response-writer.js';
-import { LoopbackMastraServer } from '../../loopback-mastra-server.js';
-import { FakeResponse, createFakeRequest, getWrittenText } from '../support/fakes.js';
+import { FakeResponse, createFakeRequest, getWrittenText } from './__tests__/support/fakes.js';
+import { MastraLoopbackBindings } from './bindings.js';
+import { toLoopbackMethods } from './internal/path-utils.js';
+import { toWebRequest } from './internal/request-utils.js';
+import { LoopbackResponseWriter } from './internal/response-writer.js';
+import { LoopbackMastraServer } from './loopback-mastra-server.js';
 
 class FakeApp {
   readonly routes: RouteEntry[] = [];
@@ -257,6 +257,19 @@ describe('LoopbackMastraServer', () => {
     expect(res.jsonBody).toEqual({ ok: true });
   });
 
+  it('sendResponse writes Uint8Array bodies as binary', async () => {
+    const server = createServer();
+    const res = new FakeResponse();
+    const body = new Uint8Array([1, 2, 3]);
+
+    await server.sendResponse({ responseType: 'json' } as never, res as unknown as never, body);
+
+    expect(res.getHeader('content-type')).toBe('application/octet-stream');
+    expect(res.jsonBody).toBeUndefined();
+    expect(res.writes).toEqual([Buffer.from(body)]);
+    expect(res.ended).toBe(true);
+  });
+
   it('stream writes SSE output and done marker', async () => {
     const server = createServer();
     const res = new FakeResponse();
@@ -275,6 +288,18 @@ describe('LoopbackMastraServer', () => {
     expect(text).toContain('data: hello');
     expect(text).toContain('data: {"delta":"world"}');
     expect(text).toContain('event: done');
+  });
+
+  it('stream writes a Uint8Array result as one binary chunk', async () => {
+    const server = createServer();
+    const res = new FakeResponse();
+    const body = new Uint8Array([65, 66, 67]);
+
+    await server.stream({ responseType: 'stream' } as never, res as unknown as never, body);
+
+    expect(res.getHeader('content-type')).toBe('text/plain; charset=utf-8');
+    expect(res.writes).toEqual([Buffer.from(body)]);
+    expect(res.ended).toBe(true);
   });
 
   it('sendResponse handles datastream fetch-like responses', async () => {

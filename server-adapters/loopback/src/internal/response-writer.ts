@@ -223,9 +223,9 @@ function writeBodyValue(res: Response, body: unknown): void {
     return;
   }
 
-  if (Buffer.isBuffer(body)) {
+  if (isBinaryBody(body)) {
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.end(body);
+    res.end(toBuffer(body));
     return;
   }
 
@@ -261,6 +261,10 @@ function isFetchLikeResponse(value: unknown): value is FetchLikeResponse {
 function toAsyncIterable(value: unknown): AsyncIterable<unknown> | null {
   if (!value) {
     return null;
+  }
+
+  if (isBinaryBody(value)) {
+    return fromIterable([value]);
   }
 
   if (isAsyncIterable(value)) {
@@ -317,6 +321,20 @@ function isSyncIterable(value: unknown): value is Iterable<unknown> {
   );
 }
 
+function isBinaryBody(value: unknown): value is ArrayBuffer | ArrayBufferView {
+  return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+}
+
+function toBuffer(value: ArrayBuffer | ArrayBufferView): Buffer {
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(value);
+  }
+  return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+}
+
 function isWebReadableStream(value: unknown): value is ReadableStream<Uint8Array> {
   return (
     !!value &&
@@ -354,8 +372,8 @@ function writeStreamChunk(res: Response, chunk: unknown, sseMode: boolean): void
     return;
   }
 
-  if (chunk instanceof Uint8Array) {
-    res.write(Buffer.from(chunk));
+  if (isBinaryBody(chunk)) {
+    res.write(toBuffer(chunk));
     return;
   }
 
@@ -371,12 +389,8 @@ function toSseChunk(chunk: unknown): string {
     return 'data: null\n\n';
   }
 
-  if (Buffer.isBuffer(chunk)) {
-    return toSseChunk(chunk.toString('utf8'));
-  }
-
-  if (chunk instanceof Uint8Array) {
-    return toSseChunk(Buffer.from(chunk).toString('utf8'));
+  if (isBinaryBody(chunk)) {
+    return toSseChunk(toBuffer(chunk).toString('utf8'));
   }
 
   if (typeof chunk === 'string') {
