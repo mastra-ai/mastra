@@ -1622,6 +1622,60 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(base64);
     });
 
+    it('should share the image counter between user-attached and tool-result images', () => {
+      const toolBase64 = 'D'.repeat(1500);
+
+      const userMsg = createTestMessage('ignored', 'user');
+      userMsg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at this.' },
+          { type: 'image', image: 'https://example.com/user-photo.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const toolMsg = createTestMessage('ignored', 'assistant');
+      toolMsg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: toolBase64, mediaType: 'image/png' }],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([userMsg, toolMsg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts[0]).toMatchObject({ image: 'https://example.com/user-photo.png' });
+      expect(imageParts[1]).toMatchObject({ image: `data:image/png;base64,${toolBase64}` });
+
+      expect(joinedText).toContain('[Image #1: user-photo.png]');
+      expect(joinedText).toContain('[Image #2: image/png]');
+      expect(joinedText).not.toMatch(/\[Image #1: image\/png\]/);
+    });
+
     it('should reuse part-level date grouping without message separators', () => {
       const assistant = createTestMessage('ignored', 'assistant');
       assistant.createdAt = new Date('2024-12-04T10:30:00Z');
