@@ -23,6 +23,23 @@ class TestAgent extends Agent {
   }
 }
 
+async function waitForAssertion(assertion: () => void, timeoutMs = 1000) {
+  const startedAt = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  throw lastError;
+}
+
 describe('Agent.stream', () => {
   const mockClientOptions = {
     baseUrl: 'http://localhost:4111',
@@ -674,6 +691,133 @@ describe('Agent Client Methods', () => {
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),
+    );
+  });
+});
+
+describe('Agent legacy stream client tools', () => {
+  const mockClientOptions: ClientOptions = {
+    baseUrl: 'https://api.test.com',
+  };
+
+  function emptyStreamResponse() {
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      { status: 200 },
+    );
+  }
+
+  it('executes parallel client tool calls from one streamed step before recursing', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent-id');
+    const mockRequest = vi.fn(async () => emptyStreamResponse());
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const weatherInvocation = {
+      state: 'call',
+      toolCallId: 'call_weather',
+      toolName: 'weatherTool',
+      args: { location: 'NYC' },
+    };
+    const newsInvocation = {
+      state: 'call',
+      toolCallId: 'call_news',
+      toolName: 'newsTool',
+      args: { topic: 'weather' },
+    };
+    const firstMessage = {
+      id: 'message-1',
+      role: 'assistant',
+      content: '',
+      parts: [
+        { type: 'tool-invocation', toolInvocation: weatherInvocation },
+        { type: 'tool-invocation', toolInvocation: newsInvocation },
+      ],
+      toolInvocations: [weatherInvocation, newsInvocation],
+    };
+
+    let processCallCount = 0;
+    (agent as any).processChatResponse = vi.fn(async ({ update, onFinish }: any) => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      processCallCount++;
+
+      if (processCallCount === 1) {
+        update({ message: firstMessage, data: undefined, replaceLastMessage: false });
+        await onFinish?.({ finishReason: 'tool-calls', message: firstMessage, usage: '' });
+        return;
+      }
+
+      const finalMessage = {
+        id: 'message-2',
+        role: 'assistant',
+        content: 'Done',
+        parts: [],
+      };
+      update({ message: finalMessage, data: undefined, replaceLastMessage: false });
+      await onFinish?.({ finishReason: 'stop', message: finalMessage, usage: '' });
+    });
+
+    const weatherExecuteSpy = vi.fn(async () => ({ temperature: 72 }));
+    const newsExecuteSpy = vi.fn(async () => ({ headlines: ['Sunny tomorrow'] }));
+    const writtenChunks: string[] = [];
+    const writable = new WritableStream<Uint8Array>({
+      write(chunk) {
+        writtenChunks.push(new TextDecoder().decode(chunk));
+      },
+    });
+
+    await (agent as any).processStreamResponseLegacy(
+      {
+        messages: [],
+        clientTools: {
+          weatherTool: { execute: weatherExecuteSpy },
+          newsTool: { execute: newsExecuteSpy },
+        },
+      },
+      writable,
+    );
+
+    await waitForAssertion(() => {
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    expect(weatherExecuteSpy).toHaveBeenCalledTimes(1);
+    expect(newsExecuteSpy).toHaveBeenCalledTimes(1);
+
+    const toolResultParts = writtenChunks
+      .join('')
+      .split('\n')
+      .filter(line => line.startsWith('a:'))
+      .map(line => JSON.parse(line.slice(2)));
+    expect(toolResultParts).toEqual(
+      expect.arrayContaining([
+        { toolCallId: 'call_weather', result: { temperature: 72 } },
+        { toolCallId: 'call_news', result: { headlines: ['Sunny tomorrow'] } },
+      ]),
+    );
+
+    const recursiveBody = mockRequest.mock.calls[1][1].body;
+    const assistantMessage = recursiveBody.messages.find((message: any) => Array.isArray(message.parts));
+    const toolInvocations = assistantMessage.parts
+      .filter((part: any) => part.type === 'tool-invocation')
+      .map((part: any) => part.toolInvocation);
+
+    expect(toolInvocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolCallId: 'call_weather',
+          state: 'result',
+          result: { temperature: 72 },
+        }),
+        expect.objectContaining({
+          toolCallId: 'call_news',
+          state: 'result',
+          result: { headlines: ['Sunny tomorrow'] },
+        }),
+      ]),
     );
   });
 });
