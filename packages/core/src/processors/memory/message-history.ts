@@ -28,6 +28,16 @@ type MemoryHistoryOverride = MastraMemoryHistoryOverride;
 
 const INCOMPLETE_RESPONSE_STATUSES = new Set(['partial', 'aborted', 'cancelled', 'canceled']);
 
+export class RegenerateTargetError extends Error {
+  constructor(
+    public readonly kind: 'missing' | 'non-assistant',
+    public readonly targetMessageId: string,
+  ) {
+    super(`Cannot regenerate ${kind} message "${targetMessageId}"`);
+    this.name = 'RegenerateTargetError';
+  }
+}
+
 function isEmptyAssistantMessage(message: MastraDBMessage): boolean {
   if (message.role !== 'assistant') {
     return false;
@@ -238,12 +248,12 @@ export class MessageHistory implements Processor {
     const storedMessages = result.messages.filter((msg: MastraDBMessage) => msg.role !== 'system');
     const targetIndex = storedMessages.findIndex(message => message.id === override.targetMessageId);
     if (targetIndex === -1) {
-      throw new Error(`Cannot regenerate missing message "${override.targetMessageId}"`);
+      throw new RegenerateTargetError('missing', override.targetMessageId);
     }
 
     const targetMessage = storedMessages[targetIndex]!;
     if (targetMessage.role !== 'assistant') {
-      throw new Error(`Cannot regenerate non-assistant message "${override.targetMessageId}"`);
+      throw new RegenerateTargetError('non-assistant', override.targetMessageId);
     }
 
     const branchMessages = storedMessages.slice(targetIndex);

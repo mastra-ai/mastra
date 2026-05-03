@@ -6,6 +6,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { PromptToolWaterfall } from '../observability/prompt-tool-waterfall';
+import { RegenerateTargetError } from '../processors/memory/message-history';
 import { MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, RequestContext } from '../request-context';
 import type { MastraMemoryHistoryOverride } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -1703,7 +1704,11 @@ export class Harness<TState = {}> {
 
     let regenerateTargetError: Error | undefined;
     const unsubscribe = this.subscribe(event => {
-      if (event.type === 'error' && /^Cannot regenerate (missing|non-assistant) message /.test(event.error.message)) {
+      if (
+        event.type === 'error' &&
+        event.error instanceof RegenerateTargetError &&
+        event.error.targetMessageId === targetMessageId
+      ) {
         regenerateTargetError = event.error;
       }
     });

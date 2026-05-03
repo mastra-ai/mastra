@@ -1,6 +1,9 @@
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
+import { RegenerateTargetError } from '../processors/memory/message-history';
 import { MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
@@ -31,18 +34,39 @@ async function* replacementStream() {
   };
 }
 
-function createHarness() {
+function createReplacementModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'Replacement answer' },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+        },
+      ]),
+      rawCall: { rawPrompt: [], rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
+function createHarness({ model = { provider: 'openai', name: 'gpt-4o' } as any } = {}) {
+  const storage = new InMemoryStore();
   const agent = new Agent({
     id: 'regenerate-agent',
     name: 'Regenerate Agent',
     instructions: 'Answer.',
-    model: { provider: 'openai', name: 'gpt-4o' },
+    model,
   });
-  const storage = new InMemoryStore();
   const harness = new Harness({
     id: 'regenerate-harness',
     storage,
-    memory: {} as any,
+    memory: new MockMemory({ storage }),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
 
@@ -56,6 +80,7 @@ async function saveMessage(args: {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  createdAt?: Date;
 }) {
   const memoryStorage = await args.storage.getStore('memory');
   await memoryStorage.saveMessages({
@@ -66,7 +91,7 @@ async function saveMessage(args: {
         threadId: args.threadId,
         resourceId: args.resourceId,
         content: { format: 2, parts: [{ type: 'text', text: args.text }] },
-        createdAt: new Date(),
+        createdAt: args.createdAt ?? new Date(),
       },
     ],
   });
@@ -115,6 +140,74 @@ describe('Harness.regenerate', () => {
     expect(harness.getCurrentRunId()).toBe('run-regenerate');
   });
 
+  it('deletes the regenerated branch after the replacement response is persisted', async () => {
+    const { harness, storage } = createHarness({ model: createReplacementModel() });
+
+    await harness.init();
+    const thread = await harness.createThread();
+    const resourceId = 'regenerate-harness';
+    await saveMessage({
+      storage,
+      threadId: thread.id,
+      resourceId,
+      id: 'user-1',
+      role: 'user',
+      text: 'Original question',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    await saveMessage({
+      storage,
+      threadId: thread.id,
+      resourceId,
+      id: 'assistant-1',
+      role: 'assistant',
+      text: 'Original answer',
+      createdAt: new Date('2026-01-01T00:00:01.000Z'),
+    });
+    await saveMessage({
+      storage,
+      threadId: thread.id,
+      resourceId,
+      id: 'user-2',
+      role: 'user',
+      text: 'Follow-up question',
+      createdAt: new Date('2026-01-01T00:00:02.000Z'),
+    });
+    await saveMessage({
+      storage,
+      threadId: thread.id,
+      resourceId,
+      id: 'assistant-2',
+      role: 'assistant',
+      text: 'Follow-up answer',
+      createdAt: new Date('2026-01-01T00:00:03.000Z'),
+    });
+
+    await harness.regenerate({ targetMessageId: 'assistant-1' });
+
+    const memoryStorage = await storage.getStore('memory');
+    const { messages } = await memoryStorage.listMessages({
+      threadId: thread.id,
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const messageIds = messages.map(message => message.id);
+
+    expect(messageIds).toContain('user-1');
+    expect(messageIds).not.toContain('assistant-1');
+    expect(messageIds).not.toContain('user-2');
+    expect(messageIds).not.toContain('assistant-2');
+    expect(
+      messages.some(
+        message =>
+          message.role === 'assistant' &&
+          message.id !== 'assistant-1' &&
+          message.content.parts?.some(part => part.type === 'text' && part.text === 'Replacement answer'),
+      ),
+    ).toBe(true);
+  });
+
   it('requires a target assistant message id', async () => {
     const { harness } = createHarness();
     await harness.init();
@@ -140,8 +233,8 @@ describe('Harness.regenerate', () => {
     await harness.createThread();
     const stream = vi
       .fn()
-      .mockRejectedValueOnce(new Error('Cannot regenerate missing message "missing-assistant"'))
-      .mockRejectedValueOnce(new Error('Cannot regenerate non-assistant message "user-1"'));
+      .mockRejectedValueOnce(new RegenerateTargetError('missing', 'missing-assistant'))
+      .mockRejectedValueOnce(new RegenerateTargetError('non-assistant', 'user-1'));
     (agent as any).stream = stream;
 
     await expect(harness.regenerate({ targetMessageId: 'missing-assistant' })).rejects.toThrow(
@@ -152,6 +245,15 @@ describe('Harness.regenerate', () => {
       'Cannot regenerate non-assistant message "user-1"',
     );
     expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not capture regenerate validation errors for a different target', async () => {
+    const { agent, harness } = createHarness();
+    await harness.init();
+    await harness.createThread();
+    (agent as any).stream = vi.fn().mockRejectedValueOnce(new Error('Cannot regenerate missing message "other"'));
+
+    await expect(harness.regenerate({ targetMessageId: 'assistant-1' })).resolves.toBeUndefined();
   });
 
   it('requires storage and memory so MessageHistory can validate and clean up the regenerated branch', async () => {
