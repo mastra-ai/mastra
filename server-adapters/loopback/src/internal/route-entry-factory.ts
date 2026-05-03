@@ -33,11 +33,20 @@ export function createLoopbackRouteEntry(input: {
           abortController.abort();
         }
       };
+      const abortOnRequestClose = () => {
+        if (!req.readableEnded) {
+          abortRequest();
+        }
+      };
+      const abortOnResponseClose = () => {
+        if (!res.writableFinished) {
+          abortRequest();
+        }
+      };
 
       req.once('aborted', abortRequest);
-      req.once('close', abortRequest);
-      res.once('close', abortRequest);
-      res.once('finish', abortRequest);
+      req.once('close', abortOnRequestClose);
+      res.once('close', abortOnResponseClose);
 
       try {
         return await input.handle({
@@ -49,9 +58,8 @@ export function createLoopbackRouteEntry(input: {
         });
       } finally {
         req.removeListener('aborted', abortRequest);
-        req.removeListener('close', abortRequest);
-        res.removeListener('close', abortRequest);
-        res.removeListener('finish', abortRequest);
+        req.removeListener('close', abortOnRequestClose);
+        res.removeListener('close', abortOnResponseClose);
       }
     },
     describe: () => `${input.verb.toUpperCase()} ${input.path}`,

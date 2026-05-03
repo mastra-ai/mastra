@@ -14,6 +14,7 @@ export class FakeRequest extends EventEmitter {
   query: Record<string, unknown> = {};
   params: Record<string, unknown> = {};
   body: unknown = undefined;
+  readableEnded = true;
 
   constructor(overrides?: Partial<FakeRequest>) {
     super();
@@ -29,6 +30,7 @@ export class FakeResponse extends EventEmitter {
   sendBody: unknown;
   ended = false;
   flushed = false;
+  writableFinished = false;
 
   status(code: number): this {
     this.statusCode = code;
@@ -48,6 +50,7 @@ export class FakeResponse extends EventEmitter {
     this.jsonBody = value;
     this.setHeader('content-type', 'application/json');
     this.ended = true;
+    this.writableFinished = true;
     this.emit('finish');
     return this;
   }
@@ -55,6 +58,7 @@ export class FakeResponse extends EventEmitter {
   send(value: unknown): this {
     this.sendBody = value;
     this.ended = true;
+    this.writableFinished = true;
     this.emit('finish');
     return this;
   }
@@ -69,6 +73,7 @@ export class FakeResponse extends EventEmitter {
       this.writes.push(value);
     }
     this.ended = true;
+    this.writableFinished = true;
     this.emit('finish');
     return this;
   }
@@ -99,12 +104,20 @@ export function getWrittenText(response: FakeResponse): string {
 export function createAppWithCapture(): { app: RestApplication; routes: RouteEntry[] } {
   const app = new RestApplication();
   const routes: RouteEntry[] = [];
-  const originalRoute = app.route.bind(app);
-  app.route = ((route: RouteEntry) => {
-    routes.push(route);
-    return originalRoute(route);
+  const originalRoute = app.route.bind(app) as (...args: unknown[]) => unknown;
+  app.route = ((...args: unknown[]) => {
+    const route = args[0];
+    if (args.length === 1 && isRouteEntry(route)) {
+      routes.push(route);
+      return originalRoute(route);
+    }
+    return originalRoute(...args);
   }) as typeof app.route;
   return { app, routes };
+}
+
+function isRouteEntry(value: unknown): value is RouteEntry {
+  return typeof value === 'object' && value !== null && 'verb' in value && 'path' in value && 'invokeHandler' in value;
 }
 
 export async function invokeRoute(

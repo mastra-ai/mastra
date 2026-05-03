@@ -36,11 +36,15 @@ export function logLoopbackRequest(input: {
   logger?.('Mastra request', payload);
 }
 
+const DEFAULT_REDACT_HEADERS = ['authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'x-api-key', 'api-key'];
+
 function redactHeaders(
   headers: Record<string, string | string[] | undefined>,
   config: HttpLoggingConfig,
 ): Record<string, string | string[] | undefined> {
-  const redacted = new Set((config.redactHeaders ?? []).map(header => header.toLowerCase()));
+  const redacted = new Set(
+    [...DEFAULT_REDACT_HEADERS, ...(config.redactHeaders ?? [])].map(header => header.toLowerCase()),
+  );
   return Object.fromEntries(
     Object.entries(headers).map(([key, value]) => {
       if (redacted.has(key.toLowerCase())) {

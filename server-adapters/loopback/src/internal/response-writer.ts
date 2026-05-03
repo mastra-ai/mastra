@@ -115,9 +115,10 @@ export class LoopbackResponseWriter {
       return;
     }
 
-    const knownError = error as { status?: number; statusCode?: number; message?: string };
+    const knownError = error as { status?: number; statusCode?: number; message?: string; expose?: boolean };
     const status = knownError.statusCode ?? knownError.status ?? 500;
-    const message = knownError.message ?? fallbackMessage;
+    const safeToExpose = knownError.expose === true || (status >= 400 && status < 500);
+    const message = safeToExpose && knownError.message ? knownError.message : fallbackMessage;
     res.status(status).json({ error: message });
   }
 

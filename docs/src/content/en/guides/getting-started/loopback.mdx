@@ -13,21 +13,13 @@ In this guide, you'll build a tool-calling AI agent using Mastra and LoopBack 4.
 - Install Node.js `v22.13.0` or later.
 - Install or create a LoopBack 4 application.
 
-## Create a new LoopBack app (optional)
+## Start with a LoopBack app
 
-If you already have a LoopBack app, skip to the next step.
-
-Run the LoopBack CLI to create a new project:
-
-```bash npm2yarn
-npx @loopback/cli@latest
-```
-
-Choose an empty application or the project shape that matches your use case.
+Use an existing LoopBack 4 app, or follow the official [LoopBack getting-started guide](https://loopback.io/doc/en/lb4/Getting-started.html) to create one.
 
 ## Initialize Mastra
 
-Inside your LoopBack project directory, run [`mastra init`](/reference/cli/mastra#mastra-init).
+Inside your LoopBack project directory, run [`mastra init`](/reference/cli/mastra#mastra-init), then continue with adapter registration.
 
 When prompted, choose a provider such as OpenAI and enter your key.
 

@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
   LoopbackAuthResolverInput,
-  LoopbackAuthorizationResult,
+  LoopbackAuthorizationDenial,
   LoopbackMastraConfig,
   MastraAuthContext,
 } from '../types.js';
@@ -208,6 +208,6 @@ export class LoopbackRequestRuntime {
   }
 }
 
-export function toAuthError(result: LoopbackAuthorizationResult | null | undefined): AuthError | null {
+export function toAuthError(result: LoopbackAuthorizationDenial | null | undefined): AuthError | null {
   return result ?? null;
 }

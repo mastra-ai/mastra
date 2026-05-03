@@ -27,7 +27,7 @@ export function joinPath(prefix: string | undefined, path: string): string {
 
 export function toLoopbackMethods(method: LoopbackApiRouteMethod): string[] {
   if (method === 'ALL') {
-    return ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+    return ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
   }
   return [method];
 }

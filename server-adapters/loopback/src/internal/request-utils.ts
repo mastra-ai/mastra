@@ -69,7 +69,9 @@ export function extractAuthContext(requestContext: unknown): MastraAuthContext |
   }
 
   const auth = candidate as Record<string, unknown>;
-  const scopes = Array.isArray(auth.scopes) ? auth.scopes.filter(scope => typeof scope === 'string') : undefined;
+  const scopes = Array.isArray(auth.scopes)
+    ? auth.scopes.filter((scope): scope is string => typeof scope === 'string')
+    : undefined;
 
   return {
     userId: toOptionalString(auth.userId ?? auth.id ?? auth.sub),
@@ -207,16 +209,18 @@ export function toWebRequest(req: Request): globalThis.Request {
   const method = req.method.toUpperCase();
   const init: RequestInit = { method, headers };
   if (method !== 'GET' && method !== 'HEAD' && req.body !== undefined) {
-    init.body = toRequestBody(req.body);
-    if (
+    const willJsonStringify =
       typeof req.body === 'object' &&
       req.body !== null &&
-      !headers.has('content-type') &&
       !Buffer.isBuffer(req.body) &&
-      !(req.body instanceof Uint8Array)
-    ) {
+      !(req.body instanceof Uint8Array) &&
+      !(req.body instanceof URLSearchParams) &&
+      !(req.body instanceof Blob) &&
+      !(req.body instanceof FormData);
+    if (willJsonStringify) {
       headers.set('content-type', 'application/json');
     }
+    init.body = toRequestBody(req.body);
   }
 
   return new Request(url, init);

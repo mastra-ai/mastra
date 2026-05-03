@@ -190,7 +190,9 @@ mastra.setServer({
         const loopback = requestContext.get('loopback')
         const customerService = await loopback.resolve('services.CustomerService')
 
-        return c.json(customerService.findById(c.req.param('id')))
+        const customer = await customerService.findById(c.req.param('id'))
+
+        return c.json(customer)
       },
       openapi: {
         summary: 'Get customer by id',

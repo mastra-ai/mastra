@@ -4,6 +4,9 @@ import { RequestContext as MastraRequestContext } from '@mastra/core/request-con
 import { describe, expect, it, vi } from 'vitest';
 
 import { MastraLoopbackBindings } from '../../bindings.js';
+import { toLoopbackMethods } from '../../internal/path-utils.js';
+import { toWebRequest } from '../../internal/request-utils.js';
+import { LoopbackResponseWriter } from '../../internal/response-writer.js';
 import { LoopbackMastraServer } from '../../loopback-mastra-server.js';
 import { FakeResponse, createFakeRequest, getWrittenText } from '../support/fakes.js';
 
@@ -97,9 +100,17 @@ describe('LoopbackMastraServer', () => {
 
   it('binds request scoped context and returns auth error when check fails', async () => {
     const app = new FakeApp();
-    const server = createServer(undefined, app);
-    const checkRouteAuth = vi.fn(async () => ({ status: 401, error: 'Unauthorized' }));
-    (server as unknown as { checkRouteAuth: unknown }).checkRouteAuth = checkRouteAuth;
+    const authorize = vi.fn(async () => ({ status: 401, error: 'Unauthorized' }));
+    const server = createServer(
+      {
+        auth: {
+          enabled: true,
+          authorizeMode: 'replace',
+          authorize,
+        },
+      },
+      app,
+    );
 
     let handlerCalled = false;
     const route = {
@@ -124,10 +135,45 @@ describe('LoopbackMastraServer', () => {
 
     await entry?.invokeHandler(requestContext as unknown as never, []);
 
-    expect(checkRouteAuth).toHaveBeenCalledTimes(1);
+    expect(authorize).toHaveBeenCalledTimes(1);
     expect(handlerCalled).toBe(false);
     expect(res.statusCode).toBe(401);
     expect(res.jsonBody).toEqual({ error: 'Unauthorized' });
+  });
+
+  it('returns 400 when body parsing fails', async () => {
+    const app = new FakeApp();
+    const server = createServer({ enableAuth: false }, app);
+    (server as unknown as { parseBody: () => Promise<unknown> }).parseBody = vi.fn(async () => {
+      throw new Error('Malformed request body');
+    });
+
+    let handlerCalled = false;
+    const route = {
+      method: 'POST',
+      path: '/parse',
+      responseType: 'json',
+      handler: async () => {
+        handlerCalled = true;
+        return { ok: true };
+      },
+    };
+
+    await server.registerRoute(app as unknown as never, route as never, {});
+    const entry = app.routes[0];
+    expect(entry).toBeDefined();
+
+    const req = createFakeRequest({ method: 'POST', path: '/parse', body: '{bad json}' });
+    const res = new FakeResponse();
+    const requestContext = new FakeRequestContext();
+    requestContext.values.set(RestBindings.Http.REQUEST, req);
+    requestContext.values.set(RestBindings.Http.RESPONSE, res);
+
+    await entry?.invokeHandler(requestContext as unknown as never, []);
+
+    expect(handlerCalled).toBe(false);
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual({ error: 'Malformed request body' });
   });
 
   it('passes a Mastra RequestContext with a LoopBack bridge to route handlers', async () => {
@@ -253,6 +299,50 @@ describe('LoopbackMastraServer', () => {
     expect(res.getHeader('x-stream')).toBe('true');
     expect(getWrittenText(res)).toContain('chunk-1chunk-2');
     expect(res.ended).toBe(true);
+  });
+
+  it('hides 5xx error messages unless the error is explicitly exposed', () => {
+    const writer = new LoopbackResponseWriter({
+      applyStreamRedaction: async chunk => chunk,
+    });
+
+    const internalRes = new FakeResponse();
+    writer.sendErrorResponse(internalRes as unknown as never, { status: 500, message: 'database secret leaked' });
+    expect(internalRes.jsonBody).toEqual({ error: 'Internal Server Error' });
+
+    const exposedRes = new FakeResponse();
+    writer.sendErrorResponse(exposedRes as unknown as never, {
+      status: 500,
+      message: 'public maintenance message',
+      expose: true,
+    });
+    expect(exposedRes.jsonBody).toEqual({ error: 'public maintenance message' });
+
+    const clientRes = new FakeResponse();
+    writer.sendErrorResponse(clientRes as unknown as never, { status: 400, message: 'Invalid request' });
+    expect(clientRes.jsonBody).toEqual({ error: 'Invalid request' });
+  });
+
+  it('expands ALL custom routes to include HEAD and OPTIONS', () => {
+    expect(toLoopbackMethods('ALL')).toEqual(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+  });
+
+  it('marks JSON-stringified web request bodies with an application/json content type', async () => {
+    const request = toWebRequest(
+      createFakeRequest({
+        method: 'POST',
+        path: '/json',
+        originalUrl: '/json',
+        url: '/json',
+        headers: {
+          'content-type': 'text/plain',
+        },
+        body: { ok: true },
+      }) as never,
+    );
+
+    expect(request.headers.get('content-type')).toBe('application/json');
+    expect(await request.text()).toBe('{"ok":true}');
   });
 
   it('sendResponse delegates mcp-http and mcp-sse to server hooks', async () => {

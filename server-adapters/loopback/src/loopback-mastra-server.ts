@@ -59,10 +59,6 @@ export class LoopbackMastraServer extends MastraServer<RestApplication, Request,
       mcpOptions: config.mcp,
     } as never);
     this.config = config;
-    this.responseWriter = new LoopbackResponseWriter({
-      prefix: this.config.prefix,
-      applyStreamRedaction: chunk => this.runtime.redactStreamChunk(chunk),
-    });
     this.runtime = new LoopbackRequestRuntime({
       config: this.config,
       parseQueryParamsHook: (route, queryParams) => this.invokeParseQueryParamsHook(route, queryParams),
@@ -73,6 +69,10 @@ export class LoopbackMastraServer extends MastraServer<RestApplication, Request,
       resolveTools: () => this.resolveToolsForRoute(),
       resolveTaskStore: () => this.resolveTaskStore(),
       redactStreamChunkHook: chunk => this.invokeRedactStreamChunkHook(chunk),
+    });
+    this.responseWriter = new LoopbackResponseWriter({
+      prefix: this.config.prefix,
+      applyStreamRedaction: chunk => this.runtime.redactStreamChunk(chunk),
     });
 
     this.ensureSupportBindingsRegistered(options.app);
@@ -168,9 +168,16 @@ export class LoopbackMastraServer extends MastraServer<RestApplication, Request,
     try {
       const params = await this.getParams(route, req);
       const queryParams = await this.runtime.parseQueryParams(route, params.queryParams);
-      const body = await this.runtime.parseBody(route, params.body);
       if (params.bodyParseError) {
         res.status(400).json({ error: params.bodyParseError.message });
+        return res;
+      }
+      let body: unknown;
+      try {
+        body = await this.runtime.parseBody(route, params.body);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invalid request body';
+        res.status(400).json({ error: message });
         return res;
       }
       const pathParams = await this.runtime.parsePathParams(route, params.urlParams);
