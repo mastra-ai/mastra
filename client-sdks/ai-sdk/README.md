@@ -310,3 +310,5 @@ export async function GET() {
 ```
 
 The adapter reads the initial state from `harness.getDisplayState()` and then subscribes with `harness.subscribeDisplayState()`. It emits assistant text, reasoning, and native AI SDK tool lifecycle chunks when available, plus a stable `data-mastra-harness-snapshot` baseline. In `delta` mode, later display-state changes are emitted as append-only `data-mastra-harness-delta` parts that replace changed fields or domains.
+
+If the response stream must be created before the Harness turn starts, pass `waitForRun: true`. The adapter will subscribe while the Harness is idle and begin emitting when the first running display state arrives. `waitForRunTimeoutMs` can be used to fail deterministically when no run starts.

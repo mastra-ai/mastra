@@ -27,6 +27,8 @@ export interface HarnessToUIMessageStreamOptions {
   include?: readonly HarnessUIStreamDomain[];
   windowMs?: number;
   maxWaitMs?: number;
+  waitForRun?: boolean;
+  waitForRunTimeoutMs?: number;
   messageId?: string | ((state: HarnessDisplayState) => string);
   sendStart?: boolean;
   sendFinish?: boolean;
@@ -197,11 +199,14 @@ export function harnessToUIMessageStream(
   const include = new Set(options.include ?? DEFAULT_DOMAINS);
   const windowMs = options.windowMs ?? 250;
   const maxWaitMs = options.maxWaitMs ?? 500;
+  const waitForRun = options.waitForRun ?? false;
+  const waitForRunTimeoutMs = options.waitForRunTimeoutMs;
   const sendStart = options.sendStart ?? true;
   const sendFinish = options.sendFinish ?? true;
   const resolveMessageId = createMessageIdResolver(options.messageId);
 
   let unsubscribe: (() => void) | undefined;
+  let waitForRunTimer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
 
   return new ReadableStream<HarnessUIMessageStreamChunk>({
@@ -230,6 +235,10 @@ export function harnessToUIMessageStream(
           return;
         }
         closed = true;
+        if (waitForRunTimer) {
+          clearTimeout(waitForRunTimer);
+          waitForRunTimer = undefined;
+        }
         unsubscribe?.();
         controller.close();
       };
@@ -239,6 +248,10 @@ export function harnessToUIMessageStream(
           return;
         }
         closed = true;
+        if (waitForRunTimer) {
+          clearTimeout(waitForRunTimer);
+          waitForRunTimer = undefined;
+        }
         unsubscribe?.();
         controller.error(error);
       };
@@ -249,6 +262,15 @@ export function harnessToUIMessageStream(
         }
 
         try {
+          if (waitForRun && !context.started && !state.isRunning) {
+            return;
+          }
+
+          if (waitForRunTimer) {
+            clearTimeout(waitForRunTimer);
+            waitForRunTimer = undefined;
+          }
+
           emitDisplayState(state, context);
 
           if (!state.isRunning) {
@@ -264,7 +286,20 @@ export function harnessToUIMessageStream(
         }
       };
 
-      emit(harness.getDisplayState() as HarnessDisplayState);
+      if (waitForRun) {
+        if (waitForRunTimeoutMs !== undefined) {
+          waitForRunTimer = setTimeout(() => {
+            failStream(new Error(`Harness did not start running within ${waitForRunTimeoutMs}ms`));
+          }, waitForRunTimeoutMs);
+        }
+        // Subscribe before reading the snapshot so a run that starts during attachment is not missed.
+        unsubscribe = harness.subscribeDisplayState(emit, { windowMs, maxWaitMs });
+        emit(harness.getDisplayState() as HarnessDisplayState);
+        return;
+      }
+
+      const initialState = harness.getDisplayState() as HarnessDisplayState;
+      emit(initialState);
 
       if (!closed) {
         unsubscribe = harness.subscribeDisplayState(emit, { windowMs, maxWaitMs });
@@ -273,6 +308,10 @@ export function harnessToUIMessageStream(
 
     cancel() {
       closed = true;
+      if (waitForRunTimer) {
+        clearTimeout(waitForRunTimer);
+        waitForRunTimer = undefined;
+      }
       unsubscribe?.();
     },
   });

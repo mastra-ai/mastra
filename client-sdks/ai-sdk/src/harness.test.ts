@@ -1,6 +1,6 @@
 import { defaultDisplayState } from '@mastra/core/harness';
 import type { HarnessDisplayState, HarnessDisplayStateListener, HarnessMessage } from '@mastra/core/harness';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { harnessToUIMessageStream } from './harness';
 import type { HarnessUIMessageStreamChunk, HarnessUISnapshotDataPart } from './harness';
@@ -840,6 +840,109 @@ describe('harnessToUIMessageStream', () => {
     await reader.cancel();
 
     expect(harness.unsubscribed).toBe(true);
+  });
+
+  it('keeps default idle attachment behavior unchanged', async () => {
+    const harness = new FakeHarness(createState({ isRunning: false }));
+    const reader = harnessToUIMessageStream(harness, {
+      include: ['usage'],
+      sendStart: false,
+      sendFinish: false,
+    }).getReader();
+
+    const snapshot = expectSnapshot(await readChunk(reader));
+    expect(snapshot.data).toMatchObject({ sequence: 1, isRunning: false });
+
+    const done = await reader.read();
+    expect(done.done).toBe(true);
+    expect(harness.subscribeCalls).toBe(0);
+  });
+
+  it('waits for the first running display state when waitForRun is enabled', async () => {
+    const harness = new FakeHarness(createState({ isRunning: false }));
+    const reader = harnessToUIMessageStream(harness, {
+      include: ['text'],
+      waitForRun: true,
+    }).getReader();
+
+    expect(harness.subscribeCalls).toBe(1);
+
+    harness.emit(createState({ isRunning: true, message: { id: 'm1', text: 'Hello' } }));
+
+    const started = await readChunks(reader, 4);
+    expect(started).toMatchObject([
+      { type: 'start', messageId: 'm1' },
+      { type: 'text-start', id: 'm1:text' },
+      { type: 'text-delta', id: 'm1:text', delta: 'Hello' },
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 1, isRunning: true } },
+    ]);
+
+    harness.emit(createState({ isRunning: false, message: { id: 'm1', text: 'Hello' } }));
+
+    const terminal = await readChunks(reader, 3);
+    expect(terminal).toMatchObject([
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 2, isRunning: false } },
+      { type: 'text-end', id: 'm1:text' },
+      { type: 'finish' },
+    ]);
+
+    const done = await reader.read();
+    expect(done.done).toBe(true);
+    expect(harness.unsubscribed).toBe(true);
+  });
+
+  it('starts immediately when waitForRun is enabled and the initial state is already running', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = new FakeHarness(createState({ isRunning: true, message: { id: 'm1', text: 'Hello' } }));
+      const reader = harnessToUIMessageStream(harness, {
+        include: ['text'],
+        waitForRun: true,
+        waitForRunTimeoutMs: 1,
+      }).getReader();
+
+      expect(harness.subscribeCalls).toBe(1);
+      const started = await readChunks(reader, 4);
+      expect(started).toMatchObject([
+        { type: 'start', messageId: 'm1' },
+        { type: 'text-start', id: 'm1:text' },
+        { type: 'text-delta', id: 'm1:text', delta: 'Hello' },
+        { type: 'data-mastra-harness-snapshot', data: { sequence: 1, isRunning: true } },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(5);
+      harness.emit(createState({ isRunning: true, message: { id: 'm1', text: 'Hello again' } }));
+
+      const update = await readChunks(reader, 2);
+      expect(update).toMatchObject([
+        { type: 'text-delta', id: 'm1:text', delta: ' again' },
+        { type: 'data-mastra-harness-snapshot', data: { sequence: 2, isRunning: true } },
+      ]);
+
+      await reader.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('errors deterministically when waitForRun times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = new FakeHarness(createState({ isRunning: false }));
+      const reader = harnessToUIMessageStream(harness, {
+        waitForRun: true,
+        waitForRunTimeoutMs: 1,
+      }).getReader();
+      const read = reader.read();
+      const rejection = expect(read).rejects.toThrow('Harness did not start running within 1ms');
+
+      await vi.advanceTimersByTimeAsync(1);
+
+      await rejection;
+      expect(harness.unsubscribed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('includes terminal subagent history when the Harness display state provides it', async () => {
