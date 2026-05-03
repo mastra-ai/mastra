@@ -83,10 +83,16 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
     scopes.push('commands');
   }
 
+  // Slack docs say 140 but the API rejects at that length for short_desc.
+  const MAX_DESC = 139;
+  const rawDescription = description ?? `${name} - Powered by Mastra`;
+  const shortDescription =
+    rawDescription.length > MAX_DESC ? rawDescription.slice(0, MAX_DESC - 3) + '...' : rawDescription;
+
   const manifest: SlackAppManifest = {
     display_information: {
       name,
-      description: description ?? `${name} - Powered by Mastra`,
+      description: shortDescription,
     },
     features: {
       app_home: {

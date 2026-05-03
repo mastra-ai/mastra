@@ -879,6 +879,13 @@ export class ReflectorRunner {
           `[OM:reflect] blockAfter exceeded (${observationTokens} >= ${this.reflectionConfig.blockAfter}), falling through to sync reflection`,
         );
       } else {
+        const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
+        if (observationTokens < activationPoint) {
+          omDebug(
+            `[OM:reflect] skipping async reflection — observationTokens (${observationTokens}) below activation point (${activationPoint}), triggered by ${activationTriggeredBy}`,
+          );
+          return;
+        }
         omDebug(
           `[OM:reflect] async activation failed, no blockAfter or below it (obsTokens=${observationTokens}, blockAfter=${this.reflectionConfig.blockAfter}) — starting background reflection`,
         );

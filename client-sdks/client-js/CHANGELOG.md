@@ -1,5 +1,54 @@
 # @mastra/client-js
 
+## 1.17.0-alpha.1
+
+### Minor Changes
+
+- Added schedule methods to the client for the new scheduled workflows feature. ([#15830](https://github.com/mastra-ai/mastra/pull/15830))
+
+  ```typescript
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+
+  const schedules = await client.listSchedules({ workflowId: 'daily-report' });
+  const schedule = await client.getSchedule('wf_daily-report');
+  const triggers = await client.listScheduleTriggers('wf_daily-report', { limit: 50 });
+
+  await client.pauseSchedule('wf_daily-report');
+  await client.resumeSchedule('wf_daily-report');
+  ```
+
+  Pause is durable across redeploys. Resume recomputes the next fire time from now so a long-paused schedule does not fire a backlog.
+
+- Fixed Vector resource return types so they match what the server actually returns. Previously the types declared shapes that did not exist at runtime, leading to runtime failures with no TypeScript errors. ([#16036](https://github.com/mastra-ai/mastra/pull/16036))
+
+  **What changed**
+  - `vector.getIndexes()` now returns `string[]` (was `{ indexes: string[] }`)
+  - `vector.upsert()` now returns `{ ids: string[] }` (was `string[]`)
+  - `vector.query()` now returns `QueryResult[]` (was `{ results: QueryResult[] }`)
+
+  **Before**
+
+  ```ts
+  const response = await client.getVector('docs').getIndexes();
+  console.log(response.indexes); // undefined at runtime
+  ```
+
+  **After**
+
+  ```ts
+  const indexes = await client.getVector('docs').getIndexes();
+  console.log(indexes[0]); // 'docs-index'
+  ```
+
+  Closes #15089.
+
+### Patch Changes
+
+- Updated dependencies [[`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d)]:
+  - @mastra/core@1.32.0-alpha.1
+
 ## 1.16.1-alpha.0
 
 ### Patch Changes

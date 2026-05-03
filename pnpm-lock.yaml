@@ -291,7 +291,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.7.0
+        version: 13.7.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6944,6 +6944,73 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.12.13(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.2(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+
+  workflows/temporal:
+    dependencies:
+      '@babel/generator':
+        specifier: ^7.28.3
+        version: 7.29.1
+      '@babel/parser':
+        specifier: ^7.28.4
+        version: 7.29.2
+      '@babel/types':
+        specifier: ^7.28.4
+        version: 7.29.0
+      '@mastra/deployer':
+        specifier: workspace:*
+        version: link:../../packages/deployer
+      '@temporalio/activity':
+        specifier: ^1.11.7
+        version: 1.16.1
+      '@temporalio/client':
+        specifier: ^1.11.7
+        version: 1.16.1
+      '@temporalio/plugin':
+        specifier: ^1.16.1
+        version: 1.16.1
+      '@temporalio/worker':
+        specifier: ^1.11.7
+        version: 1.16.1(@swc/helpers@0.5.17)(esbuild@0.27.7)(tslib@2.8.1)
+      '@temporalio/workflow':
+        specifier: ^1.11.7
+        version: 1.16.1
+      rollup:
+        specifier: ^4.60.2
+        version: 4.60.2
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@internal/workflow-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/babel__generator':
+        specifier: ^7.6.8
+        version: 7.27.0
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.12)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.12.13(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.2(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))
+      webpack:
+        specifier: ^5.104.1
+        version: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -15839,6 +15906,42 @@ packages:
   '@tediousjs/connection-string@0.6.0':
     resolution: {integrity: sha512-GxlsW354Vi6QqbUgdPyQVcQjI7cZBdGV5vOYVYuCVDTylx2wl3WHR2HlhcxxHTrMigbelpXsdcZso+66uxPfow==}
 
+  '@temporalio/activity@1.16.1':
+    resolution: {integrity: sha512-1uJAar5SGaeQVKfS145QmWAJE8yxqJJCwtjMmRzCzB+eX6Qsg0x27ynhNxeFX87sMNFp5JeY36rsK7DdPjXiYQ==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/client@1.16.1':
+    resolution: {integrity: sha512-UX3ETFgSh/EzapmkeTwiTgGf7BGr1DhqxGQRfoXcqFa3bviKzJYLuFCY3B9KL/2hMO9G4y925ft/nydemAUisQ==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/common@1.16.1':
+    resolution: {integrity: sha512-Tyiz+ifoMidJ2MkhKkIkJidvNwuasWbFhfSM9QNbhTF3ovNtuDX+8t5d56byRgyKnZC2lXUwFsnFCEKm7MB9RQ==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/core-bridge@1.16.1':
+    resolution: {integrity: sha512-0wELfU3oRX1TzY3C6Z+7mcKzhDT6RCw/V1nNZS9Emz/aJCuwLY7gCmktj/MmvG8AFEkV6wYHhc0Ss2nMHZGDGg==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/nexus@1.16.1':
+    resolution: {integrity: sha512-wFkHAtfbUoy3BFjXVuDKYZUodP7XAeqqBVlprty5/pf5AacAneE8tJHON6o1P1YJeoUZ8/8vIdCj/YcBjAvsYg==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/plugin@1.16.1':
+    resolution: {integrity: sha512-DLWEBCg7Txcq59uI63/T+8OAghx0GwUZGxbVPHDDLKDk64AVWAqwERivdKrhCrK2O/griqXMgA5aphw/Fj2avQ==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/proto@1.16.1':
+    resolution: {integrity: sha512-P2BBtKkK9/6or4o5q2stz/56d8dBSkFfS3Bc4GFG24gtA+IZyQnRHRpuGYVwdE4FoVXZozv+dgky46Bv8qyHyQ==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/worker@1.16.1':
+    resolution: {integrity: sha512-cBE0qDXxlN7bheGAhooinEKljQERyd+hezuIwKvWVkwJUnZG/Ov0S8MAcJ/qcOO8Wikunhuk0MKwsj5pSd1gZg==}
+    engines: {node: '>= 20.0.0'}
+
+  '@temporalio/workflow@1.16.1':
+    resolution: {integrity: sha512-j4FyUNXDoipk+AYoiCVh8A+RYiHmXP53sqox7xKh/UV0DHy8Gx7l3IR2v2zd7aYHWE9Xw46S3mLMYH8O8mz2HQ==}
+    engines: {node: '>= 20.0.0'}
+
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
     engines: {node: '>=18'}
@@ -19904,6 +20007,9 @@ packages:
     resolution: {integrity: sha512-V/JgOLFCS+R6Vcq0slCuaeWEdNC3ouDlJMNIsacH2VtALiu9mV4LPrHc5cDl8k5aw6J8jwgWWpiTo5RYhmIzvg==}
     engines: {node: '>= 8'}
 
+  fs-monkey@1.1.0:
+    resolution: {integrity: sha512-QMUezzXWII9EV5aTFXW1UBVUO77wYPpjqIF8/AviUCThNeSYZykpoTixUeaNNBwmCev0AMDWMAni+f8Hxb1IFw==}
+
   fsevents@2.3.2:
     resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -22243,6 +22349,10 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
+  ms@3.0.0-canary.1:
+    resolution: {integrity: sha512-kh8ARjh8rMN7Du2igDRO9QJnqCb2xYTJxyQYK7vJJS4TvLLmsbyhiKpSW+t+y26gyOyMd0riphX0GeWKU3ky5g==}
+    engines: {node: '>=12.13'}
+
   mssql@12.2.0:
     resolution: {integrity: sha512-lwwLHAqcWOz8okjboQpIEp5OghUFGJhuuQZS3+WF1ZXbaEaCEGKOfiQET3w/5Xz0tyZfDNCQVCm9wp5GwXut6g==}
     engines: {node: '>=18'}
@@ -22352,6 +22462,10 @@ packages:
         optional: true
       sass:
         optional: true
+
+  nexus-rpc@0.0.2:
+    resolution: {integrity: sha512-IWjIExdVYlmwXuzHdY/Q3lXCv1gbqoAXPazQhy2w4Xgtgha3H0OOujEESVPQcFUFMWm+pAk2gKnb57g8S41JZg==}
+    engines: {node: '>= 20.0.0'}
 
   nice-grpc-common@2.0.3:
     resolution: {integrity: sha512-MEhnD3JMah0mgyivpb9hpRDbOBuXBxI/TVO+OK1h6rC97WM42HsPMR+zzRNQ0C5BqYJTw1nyWiQRD0DucO+pjQ==}
@@ -24873,6 +24987,12 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
+  source-map-loader@4.0.2:
+    resolution: {integrity: sha512-oYwAqCuL0OZhBoSgmdrLa7mv9MjommVMiQIWgcztf+eS4+8BfcUee6nenFnDhKOhzAVnk5gpZdfnz1iiBv+5sg==}
+    engines: {node: '>= 14.15.0'}
+    peerDependencies:
+      webpack: ^5.72.1
+
   source-map-support@0.5.21:
     resolution: {integrity: sha512-uBHU3L3czsIyYXKX88fdrGovxdSCoTGDRZ6SYXtSRxLZUzHg5P/66Ht6uoUlHu9EZod+inXhKo3qQgwXUT/y1w==}
 
@@ -25835,6 +25955,9 @@ packages:
 
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
+
+  unionfs@4.6.0:
+    resolution: {integrity: sha512-fJAy3gTHjFi5S3TP5EGdjs/OUMFFvI/ady3T8qVuZfkv8Qi8prV/Q8BuFEgODJslhZTT2z2qdD2lGdee9qjEnA==}
 
   unique-string@3.0.0:
     resolution: {integrity: sha512-VGXBUVwxKMBUznyffQweQABPRRW1vHZAbadFZud4pLFAqRGvv/96vafgjWFqzourzr8YonlQiPgH0YCJfawoGQ==}
@@ -32144,7 +32267,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
@@ -37917,6 +38040,86 @@ snapshots:
 
   '@tediousjs/connection-string@0.6.0': {}
 
+  '@temporalio/activity@1.16.1':
+    dependencies:
+      '@temporalio/client': 1.16.1
+      '@temporalio/common': 1.16.1
+      abort-controller: 3.0.0
+
+  '@temporalio/client@1.16.1':
+    dependencies:
+      '@grpc/grpc-js': 1.14.3
+      '@temporalio/common': 1.16.1
+      '@temporalio/proto': 1.16.1
+      abort-controller: 3.0.0
+      long: 5.3.2
+      uuid: 11.1.0
+
+  '@temporalio/common@1.16.1':
+    dependencies:
+      '@temporalio/proto': 1.16.1
+      long: 5.3.2
+      ms: 3.0.0-canary.1
+      nexus-rpc: 0.0.2
+      proto3-json-serializer: 2.0.2
+
+  '@temporalio/core-bridge@1.16.1':
+    dependencies:
+      '@grpc/grpc-js': 1.14.3
+      '@temporalio/common': 1.16.1
+
+  '@temporalio/nexus@1.16.1':
+    dependencies:
+      '@temporalio/client': 1.16.1
+      '@temporalio/common': 1.16.1
+      '@temporalio/proto': 1.16.1
+      long: 5.3.2
+      nexus-rpc: 0.0.2
+
+  '@temporalio/plugin@1.16.1': {}
+
+  '@temporalio/proto@1.16.1':
+    dependencies:
+      long: 5.3.2
+      protobufjs: 7.5.5
+
+  '@temporalio/worker@1.16.1(@swc/helpers@0.5.17)(esbuild@0.27.7)(tslib@2.8.1)':
+    dependencies:
+      '@grpc/grpc-js': 1.14.3
+      '@swc/core': 1.15.7(@swc/helpers@0.5.17)
+      '@temporalio/activity': 1.16.1
+      '@temporalio/client': 1.16.1
+      '@temporalio/common': 1.16.1
+      '@temporalio/core-bridge': 1.16.1
+      '@temporalio/nexus': 1.16.1
+      '@temporalio/proto': 1.16.1
+      '@temporalio/workflow': 1.16.1
+      abort-controller: 3.0.0
+      heap-js: 2.7.1
+      memfs: 4.56.11(tslib@2.8.1)
+      nexus-rpc: 0.0.2
+      proto3-json-serializer: 2.0.2
+      protobufjs: 7.5.5
+      rxjs: 7.8.1
+      source-map: 0.7.6
+      source-map-loader: 4.0.2(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7))
+      supports-color: 8.1.1
+      swc-loader: 0.2.7(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7))
+      unionfs: 4.6.0
+      webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)
+    transitivePeerDependencies:
+      - '@swc/helpers'
+      - esbuild
+      - tslib
+      - uglify-js
+      - webpack-cli
+
+  '@temporalio/workflow@1.16.1':
+    dependencies:
+      '@temporalio/common': 1.16.1
+      '@temporalio/proto': 1.16.1
+      nexus-rpc: 0.0.2
+
   '@testing-library/dom@10.4.1':
     dependencies:
       '@babel/code-frame': 7.29.0
@@ -42671,7 +42874,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.3
 
-  firebase-admin@13.7.0:
+  firebase-admin@13.7.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -42684,7 +42887,7 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
@@ -42797,6 +43000,8 @@ snapshots:
   fs-minipass@2.1.0:
     dependencies:
       minipass: 3.3.6
+
+  fs-monkey@1.1.0: {}
 
   fsevents@2.3.2:
     optional: true
@@ -45859,6 +46064,8 @@ snapshots:
 
   ms@2.1.3: {}
 
+  ms@3.0.0-canary.1: {}
+
   mssql@12.2.0:
     dependencies:
       '@tediousjs/connection-string': 0.6.0
@@ -46005,6 +46212,8 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
     optional: true
+
+  nexus-rpc@0.0.2: {}
 
   nice-grpc-common@2.0.3:
     dependencies:
@@ -49278,6 +49487,12 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
+  source-map-loader@4.0.2(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)):
+    dependencies:
+      iconv-lite: 0.6.3
+      source-map-js: 1.2.1
+      webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)
+
   source-map-support@0.5.21:
     dependencies:
       buffer-from: 1.1.2
@@ -49740,6 +49955,12 @@ snapshots:
       express: 5.2.1
       swagger-ui-dist: 5.30.2
 
+  swc-loader@0.2.7(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)):
+    dependencies:
+      '@swc/core': 1.15.7(@swc/helpers@0.5.17)
+      '@swc/counter': 0.1.3
+      webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)
+
   swc-loader@0.2.7(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))):
     dependencies:
       '@swc/core': 1.15.7(@swc/helpers@0.5.17)
@@ -49908,6 +50129,18 @@ snapshots:
   term-size@2.2.1: {}
 
   termi-link@1.1.0: {}
+
+  terser-webpack-plugin@5.3.16(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)):
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.31
+      jest-worker: 27.5.1
+      schema-utils: 4.3.3
+      serialize-javascript: 7.0.5
+      terser: 5.44.1
+      webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)
+    optionalDependencies:
+      '@swc/core': 1.15.7(@swc/helpers@0.5.17)
+      esbuild: 0.27.7
 
   terser-webpack-plugin@5.3.16(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))):
     dependencies:
@@ -50417,6 +50650,10 @@ snapshots:
       is-plain-obj: 4.1.0
       trough: 2.2.0
       vfile: 6.0.3
+
+  unionfs@4.6.0:
+    dependencies:
+      fs-monkey: 1.1.0
 
   unique-string@3.0.0:
     dependencies:
@@ -51300,6 +51537,38 @@ snapshots:
       schema-utils: 4.3.3
       tapable: 2.3.0
       terser-webpack-plugin: 5.3.16(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17)))
+      watchpack: 2.5.1
+      webpack-sources: 3.3.3
+    transitivePeerDependencies:
+      - '@swc/core'
+      - esbuild
+      - uglify-js
+
+  webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7):
+    dependencies:
+      '@types/eslint-scope': 3.7.7
+      '@types/estree': 1.0.8
+      '@types/json-schema': 7.0.15
+      '@webassemblyjs/ast': 1.14.1
+      '@webassemblyjs/wasm-edit': 1.14.1
+      '@webassemblyjs/wasm-parser': 1.14.1
+      acorn: 8.16.0
+      acorn-import-phases: 1.0.4(acorn@8.16.0)
+      browserslist: 4.28.1
+      chrome-trace-event: 1.0.4
+      enhanced-resolve: 5.20.0
+      es-module-lexer: 2.1.0
+      eslint-scope: 5.1.1
+      events: 3.3.0
+      glob-to-regexp: 0.4.1
+      graceful-fs: 4.2.11
+      json-parse-even-better-errors: 2.3.1
+      loader-runner: 4.3.1
+      mime-types: 2.1.35
+      neo-async: 2.6.2
+      schema-utils: 4.3.3
+      tapable: 2.3.0
+      terser-webpack-plugin: 5.3.16(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7)(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(esbuild@0.27.7))
       watchpack: 2.5.1
       webpack-sources: 3.3.3
     transitivePeerDependencies:
