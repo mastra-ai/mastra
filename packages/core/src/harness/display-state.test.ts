@@ -42,6 +42,7 @@ describe('defaultDisplayState', () => {
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.subagentHistory).toEqual([]);
+    expect(ds.promptWaterfall).toBeUndefined();
     expect(ds.omProgress.status).toBe('idle');
     expect(ds.omProgress.pendingTokens).toBe(0);
     expect(ds.omProgress.threshold).toBe(30000);
@@ -422,6 +423,101 @@ describe('tool lifecycle', () => {
         result: { displayName: 'Acme' },
       }),
     );
+  });
+
+  it('stores finalized prompt waterfall from processed stream response', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+    const promptWaterfall = {
+      runId: 'run-1',
+      status: 'finished',
+      stepCount: 1,
+      phases: [],
+    };
+
+    await (harness as any).processStream(
+      {
+        promptWaterfall,
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'text-start',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: { id: 'text-1' },
+            });
+            controller.enqueue({
+              type: 'text-delta',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: { id: 'text-1', text: 'Done' },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(harness.getDisplayState().promptWaterfall).toBe(promptWaterfall);
+    expect(events.filter(event => event.type === 'prompt_waterfall_update')).toEqual([
+      { type: 'prompt_waterfall_update', promptWaterfall },
+    ]);
+  });
+
+  it('clears prompt waterfall when thread display state resets', () => {
+    const promptWaterfall = {
+      runId: 'run-1',
+      status: 'finished',
+      stepCount: 1,
+      phases: [],
+    } as any;
+
+    emit(harness, { type: 'prompt_waterfall_update', promptWaterfall });
+    expect(harness.getDisplayState().promptWaterfall).toBe(promptWaterfall);
+
+    emit(harness, { type: 'thread_changed', threadId: 'thread-2', previousThreadId: 'thread-1' });
+    expect(harness.getDisplayState().promptWaterfall).toBeUndefined();
+  });
+
+  it('clears prompt waterfall when a new agent run starts', () => {
+    const promptWaterfall = {
+      runId: 'run-1',
+      status: 'finished',
+      stepCount: 1,
+      phases: [],
+    } as any;
+
+    emit(harness, { type: 'prompt_waterfall_update', promptWaterfall });
+    expect(harness.getDisplayState().promptWaterfall).toBe(promptWaterfall);
+
+    emit(harness, { type: 'agent_start' });
+    expect(harness.getDisplayState().promptWaterfall).toBeUndefined();
+  });
+
+  it('does not emit prompt waterfall update when stream response has none', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    await (harness as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'text-start',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: { id: 'text-1' },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(events.some(event => event.type === 'prompt_waterfall_update')).toBe(false);
+    expect(harness.getDisplayState().promptWaterfall).toBeUndefined();
   });
 
   it('preserves explicit null display projections', async () => {

@@ -5,6 +5,7 @@ import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
+import type { PromptToolWaterfall } from '../observability/prompt-tool-waterfall';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
@@ -85,6 +86,12 @@ function createSubagentHistoryEntry({
   }
   return entry;
 }
+
+type HarnessStreamResponse = {
+  fullStream: AsyncIterable<any>;
+  traceId?: string;
+  promptWaterfall?: PromptToolWaterfall;
+};
 
 function createEmptyTokenUsage(): TokenUsage {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -1907,7 +1914,7 @@ export class Harness<TState = {}> {
    * Process a stream response (shared between sendMessage and tool approval).
    */
   private async processStream(
-    response: { fullStream: AsyncIterable<any>; traceId?: string },
+    response: HarnessStreamResponse,
     requestContext: RequestContext,
   ): Promise<{ message: HarnessMessage; suspended?: boolean }> {
     if (response.traceId) {
@@ -1923,6 +1930,12 @@ export class Harness<TState = {}> {
       role: 'assistant',
       content: [],
       createdAt: new Date(),
+    };
+
+    const emitPromptWaterfallIfAvailable = () => {
+      if (response.promptWaterfall) {
+        this.emit({ type: 'prompt_waterfall_update', promptWaterfall: response.promptWaterfall });
+      }
     };
 
     let isSuspended = false;
@@ -2085,6 +2098,7 @@ export class Harness<TState = {}> {
 
             const result = await this.handleToolApprove({ toolCallId, requestContext });
             currentMessage = result.message;
+            emitPromptWaterfallIfAvailable();
             return result;
           }
 
@@ -2097,6 +2111,7 @@ export class Harness<TState = {}> {
 
             const result = await this.handleToolDecline({ toolCallId, requestContext });
             currentMessage = result.message;
+            emitPromptWaterfallIfAvailable();
             return result;
           }
 
@@ -2116,6 +2131,7 @@ export class Harness<TState = {}> {
               requestContext: approval.requestContext ?? requestContext,
             });
             currentMessage = result.message;
+            emitPromptWaterfallIfAvailable();
             return result;
           } else {
             const result = await this.handleToolDecline({
@@ -2123,6 +2139,7 @@ export class Harness<TState = {}> {
               requestContext: approval.requestContext ?? requestContext,
             });
             currentMessage = result.message;
+            emitPromptWaterfallIfAvailable();
             return result;
           }
         }
@@ -2304,6 +2321,7 @@ export class Harness<TState = {}> {
             }
 
             abortForOmFailure({ operationType, stage: 'run', error });
+            emitPromptWaterfallIfAvailable();
             return { message: currentMessage };
           }
           break;
@@ -2349,6 +2367,7 @@ export class Harness<TState = {}> {
             });
 
             abortForOmFailure({ operationType, stage: 'buffering', error });
+            emitPromptWaterfallIfAvailable();
             return { message: currentMessage };
           }
           break;
@@ -2428,6 +2447,7 @@ export class Harness<TState = {}> {
       }
     }
 
+    emitPromptWaterfallIfAvailable();
     this.emit({ type: 'message_end', message: currentMessage });
 
     let deferredResult: { message: HarnessMessage; suspended?: boolean } | undefined;
@@ -2752,6 +2772,7 @@ export class Harness<TState = {}> {
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.subagentHistory = [];
+    this.displayState.promptWaterfall = undefined;
     this.displayState.currentMessage = null;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
@@ -3510,6 +3531,7 @@ export class Harness<TState = {}> {
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.subagentHistory = [];
+        ds.promptWaterfall = undefined;
         ds.currentMessage = null;
         ds.pendingApproval = null;
         ds.pendingSuspension = null;
@@ -3869,6 +3891,10 @@ export class Harness<TState = {}> {
       // ── Token usage ────────────────────────────────────────────────────
       case 'usage_update':
         ds.tokenUsage = { ...this.tokenUsage };
+        break;
+
+      case 'prompt_waterfall_update':
+        ds.promptWaterfall = event.promptWaterfall;
         break;
 
       // ── Tasks ──────────────────────────────────────────────────────────

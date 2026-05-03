@@ -4,6 +4,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
+import type { PromptToolWaterfall } from '../observability/prompt-tool-waterfall';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
@@ -742,6 +743,10 @@ export interface HarnessDisplayState {
   /** Terminal subagent executions retained after they leave activeSubagents */
   subagentHistory: HarnessSubagentHistoryEntry[];
 
+  // ── Observability ────────────────────────────────────────────────────
+  /** Latest finalized prompt/tool waterfall for the current run */
+  promptWaterfall?: PromptToolWaterfall;
+
   // ── Observational Memory ─────────────────────────────────────────────
   /** Full OM progress state (status, tokens, thresholds, buffered) */
   omProgress: OMProgressState;
@@ -788,6 +793,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     pendingPlanApproval: null,
     activeSubagents: new Map(),
     subagentHistory: [],
+    promptWaterfall: undefined,
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
     bufferingObservations: false,
@@ -865,6 +871,7 @@ export type HarnessEvent =
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }
+  | { type: 'prompt_waterfall_update'; promptWaterfall: PromptToolWaterfall }
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
   | { type: 'follow_up_queued'; count: number }

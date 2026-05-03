@@ -17,7 +17,8 @@ export type HarnessUIStreamDomain =
   | 'tasks'
   | 'om'
   | 'files'
-  | 'subagents';
+  | 'subagents'
+  | 'observability';
 
 export type HarnessUIStreamMode = 'snapshot' | 'delta';
 
@@ -67,6 +68,7 @@ export interface HarnessUISnapshotData {
     om?: JsonValue;
     files?: JsonValue;
     subagents?: JsonValue;
+    observability?: JsonValue;
   };
 }
 
@@ -594,6 +596,12 @@ function createSnapshotData(
     domains.subagents = {
       active: mapToRecord(state.activeSubagents),
       history: toJsonValue(stateWithHistory.subagentHistory) ?? [],
+    };
+  }
+
+  if (include.has('observability')) {
+    domains.observability = {
+      promptWaterfall: toJsonValue(state.promptWaterfall) ?? null,
     };
   }
 

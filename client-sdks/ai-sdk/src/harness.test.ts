@@ -199,6 +199,36 @@ describe('harnessToUIMessageStream', () => {
     expect(chunks[3]).toEqual({ type: 'finish' });
   });
 
+  it('emits prompt waterfall in the observability snapshot domain', async () => {
+    const promptWaterfall = {
+      runId: 'run-1',
+      status: 'finished',
+      stepCount: 1,
+      phases: [],
+    };
+    const harness = new FakeHarness(createState({ isRunning: true, promptWaterfall: promptWaterfall as any }));
+    const reader = harnessToUIMessageStream(harness, { include: ['observability'], sendStart: false }).getReader();
+
+    const snapshot = expectSnapshot(await readChunk(reader));
+    expect(snapshot.data.domains).toEqual({
+      observability: {
+        promptWaterfall,
+      },
+    });
+  });
+
+  it('emits null prompt waterfall when observability domain is included before finalization', async () => {
+    const harness = new FakeHarness(createState({ isRunning: true }));
+    const reader = harnessToUIMessageStream(harness, { include: ['observability'], sendStart: false }).getReader();
+
+    const snapshot = expectSnapshot(await readChunk(reader));
+    expect(snapshot.data.domains).toEqual({
+      observability: {
+        promptWaterfall: null,
+      },
+    });
+  });
+
   it('emits native AI SDK approval requests once from pending HITL approval state', async () => {
     const state = createState({
       isRunning: true,
