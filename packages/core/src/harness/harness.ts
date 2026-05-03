@@ -6,7 +6,8 @@ import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { PromptToolWaterfall } from '../observability/prompt-tool-waterfall';
-import { RequestContext } from '../request-context';
+import { MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, RequestContext } from '../request-context';
+import type { MastraMemoryHistoryOverride } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
@@ -129,6 +130,12 @@ function addOptionalUsageField(
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function cloneRequestContext(requestContext?: RequestContext): RequestContext {
+  return requestContext
+    ? new RequestContext(requestContext.entries() as Iterable<readonly [string, unknown]>)
+    : new RequestContext();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1653,6 +1660,67 @@ export class Harness<TState = {}> {
           tracingOptions,
         });
       }
+    }
+  }
+
+  /**
+   * Regenerate a previous assistant message in the current thread.
+   *
+   * The Harness delegates target validation and branch cleanup to the
+   * MessageHistory processor by setting its internal regenerate history
+   * override, then reuses the normal empty-input stream path so display state,
+   * approvals, tool events, and token usage stay aligned with sendMessage().
+   */
+  async regenerate({
+    targetMessageId,
+    tracingContext,
+    tracingOptions,
+    requestContext: requestContextInput,
+  }: {
+    targetMessageId: string;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    if (!targetMessageId) {
+      throw new Error('targetMessageId is required for Harness regeneration');
+    }
+    if (!this.currentThreadId) {
+      throw new Error('Cannot regenerate without a current thread');
+    }
+    if (!this.config.storage) {
+      throw new Error('Storage is not configured on this Harness');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const requestContext = cloneRequestContext(requestContextInput);
+    requestContext.set(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY, {
+      type: 'regenerate',
+      targetMessageId,
+    } satisfies MastraMemoryHistoryOverride);
+
+    let regenerateTargetError: Error | undefined;
+    const unsubscribe = this.subscribe(event => {
+      if (event.type === 'error' && /^Cannot regenerate (missing|non-assistant) message /.test(event.error.message)) {
+        regenerateTargetError = event.error;
+      }
+    });
+
+    try {
+      await this.sendMessage({
+        content: '',
+        tracingContext,
+        tracingOptions,
+        requestContext,
+      });
+    } finally {
+      unsubscribe();
+    }
+
+    if (regenerateTargetError) {
+      throw regenerateTargetError;
     }
   }
 
