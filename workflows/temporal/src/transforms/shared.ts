@@ -29,7 +29,7 @@ export function isIdentifierNamed(node: t.Node, name: string): boolean {
 }
 
 export function isTemporalHelperModule(source: string): boolean {
-  return typeof source === 'string' && /(^|\/)temporal\.(ts|tsx|js|jsx|mts|mjs)?$/.test(source);
+  return typeof source === 'string' && /(^|\/)temporal\.(ts|tsx|js|jsx|mts|mjs)$/.test(source);
 }
 
 export const strippedExternalModules = new Set(['@temporalio/client', '@temporalio/envconfig']);

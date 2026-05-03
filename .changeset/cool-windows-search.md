@@ -13,7 +13,8 @@ Added the new `@mastra/temporal` package for running Mastra workflows on Tempora
 **Example**
 
 ```ts
-import { init, MastraPlugin } from '@mastra/temporal';
+import { init } from '@mastra/temporal';
+import { MastraPlugin } from '@mastra/temporal/worker';
 import { Client, Connection } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 

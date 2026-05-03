@@ -16,7 +16,7 @@ async function transform(source: string): Promise<string> {
   const inputPath = path.join(directory, 'weather-workflow.mjs');
   await writeFile(inputPath, source);
 
-  const outputPath = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
+  const { outputPath } = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
   return stripInlineSourceMap(await readFile(outputPath, 'utf-8'));
 }
 
@@ -383,14 +383,13 @@ describe('@mastra/temporal configureWorker activities', () => {
     const compiledWorkflowSource = 'export const unused = true;';
     const bundleSpy = mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const plugin = new MastraPlugin({});
-    await plugin.prebuild({ entryFile: entryPath });
+    const workerPlugin = new MastraPlugin({});
+    await workerPlugin.prebuild({ entryFile: entryPath });
 
     await expect(
       readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activity-bindings.json'), 'utf8'),
     ).resolves.toContain('fetch-weather');
 
-    const workerPlugin = new MastraPlugin({});
     const workerOptions = workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'
@@ -435,10 +434,9 @@ describe('@mastra/temporal configureWorker activities', () => {
     const compiledWorkflowSource = `export const unused = true;`;
     mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const plugin = new MastraPlugin({});
-    await plugin.prebuild({ entryFile: entryPath });
-
     const workerPlugin = new MastraPlugin({});
+    await workerPlugin.prebuild({ entryFile: entryPath });
+
     const workerOptions = workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'

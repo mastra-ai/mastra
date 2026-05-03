@@ -26,8 +26,10 @@ function getActivityBindingsPath(outputDir: string): string {
 
 export class MastraPlugin implements WorkerPlugin {
   #prebuildPath: string | null = null;
-  #compiledActivitiesModule: Promise<Record<string, unknown>> | null = null;
+  #compiledActivitiesModules = new Map<string, Promise<Record<string, unknown>>>();
   name = 'Mastra';
+
+  constructor() {}
 
   async #bundleMastra(entryFile: string, projectRoot: string, outputDirectory: string): Promise<string> {
     const { BuildBundler } = await import('./mastra-deployer');
@@ -78,15 +80,16 @@ export class MastraPlugin implements WorkerPlugin {
   }
 
   #loadCompiledActivitiesModule(activitiesModulePath: string): Promise<Record<string, unknown>> {
-    if (this.#compiledActivitiesModule) {
-      return this.#compiledActivitiesModule;
+    const cachedModule = this.#compiledActivitiesModules.get(activitiesModulePath);
+    if (cachedModule) {
+      return cachedModule;
     }
 
     const modulePromise = import(`${pathToFileURL(activitiesModulePath).href}?t=${Date.now()}`) as Promise<
       Record<string, unknown>
     >;
 
-    this.#compiledActivitiesModule = modulePromise;
+    this.#compiledActivitiesModules.set(activitiesModulePath, modulePromise);
     return modulePromise;
   }
 

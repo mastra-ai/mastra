@@ -145,7 +145,7 @@ describe('Temporal prebuild integration', () => {
     const activitiesPath = path.join(temporalOutputDir, 'activities.mjs');
     const activityBindingsPath = path.join(temporalOutputDir, 'activity-bindings.json');
 
-    expect(prebuildResult.workflowBundle?.codePath).toBe(workflowPath);
+    expect(prebuildResult.workflowsPath).toBe(workflowPath);
     expect(bundleSpy).toHaveBeenCalledWith(entryFile, temporalOutputDir, {
       toolsPaths: [],
       projectRoot: tempDir,

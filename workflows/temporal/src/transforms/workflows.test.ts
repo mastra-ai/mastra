@@ -14,7 +14,7 @@ async function transform(source: string): Promise<string> {
   const inputPath = path.join(directory, 'weather-workflow.mjs');
   await writeFile(inputPath, source);
 
-  const outputPath = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
+  const { outputPath } = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
   return stripInlineSourceMap(await readFile(outputPath, 'utf-8'));
 }
 
@@ -25,7 +25,7 @@ describe('workflow transform', () => {
     const expected = await readFile(outputPath, 'utf-8');
     const directory = await mkdtemp(path.join(tmpdir(), 'temporal-workflow-fixture-'));
 
-    const resultPath = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
+    const { outputPath: resultPath } = await buildTemporalWorkflowModule(inputPath, directory, 'workflow.mjs');
     const result = stripInlineSourceMap(await readFile(resultPath, 'utf-8'));
 
     expect(result).toBe(expected);
@@ -43,6 +43,22 @@ describe('workflow transform', () => {
     expect(result).toMatch(/export\s*(const\s+weatherForecastWorkflow\s*=|\{\s*weatherForecastWorkflow\s*\})/);
     expect(result).toContain("createWorkflow('weather-forecast')");
     expect(result).not.toContain('const customName =');
+  });
+
+  it('rewrites named workflow exports to reference normalized bindings', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+
+      const customName = createWorkflow({ id: 'weather-forecast' }).then('fetch-weather');
+      export { customName as defaultWorkflow };
+      export default customName;
+    `);
+
+    expect(result).toContain('const weatherForecastWorkflow =');
+    expect(result).toContain('weatherForecastWorkflow as default');
+    expect(result).toContain('weatherForecastWorkflow as defaultWorkflow');
+    expect(result).not.toContain('export { customName as defaultWorkflow };');
+    expect(result).not.toContain('export default customName;');
   });
 
   it('rewrites nested workflow references as child workflow calls', async () => {

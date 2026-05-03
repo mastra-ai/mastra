@@ -175,7 +175,21 @@ function createPreservedDeclaration(
   );
 }
 
-function createTemporalActivitiesHelperStatements(mastraImportPath: string | null): t.Statement[] {
+function hasLocalMastraBinding(ast: t.File): boolean {
+  return ast.program.body.some(statement => {
+    const declaration = t.isExportNamedDeclaration(statement) ? statement.declaration : statement;
+    if (!t.isVariableDeclaration(declaration)) {
+      return false;
+    }
+
+    return declaration.declarations.some(declarator => t.isIdentifier(declarator.id, { name: 'mastra' }));
+  });
+}
+
+function createTemporalActivitiesHelperStatements(
+  mastraImportPath: string | null,
+  hasMastraBinding: boolean,
+): t.Statement[] {
   const helperSource = mastraImportPath
     ? `
         function createStep(args) {
@@ -185,10 +199,18 @@ function createTemporalActivitiesHelperStatements(mastraImportPath: string | nul
           };
         }
       `
-    : `
+    : hasMastraBinding
+      ? `
         function createStep(args) {
           return async (params) => {
             return args.execute({ ...params, mastra });
+          };
+        }
+      `
+      : `
+        function createStep(args) {
+          return async (params) => {
+            return args.execute(params);
           };
         }
       `;
@@ -235,7 +257,8 @@ export async function buildTemporalActivitiesModule(
           const seenNames = new Set<string>();
           const strippedNames = new Set<string>();
           const workflowBindingNames = collectWorkflowBindingNames(ast);
-          const sourceFilePath = entryFile;
+          const sourceFilePath = id;
+          const hasMastraBinding = hasLocalMastraBinding(ast);
           let helperInserted = false;
 
           const ensureHelperInserted = () => {
@@ -243,7 +266,7 @@ export async function buildTemporalActivitiesModule(
               return;
             }
 
-            statements.push(...createTemporalActivitiesHelperStatements(null));
+            statements.push(...createTemporalActivitiesHelperStatements(null, hasMastraBinding));
             helperInserted = true;
           };
 

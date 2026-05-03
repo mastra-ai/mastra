@@ -12,4 +12,6 @@ export const innerWorkflow = createWorkflow({
   id: 'inner-workflow',
   inputSchema: z.object({ value: z.string() }),
   outputSchema: z.object({ value: z.string() }),
-}).then(innerStep);
+})
+  .then(innerStep)
+  .commit();

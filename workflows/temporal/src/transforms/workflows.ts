@@ -562,18 +562,31 @@ function rewriteWorkflowImportDeclaration(statement: t.ImportDeclaration, state:
   state.statements.push(statement);
 }
 
+function getNormalizedWorkflowBindingName(name: string, state: WorkflowTransformState): string | null {
+  if (!state.workflowNames.has(name)) {
+    return null;
+  }
+
+  return state.workflowBindings.get(name) ?? name;
+}
+
 function rewriteWorkflowNamedExport(statement: t.ExportNamedDeclaration, state: WorkflowTransformState): void {
   if (statement.source != null) {
     return;
   }
 
-  const retainedSpecifiers = statement.specifiers.filter(
-    specifier =>
-      t.isExportSpecifier(specifier) &&
-      t.isIdentifier(specifier.local) &&
-      state.workflowNames.has(specifier.local.name) &&
-      getExportedName(specifier.exported) !== specifier.local.name,
-  );
+  const retainedSpecifiers = statement.specifiers.flatMap(specifier => {
+    if (!t.isExportSpecifier(specifier) || !t.isIdentifier(specifier.local)) {
+      return [];
+    }
+
+    const normalizedLocalName = getNormalizedWorkflowBindingName(specifier.local.name, state);
+    if (!normalizedLocalName || getExportedName(specifier.exported) === specifier.local.name) {
+      return [];
+    }
+
+    return [t.exportSpecifier(t.identifier(normalizedLocalName), t.cloneNode(specifier.exported))];
+  });
 
   if (retainedSpecifiers.length > 0) {
     state.statements.push(t.exportNamedDeclaration(null, retainedSpecifiers));
@@ -682,8 +695,9 @@ function rewriteWorkflowStatement(statement: t.Statement, filePath: string, stat
   }
 
   if (t.isExportDefaultDeclaration(statement) && t.isIdentifier(statement.declaration)) {
-    if (state.workflowNames.has(statement.declaration.name)) {
-      state.statements.push(statement);
+    const normalizedLocalName = getNormalizedWorkflowBindingName(statement.declaration.name, state);
+    if (normalizedLocalName) {
+      state.statements.push(t.exportDefaultDeclaration(t.identifier(normalizedLocalName)));
     }
     return;
   }
