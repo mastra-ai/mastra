@@ -288,6 +288,24 @@ describe('tool lifecycle', () => {
       expect(tool!.status).toBe('error');
       expect(tool!.isError).toBe(true);
     });
+
+    it('preserves denied metadata on declined approval tool_end', () => {
+      emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
+      emit(harness, { type: 'tool_end', toolCallId: 't1', result: 'declined by user', isError: true, denied: true });
+      const tool = harness.getDisplayState().activeTools.get('t1');
+      expect(tool!.status).toBe('error');
+      expect(tool!.isError).toBe(true);
+      expect(tool!.denied).toBe(true);
+    });
+
+    it('clears stale denied metadata when tool_start reuses an id', () => {
+      emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
+      emit(harness, { type: 'tool_end', toolCallId: 't1', result: 'declined by user', isError: true, denied: true });
+      emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'ok.ts' } });
+      const tool = harness.getDisplayState().activeTools.get('t1');
+      expect(tool!.status).toBe('running');
+      expect(tool!.denied).toBeUndefined();
+    });
   });
 
   describe('tool_update', () => {

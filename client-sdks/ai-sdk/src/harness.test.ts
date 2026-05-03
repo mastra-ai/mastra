@@ -475,6 +475,51 @@ describe('harnessToUIMessageStream', () => {
     });
   });
 
+  it('emits native AI SDK tool denied chunks once for declined approvals', async () => {
+    const state = createState({ isRunning: true });
+    state.activeTools.set('tool-1', {
+      name: 'read_file',
+      args: { path: 'secret.ts' },
+      status: 'error',
+      result: 'Declined by user',
+      isError: true,
+      denied: true,
+    });
+
+    const harness = new FakeHarness(state);
+    const reader = harnessToUIMessageStream(harness, {
+      include: ['tools'],
+      sendStart: false,
+    }).getReader();
+
+    expect(await readChunks(reader, 3)).toMatchObject([
+      {
+        type: 'tool-input-available',
+        toolCallId: 'tool-1',
+        toolName: 'read_file',
+        input: { path: 'secret.ts' },
+      },
+      { type: 'tool-output-denied', toolCallId: 'tool-1', reason: 'Declined by user' },
+      { type: 'data-mastra-harness-snapshot', data: { sequence: 1 } },
+    ]);
+
+    const repeated = createState({ isRunning: true });
+    repeated.activeTools.set('tool-1', {
+      name: 'read_file',
+      args: { path: 'secret.ts' },
+      status: 'error',
+      result: 'Declined by user',
+      isError: true,
+      denied: true,
+    });
+    harness.emit(repeated);
+
+    expect(await readChunk(reader)).toMatchObject({
+      type: 'data-mastra-harness-snapshot',
+      data: { sequence: 2 },
+    });
+  });
+
   it('supports delta mode with an initial snapshot and append-only changed-domain parts', async () => {
     const harness = new FakeHarness(
       createState({ isRunning: true, tokenUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }),

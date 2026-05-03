@@ -284,6 +284,7 @@ export class Harness<TState = {}> {
   private tokenUsage: TokenUsage = createEmptyTokenUsage();
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
+  private declinedToolCallIds = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
   #internalMastra: Mastra | undefined = undefined;
 
@@ -2051,18 +2052,21 @@ export class Harness<TState = {}> {
 
         case 'tool-result': {
           const toolResult = chunk.payload;
+          const isError = toolResult.isError ?? false;
+          const denied = this.consumeDeclinedToolCall(toolResult.toolCallId, isError);
           currentMessage.content.push({
             type: 'tool_result',
             id: toolResult.toolCallId,
             name: toolResult.toolName,
             result: getDisplayProjection(chunk.metadata, 'output-available', toolResult.result),
-            isError: toolResult.isError ?? false,
+            isError,
           });
           this.emit({
             type: 'tool_end',
             toolCallId: toolResult.toolCallId,
             result: getDisplayProjection(chunk.metadata, 'output-available', toolResult.result),
-            isError: toolResult.isError ?? false,
+            isError,
+            denied,
           });
           this.emit({ type: 'message_update', message: { ...currentMessage } });
           break;
@@ -2070,11 +2074,13 @@ export class Harness<TState = {}> {
 
         case 'tool-error': {
           const toolError = chunk.payload;
+          const denied = this.consumeDeclinedToolCall(toolError.toolCallId, true);
           this.emit({
             type: 'tool_end',
             toolCallId: toolError.toolCallId,
             result: getDisplayProjection(chunk.metadata, 'error', toolError.error),
             isError: true,
+            denied,
           });
           break;
         }
@@ -3391,17 +3397,34 @@ export class Harness<TState = {}> {
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
-    const response = await agent.declineToolCall({
-      runId: this.currentRunId,
-      toolCallId,
-      requireToolApproval: !isYolo,
-      memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
-      abortSignal: this.abortController.signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
+    if (toolCallId) {
+      this.declinedToolCallIds.add(toolCallId);
+    }
+    try {
+      const response = await agent.declineToolCall({
+        runId: this.currentRunId,
+        toolCallId,
+        requireToolApproval: !isYolo,
+        memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
+        abortSignal: this.abortController.signal,
+        requestContext,
+        toolsets: await this.buildToolsets(requestContext),
+      });
 
-    return await this.processStream(response, requestContext);
+      return await this.processStream(response, requestContext);
+    } finally {
+      if (toolCallId) {
+        this.declinedToolCallIds.delete(toolCallId);
+      }
+    }
+  }
+
+  private consumeDeclinedToolCall(toolCallId: string | undefined, isError: boolean): boolean | undefined {
+    if (!toolCallId || !this.declinedToolCallIds.has(toolCallId)) {
+      return undefined;
+    }
+    this.declinedToolCallIds.delete(toolCallId);
+    return isError ? true : undefined;
   }
 
   private async handleToolResume({
@@ -3615,6 +3638,7 @@ export class Harness<TState = {}> {
           existingTool.name = event.toolName;
           existingTool.args = event.args;
           existingTool.status = 'running';
+          delete existingTool.denied;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
@@ -3640,6 +3664,11 @@ export class Harness<TState = {}> {
           endedTool.status = event.isError ? 'error' : 'completed';
           endedTool.result = event.result;
           endedTool.isError = event.isError;
+          if (event.denied) {
+            endedTool.denied = true;
+          } else {
+            delete endedTool.denied;
+          }
         }
         // Track file modifications
         if (!event.isError) {

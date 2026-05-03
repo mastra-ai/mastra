@@ -501,6 +501,7 @@ export interface ActiveToolState {
   partialResult?: string;
   result?: unknown;
   isError?: boolean;
+  denied?: boolean;
   shellOutput?: string;
 }
 
@@ -865,7 +866,7 @@ export type HarnessEvent =
       resumeSchema?: string;
     }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
+  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean; denied?: boolean }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }

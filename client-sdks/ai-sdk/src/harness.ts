@@ -135,6 +135,7 @@ type HarnessUITextChunk =
   | { type: 'tool-input-available'; toolCallId: string; toolName: string; input: unknown }
   | { type: 'tool-approval-request'; approvalId: string; toolCallId: string }
   | { type: 'tool-output-available'; toolCallId: string; output: unknown }
+  | { type: 'tool-output-denied'; toolCallId: string; reason?: string }
   | { type: 'tool-output-error'; toolCallId: string; errorText: string };
 
 export type HarnessUIMessageStreamChunk = HarnessUITextChunk | HarnessUIDataPart;
@@ -466,6 +467,18 @@ function emitNativeToolChunks(state: HarnessDisplayState, context: EmitContext):
     }
 
     if (!toolState.outputEmitted && tool.status === 'error') {
+      if (tool.denied) {
+        context.controller.enqueue({
+          type: 'tool-output-denied',
+          toolCallId,
+          reason: stringifyToolError(tool.result ?? tool.partialResult ?? 'Tool approval was declined'),
+        });
+        toolState.outputEmitted = true;
+        context.finalizedTools.add(toolCallId);
+        context.tools.delete(toolCallId);
+        continue;
+      }
+
       context.controller.enqueue({
         type: 'tool-output-error',
         toolCallId,
