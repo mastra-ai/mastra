@@ -118,7 +118,7 @@ export const mastra = new Mastra({
 The worker is a long-lived Node.js process that polls a Temporal task queue. Install `MastraPlugin` and point its `src` option at the Mastra entry file that registers your workflows.
 
 ```ts title="src/mastra/worker.ts"
-import { MastraPlugin } from '@mastra/temporal'
+import { MastraPlugin } from '@mastra/temporal/worker'
 import { NativeConnection, Worker } from '@temporalio/worker'
 
 const connection = await NativeConnection.connect({
