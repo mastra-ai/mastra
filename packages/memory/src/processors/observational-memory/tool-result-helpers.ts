@@ -11,6 +11,64 @@ function isObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function getStringProperty(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveMediaBlockLabel(record: Record<string, unknown>): string | undefined {
+  const filename = getStringProperty(record, 'filename');
+  if (filename) {
+    return filename;
+  }
+
+  const asset = getStringProperty(record, 'url');
+  if (asset) {
+    try {
+      const url = new URL(asset);
+      const basename = url.pathname.split('/').filter(Boolean).pop();
+      if (basename) {
+        return decodeURIComponent(basename);
+      }
+    } catch {
+      // Fall through to mediaType, mimeType, or id.
+    }
+  }
+
+  return getStringProperty(record, 'mediaType', 'mimeType', 'id');
+}
+
+function formatMediaBlockPlaceholder(record: Record<string, unknown>): string | undefined {
+  const type = record.type;
+  const mediaType = getStringProperty(record, 'mediaType', 'mimeType');
+  const isImage =
+    type === 'image' ||
+    type === 'image-data' ||
+    type === 'image-url' ||
+    type === 'image-file-id' ||
+    (type === 'media' && mediaType?.toLowerCase().startsWith('image/'));
+  const isFile =
+    type === 'file' ||
+    type === 'file-data' ||
+    type === 'file-url' ||
+    type === 'file-id' ||
+    (type === 'media' && !isImage);
+
+  if (!isImage && !isFile) {
+    return undefined;
+  }
+
+  const label = resolveMediaBlockLabel(record);
+  const attachmentType = isImage ? 'Image' : 'File';
+  return label ? `[${attachmentType}: ${label}]` : `[${attachmentType}]`;
+}
+
 function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> = new WeakMap()): unknown {
   if (!isObjectLike(value)) {
     return value;
@@ -27,6 +85,11 @@ function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> 
       sanitizedArray.push(sanitizeToolResultValue(item, seen));
     }
     return sanitizedArray;
+  }
+
+  const mediaPlaceholder = formatMediaBlockPlaceholder(value);
+  if (mediaPlaceholder) {
+    return { type: 'text', text: mediaPlaceholder };
   }
 
   const sanitizedObject: Record<string, unknown> = {};

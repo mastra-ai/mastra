@@ -695,6 +695,115 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function ensureDataUri(data: string, mediaType?: string): string {
+  if (!mediaType || data.startsWith('data:')) {
+    return data;
+  }
+
+  return `data:${mediaType};base64,${data}`;
+}
+
+function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart | undefined {
+  if (!block || typeof block !== 'object') {
+    return undefined;
+  }
+
+  const record = block as Record<string, unknown>;
+  const type = record.type;
+  const mediaType =
+    typeof record.mediaType === 'string'
+      ? record.mediaType
+      : typeof record.mimeType === 'string'
+        ? record.mimeType
+        : undefined;
+  const filename = typeof record.filename === 'string' ? record.filename : undefined;
+
+  if (type === 'image') {
+    const image = record.image;
+    if (typeof image === 'string') {
+      return { type: 'image', image, mimeType: mediaType };
+    }
+
+    const data = record.data;
+    if (typeof data !== 'string') return undefined;
+    return { type: 'image', image: ensureDataUri(data, mediaType), mimeType: mediaType };
+  }
+
+  if (type === 'image-data') {
+    const data = record.data;
+    if (typeof data !== 'string') return undefined;
+    return { type: 'image', image: ensureDataUri(data, mediaType), mimeType: mediaType };
+  }
+
+  if (type === 'image-url') {
+    const url = record.url;
+    if (typeof url !== 'string') return undefined;
+    return { type: 'image', image: url, mimeType: mediaType };
+  }
+
+  if (type === 'media') {
+    const data = record.data;
+    if (typeof data !== 'string' || !mediaType) return undefined;
+    const dataUri = ensureDataUri(data, mediaType);
+    if (mediaType.toLowerCase().startsWith('image/')) {
+      return { type: 'image', image: dataUri, mimeType: mediaType };
+    }
+    return { type: 'file', data: dataUri, mimeType: mediaType };
+  }
+
+  if (type === 'file-data') {
+    const data = record.data;
+    if (typeof data !== 'string') return undefined;
+    return { type: 'file', data: ensureDataUri(data, mediaType), mimeType: mediaType, filename };
+  }
+
+  if (type === 'file') {
+    const data = record.data;
+    if (typeof data !== 'string') return undefined;
+    return { type: 'file', data: ensureDataUri(data, mediaType), mimeType: mediaType, filename };
+  }
+
+  if (type === 'file-url') {
+    const url = record.url;
+    if (typeof url !== 'string') return undefined;
+    return { type: 'file', data: url, mimeType: mediaType, filename };
+  }
+
+  return undefined;
+}
+
+function extractToolResultAttachments(
+  result: unknown,
+  counter: ObserverAttachmentCounter,
+): { residual: unknown; attachments: ObserverInputAttachmentPart[] } {
+  if (!result || typeof result !== 'object') {
+    return { residual: result, attachments: [] };
+  }
+
+  const record = result as Record<string, unknown>;
+  if (record.type !== 'content' || !Array.isArray(record.value)) {
+    return { residual: result, attachments: [] };
+  }
+
+  const attachments: ObserverInputAttachmentPart[] = [];
+  const newValue = (record.value as unknown[]).map(block => {
+    const attachment = mapToolResultBlockToAttachment(block);
+    if (!attachment) {
+      return block;
+    }
+
+    attachments.push(toObserverInputAttachmentPart(attachment));
+    const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
+    return { type: 'text', text: placeholder };
+  });
+
+  if (attachments.length === 0) {
+    return { residual: result, attachments };
+  }
+
+  return { residual: { ...record, value: newValue }, attachments };
+}
+
 function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
   const timeLabel = time && time !== previousTime ? `(${time})` : '';
 
@@ -823,9 +932,16 @@ function formatObserverMessage(
             part as { providerMetadata?: Record<string, any> },
             inv.result,
           );
+          const { residual, attachments: extractedAttachments } = extractToolResultAttachments(
+            resultForObserver,
+            counter,
+          );
+          if (extractedAttachments.length > 0) {
+            attachments.push(...extractedAttachments);
+          }
           pushLine(
             `Tool Result ${inv.toolName}`,
-            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            maybeTruncate(formatToolResultForObserver(residual, { maxTokens: maxToolResultTokens }), maxLen),
             partCreatedAt,
           );
           return;
