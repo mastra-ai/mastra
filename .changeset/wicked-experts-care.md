@@ -2,13 +2,4 @@
 '@mastra/editor': patch
 ---
 
-Fixed editor tool providers (Composio, Arcade) receiving a hardcoded 'default' userId. The userId is now read from `requestContext.get('userId')` and forwarded to `provider.resolveTools`, matching the documented behavior. Tool calls now scope correctly to the authenticated user.
-
-```typescript
-import { RequestContext } from '@mastra/core/request-context';
-
-const ctx = new RequestContext();
-ctx.set('userId', 'user-123');
-
-await agent.generate('list my repos', { requestContext: ctx });
-```
+Fixed `@mastra/editor` integrations (Composio, Arcade) collapsing every tool call onto a shared `'default'` user. Tools resolved during `agent.generate` now scope to the authenticated user from the request context, so per-user OAuth connections route to the correct account instead of a shared one.
