@@ -1404,10 +1404,6 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
-    // Regression test for https://github.com/mastra-ai/mastra/issues/15883
-    // Tools that return AI SDK v5 image-data blocks via toModelOutput must not
-    // dump the base64 payload into the observer's text body — it blows the
-    // observer's context and causes degenerate output.
     it('should replace image-data tool-result blocks with attachment placeholders', () => {
       const base64 = 'A'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
@@ -1563,7 +1559,6 @@ describe('Observer Agent Helpers', () => {
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
     });
 
-    // Regression test for https://github.com/mastra-ai/mastra/issues/15883
     it('should hoist image-data tool-result blocks into observer input attachments', () => {
       const base64 = 'B'.repeat(1500);
       const msg = createTestMessage('ignored', 'assistant');
