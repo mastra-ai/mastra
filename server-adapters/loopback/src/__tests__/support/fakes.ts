@@ -30,6 +30,7 @@ export class FakeResponse extends EventEmitter {
   sendBody: unknown;
   ended = false;
   flushed = false;
+  writableEnded = false;
   writableFinished = false;
 
   status(code: number): this {
@@ -50,6 +51,7 @@ export class FakeResponse extends EventEmitter {
     this.jsonBody = value;
     this.setHeader('content-type', 'application/json');
     this.ended = true;
+    this.writableEnded = true;
     this.writableFinished = true;
     this.emit('finish');
     return this;
@@ -58,6 +60,7 @@ export class FakeResponse extends EventEmitter {
   send(value: unknown): this {
     this.sendBody = value;
     this.ended = true;
+    this.writableEnded = true;
     this.writableFinished = true;
     this.emit('finish');
     return this;
@@ -73,6 +76,7 @@ export class FakeResponse extends EventEmitter {
       this.writes.push(value);
     }
     this.ended = true;
+    this.writableEnded = true;
     this.writableFinished = true;
     this.emit('finish');
     return this;

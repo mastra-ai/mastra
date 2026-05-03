@@ -23,11 +23,19 @@ export class LoopbackResponseWriter {
     const responseType = getResponseType(route);
 
     if (responseType === 'stream') {
+      if (result === undefined) {
+        res.status(204).end();
+        return;
+      }
       await this.stream(route, res, result);
       return;
     }
 
     if (responseType === 'datastream-response') {
+      if (result === undefined) {
+        res.status(204).end();
+        return;
+      }
       if (isFetchLikeResponse(result)) {
         await writeFetchLikeResponse(res, result);
         return;
@@ -73,6 +81,11 @@ export class LoopbackResponseWriter {
   }
 
   async stream(route: ServerRoute, res: Response, result: unknown): Promise<void> {
+    if (result === undefined) {
+      res.status(204).end();
+      return;
+    }
+
     const responseType = getResponseType(route);
     const streamRoute = route as RegisteredMastraRoute;
     const sseMode = streamRoute.streamFormat === 'sse' || responseType === 'mcp-sse';
@@ -87,25 +100,29 @@ export class LoopbackResponseWriter {
     }
     res.flushHeaders?.();
 
-    const iterable = toAsyncIterable(result);
-    if (!iterable) {
-      writeStreamChunk(res, result, sseMode);
+    try {
+      const iterable = toAsyncIterable(result);
+      if (!iterable) {
+        writeStreamChunk(res, result, sseMode);
+        if (sseMode) {
+          res.write('event: done\ndata: [DONE]\n\n');
+        }
+        return;
+      }
+
+      for await (const originalChunk of iterable) {
+        const chunk = await this.options.applyStreamRedaction(originalChunk);
+        writeStreamChunk(res, chunk, sseMode);
+      }
+
       if (sseMode) {
         res.write('event: done\ndata: [DONE]\n\n');
       }
-      res.end();
-      return;
+    } finally {
+      if (!res.writableEnded) {
+        res.end();
+      }
     }
-
-    for await (const originalChunk of iterable) {
-      const chunk = await this.options.applyStreamRedaction(originalChunk);
-      writeStreamChunk(res, chunk, sseMode);
-    }
-
-    if (sseMode) {
-      res.write('event: done\ndata: [DONE]\n\n');
-    }
-    res.end();
   }
 
   sendErrorResponse(res: Response, error: unknown): void {

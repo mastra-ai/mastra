@@ -290,6 +290,31 @@ describe('LoopbackMastraServer', () => {
     expect(text).toContain('event: done');
   });
 
+  it('stream returns 204 for undefined results before writing stream headers', async () => {
+    const server = createServer();
+    const res = new FakeResponse();
+
+    await server.stream({ responseType: 'stream' } as never, res as unknown as never, undefined);
+
+    expect(res.statusCode).toBe(204);
+    expect(res.getHeader('content-type')).toBeUndefined();
+    expect(res.writes).toEqual([]);
+    expect(res.ended).toBe(true);
+  });
+
+  it('sendResponse returns 204 for undefined datastream results before writing stream headers', async () => {
+    const server = createServer();
+    const res = new FakeResponse();
+
+    await server.sendResponse({ responseType: 'datastream-response' } as never, res as unknown as never, undefined);
+
+    expect(res.statusCode).toBe(204);
+    expect(res.getHeader('x-vercel-ai-data-stream')).toBeUndefined();
+    expect(res.getHeader('content-type')).toBeUndefined();
+    expect(res.writes).toEqual([]);
+    expect(res.ended).toBe(true);
+  });
+
   it('stream writes a Uint8Array result as one binary chunk', async () => {
     const server = createServer();
     const res = new FakeResponse();
@@ -300,6 +325,22 @@ describe('LoopbackMastraServer', () => {
     expect(res.getHeader('content-type')).toBe('text/plain; charset=utf-8');
     expect(res.writes).toEqual([Buffer.from(body)]);
     expect(res.ended).toBe(true);
+  });
+
+  it('stream closes the response when chunk redaction fails', async () => {
+    const writer = new LoopbackResponseWriter({
+      applyStreamRedaction: async () => {
+        throw new Error('redaction failed');
+      },
+    });
+    const res = new FakeResponse();
+
+    await expect(
+      writer.stream({ responseType: 'stream' } as never, res as unknown as never, ['chunk']),
+    ).rejects.toThrow('redaction failed');
+
+    expect(res.ended).toBe(true);
+    expect(res.writableEnded).toBe(true);
   });
 
   it('sendResponse handles datastream fetch-like responses', async () => {
