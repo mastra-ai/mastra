@@ -230,7 +230,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
       const hasConditionalIntegrationTools =
         storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
-      const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+      const isDynamicTools =
+        hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasStoredIntegrationTools;
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
@@ -263,7 +264,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 ctx,
               )
             : (storedConfig!.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-          const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+          const integrationTools = await this.resolveStoredIntegrationTools(
+            resolvedIntegrationToolsConfig,
+            requestContext,
+          );
 
           return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
         };
@@ -280,6 +284,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
+          requestContext,
         );
         fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
       }
@@ -381,7 +386,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // Tools: registry tools, MCP client tools, and integration tools can each be conditional.
     // If any is conditional, the combined result must be a dynamic function.
-    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+    const hasIntegrationTools = storedAgent.integrationTools != null;
+    const isDynamicTools =
+      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
@@ -421,7 +428,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+        const integrationTools = await this.resolveStoredIntegrationTools(
+          resolvedIntegrationToolsConfig,
+          requestContext,
+        );
 
         return { ...registryTools, ...mcpTools, ...integrationTools };
       };
@@ -874,11 +884,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredIntegrationTools(
     integrationTools?: Record<string, StorageMCPClientToolsConfig>,
-    requestContext?: Record<string, unknown>,
+    requestContext?: RequestContext,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    const userId = requestContext?.get('userId') as string | undefined;
+    const providerOptions = { requestContext: requestContext?.toJSON(), userId };
 
     for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
       try {
@@ -906,7 +919,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
 
         // Fetch tools from the provider — pass slugs, configs, and request context
-        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, { requestContext });
+        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, providerOptions);
 
         for (const [toolId, tool] of Object.entries(providerTools)) {
           // Apply description override if configured at the agent level

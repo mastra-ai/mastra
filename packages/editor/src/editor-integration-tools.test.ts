@@ -171,7 +171,7 @@ describe('Integration Tools (tool providers)', () => {
           GITHUB_CREATE_ISSUE: {},
           SLACK_SEND_MESSAGE: {},
         }),
-        { requestContext: undefined },
+        { requestContext: {}, userId: undefined },
       );
     });
 
@@ -248,7 +248,7 @@ describe('Integration Tools (tool providers)', () => {
       expect(mockProvider.resolveTools).toHaveBeenCalledWith(
         expect.arrayContaining(['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS', 'SLACK_SEND_MESSAGE']),
         {},
-        { requestContext: undefined },
+        { requestContext: {}, userId: undefined },
       );
       // All 3 tools should be resolved
       expect(Object.keys(tools).length).toBe(3);
@@ -287,6 +287,7 @@ describe('Integration Tools (tool providers)', () => {
 
       const agent = await editorWithLogger.agent.getById('agent-missing-provider');
       expect(agent).toBeInstanceOf(Agent);
+      await agent!.listTools();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('nonexistent_provider'));
     });
 
@@ -363,6 +364,42 @@ describe('Integration Tools (tool providers)', () => {
 
       expect(tools['GITHUB_CREATE_ISSUE']).toBeDefined();
       expect(tools['JIRA_CREATE_TICKET']).toBeDefined();
+    });
+
+    it('should forward userId from request context to the tool provider', async () => {
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-userid-forwarding',
+          name: 'UserId Forwarding Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          integrationTools: {
+            composio: {
+              tools: { GITHUB_CREATE_ISSUE: {} },
+            },
+          },
+        },
+      });
+
+      const agent = await editor.agent.getById('agent-userid-forwarding');
+      expect(agent).toBeInstanceOf(Agent);
+
+      await agent!.listTools({
+        requestContext: new RequestContext([
+          ['userId', 'user-42'],
+          ['tier', 'premium'],
+        ]),
+      });
+
+      expect(mockProvider.resolveTools).toHaveBeenCalledWith(
+        expect.arrayContaining(['GITHUB_CREATE_ISSUE']),
+        expect.any(Object),
+        expect.objectContaining({
+          userId: 'user-42',
+          requestContext: expect.objectContaining({ userId: 'user-42', tier: 'premium' }),
+        }),
+      );
     });
   });
 
