@@ -3576,10 +3576,12 @@ export class Harness<TState = {}> {
         for (const [, tool] of ds.activeTools) {
           if (tool.status === 'running' || tool.status === 'streaming_input') {
             tool.status = 'error';
+            tool.completedAt = new Date();
           }
         }
         for (const [toolCallId, subagent] of ds.activeSubagents) {
           if (subagent.status === 'running') {
+            subagent.completedAt = new Date();
             ds.subagentHistory.push(
               createSubagentHistoryEntry({
                 toolCallId,
@@ -3614,11 +3616,16 @@ export class Harness<TState = {}> {
         const existing = ds.activeTools.get(event.toolCallId);
         if (existing) {
           existing.status = 'streaming_input';
+          if (existing.completedAt || !existing.startedAt) {
+            existing.startedAt = new Date();
+          }
+          delete existing.completedAt;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
             args: {},
             status: 'streaming_input',
+            startedAt: new Date(),
           });
         }
         break;
@@ -3641,13 +3648,18 @@ export class Harness<TState = {}> {
         if (existingTool) {
           existingTool.name = event.toolName;
           existingTool.args = event.args;
+          if (existingTool.completedAt || !existingTool.startedAt) {
+            existingTool.startedAt = new Date();
+          }
           existingTool.status = 'running';
+          delete existingTool.completedAt;
           delete existingTool.denied;
         } else {
           ds.activeTools.set(event.toolCallId, {
             name: event.toolName,
             args: event.args,
             status: 'running',
+            startedAt: new Date(),
           });
         }
         break;
@@ -3668,6 +3680,7 @@ export class Harness<TState = {}> {
           endedTool.status = event.isError ? 'error' : 'completed';
           endedTool.result = event.result;
           endedTool.isError = event.isError;
+          endedTool.completedAt = new Date();
           if (event.denied) {
             endedTool.denied = true;
           } else {
@@ -3764,6 +3777,7 @@ export class Harness<TState = {}> {
           task: event.task,
           modelId: event.modelId,
           forked: event.forked,
+          startedAt: new Date(),
           toolCalls: [],
           textDelta: '',
           status: 'running',
@@ -3809,6 +3823,7 @@ export class Harness<TState = {}> {
           endedSub.status = event.isError ? 'error' : 'completed';
           endedSub.durationMs = event.durationMs;
           endedSub.result = event.result;
+          endedSub.completedAt = new Date();
           ds.subagentHistory.push(
             createSubagentHistoryEntry({
               toolCallId: event.toolCallId,

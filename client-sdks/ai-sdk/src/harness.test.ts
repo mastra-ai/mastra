@@ -377,7 +377,12 @@ describe('harnessToUIMessageStream', () => {
 
   it('emits native AI SDK tool lifecycle chunks from display-state snapshots', async () => {
     const initial = createState({ isRunning: true });
-    initial.activeTools.set('tool-1', { name: 'write_file', args: {}, status: 'streaming_input' });
+    initial.activeTools.set('tool-1', {
+      name: 'write_file',
+      args: {},
+      status: 'streaming_input',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
+    });
     initial.toolInputBuffers.set('tool-1', { toolName: 'write_file', text: '{"path"' });
 
     const harness = new FakeHarness(initial);
@@ -394,6 +399,7 @@ describe('harnessToUIMessageStream', () => {
       name: 'write_file',
       args: { path: 'src/app.ts', content: 'hello' },
       status: 'running',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
     });
     harness.emit(running);
 
@@ -412,6 +418,8 @@ describe('harnessToUIMessageStream', () => {
       name: 'write_file',
       args: { path: 'src/app.ts', content: 'hello' },
       status: 'completed',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
+      completedAt: new Date('2026-05-01T12:00:01.000Z'),
       result: { ok: true },
       isError: false,
     });
@@ -438,6 +446,8 @@ describe('harnessToUIMessageStream', () => {
       name: 'read_file',
       args: { path: 'missing.ts' },
       status: 'error',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
+      completedAt: new Date('2026-05-01T12:00:01.000Z'),
       result: new Error('not found'),
       isError: true,
     });
@@ -464,6 +474,8 @@ describe('harnessToUIMessageStream', () => {
       name: 'read_file',
       args: { path: 'missing.ts' },
       status: 'error',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
+      completedAt: new Date('2026-05-01T12:00:01.000Z'),
       result: new Error('not found'),
       isError: true,
     });
@@ -481,6 +493,8 @@ describe('harnessToUIMessageStream', () => {
       name: 'read_file',
       args: { path: 'secret.ts' },
       status: 'error',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
+      completedAt: new Date('2026-05-01T12:00:01.000Z'),
       result: 'Declined by user',
       isError: true,
       denied: true,
@@ -508,6 +522,8 @@ describe('harnessToUIMessageStream', () => {
       name: 'read_file',
       args: { path: 'secret.ts' },
       status: 'error',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
+      completedAt: new Date('2026-05-01T12:00:01.000Z'),
       result: 'Declined by user',
       isError: true,
       denied: true,
@@ -684,6 +700,7 @@ describe('harnessToUIMessageStream', () => {
         error: new Error('boom'),
       },
       status: 'running',
+      startedAt: new Date('2026-05-01T12:00:00.000Z'),
     });
     state.modifiedFiles.set('src/app.ts', {
       operations: ['write_file'],
@@ -710,6 +727,7 @@ describe('harnessToUIMessageStream', () => {
             count: '1',
             error: { name: 'Error', message: 'boom' },
           },
+          startedAt: '2026-05-01T12:00:00.000Z',
         },
       },
     });

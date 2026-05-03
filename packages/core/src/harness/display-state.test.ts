@@ -177,6 +177,7 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'aborted' });
     expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('error');
+    expect(harness.getDisplayState().activeTools.get('t1')?.completedAt).toBeInstanceOf(Date);
   });
 
   it('marks streaming_input tools as error on agent_end', () => {
@@ -185,6 +186,7 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'aborted' });
     expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('error');
+    expect(harness.getDisplayState().activeTools.get('t1')?.completedAt).toBeInstanceOf(Date);
   });
 
   it('does not change completed tools on agent_end', () => {
@@ -194,6 +196,7 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('completed');
+    expect(harness.getDisplayState().activeTools.get('t1')?.completedAt).toBeInstanceOf(Date);
   });
 
   it('clears activeSubagents on agent_end', () => {
@@ -272,6 +275,8 @@ describe('tool lifecycle', () => {
       expect(tool!.name).toBe('read_file');
       expect(tool!.args).toEqual({ path: 'foo.ts' });
       expect(tool!.status).toBe('running');
+      expect(tool!.startedAt).toBeInstanceOf(Date);
+      expect(tool!.completedAt).toBeUndefined();
     });
 
     it('updates existing tool entry on tool_start (after tool_input_start)', () => {
@@ -285,6 +290,8 @@ describe('tool lifecycle', () => {
       const tool = harness.getDisplayState().activeTools.get('t1');
       expect(tool!.status).toBe('running');
       expect(tool!.args).toEqual({ path: 'x', content: 'y' });
+      expect(tool!.startedAt).toBeInstanceOf(Date);
+      expect(tool!.completedAt).toBeUndefined();
     });
 
     it('marks tool as completed on successful tool_end', () => {
@@ -294,6 +301,7 @@ describe('tool lifecycle', () => {
       expect(tool!.status).toBe('completed');
       expect(tool!.result).toBe('file contents');
       expect(tool!.isError).toBe(false);
+      expect(tool!.completedAt).toBeInstanceOf(Date);
     });
 
     it('marks tool as error on failed tool_end', () => {
@@ -302,6 +310,7 @@ describe('tool lifecycle', () => {
       const tool = harness.getDisplayState().activeTools.get('t1');
       expect(tool!.status).toBe('error');
       expect(tool!.isError).toBe(true);
+      expect(tool!.completedAt).toBeInstanceOf(Date);
     });
 
     it('preserves denied metadata on declined approval tool_end', () => {
@@ -320,6 +329,7 @@ describe('tool lifecycle', () => {
       const tool = harness.getDisplayState().activeTools.get('t1');
       expect(tool!.status).toBe('running');
       expect(tool!.denied).toBeUndefined();
+      expect(tool!.completedAt).toBeUndefined();
     });
   });
 
@@ -883,6 +893,8 @@ describe('subagent lifecycle', () => {
     expect(sub!.task).toBe('Find usages of X');
     expect(sub!.forked).toBe(true);
     expect(sub!.status).toBe('running');
+    expect(sub!.startedAt).toBeInstanceOf(Date);
+    expect(sub!.completedAt).toBeUndefined();
     expect(sub!.toolCalls).toEqual([]);
   });
 
@@ -971,6 +983,7 @@ describe('subagent lifecycle', () => {
     expect(sub.status).toBe('completed');
     expect(sub.durationMs).toBe(1234);
     expect(sub.result).toBe('done');
+    expect(sub.completedAt).toBeInstanceOf(Date);
   });
 
   it('records completed subagent history on subagent_end', () => {
@@ -1015,6 +1028,8 @@ describe('subagent lifecycle', () => {
       }),
     );
     expect(ds.subagentHistory[0]!.endedAt).toBeInstanceOf(Date);
+    expect(ds.subagentHistory[0]!.startedAt).toBeInstanceOf(Date);
+    expect(ds.subagentHistory[0]!.completedAt).toBeInstanceOf(Date);
     expect(ds.subagentHistory[0]!.toolCalls).toEqual([{ name: 'read_file', isError: false }]);
     expect(ds.subagentHistory[0]!.displayName).toBe('Execute');
   });
@@ -1122,6 +1137,7 @@ describe('subagent lifecycle', () => {
     const ds = harness.getDisplayState();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.subagentHistory).toHaveLength(1);
+    expect(ds.subagentHistory[0]!.completedAt).toBeInstanceOf(Date);
     expect(ds.subagentHistory[0]).toEqual(
       expect.objectContaining({
         toolCallId: 's1',
