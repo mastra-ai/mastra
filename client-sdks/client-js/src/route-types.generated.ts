@@ -12689,7 +12689,7 @@ export type PostObservabilityScoresAggregate_Body = {
   scorerId: string;
   scoreSource?: string | undefined;
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -12825,7 +12825,7 @@ export type PostObservabilityScoresBreakdown_Body = {
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -12962,7 +12962,7 @@ export type PostObservabilityScoresTimeseries_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -13625,7 +13625,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
   feedbackType: string;
   feedbackSource?: string | undefined;
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -13760,7 +13760,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -13896,7 +13896,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -14170,7 +14170,24 @@ export type PostObservabilityMetricsAggregate_Body = {
   /** Metric name(s) to aggregate */
   name: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  distinctColumn?:
+    | (
+        | 'entityType'
+        | 'entityName'
+        | 'parentEntityType'
+        | 'parentEntityName'
+        | 'rootEntityType'
+        | 'rootEntityName'
+        | 'name'
+        | 'provider'
+        | 'model'
+        | 'environment'
+        | 'executionSource'
+        | 'serviceName'
+      )
+    | undefined;
   filters?:
     | {
         /** Filter by timestamp range */
@@ -14320,7 +14337,24 @@ export type PostObservabilityMetricsBreakdown_Body = {
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  distinctColumn?:
+    | (
+        | 'entityType'
+        | 'entityName'
+        | 'parentEntityType'
+        | 'parentEntityName'
+        | 'rootEntityType'
+        | 'rootEntityName'
+        | 'name'
+        | 'provider'
+        | 'model'
+        | 'environment'
+        | 'executionSource'
+        | 'serviceName'
+      )
+    | undefined;
   filters?:
     | {
         /** Filter by timestamp range */
@@ -14422,6 +14456,10 @@ export type PostObservabilityMetricsBreakdown_Body = {
           | undefined;
       }
     | undefined;
+  /** Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy. */
+  limit?: number | undefined;
+  /** Sort direction for the aggregated value (defaults to 'DESC' at the storage layer; pairs with limit for top/bottom-N). */
+  orderDirection?: ('ASC' | 'DESC') | undefined;
 };
 
 export type PostObservabilityMetricsBreakdown_Response = {
@@ -14467,7 +14505,24 @@ export type PostObservabilityMetricsTimeseries_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  distinctColumn?:
+    | (
+        | 'entityType'
+        | 'entityName'
+        | 'parentEntityType'
+        | 'parentEntityName'
+        | 'rootEntityType'
+        | 'rootEntityName'
+        | 'name'
+        | 'provider'
+        | 'model'
+        | 'environment'
+        | 'executionSource'
+        | 'serviceName'
+      )
+    | undefined;
   filters?:
     | {
         /** Filter by timestamp range */
@@ -73574,6 +73629,8 @@ export interface GetBackgroundTasksBackgroundTaskId_RouteContract {
 export type GetSchedules_QueryParams = {
   workflowId?: string | undefined;
   status?: ('active' | 'paused') | undefined;
+  ownerType?: string | undefined;
+  ownerId?: string | undefined;
 };
 
 export type GetSchedules_Response = {
@@ -73620,6 +73677,8 @@ export type GetSchedules_Response = {
           [key: string]: unknown;
         }
       | undefined;
+    ownerType?: string | undefined;
+    ownerId?: string | undefined;
     createdAt: number;
     updatedAt: number;
   }[];
@@ -73694,6 +73753,8 @@ export type GetSchedulesScheduleId_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  ownerType?: string | undefined;
+  ownerId?: string | undefined;
   createdAt: number;
   updatedAt: number;
 };
@@ -73728,12 +73789,30 @@ export type GetSchedulesScheduleIdTriggers_QueryParams = {
 
 export type GetSchedulesScheduleIdTriggers_Response = {
   triggers: {
+    id?: string | undefined;
     scheduleId: string;
-    runId: string;
+    runId: string | null;
     scheduledFireAt: number;
     actualFireAt: number;
-    status: 'published' | 'failed';
+    outcome:
+      | 'published'
+      | 'failed'
+      | 'skipped'
+      | 'acked'
+      | 'alerted'
+      | 'deferred'
+      | 'appended-from-queue'
+      | 'dropped-stale'
+      | 'dropped-superseded'
+      | 'dropped-busy';
     error?: string | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain') | undefined;
+    parentTriggerId?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     run?:
       | {
           status:
@@ -73827,6 +73906,8 @@ export type PostSchedulesScheduleIdPause_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  ownerType?: string | undefined;
+  ownerId?: string | undefined;
   createdAt: number;
   updatedAt: number;
 };
@@ -73896,6 +73977,8 @@ export type PostSchedulesScheduleIdResume_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  ownerType?: string | undefined;
+  ownerId?: string | undefined;
   createdAt: number;
   updatedAt: number;
 };

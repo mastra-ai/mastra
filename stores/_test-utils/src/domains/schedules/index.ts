@@ -278,12 +278,8 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
       it('filters by ownerType and ownerId', async () => {
         if (!scheduleStore) return;
         await scheduleStore.createSchedule(createSampleSchedule({ id: 'wf' }));
-        await scheduleStore.createSchedule(
-          createSampleSchedule({ id: 'hb1', ownerType: 'agent', ownerId: 'agentA' }),
-        );
-        await scheduleStore.createSchedule(
-          createSampleSchedule({ id: 'hb2', ownerType: 'agent', ownerId: 'agentB' }),
-        );
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'hb1', ownerType: 'agent', ownerId: 'agentA' }));
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'hb2', ownerType: 'agent', ownerId: 'agentB' }));
 
         const allAgent = await scheduleStore.listSchedules({ ownerType: 'agent' });
         expect(allAgent.map(s => s.id).sort()).toEqual(['hb1', 'hb2']);
