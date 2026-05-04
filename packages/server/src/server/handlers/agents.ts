@@ -86,6 +86,12 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
   }
 }
 
+const IS_STUDIO_CONTEXT_KEY = 'isStudio';
+
+function getIsStudioFromContext(requestContext: RequestContext): boolean {
+  return requestContext.get(IS_STUDIO_CONTEXT_KEY) === true;
+}
+
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
@@ -1044,7 +1050,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
-      const isStudio = false; // TODO: Get from context if needed
+      const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
         mastra,
         agent,

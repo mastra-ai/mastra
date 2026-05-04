@@ -617,6 +617,51 @@ describe('Agent Handlers', () => {
       ]);
     });
 
+    it('should use Studio placeholder context when serializing an agent from Studio', async () => {
+      const studioAgent = makeMockAgent({
+        name: 'studio-agent',
+        instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+      });
+
+      const mastraWithStudioAgent = makeMastraMock({
+        agents: { 'studio-agent': studioAgent },
+      });
+      const studioRequestContext = new RequestContext();
+      studioRequestContext.set('isStudio', true);
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStudioAgent }),
+        agentId: 'studio-agent',
+        requestContext: studioRequestContext,
+      });
+
+      expect(result.instructions).toBe('Hello <displayName>');
+    });
+
+    it.each([false, 'true', 1])(
+      'should not use Studio placeholder context for non-true isStudio value %s',
+      async isStudio => {
+        const agent = makeMockAgent({
+          name: 'non-studio-agent',
+          instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+        });
+
+        const mastraWithAgent = makeMastraMock({
+          agents: { 'non-studio-agent': agent },
+        });
+        const nonStudioRequestContext = new RequestContext();
+        nonStudioRequestContext.set('isStudio', isStudio);
+
+        const result = await GET_AGENT_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithAgent }),
+          agentId: 'non-studio-agent',
+          requestContext: nonStudioRequestContext,
+        });
+
+        expect(result.instructions).toBe('Hello undefined');
+      },
+    );
+
     it('should return serialized agent without a model list for dynamic single-model selection', async () => {
       const dynamicSingleModelAgent = makeMockAgent({
         name: 'dynamic-single-model-agent',
