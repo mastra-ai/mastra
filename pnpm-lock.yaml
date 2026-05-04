@@ -446,8 +446,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: 8.0.0
-        version: 8.0.0
+        specifier: 8.8.0
+        version: 8.8.0
       '@workos/authkit-session':
         specifier: ^0.3.4
         version: 0.3.4
@@ -4727,6 +4727,9 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.3.6
+      zod-to-ts:
+        specifier: ^2.0.0
+        version: 2.0.0(typescript@6.0.3)(zod@4.3.6)
 
   pubsub/google-cloud-pubsub:
     dependencies:
@@ -17085,6 +17088,10 @@ packages:
     resolution: {integrity: sha512-D8VDfx0GXeiVm8vccAl0rElW7taebRnrteKPJzZwehwzI9W/Usa4qKfmwxj+7Lh1Z1deEocDRCpZpV7ml4GpWQ==}
     engines: {node: '>=20.15.0'}
 
+  '@workos-inc/node@8.8.0':
+    resolution: {integrity: sha512-niYqVLkrJCmDxY3FA372kZoiYruW6C2lRJVIMUZ42vcNLMpo5aAXTkmd39YSCXKmIYQEIa24wYwODv8xH5U3XA==}
+    engines: {node: '>=20.15.0'}
+
   '@workos/authkit-session@0.3.4':
     resolution: {integrity: sha512-lbLP1y8MHWL1Op9athZ3SrzKLcL0+xBVpADCMQLI39mPgSQj+/lopVdOx0Cku96hYnJBOJTLVTK3Zox4FbZl4A==}
     engines: {node: '>=20.0.0'}
@@ -26797,6 +26804,12 @@ packages:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
     peerDependencies:
       zod: ^3.25.28 || ^4
+
+  zod-to-ts@2.0.0:
+    resolution: {integrity: sha512-aHsUgIl+CQutKAxtRNeZslLCLXoeuSq+j5HU7q3kvi/c2KIAo6q4YjT7/lwFfACxLB923ELHYMkHmlxiqFy4lw==}
+    peerDependencies:
+      typescript: ^6.0.3
+      zod: ^3.25.0 || ^4.0.0
 
   zod-validation-error@4.0.2:
     resolution: {integrity: sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==}
@@ -39317,6 +39330,11 @@ snapshots:
       iron-webcrypto: 2.0.0
       jose: 6.1.3
 
+  '@workos-inc/node@8.8.0':
+    dependencies:
+      iron-webcrypto: 2.0.0
+      jose: 6.1.3
+
   '@workos/authkit-session@0.3.4':
     dependencies:
       '@workos-inc/node': 8.0.0
@@ -51625,6 +51643,11 @@ snapshots:
 
   zod-to-json-schema@3.25.2(zod@4.3.6):
     dependencies:
+      zod: 4.3.6
+
+  zod-to-ts@2.0.0(typescript@6.0.3)(zod@4.3.6):
+    dependencies:
+      typescript: 6.0.3
       zod: 4.3.6
 
   zod-validation-error@4.0.2(zod@3.25.76):

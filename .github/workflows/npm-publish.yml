@@ -271,8 +271,8 @@ jobs:
     needs: stable
     if: |
       always() &&
-      github.repository == 'mastra-ai/mastra' && 
-      github.event_name == 'workflow_dispatch' && 
+      github.repository == 'mastra-ai/mastra' &&
+      github.event_name == 'workflow_dispatch' &&
       (
         (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
         github.event.inputs.publish_type == 'enter-prerelease'
