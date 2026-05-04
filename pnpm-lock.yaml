@@ -446,8 +446,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: 8.0.0
-        version: 8.0.0
+        specifier: 8.8.0
+        version: 8.8.0
       '@workos/authkit-session':
         specifier: ^0.3.4
         version: 0.3.4
@@ -17086,6 +17086,10 @@ packages:
 
   '@workos-inc/node@8.0.0':
     resolution: {integrity: sha512-D8VDfx0GXeiVm8vccAl0rElW7taebRnrteKPJzZwehwzI9W/Usa4qKfmwxj+7Lh1Z1deEocDRCpZpV7ml4GpWQ==}
+    engines: {node: '>=20.15.0'}
+
+  '@workos-inc/node@8.8.0':
+    resolution: {integrity: sha512-niYqVLkrJCmDxY3FA372kZoiYruW6C2lRJVIMUZ42vcNLMpo5aAXTkmd39YSCXKmIYQEIa24wYwODv8xH5U3XA==}
     engines: {node: '>=20.15.0'}
 
   '@workos/authkit-session@0.3.4':
@@ -39322,6 +39326,11 @@ snapshots:
   '@workflow/serde@4.1.0-beta.2': {}
 
   '@workos-inc/node@8.0.0':
+    dependencies:
+      iron-webcrypto: 2.0.0
+      jose: 6.1.3
+
+  '@workos-inc/node@8.8.0':
     dependencies:
       iron-webcrypto: 2.0.0
       jose: 6.1.3

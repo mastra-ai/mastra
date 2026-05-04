@@ -6,6 +6,7 @@ import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -5713,6 +5714,21 @@ export class Agent<
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
 
+    // FGA authorization check
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = options?.requestContext?.get('user');
+      if (user) {
+        const { checkFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'agent', id: this.id },
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        });
+      }
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -5829,6 +5845,21 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
+
+    // FGA authorization check
+    const streamFgaProvider = this.#mastra?.getServer()?.fga;
+    if (streamFgaProvider) {
+      const user = streamOptions?.requestContext?.get('user');
+      if (user) {
+        const { checkFGA } = await import('../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider: streamFgaProvider,
+          user,
+          resource: { type: 'agent', id: this.id },
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        });
+      }
+    }
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,

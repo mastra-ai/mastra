@@ -1244,6 +1244,46 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores[0]!.score).toBe(0.85);
     });
 
+    it('gets a score by id', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'score-lookup-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-lookup-1',
+          spanId: null,
+          scorerId: 'relevance',
+          score: 0.85,
+          reason: 'Good answer',
+          experimentId: 'exp-lookup',
+          metadata: { entityType: 'agent' },
+        },
+      });
+      await storage.createScore({
+        score: {
+          scoreId: 'score-lookup-2',
+          timestamp: new Date('2026-01-01T00:01:00Z'),
+          traceId: 'trace-lookup-2',
+          spanId: 'span-lookup-2',
+          scorerId: 'factuality',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const score = await storage.getScoreById('score-lookup-1');
+      expect(score).toEqual(
+        expect.objectContaining({
+          scoreId: 'score-lookup-1',
+          traceId: 'trace-lookup-1',
+          scorerId: 'relevance',
+          score: 0.85,
+        }),
+      );
+      expect(await storage.getScoreById('missing-score')).toBeNull();
+    });
+
     it('supports deprecated source aliases for scores', async () => {
       await storage.createScore({
         score: {

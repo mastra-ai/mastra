@@ -360,6 +360,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   } else if (route.path.includes(':scorerId')) {
     params.scorerId = 'test-scorer';
   }
+  if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';

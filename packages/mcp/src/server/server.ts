@@ -450,9 +450,11 @@ export class MCPServer extends MCPServerBase {
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    serverInstance.setRequestHandler(ListToolsRequestSchema, async () => {
+    serverInstance.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
+      const proxiedContext = this.createProxiedRequestContext(extra);
+      const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
-        tools: Object.values(this.convertedTools).map(tool => {
+        tools: tools.map(([, tool]) => {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
@@ -553,6 +555,8 @@ export class MCPServer extends MCPServerBase {
             throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
           },
         };
+
+        await this.enforceToolExecutionFGA(request.params.name, proxiedContext);
 
         const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 
@@ -1915,16 +1919,46 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  public getToolListInfo(): {
-    tools: Array<{
-      name: string;
-      description?: string;
-      inputSchema: any;
-      outputSchema?: any;
-      toolType?: MCPToolType;
-      _meta?: Record<string, unknown>;
-    }>;
-  } {
+  public getToolListInfo(requestContext?: RequestContext):
+    | {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }
+    | Promise<{
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (fgaProvider && requestContext) {
+      return this.getAuthorizedConvertedToolEntries(requestContext).then(tools => ({
+        tools: tools.map(([toolId, tool]) => ({
+          id: toolId,
+          name: tool.id || toolId,
+          description: tool.description,
+          inputSchema: this.convertSchema(tool.parameters),
+          outputSchema: this.convertSchema(tool.outputSchema),
+          toolType: tool.mcp?.toolType,
+          _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
+        })),
+      }));
+    }
+
+    if (fgaProvider && !requestContext) {
+      return { tools: [] };
+    }
+
     this.logger.debug('Getting tool list', { server: this.name });
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
@@ -1932,7 +1966,7 @@ export class MCPServer extends MCPServerBase {
         name: tool.id || toolId,
         description: tool.description,
         inputSchema: this.convertSchema(tool.parameters),
-        outputSchema: this.convertSchema(tool.parameters),
+        outputSchema: this.convertSchema(tool.outputSchema),
         toolType: tool.mcp?.toolType,
         _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
       })),
@@ -1983,6 +2017,68 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  private createProxiedRequestContext(extra?: unknown): RequestContext {
+    const proxiedContext = new RequestContext();
+    if (extra && typeof extra === 'object') {
+      Object.entries(extra as Record<string, unknown>).forEach(([key, value]) => {
+        proxiedContext.set(key, value);
+      });
+    }
+    return proxiedContext;
+  }
+
+  private async getAuthorizedConvertedToolEntries(
+    requestContext: RequestContext,
+  ): Promise<Array<[string, (typeof this.convertedTools)[string]]>> {
+    const entries = Object.entries(this.convertedTools);
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return entries;
+    }
+
+    const user = requestContext.get('user');
+    if (!user) {
+      return [];
+    }
+
+    const accessible = await Promise.all(
+      entries.map(async ([toolId, tool]) => {
+        try {
+          await this.enforceToolExecutionFGA(toolId, requestContext);
+          return [toolId, tool] as [string, (typeof this.convertedTools)[string]];
+        } catch (error) {
+          if (error instanceof Error && error.name === 'FGADeniedError') {
+            return null;
+          }
+          throw error;
+        }
+      }),
+    );
+
+    return accessible.filter((entry): entry is [string, (typeof this.convertedTools)[string]] => entry !== null);
+  }
+
+  private async enforceToolExecutionFGA(toolId: string, requestContext?: RequestContext): Promise<void> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return;
+    }
+
+    const { checkFGA, FGADeniedError, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const resourceId = JSON.stringify([this.id, toolId]);
+    const user = requestContext?.get('user');
+    if (!user) {
+      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+    }
+
+    await checkFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'tool', id: resourceId },
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+    });
+  }
+
   /**
    * Executes a specific tool provided by this MCP server.
    *
@@ -2008,7 +2104,7 @@ export class MCPServer extends MCPServerBase {
   public async executeTool(
     toolId: string,
     args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string },
+    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
     let validatedArgs = args;
@@ -2087,7 +2183,9 @@ export class MCPServer extends MCPServerBase {
       const finalExecutionContext = {
         messages: executionContext?.messages || [],
         toolCallId: executionContext?.toolCallId || randomUUID(),
+        requestContext: executionContext?.requestContext,
       };
+      await this.enforceToolExecutionFGA(toolId, finalExecutionContext.requestContext);
       const result = await tool.execute(validatedArgs, finalExecutionContext);
       this.logger.info('Tool executed successfully', { tool: toolId });
       return result;

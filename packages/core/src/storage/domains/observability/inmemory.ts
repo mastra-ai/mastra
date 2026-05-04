@@ -1342,6 +1342,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
+  async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    return this.db.scoreRecords.find(score => score.scoreId === scoreId) ?? null;
+  }
+
   private scoreMatchesFilters(score: ScoreRecord, filters?: ListScoresArgs['filters']): boolean {
     if (!filters) return true;
 

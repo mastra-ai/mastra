@@ -51,6 +51,7 @@ import type {
   CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -568,6 +569,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing scores',
+    });
+  }
+
+  /**
+   * Retrieves a single score by its score ID.
+   */
+  async getScoreById(_scoreId: string): Promise<ScoreRecord | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support getting scores by ID',
     });
   }
 
