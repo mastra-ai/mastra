@@ -8,13 +8,15 @@ Added `count_distinct` aggregation and server-side TopK to the metrics storage A
 
 **New aggregation**
 
-`getMetricAggregate`, `getMetricBreakdown`, and `getMetricTimeSeries` accept `aggregation: 'count_distinct'` with an optional `distinctColumn`. Backends pick the most efficient native implementation — `uniq` on ClickHouse, `approx_count_distinct` on DuckDB.
+`getMetricAggregate`, `getMetricBreakdown`, and `getMetricTimeSeries` accept `aggregation: 'count_distinct'` with a `distinctColumn`. Backends pick the most efficient native implementation — `uniq` on ClickHouse, `approx_count_distinct` on DuckDB.
+
+`distinctColumn` is restricted to a low/medium-cardinality categorical allowlist (`entityType`, `entityName`, `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName`, `name`, `provider`, `model`, `environment`, `executionSource`, `serviceName`, `costUnit`). ID columns are not allowed — distinct counts over near-unique values converge to the row count and are rarely useful.
 
 ```ts
 await store.getMetricAggregate({
-  name: 'mastra_agent_duration_ms',
+  name: 'mastra_llm_tokens_total',
   aggregation: 'count_distinct',
-  distinctColumn: 'threadId',
+  distinctColumn: 'model',
   filters: { timestamp: { start, end } },
 });
 ```

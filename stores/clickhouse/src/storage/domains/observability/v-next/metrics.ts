@@ -1,5 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { listMetricsArgsSchema } from '@mastra/core/storage';
+import { listMetricsArgsSchema, METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -20,6 +20,7 @@ import type {
   GetMetricLabelKeysResponse,
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
+  MetricDistinctColumn,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
@@ -71,17 +72,23 @@ const METRIC_TYPED_COLUMNS = new Set([
 /** Columns excluded from groupBy because they are complex types. */
 const GROUP_BY_EXCLUDED = new Set(['metadata', 'scope', 'costMetadata', 'tags']);
 
-function resolveDistinctColumnSql(distinctColumn: string | undefined): string {
+function resolveDistinctColumnSql(distinctColumn: MetricDistinctColumn | undefined): string {
   if (!distinctColumn) {
     throw new Error(`count_distinct aggregation requires a 'distinctColumn' argument`);
   }
-  if (!METRIC_TYPED_COLUMNS.has(distinctColumn)) {
+  // Defense-in-depth: the schema enum already restricts this, but the value
+  // flows into raw SQL so we re-check against the system-level allowlist.
+  if (!(METRIC_DISTINCT_COLUMNS as readonly string[]).includes(distinctColumn)) {
     throw new Error(`Invalid distinctColumn: ${distinctColumn}`);
   }
   return parseFieldKey(distinctColumn);
 }
 
-function getAggregationSql(aggregation: AggregationType, measure = 'value', distinctColumn?: string): string {
+function getAggregationSql(
+  aggregation: AggregationType,
+  measure = 'value',
+  distinctColumn?: MetricDistinctColumn,
+): string {
   switch (aggregation) {
     case 'sum':
       return `sum(${measure})`;

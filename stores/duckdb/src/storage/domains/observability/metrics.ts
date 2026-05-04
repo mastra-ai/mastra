@@ -1,3 +1,4 @@
+import { METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
 import type {
   BatchCreateMetricsArgs,
   ListMetricsArgs,
@@ -18,6 +19,7 @@ import type {
   GetMetricLabelValuesResponse,
   AggregationType,
   AggregationInterval,
+  MetricDistinctColumn,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
@@ -28,44 +30,23 @@ import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
 // Helpers
 // ============================================================================
 
-/** Columns eligible for `count_distinct`. Kept narrow to avoid SQL injection via user input. */
-const METRIC_DISTINCT_COLUMNS = new Set<string>([
-  'metricId',
-  'traceId',
-  'spanId',
-  'entityId',
-  'entityName',
-  'parentEntityId',
-  'parentEntityName',
-  'rootEntityId',
-  'rootEntityName',
-  'userId',
-  'organizationId',
-  'resourceId',
-  'runId',
-  'sessionId',
-  'threadId',
-  'requestId',
-  'experimentId',
-  'provider',
-  'model',
-  'name',
-  'environment',
-  'executionSource',
-  'serviceName',
-]);
-
-function resolveDistinctColumnSql(distinctColumn: string | undefined): string {
+function resolveDistinctColumnSql(distinctColumn: MetricDistinctColumn | undefined): string {
   if (!distinctColumn) {
     throw new Error(`count_distinct aggregation requires a 'distinctColumn' argument`);
   }
-  if (!METRIC_DISTINCT_COLUMNS.has(distinctColumn)) {
+  // Defense-in-depth: the schema enum already restricts this, but the value
+  // flows into raw SQL so we re-check against the system-level allowlist.
+  if (!(METRIC_DISTINCT_COLUMNS as readonly string[]).includes(distinctColumn)) {
     throw new Error(`Invalid distinctColumn: ${distinctColumn}`);
   }
   return parseFieldKey(distinctColumn);
 }
 
-function getAggregationSql(aggregation: AggregationType, measure = 'value', distinctColumn?: string): string {
+function getAggregationSql(
+  aggregation: AggregationType,
+  measure = 'value',
+  distinctColumn?: MetricDistinctColumn,
+): string {
   switch (aggregation) {
     case 'sum':
       return `SUM(${measure})`;

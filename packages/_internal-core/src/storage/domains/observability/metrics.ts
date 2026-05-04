@@ -209,16 +209,45 @@ export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
 // OLAP Query Schemas
 // ============================================================================
 
+/**
+ * Columns eligible for `count_distinct`.
+ *
+ * Restricted to low/medium-cardinality categorical attributes. ID columns are
+ * intentionally excluded — approximate distinct count over near-unique values
+ * converges to the row count and is rarely a useful KPI.
+ */
+export const METRIC_DISTINCT_COLUMNS = [
+  'entityType',
+  'entityName',
+  'parentEntityType',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityName',
+  'name',
+  'provider',
+  'model',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'costUnit',
+] as const;
+
+export type MetricDistinctColumn = (typeof METRIC_DISTINCT_COLUMNS)[number];
+
+export const distinctColumnSchema = z
+  .enum(METRIC_DISTINCT_COLUMNS)
+  .optional()
+  .describe(
+    "Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed.",
+  );
+
 // --- getMetricAggregate ---
 
 export const getMetricAggregateArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
     aggregation: aggregationTypeSchema,
-    distinctColumn: z
-      .string()
-      .optional()
-      .describe("Column to apply count_distinct over (required when aggregation is 'count_distinct')"),
+    distinctColumn: distinctColumnSchema,
     filters: metricsFilterSchema.optional(),
     comparePeriod: comparePeriodSchema.optional(),
   })
@@ -255,10 +284,7 @@ export const getMetricBreakdownArgsSchema = z
     name: z.array(z.string()).nonempty().describe('Metric name(s) to break down'),
     groupBy: groupBySchema,
     aggregation: aggregationTypeSchema,
-    distinctColumn: z
-      .string()
-      .optional()
-      .describe("Column to apply count_distinct over (required when aggregation is 'count_distinct')"),
+    distinctColumn: distinctColumnSchema,
     filters: metricsFilterSchema.optional(),
     limit: z
       .number()
@@ -301,10 +327,7 @@ export const getMetricTimeSeriesArgsSchema = z
     name: z.array(z.string()).nonempty().describe('Metric name(s)'),
     interval: aggregationIntervalSchema,
     aggregation: aggregationTypeSchema,
-    distinctColumn: z
-      .string()
-      .optional()
-      .describe("Column to apply count_distinct over (required when aggregation is 'count_distinct')"),
+    distinctColumn: distinctColumnSchema,
     filters: metricsFilterSchema.optional(),
     groupBy: groupBySchema.optional(),
   })
