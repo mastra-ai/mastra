@@ -119,6 +119,11 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support listing scores',
     },
     {
+      name: 'getScoreById',
+      callThunk: () => storage.getScoreById('s1'),
+      expectedMessage: 'does not support getting scores by ID',
+    },
+    {
       name: 'getScoreAggregate',
       callThunk: () => storage.getScoreAggregate({ scorerId: 'test', aggregation: 'sum' }),
       expectedMessage: 'does not support score aggregation',

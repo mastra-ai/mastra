@@ -11,6 +11,25 @@ describe('ObservabilityInMemory', () => {
     storage = new ObservabilityInMemory({ db });
   });
 
+  it('gets a score by ID without paginating through list results', async () => {
+    const now = new Date('2026-01-02T00:00:00.000Z');
+
+    await storage.batchCreateScores({
+      scores: Array.from({ length: 101 }, (_, index) => ({
+        id: `score-${index}`,
+        scoreId: `score-${index}`,
+        timestamp: now,
+        scorerId: 'test-scorer',
+        score: index,
+        createdAt: now,
+        updatedAt: null,
+      })),
+    });
+
+    await expect(storage.getScoreById('score-100')).resolves.toMatchObject({ scoreId: 'score-100' });
+    await expect(storage.getScoreById('missing-score')).resolves.toBeNull();
+  });
+
   it('listLogs applies shared observability context filters', async () => {
     const now = new Date('2026-01-02T00:00:00.000Z');
 

@@ -10,6 +10,7 @@ import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   LIST_SCORERS_ROUTE,
+  LIST_SCORES_ROUTE,
   LIST_SCORES_BY_RUN_ID_ROUTE,
   LIST_SCORES_BY_ENTITY_ID_ROUTE,
   SAVE_SCORE_ROUTE,
@@ -64,6 +65,28 @@ describe('Scores Handlers', () => {
         requestContext: new RequestContext(),
       });
       expect(result).toEqual({});
+    });
+  });
+
+  describe('listScoresHandler', () => {
+    it('omits undefined scorer filters when listing by scorer ID', async () => {
+      const listScoresByScorerId = vi.fn().mockResolvedValue({
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        scores: [],
+      });
+      scoresStore.listScoresByScorerId = listScoresByScorerId;
+
+      await LIST_SCORES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        scorerId: 'test-scorer',
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(listScoresByScorerId).toHaveBeenCalledWith({
+        scorerId: 'test-scorer',
+        pagination: { page: 0, perPage: 10 },
+      });
     });
   });
 
