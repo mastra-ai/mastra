@@ -218,23 +218,31 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     return result;
   }
 
-  private extractText(messages: MastraDBMessage[]): string {
-    const parts: string[] = [];
+  private extractSegments(messages: MastraDBMessage[]): string[] {
+    const segments: string[] = [];
     for (const msg of messages) {
       if (typeof msg.content === 'string') {
-        parts.push(msg.content);
+        segments.push(msg.content);
       } else if (msg.content && typeof msg.content === 'object') {
         const content = msg.content as { parts?: Array<{ type: string; text?: string }> };
         if (content.parts) {
           for (const part of content.parts) {
             if (part.type === 'text' && part.text) {
-              parts.push(part.text);
+              segments.push(part.text);
             }
           }
         }
       }
     }
-    return parts.join('\n');
+    return segments;
+  }
+
+  private findMatchesInMessages(messages: MastraDBMessage[]): RegexMatch[] {
+    const allMatches: RegexMatch[] = [];
+    for (const segment of this.extractSegments(messages)) {
+      allMatches.push(...this.findMatches(segment));
+    }
+    return allMatches;
   }
 
   private blockWithTripWire(matches: RegexMatch[], context: string): never {
@@ -297,8 +305,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   processInput(args: ProcessInputArgs<RegexFilterTripwireMetadata>): ProcessInputResult | Promise<ProcessInputResult> {
     if (this.phase === 'output') return args.messages;
 
-    const text = this.extractText(args.messages);
-    const matches = this.findMatches(text);
+    const matches = this.findMatchesInMessages(args.messages);
 
     if (matches.length === 0) return args.messages;
 
@@ -337,8 +344,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   processOutputResult(args: ProcessOutputResultArgs<RegexFilterTripwireMetadata>): ProcessorMessageResult {
     if (this.phase === 'input') return args.messages;
 
-    const text = this.extractText(args.messages);
-    const matches = this.findMatches(text);
+    const matches = this.findMatchesInMessages(args.messages);
 
     if (matches.length === 0) return args.messages;
 
