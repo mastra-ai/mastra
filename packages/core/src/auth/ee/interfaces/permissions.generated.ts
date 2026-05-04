@@ -15,6 +15,8 @@ export const RESOURCES = [
   'a2a',
   'agent-builder',
   'agents',
+  'background-tasks',
+  'channels',
   'datasets',
   'embedders',
   'experiments',
@@ -24,6 +26,7 @@ export const RESOURCES = [
   'observability',
   'processor-providers',
   'processors',
+  'schedules',
   'scores',
   'stored',
   'stored-agents',
@@ -50,7 +53,7 @@ export type Resource = (typeof RESOURCES)[number];
  * - DELETE → delete
  * - Additional actions from explicit requiresPermission overrides
  */
-export const ACTIONS = ['delete', 'execute', 'read', 'write'] as const;
+export const ACTIONS = ['create', 'delete', 'execute', 'read', 'write'] as const;
 
 /**
  * Action type union.
@@ -64,6 +67,8 @@ export type Action = (typeof ACTIONS)[number];
 export const PERMISSION_PATTERNS = {
   /** Full access to all resources and actions */
   '*': '*',
+  /** create all resources */
+  '*:create': '*:create',
   /** Delete all resources */
   '*:delete': '*:delete',
   /** Execute all resources */
@@ -78,6 +83,10 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to background-tasks */
+  'background-tasks:*': 'background-tasks:*',
+  /** Full access to channels */
+  'channels:*': 'channels:*',
   /** Full access to datasets */
   'datasets:*': 'datasets:*',
   /** Full access to embedders */
@@ -96,6 +105,8 @@ export const PERMISSION_PATTERNS = {
   'processor-providers:*': 'processor-providers:*',
   /** Full access to processors */
   'processors:*': 'processors:*',
+  /** Full access to schedules */
+  'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
   /** Full access to stored */
@@ -126,12 +137,22 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:read': 'agent-builder:read',
   /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
+  /** create agents */
+  'agents:create': 'agents:create',
+  /** Delete agents */
+  'agents:delete': 'agents:delete',
   /** Execute agents */
   'agents:execute': 'agents:execute',
   /** View agents */
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** View background-tasks */
+  'background-tasks:read': 'background-tasks:read',
+  /** View channels */
+  'channels:read': 'channels:read',
+  /** Create and modify channels */
+  'channels:write': 'channels:write',
   /** Delete datasets */
   'datasets:delete': 'datasets:delete',
   /** Execute datasets */
@@ -170,6 +191,12 @@ export const PERMISSION_PATTERNS = {
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Execute schedules */
+  'schedules:execute': 'schedules:execute',
+  /** View schedules */
+  'schedules:read': 'schedules:read',
+  /** Create and modify schedules */
+  'schedules:write': 'schedules:write',
   /** View evaluation scores */
   'scores:read': 'scores:read',
   /** Create and modify evaluation scores */
@@ -239,9 +266,14 @@ export const PERMISSIONS = [
   'agent-builder:execute',
   'agent-builder:read',
   'agent-builder:write',
+  'agents:create',
+  'agents:delete',
   'agents:execute',
   'agents:read',
   'agents:write',
+  'background-tasks:read',
+  'channels:read',
+  'channels:write',
   'datasets:delete',
   'datasets:execute',
   'datasets:read',
@@ -261,6 +293,9 @@ export const PERMISSIONS = [
   'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'schedules:execute',
+  'schedules:read',
+  'schedules:write',
   'scores:read',
   'scores:write',
   'stored-agents:delete',

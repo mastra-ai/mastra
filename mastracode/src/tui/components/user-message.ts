@@ -54,7 +54,7 @@ class BorderedBox {
     }
 
     // Box inner width = content width + prompt prefix (the "│ " and " │" add the padding)
-    const boxInner = Math.min(maxInnerWidth, maxContentWidth + 2);
+    const boxInner = maxContentWidth + 2;
     // Total box width: "│" + " " + content + " " + "│" = boxInner + 4
     const boxWidth = boxInner + 4;
 

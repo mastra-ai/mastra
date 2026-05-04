@@ -338,6 +338,12 @@ export function buildMessagesFromChunks({
     return [];
   }
 
+  // TODO: remove in v2, this is added for backwards compatibility. We used to double add response messages accidentally, and the second path added them in ai sdk format, which had this duplicated content field.
+  const contentString = finalParts
+    .filter((part): part is Extract<MastraMessagePart, { type: 'text' }> => part.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+
   // Build a single assistant message with all parts in stream order
   const message: MastraDBMessage = {
     id: messageId,
@@ -345,6 +351,7 @@ export function buildMessagesFromChunks({
     content: {
       format: 2,
       parts: finalParts,
+      ...(contentString ? { content: contentString } : {}),
       ...responseModelMetadata,
     },
     createdAt: new Date(),

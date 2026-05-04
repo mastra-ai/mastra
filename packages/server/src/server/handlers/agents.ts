@@ -1,5 +1,6 @@
-import { Agent } from '@mastra/core/agent';
-import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import { Agent, isDurableAgentLike } from '@mastra/core/agent';
+import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
+import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -46,6 +47,10 @@ import {
   enhanceInstructionsResponseSchema,
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
+  observeAgentBodySchema,
+  observeAgentResponseSchema,
+  streamUntilIdleBodySchema,
+  resumeStreamBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
@@ -61,6 +66,7 @@ import {
   getEffectiveResourceId,
   getEffectiveThreadId,
   validateThreadOwnership,
+  validateRunOwnership,
 } from './utils';
 
 /**
@@ -448,23 +454,29 @@ interface SerializedAgentDefinition {
 async function getSerializedAgentDefinition({
   agent,
   requestContext,
+  logger,
 }: {
   agent: Agent;
   requestContext: RequestContext;
+  logger?: ReturnType<Context['mastra']['getLogger']>;
 }): Promise<Record<string, SerializedAgentDefinition>> {
   let serializedAgentAgents: Record<string, SerializedAgentDefinition> = {};
 
   if ('listAgents' in agent) {
-    const agents = await agent.listAgents({ requestContext });
-    serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
-      (acc, [key, agent]) => {
-        return {
-          ...acc,
-          [key]: { id: agent.id, name: agent.name },
-        };
-      },
-      {},
-    );
+    try {
+      const agents = await agent.listAgents({ requestContext });
+      serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
+        (acc, [key, agent]) => {
+          return {
+            ...acc,
+            [key]: { id: agent.id, name: agent.name },
+          };
+        },
+        {},
+      );
+    } catch (error) {
+      logger?.warn('Error getting sub-agents for agent', { agentName: agent.name, error });
+    }
   }
   return serializedAgentAgents;
 }
@@ -482,21 +494,63 @@ async function formatAgentList({
   requestContext: RequestContext;
   partial?: boolean;
 }): Promise<SerializedAgentWithId> {
+  const logger = mastra.getLogger();
+
   const description = agent.getDescription();
-  const instructions = await agent.getInstructions({ requestContext });
-  const tools = await agent.listTools({ requestContext });
-  const llm = await agent.getLLM({ requestContext });
-  const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
-  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
-  const defaultOptions = await agent.getDefaultOptions({ requestContext });
+
+  // Per-agent dynamic getters can throw (e.g. when their callbacks destructure
+  // fields from `requestContext` that aren't present under the active preset).
+  // Wrap each independent getter so a single failure doesn't abort the whole
+  // serialization — the agent will still be listed with safe defaults, and the
+  // failure is logged so the user can see what went wrong in `mastra dev`.
+  let instructions: SystemMessage | undefined;
+  try {
+    instructions = await agent.getInstructions({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting instructions for agent', { agentName: agent.name, error });
+  }
+
+  let tools: Record<string, SerializedToolInput> = {};
+  try {
+    tools = await agent.listTools({ requestContext });
+  } catch (error) {
+    logger.warn('Error listing tools for agent', { agentName: agent.name, error });
+  }
+
+  let llm: Awaited<ReturnType<Agent['getLLM']>> | undefined;
+  try {
+    llm = await agent.getLLM({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
+  }
+
+  let defaultGenerateOptionsLegacy: Awaited<ReturnType<Agent['getDefaultGenerateOptionsLegacy']>> | undefined;
+  try {
+    defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default generate options for agent', { agentName: agent.name, error });
+  }
+
+  let defaultStreamOptionsLegacy: Awaited<ReturnType<Agent['getDefaultStreamOptionsLegacy']>> | undefined;
+  try {
+    defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default stream options for agent', { agentName: agent.name, error });
+  }
+
+  let defaultOptions: Awaited<ReturnType<Agent['getDefaultOptions']>> | undefined;
+  try {
+    defaultOptions = await agent.getDefaultOptions({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default options for agent', { agentName: agent.name, error });
+  }
+
   const serializedAgentTools = await getSerializedAgentTools(tools, partial);
 
   let serializedAgentWorkflows: Record<
     string,
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
-
-  const logger = mastra.getLogger();
 
   if ('listWorkflows' in agent) {
     try {
@@ -516,7 +570,7 @@ async function formatAgentList({
     }
   }
 
-  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
+  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext, logger });
 
   // Get and serialize only user-configured processors (excludes memory-derived processors)
   // This ensures the UI only shows processors explicitly configured by the user
@@ -547,7 +601,13 @@ async function formatAgentList({
   }
 
   const model = llm?.getModel();
-  const models = await agent.getModelList(requestContext);
+
+  let models: Awaited<ReturnType<Agent['getModelList']>> | undefined;
+  try {
+    models = await agent.getModelList(requestContext);
+  } catch (error) {
+    logger.warn('Error getting model list for agent', { agentName: agent.name, error });
+  }
   const modelList = models?.map(md => ({
     ...md,
     model: {
@@ -607,10 +667,20 @@ async function formatAgentList({
   };
 }
 
-export function extractVersionOptions(requestContext?: RequestContext): { versionId: string } | undefined {
+export function extractVersionOptions(
+  requestContext?: RequestContext,
+  bodyRequestContext?: Record<string, unknown>,
+): { versionId: string } | undefined {
+  // First check the server-populated RequestContext (e.g. from auth middleware)
   const agentVersionId = requestContext?.get('agentVersionId');
   if (typeof agentVersionId === 'string' && agentVersionId) {
     return { versionId: agentVersionId };
+  }
+  // Fall back to body requestContext — the client may send agentVersionId there
+  // (e.g. the playground editor sends it so the correct stored version is loaded)
+  const bodyVersionId = bodyRequestContext?.agentVersionId;
+  if (typeof bodyVersionId === 'string' && bodyVersionId) {
+    return { versionId: bodyVersionId };
   }
   return undefined;
 }
@@ -619,10 +689,12 @@ export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
+  requestContext,
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+  requestContext?: RequestContext;
 }) {
   const logger = mastra.getLogger();
 
@@ -662,7 +734,11 @@ export async function getAgentFromSystem({
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent, versionOptions ?? { status: 'published' });
+        agent = await editorAgent.applyStoredOverrides(
+          agent,
+          versionOptions ?? { status: 'published' },
+          requestContext,
+        );
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -869,12 +945,17 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       // Apply stored config overrides to code-defined agents before serializing
       const editor = mastra.getEditor?.();
-      const serializedCodeAgentsMap = await Promise.all(
+      const logger = mastra.getLogger();
+      // Use `Promise.allSettled` so that one agent's catastrophic serialization
+      // failure (e.g. an unhandled throw from a user-supplied dynamic config
+      // callback) cannot reject the entire response. Failing agents are logged
+      // and skipped, matching the existing stored-agent loop below.
+      const serializedCodeAgentsMap = await Promise.allSettled(
         Object.entries(codeAgents).map(async ([id, agent]) => {
           let mergedAgent = agent;
           if (editor) {
             try {
-              mergedAgent = await editor.agent.applyStoredOverrides(agent);
+              mergedAgent = await editor.agent.applyStoredOverrides(agent, undefined, requestContext);
             } catch {
               // If overrides fail, use the original code agent
             }
@@ -883,13 +964,17 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }),
       );
 
-      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
-        (acc, { id, ...rest }) => {
-          acc[id] = { id, ...rest };
-          return acc;
-        },
-        {},
-      );
+      const serializedAgents: Record<string, SerializedAgentWithId> = {};
+      for (let i = 0; i < serializedCodeAgentsMap.length; i++) {
+        const settled = serializedCodeAgentsMap[i]!;
+        if (settled.status === 'fulfilled') {
+          const { id, ...rest } = settled.value;
+          serializedAgents[id] = { id, ...rest };
+        } else {
+          const agentId = Object.keys(codeAgents)[i];
+          logger.warn('Failed to serialize agent', { agentId, error: settled.reason });
+        }
+      }
 
       // Also fetch and include stored agents
       try {
@@ -958,7 +1043,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
       const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,
@@ -1036,12 +1121,6 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
@@ -1049,6 +1128,16 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+        requestContext: serverRequestContext,
+      });
 
       // Merge body's requestContext values into the server's RequestContext instance
       // Only set values that don't already exist on the server context to prevent
@@ -1127,6 +1216,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -1187,6 +1277,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -1332,18 +1423,22 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+        requestContext: serverRequestContext,
+      });
 
       // Merge body's requestContext values into the server's RequestContext instance
       // Only set values that don't already exist on the server context to prevent
@@ -1404,6 +1499,95 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   },
 });
 
+export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/stream-until-idle',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: streamUntilIdleBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream agent response until idle',
+  description:
+    'Executes an agent with the provided messages and streams the response in real-time, also listens for background task completions and streams them in real-time',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      validateBody({ messages });
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+        requestContext: serverRequestContext,
+      });
+
+      // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
+
+      // Authorization: apply context overrides to memory option if present
+      let authorizedMemoryOption = memoryOption;
+      if (memoryOption) {
+        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+
+        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
+        // Validate thread ownership if accessing an existing thread
+        if (effectiveThreadId && effectiveResourceId) {
+          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
+          if (memoryInstance) {
+            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+            await validateThreadOwnership(thread, effectiveResourceId);
+          }
+        }
+
+        // Build authorized memory option with effective values
+        authorizedMemoryOption = {
+          ...memoryOption,
+          resource: effectiveResourceId ?? memoryOption.resource,
+          thread: effectiveThreadId ?? memoryOption.thread,
+        };
+      }
+
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
+        requestContext: serverRequestContext,
+        memory: authorizedMemoryOption,
+        abortSignal,
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.streamUntilIdle(messages, { ...options, structuredOutput })
+        : await agent.streamUntilIdle(messages, options);
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
+    }
+  },
+});
+
 export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/stream/vnext',
@@ -1417,6 +1601,120 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   requiresAuth: true,
   deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
+});
+
+export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/observe',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: observeAgentBodySchema,
+  responseSchema: observeAgentResponseSchema,
+  summary: 'Observe agent stream',
+  description:
+    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, runId, offset, abortSignal }) => {
+    try {
+      // Verify agent exists and get its pubsub for stream subscription.
+      // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
+      // so we must subscribe to the agent's pubsub to receive the correct stream events.
+      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agentPubsub = isDurableAgentLike(agent) ? (agent as DurableAgentLike).pubsub : undefined;
+      const pubsub = agentPubsub ?? mastra.pubsub;
+
+      // Create a ReadableStream that subscribes to the agent stream topic
+      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
+      const topic = AGENT_STREAM_TOPIC(runId);
+      let handleEvent: ((event: any) => void) | null = null;
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      // Idle timeout: close the stream if no events are received within 5 minutes.
+      // This prevents subscription leaks when an agent crashes without emitting a terminal event.
+      const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+      function cleanup(controller: ReadableStreamDefaultController) {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+        if (handleEvent) {
+          void pubsub.unsubscribe(topic, handleEvent);
+          handleEvent = null;
+        }
+        try {
+          controller.close();
+        } catch {
+          // Stream may already be closed
+        }
+      }
+
+      function resetIdleTimer(controller: ReadableStreamDefaultController) {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => cleanup(controller), IDLE_TIMEOUT_MS);
+      }
+
+      const stream = new ReadableStream({
+        start(controller) {
+          // Wire up abortSignal for cleanup on client disconnect
+          if (abortSignal) {
+            if (abortSignal.aborted) {
+              cleanup(controller);
+              return;
+            }
+            abortSignal.addEventListener('abort', () => cleanup(controller), { once: true });
+          }
+
+          resetIdleTimer(controller);
+
+          handleEvent = (event: any) => {
+            const isTerminal = event.type === 'finish' || event.type === 'error';
+            try {
+              controller.enqueue(event);
+            } catch {
+              // Stream may be closed
+            }
+            if (isTerminal) {
+              cleanup(controller);
+            } else {
+              resetIdleTimer(controller);
+            }
+          };
+
+          // Subscribe with replay support
+          const subscribePromise =
+            offset !== undefined
+              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
+              : pubsub.subscribeWithReplay(topic, handleEvent);
+
+          subscribePromise.catch((error: any) => {
+            console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+            if (idleTimer) {
+              clearTimeout(idleTimer);
+              idleTimer = null;
+            }
+            controller.error(error);
+          });
+        },
+        cancel() {
+          if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = null;
+          }
+          if (handleEvent) {
+            void pubsub.unsubscribe(topic, handleEvent);
+            handleEvent = null;
+          }
+        },
+      });
+
+      return stream;
+    } catch (error) {
+      return handleError(error, 'error observing agent stream');
+    }
+  },
 });
 
 export const APPROVE_TOOL_CALL_ROUTE = createRoute({
@@ -1505,6 +1803,103 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
+    }
+  },
+});
+
+export const RESUME_STREAM_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/resume-stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: resumeStreamBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Resume agent stream',
+  description: 'Resumes a suspended agent stream with custom resume data',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      sanitizeBody(params, ['tools']);
+
+      const {
+        resumeData,
+        runId,
+        toolCallId,
+        memory: memoryOption,
+        requestContext: bodyRequestContext,
+        versions,
+        ...rest
+      } = params;
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
+
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
+
+      stashVersionOverrides(serverRequestContext, versions);
+
+      let authorizedMemoryOption = memoryOption;
+      const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
+      if (effectiveThreadId && effectiveResourceId) {
+        const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memoryInstance) {
+          const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      if (memoryOption || effectiveResourceId || effectiveThreadId) {
+        authorizedMemoryOption = {
+          ...memoryOption,
+          ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
+          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+        } as NonNullable<typeof authorizedMemoryOption>;
+      }
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        runId,
+        toolCallId,
+        ...restOptions,
+        requestContext: serverRequestContext,
+        memory: authorizedMemoryOption,
+        abortSignal,
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
+        : await agent.resumeStream(resumeData, options);
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error resuming agent stream');
     }
   },
 });

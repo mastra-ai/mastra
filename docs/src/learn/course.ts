@@ -286,18 +286,36 @@ AI agents are the next platform shift. Understanding how to build them is now a 
 
     // Module 5: Production
     {
-      slug: 'deployment-and-next-steps',
-      title: 'Deployment and Next Steps',
+      slug: 'deploy-to-mastra-platform',
+      title: 'Deploy to Mastra Platform',
       durationMin: 4,
-      status: 'comingSoon',
+      youtubeId: 'O1FnS_qrsPs',
+      status: 'published',
       module: 'Production',
       preview: {
         intro:
-          'What changes when you move from Studio to production, and how to call your agent from an app via HTTP or SDK.',
+          'Deploy the Theme Park agent from your local Studio environment to a live public endpoint using Mastra Server.',
         bullets: [
-          'Runtime choices: Node, Bun, Deno, Cloudflare-style environments',
-          'Mastra becomes an HTTP server with API endpoints and streaming',
-          'Frontend integration with AI SDK UI, CopilotKit, or Assistant UI',
+          'Explore the Swagger UI to see every agent already exposed as HTTP endpoints',
+          'Run mastra server deploy to build, upload, and get a stable public URL',
+          'Mastra is already an HTTP server — Mastra Server puts it somewhere public',
+        ],
+      },
+    },
+    {
+      slug: 'chat-with-agent-in-slack',
+      title: 'Chat With Agent in Slack',
+      durationMin: 9,
+      youtubeId: 'fD6M6n_OdJI',
+      status: 'published',
+      module: 'Production',
+      preview: {
+        intro:
+          'Connect the deployed Theme Park agent to Slack so you can message it from anywhere — same tools, memory, and workflows, from a DM.',
+        bullets: [
+          'Add the Slack adapter and a channels config to the agent',
+          'Mastra exposes the webhook route automatically — no handler to write',
+          'Channels also supports Discord and Telegram through the same pattern',
         ],
       },
     },

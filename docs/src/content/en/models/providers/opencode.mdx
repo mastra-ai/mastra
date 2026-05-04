@@ -58,18 +58,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "opencode/claude-3-5-haiku",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 0.8,
-    "outputCost": 4
-  },
-  {
     "model": "opencode/claude-haiku-4-5",
     "imageInput": true,
     "audioInput": false,
@@ -394,6 +382,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 180
   },
   {
+    "model": "opencode/gpt-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 5,
+    "outputCost": 30
+  },
+  {
+    "model": "opencode/gpt-5.5-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 30,
+    "outputCost": 180
+  },
+  {
     "model": "opencode/hy3-preview-free",
     "imageInput": false,
     "audioInput": false,
@@ -428,18 +440,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.95,
     "outputCost": 4
-  },
-  {
-    "model": "opencode/ling-2.6-flash-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262100,
-    "maxOutput": 32800,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "opencode/minimax-m2.5",

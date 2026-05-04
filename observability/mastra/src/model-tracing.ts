@@ -207,12 +207,14 @@ function summarizeRequestBody(body: unknown): StepInputPreview {
 }
 
 /**
- * Extract messages from the raw AI SDK request metadata for use as span input.
- * Parses request.body and returns a shallow conversation preview instead of the
- * full request payload, which keeps span serialization bounded for large
- * multi-turn conversations.
+ * Extract a shallow conversation preview for model_step span input.
  */
-function extractStepInput(request: StepStartPayload['request'] | undefined): StepInputPreview {
+function extractStepInput(payload?: StepStartPayload): StepInputPreview {
+  if (Array.isArray(payload?.inputMessages)) {
+    return normalizeMessages(payload.inputMessages);
+  }
+
+  const request = payload?.request;
   if (!request) return undefined;
 
   const { body } = request;
@@ -222,7 +224,7 @@ function extractStepInput(request: StepStartPayload['request'] | undefined): Ste
     const parsed = typeof body === 'string' ? JSON.parse(body) : body;
     return summarizeRequestBody(parsed);
   } catch {
-    // body was not valid JSON — return as-is
+    // body was not valid JSON; return as-is
     return request;
   }
 }
@@ -242,6 +244,11 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  #currentStepInputIsFinal: boolean = false;
+  /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
+  #deferStepClose: boolean = false;
+  /** Stored step-finish payload when defer mode is enabled */
+  #pendingStepFinishPayload?: StepFinishPayload<any, any>;
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
@@ -297,6 +304,46 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Enable or disable deferred step closing for durable execution.
+   * When enabled, step-finish chunks won't automatically close the step span.
+   * Use exportCurrentStep() to get the span data, then close it manually later.
+   */
+  setDeferStepClose(defer: boolean): void {
+    this.#deferStepClose = defer;
+  }
+
+  /**
+   * Export the current step span for later rebuilding (durable execution).
+   * Returns undefined if no step span is active.
+   */
+  exportCurrentStep(): ReturnType<Span<SpanType.MODEL_STEP>['exportSpan']> | undefined {
+    return this.#currentStepSpan?.exportSpan();
+  }
+
+  /**
+   * Get the pending step finish payload (captured when defer mode is enabled).
+   * This contains usage, finishReason, etc. for closing the step later.
+   */
+  getPendingStepFinishPayload(): StepFinishPayload<any, any> | undefined {
+    return this.#pendingStepFinishPayload;
+  }
+
+  /**
+   * Set the starting step index for durable execution.
+   * Used when resuming across agentic loop iterations to maintain step continuity.
+   */
+  setStepIndex(index: number): void {
+    this.#stepIndex = index;
+  }
+
+  /**
+   * Get the current step index.
+   */
+  getStepIndex(): number {
+    return this.#stepIndex;
+  }
+
+  /**
    * Start a new Model execution step.
    * This should be called at the beginning of LLM execution to capture accurate startTime.
    * The step-start chunk payload can be passed later via updateStep() if needed.
@@ -307,6 +354,7 @@ export class ModelSpanTracker {
       return;
     }
 
+    const input = extractStepInput(payload);
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
@@ -315,8 +363,9 @@ export class ModelSpanTracker {
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
         ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
       },
-      input: extractStepInput(payload?.request),
+      input,
     });
+    this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
     // Reset chunk sequence for new step
     this.#chunkSequence = 0;
   }
@@ -330,14 +379,20 @@ export class ModelSpanTracker {
       return;
     }
 
+    const hasFinalInput = Array.isArray(payload.inputMessages);
+    const input = hasFinalInput || !this.#currentStepInputIsFinal ? extractStepInput(payload) : undefined;
+
     // Update span with request/warnings from the step-start chunk
     this.#currentStepSpan.update({
-      input: extractStepInput(payload.request),
+      ...(input !== undefined ? { input } : {}),
       attributes: {
         ...(payload.messageId ? { messageId: payload.messageId } : {}),
         ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
       },
     });
+    if (hasFinalInput) {
+      this.#currentStepInputIsFinal = true;
+    }
   }
 
   /**
@@ -383,6 +438,7 @@ export class ModelSpanTracker {
       },
     });
     this.#currentStepSpan = undefined;
+    this.#currentStepInputIsFinal = false;
     this.#stepIndex++;
   }
 
@@ -678,7 +734,13 @@ export class ModelSpanTracker {
               break;
 
             case 'step-finish':
-              this.#endStepSpan(chunk.payload);
+              if (this.#deferStepClose) {
+                // Durable mode: save payload for later, don't close the step
+                this.#pendingStepFinishPayload = chunk.payload;
+              } else {
+                // Normal mode: close the step immediately
+                this.#endStepSpan(chunk.payload);
+              }
               break;
 
             // Infrastructure chunks - skip creating spans for these

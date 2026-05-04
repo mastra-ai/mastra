@@ -58,6 +58,84 @@ describe('AISDKV5LanguageModel', () => {
     },
   );
 
+  it.each(['doGenerate', 'doStream'] as const)(
+    'injects strictJsonSchema into openai providerOptions when a tool has strict: true via %s',
+    async method => {
+      const model = createMockV2Model();
+      const wrapped = new AISDKV5LanguageModel(model);
+
+      await wrapped[method]({
+        inputFormat: 'messages',
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        tools: [
+          {
+            type: 'function',
+            name: 'strictTool',
+            description: 'A strict tool',
+            strict: true,
+            inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        ],
+      } as any);
+
+      const call = (model[method] as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(call.providerOptions?.openai?.strictJsonSchema).toBe(true);
+    },
+  );
+
+  it.each(['doGenerate', 'doStream'] as const)(
+    'does not inject strictJsonSchema when no tool has strict: true via %s',
+    async method => {
+      const model = createMockV2Model();
+      const wrapped = new AISDKV5LanguageModel(model);
+
+      await wrapped[method]({
+        inputFormat: 'messages',
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        tools: [
+          {
+            type: 'function',
+            name: 'normalTool',
+            description: 'A normal tool',
+            inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        ],
+      } as any);
+
+      const call = (model[method] as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(call.providerOptions?.openai?.strictJsonSchema).toBeUndefined();
+    },
+  );
+
+  it.each(['doGenerate', 'doStream'] as const)(
+    'does not override explicit strictJsonSchema: false via %s',
+    async method => {
+      const model = createMockV2Model();
+      const wrapped = new AISDKV5LanguageModel(model);
+
+      await wrapped[method]({
+        inputFormat: 'messages',
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        providerOptions: {
+          openai: { strictJsonSchema: false },
+        },
+        tools: [
+          {
+            type: 'function',
+            name: 'strictTool',
+            description: 'A strict tool',
+            strict: true,
+            inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        ],
+      } as any);
+
+      const call = (model[method] as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      // User explicitly set strictJsonSchema to false, should not override
+      expect(call.providerOptions?.openai?.strictJsonSchema).toBe(false);
+    },
+  );
+
   describe('serializeForSpan', () => {
     it('returns only identity fields', () => {
       const model = createMockV2Model();

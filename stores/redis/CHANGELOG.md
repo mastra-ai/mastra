@@ -1,5 +1,244 @@
 # @mastra/redis
 
+## 1.1.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (1.0.5) ([#12557](https://github.com/mastra-ai/mastra/pull/12557))
+
+### Patch Changes
+
+- Add durable agents with resumable streams ([#12557](https://github.com/mastra-ai/mastra/pull/12557))
+
+  Durable agents make agent execution resilient to disconnections, crashes, and long-running operations.
+
+  ### The Problem
+
+  Standard agent streaming has two fragility points:
+  1. **Connection drops** - If a client disconnects mid-stream (network blip, browser refresh, mobile app backgrounded), all subsequent events are lost. The client has no way to "catch up" on what they missed.
+  2. **Long-running operations** - Agent loops with tool calls can take minutes. Holding an HTTP connection open that long is unreliable. If the server restarts or the connection times out, the work is lost.
+
+  ### The Solution
+
+  **Resumable streams** solve connection drops. Every event is cached with a sequential index. If a client disconnects at event 5, they can reconnect and request events starting from index 6. They receive cached events immediately, then continue with live events as they arrive.
+
+  **Durable execution** solves long-running operations. Instead of executing the agent loop directly in the HTTP request, execution happens in a workflow engine (built-in evented engine or Inngest). The HTTP request just subscribes to events. If the connection drops, execution continues. The client can reconnect anytime to observe progress.
+
+  ### Usage
+
+  Wrap any existing `Agent` with durability using factory functions:
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { createDurableAgent } from '@mastra/core/agent/durable';
+
+  const agent = new Agent({
+    id: 'my-agent',
+    model: openai('gpt-4'),
+    instructions: 'You are helpful',
+  });
+
+  const durableAgent = createDurableAgent({ agent });
+  ```
+
+  **Factory functions for different execution strategies:**
+
+  | Factory                                  | Execution                           | Use Case                        |
+  | ---------------------------------------- | ----------------------------------- | ------------------------------- |
+  | `createDurableAgent({ agent })`          | Local, synchronous                  | Development, simple deployments |
+  | `createEventedAgent({ agent })`          | Fire-and-forget via workflow engine | Long-running operations         |
+  | `createInngestAgent({ agent, inngest })` | Inngest-powered                     | Production, distributed systems |
+
+  ### Resumable Streams
+
+  ```typescript
+  // Start streaming
+  const { runId, output } = await durableAgent.stream('Analyze this data...');
+
+  // Client disconnects at event 5...
+
+  // Reconnect and resume from where we left off
+  const { output: resumed } = await durableAgent.observe(runId, { offset: 6 });
+  // Receives events 6, 7, 8... from cache, then continues with live events
+  ```
+
+  ### PubSub and Cache
+
+  Durable agents use two infrastructure components:
+
+  | Component  | Purpose                                   | Default               |
+  | ---------- | ----------------------------------------- | --------------------- |
+  | **PubSub** | Real-time event delivery during streaming | `EventEmitterPubSub`  |
+  | **Cache**  | Stores events for replay on reconnection  | `InMemoryServerCache` |
+
+  When `stream()` is called, events flow through pubsub in real-time. The cache stores each event with a sequential index. When `observe()` is called, missed events replay from cache before continuing with live events.
+
+  **Configure via Mastra instance (recommended):**
+
+  ```typescript
+  const mastra = new Mastra({
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+    agents: {
+      // Inherits cache and pubsub from Mastra
+      myAgent: createDurableAgent({ agent }),
+    },
+  });
+  ```
+
+  **Configure per-agent (overrides Mastra):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({
+    agent,
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+  });
+  ```
+
+  **Disable caching (streams won't be resumable):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({ agent, cache: false });
+  ```
+
+  For single-instance deployments, the defaults work fine. For multi-instance deployments (load balancer, horizontal scaling), use Redis-backed implementations so any instance can serve reconnection requests.
+
+  ### Class Hierarchy
+  - `DurableAgent` extends `Agent` - base class with resumable streams
+  - `EventedAgent` extends `DurableAgent` - fire-and-forget execution
+  - `InngestAgent` extends `DurableAgent` - Inngest-powered execution
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/core@1.30.0
+
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (1.0.5) ([#12557](https://github.com/mastra-ai/mastra/pull/12557))
+
+### Patch Changes
+
+- Add durable agents with resumable streams ([#12557](https://github.com/mastra-ai/mastra/pull/12557))
+
+  Durable agents make agent execution resilient to disconnections, crashes, and long-running operations.
+
+  ### The Problem
+
+  Standard agent streaming has two fragility points:
+  1. **Connection drops** - If a client disconnects mid-stream (network blip, browser refresh, mobile app backgrounded), all subsequent events are lost. The client has no way to "catch up" on what they missed.
+  2. **Long-running operations** - Agent loops with tool calls can take minutes. Holding an HTTP connection open that long is unreliable. If the server restarts or the connection times out, the work is lost.
+
+  ### The Solution
+
+  **Resumable streams** solve connection drops. Every event is cached with a sequential index. If a client disconnects at event 5, they can reconnect and request events starting from index 6. They receive cached events immediately, then continue with live events as they arrive.
+
+  **Durable execution** solves long-running operations. Instead of executing the agent loop directly in the HTTP request, execution happens in a workflow engine (built-in evented engine or Inngest). The HTTP request just subscribes to events. If the connection drops, execution continues. The client can reconnect anytime to observe progress.
+
+  ### Usage
+
+  Wrap any existing `Agent` with durability using factory functions:
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { createDurableAgent } from '@mastra/core/agent/durable';
+
+  const agent = new Agent({
+    id: 'my-agent',
+    model: openai('gpt-4'),
+    instructions: 'You are helpful',
+  });
+
+  const durableAgent = createDurableAgent({ agent });
+  ```
+
+  **Factory functions for different execution strategies:**
+
+  | Factory                                  | Execution                           | Use Case                        |
+  | ---------------------------------------- | ----------------------------------- | ------------------------------- |
+  | `createDurableAgent({ agent })`          | Local, synchronous                  | Development, simple deployments |
+  | `createEventedAgent({ agent })`          | Fire-and-forget via workflow engine | Long-running operations         |
+  | `createInngestAgent({ agent, inngest })` | Inngest-powered                     | Production, distributed systems |
+
+  ### Resumable Streams
+
+  ```typescript
+  // Start streaming
+  const { runId, output } = await durableAgent.stream('Analyze this data...');
+
+  // Client disconnects at event 5...
+
+  // Reconnect and resume from where we left off
+  const { output: resumed } = await durableAgent.observe(runId, { offset: 6 });
+  // Receives events 6, 7, 8... from cache, then continues with live events
+  ```
+
+  ### PubSub and Cache
+
+  Durable agents use two infrastructure components:
+
+  | Component  | Purpose                                   | Default               |
+  | ---------- | ----------------------------------------- | --------------------- |
+  | **PubSub** | Real-time event delivery during streaming | `EventEmitterPubSub`  |
+  | **Cache**  | Stores events for replay on reconnection  | `InMemoryServerCache` |
+
+  When `stream()` is called, events flow through pubsub in real-time. The cache stores each event with a sequential index. When `observe()` is called, missed events replay from cache before continuing with live events.
+
+  **Configure via Mastra instance (recommended):**
+
+  ```typescript
+  const mastra = new Mastra({
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+    agents: {
+      // Inherits cache and pubsub from Mastra
+      myAgent: createDurableAgent({ agent }),
+    },
+  });
+  ```
+
+  **Configure per-agent (overrides Mastra):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({
+    agent,
+    cache: new RedisServerCache({ url: 'redis://...' }),
+    pubsub: new RedisPubSub({ url: 'redis://...' }),
+  });
+  ```
+
+  **Disable caching (streams won't be resumable):**
+
+  ```typescript
+  const durableAgent = createDurableAgent({ agent, cache: false });
+  ```
+
+  For single-instance deployments, the defaults work fine. For multi-instance deployments (load balancer, horizontal scaling), use Redis-backed implementations so any instance can serve reconnection requests.
+
+  ### Class Hierarchy
+  - `DurableAgent` extends `Agent` - base class with resumable streams
+  - `EventedAgent` extends `DurableAgent` - fire-and-forget execution
+  - `InngestAgent` extends `DurableAgent` - Inngest-powered execution
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8)]:
+  - @mastra/core@1.30.0-alpha.1
+
+## 1.0.2
+
+### Patch Changes
+
+- Fixed Redis package releases to include built files. ([#15763](https://github.com/mastra-ai/mastra/pull/15763))
+
+- Updated dependencies [[`28caa5b`](https://github.com/mastra-ai/mastra/commit/28caa5b032358545af2589ed90636eccb4dd9d2f), [`c1ae974`](https://github.com/mastra-ai/mastra/commit/c1ae97491f6e57378ce880c3a397778c42adcdf1), [`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a), [`13b4d7c`](https://github.com/mastra-ai/mastra/commit/13b4d7c16de34dff9095d1cd80f22f544b6cfe75), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`c04417b`](https://github.com/mastra-ai/mastra/commit/c04417ba0a2e4ded66da4352331ef29cd4bd1d79), [`cf25a03`](https://github.com/mastra-ai/mastra/commit/cf25a03132164b9dc1e5dccf7394824e33007c51), [`8a71261`](https://github.com/mastra-ai/mastra/commit/8a71261e3954ae617c6f8e25767b951f99438ab2), [`9e973b0`](https://github.com/mastra-ai/mastra/commit/9e973b010dacfa15ac82b0072897319f5234b90a), [`dd934a0`](https://github.com/mastra-ai/mastra/commit/dd934a0982ce0f78712fbd559e4f2410bf594b39), [`ba6b0c5`](https://github.com/mastra-ai/mastra/commit/ba6b0c51bfce358554fd33c7f2bcd5593633f2ff), [`a6dac0a`](https://github.com/mastra-ai/mastra/commit/a6dac0a40c7181161b1add4e8534f962bcbc9aa7), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`6c8c6c7`](https://github.com/mastra-ai/mastra/commit/6c8c6c71518394321a4692614aa4b11f3bb0a343), [`5a4b1ee`](https://github.com/mastra-ai/mastra/commit/5a4b1ee80212969621228104995589c0fa59e575), [`7d056b6`](https://github.com/mastra-ai/mastra/commit/7d056b6ecf603cacaa0f663ff1df025ed885b6c1), [`9cef83b`](https://github.com/mastra-ai/mastra/commit/9cef83b8a642b8098747772921e3523b492bafbc), [`d30e215`](https://github.com/mastra-ai/mastra/commit/d30e2156c746bc9fd791745cec1cc24377b66789), [`021a60f`](https://github.com/mastra-ai/mastra/commit/021a60f1f3e0135a70ef23c58be7a9b3aaffe6b4), [`73f2809`](https://github.com/mastra-ai/mastra/commit/73f2809721db24e98cdf122539652a455211b450), [`aedeea4`](https://github.com/mastra-ai/mastra/commit/aedeea48a94f728323f040478775076b9574be50), [`26f1f94`](https://github.com/mastra-ai/mastra/commit/26f1f9490574b864ba1ecedf2c9632e0767a23bd), [`8126d86`](https://github.com/mastra-ai/mastra/commit/8126d8638411eacfafdc29036ac998e8757ea66f), [`73b45fa`](https://github.com/mastra-ai/mastra/commit/73b45facdef4fbcb8af710c50f0646f18619dbaa), [`ae97520`](https://github.com/mastra-ai/mastra/commit/ae975206fdb0f6ef03c4d5bf94f7dc7c3f706c02), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`441670a`](https://github.com/mastra-ai/mastra/commit/441670a02c9dc7731c52674f55481e7848a84523)]:
+  - @mastra/core@1.29.0
+
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- Fixed Redis package releases to include built files. ([#15763](https://github.com/mastra-ai/mastra/pull/15763))
+
 ## 1.0.1
 
 ### Patch Changes

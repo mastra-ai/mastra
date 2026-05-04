@@ -1,6 +1,7 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { z } from 'zod';
 import type { stateSchema } from '../schema.js';
+import { detectCommonBinaries } from '../utils/binaries.js';
 import { getCurrentGitBranch } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
@@ -18,6 +19,7 @@ export function getDynamicInstructions({ requestContext }: { requestContext: { g
     projectName: state?.projectName ?? '',
     gitBranch: getCurrentGitBranch(projectPath) ?? state?.gitBranch,
     platform: process.platform,
+    commonBinaries: detectCommonBinaries(),
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
     modelId: state?.currentModelId || undefined,

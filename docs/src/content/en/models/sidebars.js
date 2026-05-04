@@ -27,7 +27,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'gateways/azure-openai',
-          label: 'Azure-openai',
+          label: 'Azure OpenAI',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/mastra',
+          label: 'Mastra',
         },
         {
           type: 'doc',
@@ -100,6 +105,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
+        },
+        {
+          type: 'doc',
+          id: 'providers/abliteration-ai',
+          label: 'abliteration.ai',
         },
         {
           type: 'doc',
@@ -385,6 +395,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/neuralwatt',
+          label: 'Neuralwatt',
         },
         {
           type: 'doc',

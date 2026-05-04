@@ -6,7 +6,7 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
@@ -149,7 +149,7 @@ class StorageBackendSubmenu extends Container {
     }
 
     // Connection string input phase
-    if (data === '\r' || data === '\n') {
+    if (matchesKey(data, 'enter') || data === '\r' || data === '\n') {
       const value = this.input.getValue().trim();
       if (this.pendingBackend === 'pg') {
         // PG requires a connection string
@@ -163,7 +163,7 @@ class StorageBackendSubmenu extends Container {
       return;
     }
 
-    if (data === '\x1b' || data === '\x1b\x1b') {
+    if (matchesKey(data, 'escape') || data === '\x1b' || data === '\x1b\x1b') {
       this.onBack();
       return;
     }

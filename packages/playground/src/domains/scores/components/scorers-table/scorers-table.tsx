@@ -157,7 +157,7 @@ const EmptyScorersTable = () => (
         <Button
           size="lg"
           className="w-full"
-          variant="light"
+          variant="default"
           as="a"
           href="https://mastra.ai/en/docs/evals/overview"
           target="_blank"

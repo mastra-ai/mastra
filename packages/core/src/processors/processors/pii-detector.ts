@@ -377,9 +377,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
    * Determine if PII is flagged based on detections or category scores above threshold
    */
   private isPIIFlagged(result: PIIDetectionResult): boolean {
-    // Check if we have any detections
+    // Check if we have any detections above confidence threshold
     if (result.detections && result.detections.length > 0) {
-      return true;
+      return result.detections.some(d => d.confidence >= this.threshold);
     }
 
     // Check if any category scores exceed the threshold
@@ -409,6 +409,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     switch (strategy) {
       case 'block':
         abort(alertMessage);
+        return null;
 
       case 'warn':
         console.warn(`[PIIDetector] ${alertMessage}`);
@@ -623,6 +624,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         switch (this.strategy) {
           case 'block':
             abort(`PII detected in streaming content. Types: ${this.getDetectedTypes(detectionResult).join(', ')}`);
+            return null;
 
           case 'warn':
             console.warn(

@@ -186,6 +186,12 @@ Examples:
   mastracode --resource-id my-project --prompt "Fix the bug"
   echo "task description" | mastracode --prompt -
 
+Piping without --prompt launches the interactive TUI with piped content
+as the first message:
+  cat file.txt | mastracode
+  git diff | mastracode
+  npm test 2>&1 | mastracode
+
 Run without --prompt for the interactive TUI.
 `);
 }
@@ -257,7 +263,9 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
       process.stderr.write(event.output);
       break;
     case 'subagent_start':
-      process.stderr.write(`[subagent:${event.agentType}] ${truncate(event.task, 100)}\n`);
+      process.stderr.write(
+        `[subagent:${event.forked ? 'forked:' : ''}${event.agentType}] ${truncate(event.task, 100)}\n`,
+      );
       break;
     case 'subagent_end':
       if (event.isError) process.stderr.write(`[subagent error] ${truncate(event.result, 200)}\n`);
@@ -336,8 +344,8 @@ function finalizeSummary<TState extends Record<string, unknown>>(
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
-async function resolveThread(
-  harness: Harness,
+async function resolveThread<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
   const threads = await harness.listThreads();
@@ -567,7 +575,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
  * Headless mode main entry point: parse arguments, read stdin, initialize
  * MastraCode, and run headless mode.
  */
-export async function headlessMain(): Promise<never> {
+export async function headlessMain(predrainedInput?: string | null): Promise<never> {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHeadlessUsage();
     process.exit(0);
@@ -582,7 +590,10 @@ export async function headlessMain(): Promise<never> {
   }
 
   let prompt = args.prompt;
-  if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
+  if (predrainedInput !== undefined) {
+    // Stdin was already drained by the caller (e.g. TTY reopen failed after pipe drain)
+    prompt = predrainedInput ?? '';
+  } else if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
     const chunks: Buffer[] = [];
     for await (const chunk of process.stdin) {
       chunks.push(chunk as Buffer);

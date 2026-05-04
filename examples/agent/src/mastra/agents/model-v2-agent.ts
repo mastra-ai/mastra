@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai-v5';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
@@ -52,11 +51,11 @@ export const errorAgent = new Agent({
   id: 'error-agent',
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
 });
 
 export const moderationProcessor = new ModerationProcessor({
-  model: openai('gpt-4.1-nano'),
+  model: 'openai/gpt-4.1-nano',
   categories: ['hate', 'harassment', 'violence'],
   threshold: 0.7,
   strategy: 'block',
@@ -109,7 +108,7 @@ const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     weatherInfo,
   },
@@ -126,7 +125,7 @@ export const networkAgent = new Agent({
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
   instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     weatherAgent,
   },
@@ -181,7 +180,7 @@ export const agentWithAdvancedModeration = new Agent({
   name: 'Agent with Advanced Moderation',
   description: 'A helpful assistant with advanced content moderation using parallel processor checks.',
   instructions: `You are a helpful assistant. Always provide detailed, thoughtful responses.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   inputProcessors: [advancedModerationWorkflow],
   outputProcessors: [responseQualityProcessor, stepLoggerProcessor],
   maxProcessorRetries: 2,
@@ -197,7 +196,7 @@ export const agentWithBranchingModeration = new Agent({
   name: 'Agent with Branching Moderation',
   description: 'A helpful assistant with smart content moderation that branches based on message content.',
   instructions: `You are a helpful assistant.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   inputProcessors: [branchingModerationWorkflow],
   outputProcessors: [stepLoggerProcessor],
   maxProcessorRetries: 2,
@@ -213,7 +212,7 @@ export const agentWithSequentialModeration = new Agent({
   name: 'Agent with Sequential Moderation',
   description: 'A helpful assistant with sequential content moderation checks.',
   instructions: `You are a helpful assistant.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   inputProcessors: [contentModerationWorkflow],
   outputProcessors: [responseQualityProcessor],
   maxProcessorRetries: 2,
@@ -238,7 +237,7 @@ export const researchAgent = new Agent({
     - Multiple perspectives
     - Relevant sources
     Be thorough but concise.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     weatherInfo, // Example tool for demonstration
   },
@@ -254,7 +253,7 @@ export const alternativeResearchAgent = new Agent({
   name: 'Alternative Research Agent',
   description: 'Alternative research agent (deprecated - use research-agent instead)',
   instructions: `You are a secondary research specialist. Note: This agent is deprecated in favor of the primary research-agent.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     weatherInfo,
   },
@@ -274,7 +273,7 @@ export const analysisAgent = new Agent({
     - Key insights
     - Actionable recommendations
     Focus on quality over quantity.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
 });
 
 /**
@@ -300,7 +299,7 @@ export const supervisorAgent = new Agent({
     4. Synthesize results into a comprehensive response
 
     Use the subagents effectively and iterate until the task is complete.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     researchAgent,
     alternativeResearchAgent,
@@ -496,7 +495,7 @@ const subscriptionSubAgent = new Agent({
     When creating a subscription, always confirm the details back to the user including the subscription ID.
     When updating, always confirm what was changed.
     Always be precise with subscription IDs.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     createSubscription,
     getSubscription,
@@ -513,7 +512,7 @@ const generalSubAgent = new Agent({
   instructions: `You are a helpful assistant that answers general questions about subscription services.
     You can explain different plan tiers, pricing structures, and policies.
     You do NOT have access to actual subscription data - for that, the user should be routed to the subscription management agent.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
 });
 
 /**
@@ -557,7 +556,7 @@ Use CoinGecko coin IDs (lowercase, hyphenated): "bitcoin", "ethereum", "solana",
 When the user asks to "research" or "analyze" a coin, use crypto-research.
 When they just want a price or quick stats, use crypto-price.
 You can handle both at the same time — start a background research while answering a quick price check.`,
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-5.4-mini',
   tools: {
     cryptoResearchTool,
     cryptoPriceTool,
@@ -568,12 +567,6 @@ You can handle both at the same time — start a background research while answe
       cryptoResearchTool: true,
     },
     waitTimeoutMs: 10000,
-    onTaskComplete: async task => {
-      console.log(`Tool ${task.toolName} completed, result: ${JSON.stringify(task.result)}`);
-    },
-    onTaskFailed: async task => {
-      console.log(`Tool ${task.toolName} failed, error: ${JSON.stringify(task.error)}`);
-    },
   },
 });
 
@@ -591,19 +584,19 @@ export const subscriptionOrchestratorAgent = new Agent({
     Route user requests to the appropriate sub-agent. For follow-up actions on the same subscription
     (e.g., "create a subscription" then "now upgrade it"), make sure to include relevant context
     like the subscription ID in your delegation prompt.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     subscriptionAgent: subscriptionSubAgent,
     generalAgent: generalSubAgent,
     cryptoResearchAgent,
   },
+  backgroundTasks: {
+    tools: {
+      cryptoResearchAgent: true,
+    },
+  },
   memory: new Memory(),
   defaultOptions: {
     maxSteps: 10,
   },
-  // backgroundTasks: {
-  //   tools: {
-  //     cryptoResearchAgent: true,
-  //   },
-  // },
 });

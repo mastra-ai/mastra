@@ -1,6 +1,6 @@
 {
   "name": "@mastra/posthog",
-  "version": "1.0.18",
+  "version": "1.0.23-alpha.1",
   "description": "PostHog observability provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "posthog-node": "^4.18.0"
+    "posthog-node": "^5.30.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

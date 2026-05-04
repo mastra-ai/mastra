@@ -12,7 +12,7 @@ import {
   Sections,
   SideDialog,
 } from '@mastra/playground-ui';
-import { AlertTriangleIcon, FileCodeIcon, FileInputIcon, FileOutputIcon, TargetIcon, XIcon } from 'lucide-react';
+import { FileCodeIcon, FileInputIcon, FileOutputIcon, TargetIcon, XIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
 
 type ComparisonItem = CompareExperimentsResponse['items'][number];
@@ -79,8 +79,7 @@ export function ComparisonItemPanel({
         </MainHeader>
 
         {!inBoth ? (
-          <Notice variant="warning">
-            <AlertTriangleIcon />
+          <Notice variant="warning" title="Comparison not available">
             <Notice.Message>
               {(() => {
                 const missingIn = baselineResult ? 'Contender' : 'Baseline';
@@ -88,7 +87,7 @@ export function ComparisonItemPanel({
                 return (
                   <>
                     The {missingIn} experiment was run against dataset{version != null ? ` v. ${version}` : ''}, which
-                    does not contain this item. Comparison is not available.
+                    does not contain this item.
                   </>
                 );
               })()}

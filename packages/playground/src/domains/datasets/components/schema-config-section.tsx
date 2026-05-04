@@ -1,9 +1,7 @@
 'use client';
 
 import {
-  Alert,
-  AlertTitle,
-  AlertDescription,
+  Notice,
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
@@ -169,9 +167,8 @@ export function SchemaConfigSection({
 
       <CollapsibleContent className="pt-4 space-y-4">
         {/* JSON Schema info notification */}
-        <Alert variant="info">
-          <AlertTitle>JSON Schema Format</AlertTitle>
-          <AlertDescription as="p">
+        <Notice variant="info" title="JSON Schema Format">
+          <Notice.Message>
             Schemas use{' '}
             <a
               href="https://json-schema.org/"
@@ -182,8 +179,8 @@ export function SchemaConfigSection({
               JSON Schema
             </a>{' '}
             for validation and type checking.
-          </AlertDescription>
-        </Alert>
+          </Notice.Message>
+        </Notice>
 
         {/* Source selector */}
         <div className="space-y-2">
