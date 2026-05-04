@@ -122,6 +122,26 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
     }
   }
 
+  // scope is stored as JSON-encoded text (Nullable(String)) -- match the
+  // semantics used by in-memory and DuckDB backends: every key/value in the
+  // filter object must equal the same key in the row's scope. JSON-encoded
+  // values (objects, arrays, numbers) are matched after JSON.stringify so a
+  // caller can pass either a stringified scalar or the original value.
+  if (filters?.scope != null && typeof filters.scope === 'object') {
+    let i = 0;
+    for (const [key, value] of Object.entries(filters.scope)) {
+      if (value === undefined) continue;
+      const normalized = typeof value === 'string' ? value : JSON.stringify(value);
+      if (normalized == null) continue;
+      const keyParam = `scope_k_${i}`;
+      const valParam = `scope_v_${i}`;
+      conditions.push(`JSONExtractString(scope, {${keyParam}:String}) = {${valParam}:String}`);
+      params[keyParam] = key;
+      params[valParam] = normalized;
+      i++;
+    }
+  }
+
   if (filters?.status === TraceStatus.ERROR) {
     conditions.push(`error IS NOT NULL`);
   } else if (filters?.status === TraceStatus.SUCCESS) {
@@ -169,7 +189,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
         ORDER BY dedupeKey
         LIMIT 1 BY dedupeKey
       )
-      ORDER BY ${sortField} ${sortDirection}
+      ORDER BY ${sortField} ${sortDirection}, dedupeKey ASC
       LIMIT {limit:UInt32}
       OFFSET {offset:UInt32}
     `,

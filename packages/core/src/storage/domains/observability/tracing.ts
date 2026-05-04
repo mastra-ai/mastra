@@ -354,12 +354,16 @@ export type GetBranchResponse = z.infer<typeof getBranchResponseSchema>;
 
 /**
  * Extracts the subtree rooted at `anchorSpanId` from a flat list of trace
- * spans. The anchor itself is included; descendants are walked via
- * `parentSpanId`. When `maxDepth` is provided, only that many levels of
+ * spans. The anchor itself is included as the first element; descendants are
+ * walked via `parentSpanId` and returned sorted by `startedAt` ascending after
+ * the anchor. When `maxDepth` is provided, only that many levels of
  * descendants are returned (anchor counts as depth 0).
  *
- * Returns spans sorted by `startedAt` ascending. Returns an empty array if
- * the anchor isn't in the input.
+ * Cycles in `parentSpanId` (which shouldn't happen in well-formed traces but
+ * could surface from corrupted data) are handled by tracking visited spanIds
+ * and skipping any span seen during this walk.
+ *
+ * Returns an empty array if the anchor isn't in the input.
  *
  * Generic over the span shape so it works on both full {@link SpanRecord}
  * lists (e.g. result of `getTrace`) and lightweight skeletons (result of
@@ -383,8 +387,10 @@ export function extractBranchSpans<
     }
   }
 
-  const result: T[] = [anchor];
-  // BFS so depth bounding is straightforward.
+  const visited = new Set<string>([anchor.spanId]);
+  const descendants: T[] = [];
+  // BFS so depth bounding is straightforward; visited set prevents
+  // infinite loops on malformed (cyclic) parent chains.
   let frontier: T[] = [anchor];
   let depth = 0;
   while (frontier.length > 0) {
@@ -392,19 +398,23 @@ export function extractBranchSpans<
     const next: T[] = [];
     for (const span of frontier) {
       const children = childrenByParent.get(span.spanId);
-      if (children) {
-        for (const child of children) {
-          result.push(child);
-          next.push(child);
-        }
+      if (!children) continue;
+      for (const child of children) {
+        if (visited.has(child.spanId)) continue;
+        visited.add(child.spanId);
+        descendants.push(child);
+        next.push(child);
       }
     }
     frontier = next;
     depth++;
   }
 
-  result.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
-  return result;
+  // Sort descendants by startedAt; keep the anchor at index 0 regardless of
+  // whether some descendant happens to have an earlier startedAt (clock skew,
+  // out-of-order isEvent spans, etc).
+  descendants.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  return [anchor, ...descendants];
 }
 
 // ============================================================================

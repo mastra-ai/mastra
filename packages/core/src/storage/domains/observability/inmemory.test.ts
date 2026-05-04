@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { EntityType, SpanType } from '../../../observability';
 import { InMemoryDB } from '../inmemory-db';
 import { ObservabilityInMemory } from './inmemory';
+import { extractBranchSpans } from './tracing';
 import type { CreateSpanRecord } from './tracing';
 
 describe('ObservabilityInMemory', () => {
@@ -985,6 +986,41 @@ describe('ObservabilityInMemory', () => {
     it('rooted at the trace root returns every span in the trace', async () => {
       const branch = await storage.getBranch({ traceId: 't1', spanId: 'root' });
       expect(branch!.spans).toHaveLength(7);
+    });
+  });
+
+  describe('extractBranchSpans (helper)', () => {
+    type Span = { spanId: string; parentSpanId: string | null; startedAt: Date };
+
+    it('keeps the anchor at index 0 even when a descendant has earlier startedAt', async () => {
+      // Anchor 'A' starts AFTER its child 'B' -- can happen with isEvent
+      // spans, clock skew, or out-of-order ingestion.
+      const spans: Span[] = [
+        { spanId: 'A', parentSpanId: 'root', startedAt: new Date('2026-01-02T12:00:05.000Z') },
+        { spanId: 'B', parentSpanId: 'A', startedAt: new Date('2026-01-02T12:00:01.000Z') },
+        { spanId: 'C', parentSpanId: 'A', startedAt: new Date('2026-01-02T12:00:09.000Z') },
+      ];
+      const branch = extractBranchSpans(spans, 'A');
+      expect(branch.map(s => s.spanId)).toEqual(['A', 'B', 'C']);
+    });
+
+    it('does not loop forever on a parentSpanId cycle', async () => {
+      // Cycle: A → B → C → B (corrupted data)
+      const spans: Span[] = [
+        { spanId: 'A', parentSpanId: null, startedAt: new Date('2026-01-02T12:00:00.000Z') },
+        { spanId: 'B', parentSpanId: 'A', startedAt: new Date('2026-01-02T12:00:01.000Z') },
+        { spanId: 'C', parentSpanId: 'B', startedAt: new Date('2026-01-02T12:00:02.000Z') },
+        // Reintroduces B as a child of C
+        { spanId: 'B-dup', parentSpanId: 'C', startedAt: new Date('2026-01-02T12:00:03.000Z') },
+      ];
+      // Even more pathological: C lists itself as its own parent.
+      spans.push({ spanId: 'C', parentSpanId: 'C', startedAt: new Date('2026-01-02T12:00:04.000Z') });
+
+      const branch = extractBranchSpans(spans, 'A');
+      // Anchor first; each spanId visited at most once.
+      const visited = new Set(branch.map(s => s.spanId));
+      expect(visited.size).toBe(branch.length);
+      expect(branch[0]!.spanId).toBe('A');
     });
   });
 

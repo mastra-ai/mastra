@@ -212,25 +212,38 @@ export class ObservabilityStorage extends StorageDomain {
    * metadata, tags, links) excluded. Intended for waterfall/timeline rendering
    * where the full payload would be wasteful.
    *
-   * Default implementation forwards to {@link getTraceLight} for backwards
-   * compatibility; backends should override either method (a single
-   * implementation is enough since the response shape is identical).
+   * Default implementation forwards to {@link getTraceLight} (the legacy
+   * override surface). Backends should override either method -- the response
+   * shape is identical, and the unimplemented one delegates to the
+   * implemented one. The cycle guard is what makes that safe.
    */
   async getStructure(args: GetTraceArgs): Promise<GetStructureResponse | null> {
+    if (this.getTraceLight === ObservabilityStorage.prototype.getTraceLight) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_STORAGE_GET_STRUCTURE_NOT_IMPLEMENTED',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.SYSTEM,
+        text: 'This storage provider does not support getting trace structure',
+      });
+    }
     return this.getTraceLight(args);
   }
 
   /**
-   * @deprecated Use {@link getStructure} instead. Retained as the legacy
-   * override surface for storage providers that haven't yet migrated.
+   * @deprecated Use {@link getStructure} instead. Default implementation
+   * forwards to {@link getStructure} so backends that only override the
+   * canonical name still work for legacy callers.
    */
-  async getTraceLight(_args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
-    throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_GET_TRACE_LIGHT_NOT_IMPLEMENTED',
-      domain: ErrorDomain.MASTRA_OBSERVABILITY,
-      category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support getting lightweight traces',
-    });
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    if (this.getStructure === ObservabilityStorage.prototype.getStructure) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_STORAGE_GET_TRACE_LIGHT_NOT_IMPLEMENTED',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.SYSTEM,
+        text: 'This storage provider does not support getting lightweight traces',
+      });
+    }
+    return this.getStructure(args);
   }
 
   /**

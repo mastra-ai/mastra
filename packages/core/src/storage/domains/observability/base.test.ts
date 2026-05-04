@@ -91,16 +91,18 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support tag discovery',
     },
 
-    // Traces
+    // Traces -- {get,Trace}Light and getStructure each throw a distinct
+    // not-implemented error on a bare base class (overriding either is
+    // covered separately by the bidirectional-forwarding describe block).
     {
       name: 'getTraceLight',
       callThunk: () => storage.getTraceLight({ traceId: 'test' }),
       expectedMessage: 'does not support getting lightweight traces',
     },
     {
-      name: 'getStructure (forwards to getTraceLight default)',
+      name: 'getStructure',
       callThunk: () => storage.getStructure({ traceId: 'test' }),
-      expectedMessage: 'does not support getting lightweight traces',
+      expectedMessage: 'does not support getting trace structure',
     },
     {
       name: 'listBranches',
@@ -201,5 +203,53 @@ describe('ObservabilityStorage base class', () => {
 
   it.each(methodCases)('$name throws not-implemented', async ({ callThunk, expectedMessage }) => {
     await expect(callThunk()).rejects.toThrow(expectedMessage);
+  });
+
+  describe('getStructure / getTraceLight bidirectional forwarding', () => {
+    const fakeResponse = {
+      traceId: 't1',
+      spans: [
+        {
+          traceId: 't1',
+          spanId: 's1',
+          parentSpanId: null,
+          name: 'root',
+          spanType: 'agent_run' as const,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:00:00Z'),
+          endedAt: new Date('2026-01-01T00:00:01Z'),
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          updatedAt: null,
+        },
+      ],
+    };
+
+    it('a backend overriding only getStructure resolves both methods', async () => {
+      class StructureOnly extends ObservabilityStorage {
+        override async getStructure() {
+          return fakeResponse;
+        }
+      }
+      const s = new StructureOnly();
+      await expect(s.getStructure({ traceId: 't1' })).resolves.toEqual(fakeResponse);
+      await expect(s.getTraceLight({ traceId: 't1' })).resolves.toEqual(fakeResponse);
+    });
+
+    it('a backend overriding only getTraceLight resolves both methods', async () => {
+      class LightOnly extends ObservabilityStorage {
+        override async getTraceLight() {
+          return fakeResponse;
+        }
+      }
+      const s = new LightOnly();
+      await expect(s.getTraceLight({ traceId: 't1' })).resolves.toEqual(fakeResponse);
+      await expect(s.getStructure({ traceId: 't1' })).resolves.toEqual(fakeResponse);
+    });
+
+    it('a backend overriding neither throws on both with distinct error ids', async () => {
+      const s = new ObservabilityStorage();
+      await expect(s.getStructure({ traceId: 't1' })).rejects.toThrow('does not support getting trace structure');
+      await expect(s.getTraceLight({ traceId: 't1' })).rejects.toThrow('does not support getting lightweight traces');
+    });
   });
 });
