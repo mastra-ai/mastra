@@ -173,6 +173,9 @@ describe('suspend output validation edge cases', () => {
       id: 'suspend-empty-string',
       description: 'test suspend empty string',
       suspendSchema: z.any(),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
       execute: async (_input, context: any) => {
         context.suspend('');
         return undefined;
@@ -192,6 +195,9 @@ describe('suspend output validation edge cases', () => {
       id: 'suspend-zero',
       description: 'test suspend zero',
       suspendSchema: z.any(),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
       execute: async (_input, context: any) => {
         context.suspend(0);
         return undefined;
