@@ -179,9 +179,14 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 isComposingRef.current = false;
               }}
               onKeyDown={e => {
-                // Block Enter from propagating to ComposerPrimitive.Input's submit handler
+                // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
                 // while an IME composition session is active (e.g. Chinese pinyin).
-                if (e.key === 'Enter' && isComposingRef.current) {
+                // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
+                // not prevent the primitive's onKeyDown from running on the same element —
+                // preventDefault() is required. e.nativeEvent.isComposing is added as a
+                // defensive fallback for browsers/timings where compositionend has already fired.
+                if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
+                  e.preventDefault();
                   e.stopPropagation();
                 }
               }}
