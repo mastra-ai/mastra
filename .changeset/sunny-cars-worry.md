@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Show an info Notice on the trace data panel when neither `onEvaluateTrace` nor `onSaveAsDatasetItem` is provided, telling the user those actions are available in Mastra Studio (local or deployed).
+Added an informational notice on the trace data panel pointing users to Mastra Studio (local or deployed) when "Evaluate Trace" and "Save as Dataset Item" actions are not available in the current view.

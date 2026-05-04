@@ -189,8 +189,7 @@ export function TraceDataPanelView({
             {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && (
               <Notice variant="info" className="mb-6">
                 <Notice.Message>
-                  Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                  deployed).
+                  Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).
                 </Notice.Message>
               </Notice>
             )}
