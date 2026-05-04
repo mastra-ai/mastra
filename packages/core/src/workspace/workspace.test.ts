@@ -2422,15 +2422,6 @@ Line 3 conclusion`;
       ).toThrow('Cannot use "mounts" with a dynamic sandbox resolver');
     });
 
-    it('should throw when a class constructor is passed instead of an instance or resolver', () => {
-      expect(
-        () =>
-          new Workspace({
-            sandbox: LocalSandbox as any,
-          }),
-      ).toThrow('class constructor');
-    });
-
     it('should warn and disable LSP when combined with a sandbox resolver', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {

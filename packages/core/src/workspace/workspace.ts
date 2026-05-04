@@ -513,13 +513,6 @@ export class Workspace<
     this._config = config;
 
     if (typeof config.sandbox === 'function') {
-      if (/^class\s/.test(Function.prototype.toString.call(config.sandbox))) {
-        throw new WorkspaceError(
-          'sandbox received a class constructor instead of an instance or resolver function. ' +
-            'Pass an instance (e.g., new LocalSandbox(...)) or a resolver function (({ requestContext }) => sandbox).',
-          'INVALID_CONFIG',
-        );
-      }
       this._sandboxResolver = config.sandbox as WorkspaceSandboxResolver;
     } else {
       this._sandbox = config.sandbox;
