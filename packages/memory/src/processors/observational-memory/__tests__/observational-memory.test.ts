@@ -7308,7 +7308,7 @@ describe('Model Requirement', () => {
     ).toThrow('Please bump @mastra/core to a newer version');
   });
 
-  it('should throw when no model is provided at all', () => {
+  it('should use the default model when no model is provided', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -7317,19 +7317,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
-    ).toThrow('Observational Memory requires a model to be set');
-  });
-
-  it('should include docs link in model error', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          observation: { messageTokens: 50000 },
-          reflection: { observationTokens: 20000 },
-        }),
-    ).toThrow('https://mastra.ai/docs/memory/observational-memory#models');
+    ).not.toThrow();
   });
 
   it('should accept a top-level model', () => {
