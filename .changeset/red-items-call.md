@@ -1,6 +1,7 @@
 ---
 '@mastra/core': minor
 '@mastra/clickhouse': minor
+'@mastra/duckdb': minor
 ---
 
 **Added** `listBranches` and `getBranch` for querying named-entity invocations across traces, including nested ones. `listTraces` only returns root-rooted traces, so an entity that always runs as a child (e.g., an `Observer` agent inside a workflow) wasn't queryable before.
@@ -19,4 +20,4 @@ const branch = await store.getBranch({ traceId, spanId, depth: 1 });
 
 **Added** `getStructure({ traceId })` (canonical name for the lightweight trace skeleton; `getTraceLight` retained as a deprecated alias) and `getSpans({ traceId, spanIds })` (batch-fetch spans by id).
 
-ClickHouse implements `listBranches` and `getSpans`. Other backends throw "not implemented" for both; follow-ups will add per-backend implementations.
+ClickHouse and DuckDB implement `listBranches` and `getSpans`. Other backends throw "not implemented" for both; follow-ups will add per-backend implementations.
