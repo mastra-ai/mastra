@@ -1261,15 +1261,7 @@ export function MastraRuntimeProvider({
       }
 
       if (isSupportedModel) {
-        setStreamErrors(prev => [
-          ...prev,
-          {
-            id: `error-thrown-${Date.now()}`,
-            role: 'assistant',
-            parts: [{ type: 'text', text: `${error}` }],
-            metadata: { status: 'error' },
-          } as MastraUIMessage,
-        ]);
+        setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
       } else {
         setLegacyMessages(currentConversation => [
           ...currentConversation,

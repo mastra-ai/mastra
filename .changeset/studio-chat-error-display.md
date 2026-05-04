@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Fix Studio chat swallowing API errors. When an agent stream emits an `error` chunk (or `sendMessage` throws), the resulting error message is now persisted in a state that survives the post-stream `initialMessages` refetch, so the chat UI consistently surfaces the failure instead of clearing it.
+Studio chat now reliably surfaces agent API errors (such as an invalid OpenAI key) as a red error notice in the conversation, instead of silently clearing the failure from the UI.
