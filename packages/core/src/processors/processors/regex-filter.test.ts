@@ -361,7 +361,7 @@ describe('RegexFilterProcessor', () => {
         strategy: 'block',
       });
 
-      const args = createInputArgs([createMessage('api_key: sk_live_abc123def456ghi789jkl012')]);
+      const args = createInputArgs([createMessage('api_key: example_api_key_abc123def456ghi789jkl012')]);
       expect(() => filter.processInput(args)).toThrow(TripWire);
     });
 

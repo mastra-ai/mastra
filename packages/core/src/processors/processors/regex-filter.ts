@@ -201,6 +201,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
       while ((m = regex.exec(text)) !== null) {
         matches.push({ rule: rule.name, match: m[0], index: m.index });
         if (!regex.global) break;
+        if (m[0].length === 0) {
+          regex.lastIndex++;
+        }
       }
     }
     return matches;
