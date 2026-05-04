@@ -29,6 +29,11 @@ class TestableMemory extends Memory {
   }
 }
 
+function getTextParts(message: MastraDBMessage): string[] {
+  const parts = Array.isArray(message.content.parts) ? message.content.parts : [];
+  return parts.filter(part => part.type === 'text').map(part => part.text);
+}
+
 describe('Memory', () => {
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
@@ -128,6 +133,49 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
     });
 
+    it('should not drop messages with empty parts array but valid content.content (issue #13824)', () => {
+      const message: MastraDBMessage = {
+        id: 'test-empty-parts',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'Hello from a real message',
+          experimental_attachments: [],
+          parts: [],
+        },
+      };
+
+      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+
+      // The message has legitimate text in content.content — it must NOT be dropped
+      expect(result).not.toBeNull();
+      expect(result?.content.content).toBe('Hello from a real message');
+    });
+
+    it('should not drop assistant messages with empty parts array but valid content.content (issue #13824)', () => {
+      const message: MastraDBMessage = {
+        id: 'test-empty-parts-assistant',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'I am the assistant reply',
+          experimental_attachments: [],
+          parts: [],
+        },
+      };
+
+      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+
+      expect(result).not.toBeNull();
+      expect(result?.content.content).toBe('I am the assistant reply');
+    });
+
     it('should filter out updateWorkingMemory tool invocations', () => {
       const message: MastraDBMessage = {
         id: 'test-7',
@@ -156,6 +204,71 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
       expect(result?.content.parts).toHaveLength(1);
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Let me update memory' });
+    });
+  });
+
+  describe('saveMessages with empty parts array (issue #13824)', () => {
+    let memory: Memory;
+
+    beforeEach(() => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+      });
+    });
+
+    it('should save messages that have content.content but empty parts array', async () => {
+      const threadId = 'thread-save-test';
+      const resourceId = 'resource-save-test';
+
+      await memory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'save-msg-1',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: {
+            format: 2,
+            content: 'Hello from user',
+            experimental_attachments: [],
+            parts: [],
+          },
+        },
+        {
+          id: 'save-msg-2',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: {
+            format: 2,
+            content: 'Hello from assistant',
+            experimental_attachments: [],
+            parts: [],
+          },
+        },
+      ];
+
+      const result = await memory.saveMessages({ messages });
+
+      // Messages must not be silently dropped
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages).toHaveLength(2);
+
+      const recalled = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(2);
+      expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
+      expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
   });
 
@@ -1730,6 +1843,98 @@ describe('Memory', () => {
       await memory.saveMessages({ messages });
     });
 
+    it('filters system reminder user messages from recall() by default', async () => {
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/memory/AGENTS.md">Memory guidance</system-reminder>';
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-reminder-metadata',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                dynamicAgentsMdReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+          {
+            id: 'msg-reminder-legacy',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                systemReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:07:00Z'),
+          },
+        ],
+      });
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(result.messages.map(message => message.id)).not.toContain('msg-reminder-metadata');
+      expect(result.messages.map(message => message.id)).not.toContain('msg-reminder-legacy');
+    });
+
+    it('includes system reminder user messages when includeSystemReminders is true', async () => {
+      const reminderMarkup =
+        '<system-reminder type="dynamic-agents-md" path="/repo/packages/memory/AGENTS.md">Memory guidance</system-reminder>';
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-reminder-visible',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: reminderMarkup }],
+              metadata: {
+                dynamicAgentsMdReminder: {
+                  path: '/repo/packages/memory/AGENTS.md',
+                  type: 'dynamic-agents-md',
+                },
+              },
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+        ],
+      });
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+        includeSystemReminders: true,
+      });
+
+      expect(result.messages.map(message => message.id)).toContain('msg-reminder-visible');
+      expect(getTextParts(result.messages.find(message => message.id === 'msg-reminder-visible')!)).toContain(
+        reminderMarkup,
+      );
+    });
+
     it('should return pagination metadata from recall()', async () => {
       const result = await memory.recall({
         threadId,
@@ -1757,6 +1962,151 @@ describe('Memory', () => {
       expect(result.messages).toHaveLength(5);
       expect(result).toHaveProperty('total', 5);
       expect(result).toHaveProperty('hasMore', false);
+    });
+  });
+
+  describe('lastMessages: false (disable conversation history)', () => {
+    let memory: Memory;
+    const resourceId = 'test-resource';
+    const threadId = 'test-thread-lm-false';
+
+    beforeEach(async () => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          lastMessages: false,
+        },
+      });
+
+      // Create a thread and seed it with messages
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-1',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'msg-2',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+          {
+            id: 'msg-3',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'How are you?' }] },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+    });
+
+    it('recall() should return empty messages with valid pagination metadata when lastMessages: false', async () => {
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(0);
+      expect(result).toHaveProperty('total', 0);
+      expect(result).toHaveProperty('page', 0);
+      expect(result).toHaveProperty('perPage', 0);
+      expect(result).toHaveProperty('hasMore', false);
+    });
+
+    it('recall() should return empty when lastMessages: false even if thread has many messages', async () => {
+      // Add more messages
+      for (let i = 4; i <= 20; i++) {
+        await memory.saveMessages({
+          messages: [
+            {
+              id: `msg-${i}`,
+              threadId,
+              resourceId,
+              role: i % 2 === 0 ? 'user' : 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+              createdAt: new Date(`2024-01-01T10:${String(i).padStart(2, '0')}:00Z`),
+            },
+          ],
+        });
+      }
+
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('recall() with explicit perPage override should still work', async () => {
+      // When perPage is explicitly passed (e.g., from playground listing messages),
+      // it should override the config and return messages
+      const result = await memory.recall({ threadId, resourceId, perPage: false });
+
+      // perPage: false explicitly = "no limit, return all"
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages).toHaveLength(3);
+    });
+
+    it('recall() with explicit perPage number should work', async () => {
+      const result = await memory.recall({ threadId, resourceId, perPage: 2 });
+
+      expect(result.messages).toHaveLength(2);
+    });
+
+    it('threadConfig should preserve lastMessages: false after construction', () => {
+      const config = memory.getMergedThreadConfig();
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('threadConfig should preserve lastMessages: false when merging with empty config', () => {
+      const config = memory.getMergedThreadConfig({});
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('threadConfig should preserve lastMessages: false when merging with unrelated options', () => {
+      const config = memory.getMergedThreadConfig({
+        workingMemory: { enabled: false },
+      });
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('per-request config can override lastMessages: false back to a number', () => {
+      const config = memory.getMergedThreadConfig({
+        lastMessages: 10,
+      });
+
+      expect(config.lastMessages).toBe(10);
+    });
+
+    it('getInputProcessors should return no MessageHistory processor when lastMessages: false', async () => {
+      const processors = await memory.getInputProcessors();
+
+      const messageHistoryProcessor = processors.find(p => p.id === 'message-history');
+      expect(messageHistoryProcessor).toBeUndefined();
+    });
+
+    it('getOutputProcessors should return no MessageHistory processor when lastMessages: false', async () => {
+      const processors = await memory.getOutputProcessors();
+
+      const messageHistoryProcessor = processors.find(p => p.id === 'message-history');
+      expect(messageHistoryProcessor).toBeUndefined();
     });
   });
 
@@ -1895,6 +2245,175 @@ describe('Memory', () => {
           filter: { message_id: { $in: messageIds.slice(100, 150) } },
         });
       });
+    });
+  });
+
+  describe('Memory tracing', () => {
+    function createMockSpan() {
+      const childSpan = {
+        end: vi.fn(),
+        error: vi.fn(),
+      };
+      const parentSpan = {
+        createChildSpan: vi.fn().mockReturnValue(childSpan),
+      };
+      return { parentSpan, childSpan };
+    }
+
+    function createTracedMemory() {
+      const store = new InMemoryStore();
+      const memory = new Memory({ storage: store });
+      return memory;
+    }
+
+    async function seedThread(memory: Memory, threadId: string, resourceId: string) {
+      await memory.createThread({ threadId, resourceId });
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
+        },
+      ];
+      await memory.saveMessages({ messages });
+      return messages;
+    }
+
+    it('recall creates a span and ends it with message count on success', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await seedThread(memory, 'thread-1', 'resource-1');
+
+      const result = await memory.recall({
+        threadId: 'thread-1',
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+      });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.type).toBe('memory_operation');
+      expect(spanArgs.attributes.operationType).toBe('recall');
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      const endArgs = childSpan.end.mock.calls[0][0];
+      expect(endArgs.output.success).toBe(true);
+      expect(endArgs.attributes.messageCount).toBe(result.messages.length);
+    });
+
+    it('recall records error on span when it fails', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      // Recall on a non-existent thread with resourceId triggers validation error
+      await expect(
+        memory.recall({
+          threadId: 'nonexistent',
+          resourceId: 'res-1',
+          observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+        }),
+      ).rejects.toThrow();
+
+      expect(childSpan.error).toHaveBeenCalledTimes(1);
+      expect(childSpan.error.mock.calls[0][0].endSpan).toBe(true);
+    });
+
+    it('saveMessages creates a span and ends it with correct attributes', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await memory.createThread({ threadId: 'thread-2', resourceId: 'resource-2' });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-save-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId: 'thread-2',
+          resourceId: 'resource-2',
+          content: { format: 2, parts: [{ type: 'text', text: 'Test message' }] },
+        },
+      ];
+
+      await memory.saveMessages({
+        messages,
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+      });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.attributes.operationType).toBe('save');
+      expect(spanArgs.attributes.messageCount).toBe(1);
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
+    });
+
+    it('deleteMessages creates a span and ends it with message count', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await seedThread(memory, 'thread-del', 'resource-del');
+
+      await memory.deleteMessages(['msg-1'], { tracingContext: { currentSpan: parentSpan as any } });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.attributes.operationType).toBe('delete');
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
+      expect(childSpan.end.mock.calls[0][0].attributes.messageCount).toBe(1);
+    });
+
+    it('updateWorkingMemory creates a span and ends it on success', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, scope: 'thread' } },
+      });
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await memory.createThread({ threadId: 'thread-wm', resourceId: 'resource-wm' });
+
+      await memory.updateWorkingMemory({
+        threadId: 'thread-wm',
+        workingMemory: 'updated memory content',
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+      });
+
+      expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
+      expect(spanArgs.attributes.operationType).toBe('update');
+
+      expect(childSpan.end).toHaveBeenCalledTimes(1);
+      expect(childSpan.end.mock.calls[0][0].output.success).toBe(true);
+    });
+
+    it('updateWorkingMemory throws without creating a span when working memory is disabled', async () => {
+      const memory = createTracedMemory();
+      const { parentSpan, childSpan } = createMockSpan();
+
+      await expect(
+        memory.updateWorkingMemory({
+          threadId: 'thread-fail',
+          workingMemory: 'data',
+          observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
+        }),
+      ).rejects.toThrow('Working memory is not enabled');
+
+      expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+      expect(childSpan.error).not.toHaveBeenCalled();
     });
   });
 });

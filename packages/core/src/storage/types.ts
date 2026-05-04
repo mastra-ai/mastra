@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
@@ -981,6 +981,8 @@ export interface BufferedObservationChunk {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1003,6 +1005,8 @@ export interface BufferedObservationChunkInput {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1016,6 +1020,17 @@ export interface BufferedObservationChunkInput {
  * - lastReflectionAt: createdAt of most recent reflection record
  * - previousGeneration: record with next-oldest createdAt
  */
+
+/** Options for filtering observational memory history queries. */
+export interface ObservationalMemoryHistoryOptions {
+  /** Only return records created at or after this date */
+  from?: Date;
+  /** Only return records created at or before this date */
+  to?: Date;
+  /** Number of records to skip (for pagination) */
+  offset?: number;
+}
+
 export interface ObservationalMemoryRecord {
   // Identity
   /** Unique record ID */
@@ -1223,6 +1238,13 @@ export interface SwapBufferedToActiveInput {
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
    */
   lastObservedAt?: Date;
+  /**
+   * Refreshed buffered chunks with up-to-date messageTokens.
+   * When provided, the storage layer uses these instead of the persisted chunks
+   * for activation boundary selection, so stale token weights don't cause
+   * over- or under-activation.
+   */
+  bufferedChunks?: BufferedObservationChunk[];
 }
 
 /**
@@ -1298,6 +1320,15 @@ export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+}
+
+/**
+ * Input for updating the config of an existing observational memory record.
+ * The provided config is deep-merged into the record's existing config.
+ */
+export interface UpdateObservationalMemoryConfigInput {
+  id: string;
+  config: Record<string, unknown>;
 }
 
 // ============================================
@@ -1986,6 +2017,16 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
@@ -2010,18 +2051,56 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 
 /**
  * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
- * Zod 3 uses _def.checks, Zod 4 uses _zod.def.checks.
+ * Zod 3 uses _def.checks with {kind: "..."} objects
+ * Zod 4 uses _zod.def.checks with {def: {check: "...", format: "..."}} objects
  */
 function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
-  const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.checks) {
-    return schemaAny._zod.def.checks;
+  // Zod 4 structure: checks have def.check instead of kind
+  if ('_zod' in schema) {
+    const zodV4 = schema as { _zod?: { def?: { checks?: unknown[] } } };
+    const checks = zodV4._zod?.def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks.map((check: unknown) => {
+        // Type guard for Zod v4 check structure
+        if (
+          typeof check === 'object' &&
+          check !== null &&
+          'def' in check &&
+          typeof check.def === 'object' &&
+          check.def !== null
+        ) {
+          const def = check.def as Record<string, unknown>;
+
+          // For number checks in Zod 4, format:"safeint" means int()
+          if (def.check === 'number_format' && def.format === 'safeint') {
+            return { kind: 'int' };
+          }
+
+          // For string checks in Zod 4, check type is the format name
+          if (def.check === 'string_format' && typeof def.format === 'string') {
+            return { kind: def.format }; // e.g., "uuid", "email", etc.
+          }
+
+          // Generic mapping: use the check type as kind
+          return { kind: typeof def.check === 'string' ? def.check : 'unknown' };
+        }
+
+        return { kind: 'unknown' };
+      });
+    }
   }
-  // Zod 3 structure
-  if (schemaAny._def?.checks) {
-    return schemaAny._def.checks;
+
+  // Zod 3 structure: checks already have kind property
+  if ('_def' in schema) {
+    const zodV3 = schema as { _def?: { checks?: Array<{ kind: string }> } };
+    const checks = zodV3._def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks;
+    }
   }
+
   return [];
 }
 
@@ -2044,7 +2123,8 @@ function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
     const checks = getZodChecks(schema);
     return checks.some(c => c.kind === 'int') ? 'integer' : 'float';
   }
-  if (typeName === 'ZodBigInt') {
+  // Both ZodBigInt (v3) and ZodBigint (v4) should map to bigint
+  if (typeName === 'ZodBigInt' || typeName === 'ZodBigint') {
     return 'bigint';
   }
   if (typeName === 'ZodDate') {
@@ -2092,9 +2172,19 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: TargetType | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
 }
 
 export interface DatasetItem {
@@ -2103,7 +2193,10 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2116,7 +2209,10 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2136,6 +2232,10 @@ export interface CreateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  targetType?: TargetType;
+  targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2145,13 +2245,21 @@ export interface UpdateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[] | null;
+  targetType?: TargetType | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface UpdateDatasetItemInput {
@@ -2159,7 +2267,10 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface ListDatasetsInput {
@@ -2198,7 +2309,10 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }>;
 }
 
@@ -2227,11 +2341,14 @@ export interface Experiment {
   succeededCount: number;
   failedCount: number;
   skippedCount: number;
+  agentVersion?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type ExperimentResultStatus = 'needs-review' | 'reviewed' | 'complete';
 
 export interface ExperimentResult {
   id: string;
@@ -2246,7 +2363,17 @@ export interface ExperimentResult {
   completedAt: Date;
   retryCount: number;
   traceId: string | null;
+  status: ExperimentResultStatus | null;
+  tags: string[] | null;
   createdAt: Date;
+}
+
+export interface UpdateExperimentResultInput {
+  id: string;
+  /** When provided, the update will only succeed if the result belongs to this experiment */
+  experimentId?: string;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface CreateExperimentInput {
@@ -2256,6 +2383,7 @@ export interface CreateExperimentInput {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion?: string;
   targetType: TargetType;
   targetId: string;
   totalItems: number;
@@ -2288,10 +2416,16 @@ export interface AddExperimentResultInput {
   completedAt: Date;
   retryCount: number;
   traceId?: string | null;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface ListExperimentsInput {
   datasetId?: string;
+  targetType?: TargetType;
+  targetId?: string;
+  agentVersion?: string;
+  status?: ExperimentStatus;
   pagination: StoragePagination;
 }
 
@@ -2302,10 +2436,20 @@ export interface ListExperimentsOutput {
 
 export interface ListExperimentResultsInput {
   experimentId: string;
+  traceId?: string;
+  status?: ExperimentResultStatus;
   pagination: StoragePagination;
 }
 
 export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

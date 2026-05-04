@@ -22,7 +22,7 @@ export const contentAgent = new Agent({
     
     Always provide constructive, actionable feedback.
   `,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -31,7 +31,7 @@ export const contentAgent = new Agent({
 - **Name**: Unique identifier for the agent
 - **Description**: What the agent does
 - **Instructions**: Detailed prompts that guide the AI's behavior
-- **Model**: Which AI model to use (GPT-4.1-mini is fast and cost-effective)
+- **Model**: Which AI model to use
 
 ## Registering and Testing Your Agent
 

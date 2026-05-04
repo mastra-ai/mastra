@@ -18,7 +18,7 @@ import type {
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
-import { isDevPlaygroundRequest } from '../auth/helpers';
+import { supportsSessionRefresh } from '../auth/helpers';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -27,11 +27,12 @@ import {
   currentUserResponseSchema,
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
+  refreshResponseSchema,
 } from '../schemas/auth';
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
-type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any }) => Promise<any>;
+type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any; apiPrefix?: string }) => Promise<any>;
 let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
 function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   if (!_buildCapabilitiesPromise) {
@@ -65,16 +66,35 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 
 /**
  * Get the public-facing origin from a request, respecting reverse proxy headers.
- * Behind a proxy (e.g. edge router), request.url contains the internal hostname.
- * X-Forwarded-Host tells us the real public hostname.
- * Always uses https when behind a proxy — Knative's queue-proxy overwrites
- * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
+ * Behind a proxy (e.g. edge router), request.url contains the internal hostname,
+ * so we rely on forwarded headers to reconstruct the real public origin.
+ *
+ * Assumes the server is behind a trusted proxy (or running locally). When
+ * exposed directly to untrusted clients, the Host header is attacker-controlled
+ * and must be validated upstream.
+ *
+ * Priority:
+ * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS. Knative's
+ *    queue-proxy overwrites X-Forwarded-Proto based on the internal HTTP
+ *    connection, so X-Forwarded-Proto is ignored here.
+ * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto.
+ * 3. Host header alone → use the scheme from request.url (covers both direct
+ *    HTTP access and proxies that preserve Host but don't set a proto header).
+ * 4. No Host header → fall back to request.url.origin (local dev / direct access).
  */
-function getPublicOrigin(request: Request): string {
-  const forwardedHost = request.headers.get('x-forwarded-host');
+export function getPublicOrigin(request: Request): string {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (forwardedHost) {
     return `https://${forwardedHost}`;
   }
+
+  const host = request.headers.get('host');
+  if (host) {
+    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
+    return `${proto}://${host}`;
+  }
+
   return new URL(request.url).origin;
 }
 
@@ -108,26 +128,56 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, request } = ctx as any;
+      const { mastra, request, routePrefix } = ctx as any;
 
-      // In dev playground mode, return auth as disabled so the UI doesn't show login gates.
-      // The server already bypasses auth for dev playground requests, so the UI should match.
-      const serverConfig = mastra.getServer?.();
-      const authConfig = serverConfig?.auth || {};
-      const getHeader = (name: string) => request.headers.get(name) ?? undefined;
+      const auth = getAuthProvider(mastra);
 
-      if (isDevPlaygroundRequest('/api/auth/capabilities', 'GET', getHeader, authConfig)) {
+      if (!auth) {
         return { enabled: false, login: null };
       }
 
-      const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
       const buildCapabilities = await loadBuildCapabilities();
       if (!buildCapabilities) {
         return { enabled: false, login: null };
       }
-      const capabilities = await buildCapabilities(auth, request, { rbac });
+      const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
+
+      // If capabilities came back without a user, the session may have expired.
+      // Attempt a transparent refresh (same logic as coreAuthMiddleware) and retry.
+      if (!('user' in capabilities) && supportsSessionRefresh(auth)) {
+        try {
+          const sessionId = await auth.getSessionIdFromRequest(request);
+          if (sessionId) {
+            const refreshedSession = await auth.refreshSession(sessionId);
+            if (refreshedSession) {
+              const sessionHeaders = await auth.getSessionHeaders(refreshedSession);
+              const cookieValue = extractCookieFromHeaders(sessionHeaders);
+              if (cookieValue) {
+                // Rebuild capabilities with the refreshed cookie
+                const refreshedRequest = new Request(request.url, {
+                  method: request.method,
+                  headers: new Headers(request.headers),
+                });
+                refreshedRequest.headers.set('Cookie', cookieValue);
+                const refreshedCapabilities = await buildCapabilities(auth, refreshedRequest, {
+                  rbac,
+                  apiPrefix: routePrefix,
+                });
+
+                // Attach refresh headers so the adapter can set the new cookie
+                if ('user' in refreshedCapabilities) {
+                  (refreshedCapabilities as any).__refreshHeaders = sessionHeaders;
+                }
+                return refreshedCapabilities;
+              }
+            }
+          }
+        } catch {
+          // Refresh failed — return original unauthenticated capabilities
+        }
+      }
 
       return capabilities;
     } catch (error) {
@@ -135,6 +185,17 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
     }
   },
 });
+
+/**
+ * Extract a full cookie string from session headers (e.g. Set-Cookie → Cookie).
+ */
+function extractCookieFromHeaders(headers: Record<string, string>): string | null {
+  const setCookie = headers['Set-Cookie'] || headers['set-cookie'];
+  if (!setCookie) return null;
+  // Set-Cookie value is "name=value; Path=/; ..." — extract "name=value"
+  const match = setCookie.match(/^([^;]+)/);
+  return match ? (match[1] ?? null) : null;
+}
 
 // ============================================================================
 // GET /auth/me
@@ -202,21 +263,49 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, redirect_uri, request } = ctx as any;
+      const { mastra, redirect_uri, request, routePrefix } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
         throw new HTTPException(404, { message: 'SSO not configured' });
       }
 
-      // Build OAuth callback URI (always /api/auth/sso/callback)
+      // Build OAuth callback URI using the configured route prefix
       const origin = getPublicOrigin(request);
-      const oauthCallbackUri = `${origin}/api/auth/sso/callback`;
+      const raw = ((routePrefix as string) || '/api').trim();
+      const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+      const prefix = withSlash.endsWith('/') ? withSlash.slice(0, -1) : withSlash;
+      const oauthCallbackUri = `${origin}${prefix}/auth/sso/callback`;
 
       // Encode the post-login redirect in state (where user goes after auth completes)
       // State format: uuid|postLoginRedirect
+      // Validate redirect_uri to prevent open-redirect attacks: allow relative paths,
+      // same-origin URLs, and localhost URLs (for dev setups where Studio runs on a
+      // different port).
+      let postLoginRedirect = '/';
+      if (redirect_uri) {
+        if (!redirect_uri.startsWith('http')) {
+          // Relative path — always safe
+          postLoginRedirect = redirect_uri;
+        } else {
+          try {
+            const redirectUrl = new URL(redirect_uri);
+            const requestOrigin = new URL(origin);
+            const isHttps = redirectUrl.protocol === 'http:' || redirectUrl.protocol === 'https:';
+            const isSameOrigin = redirectUrl.origin === requestOrigin.origin;
+            const isLocalhost =
+              redirectUrl.hostname === 'localhost' ||
+              redirectUrl.hostname === '127.0.0.1' ||
+              redirectUrl.hostname === '[::1]';
+            if (isHttps && (isSameOrigin || isLocalhost)) {
+              postLoginRedirect = redirect_uri;
+            }
+          } catch {
+            // Malformed URL — fall back to /
+          }
+        }
+      }
       const stateId = crypto.randomUUID();
-      const postLoginRedirect = redirect_uri || '/';
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
       const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
@@ -273,14 +362,20 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
       }
     }
 
-    // Build absolute redirect URL, preventing open redirects to external origins
+    // Build absolute redirect URL.
+    // The redirect_uri was validated at the login endpoint (same-origin or localhost
+    // only), so the state should only contain safe URLs. We still apply defense-in-depth
+    // checks here: allow http(s) same-origin or localhost, reject everything else.
     let absoluteRedirect: string;
     if (redirectTo.startsWith('http')) {
       try {
-        const redirectUrl = new URL(redirectTo);
-        const baseUrlObj = new URL(baseUrl);
-        // Only allow same-origin redirects
-        absoluteRedirect = redirectUrl.origin === baseUrlObj.origin ? redirectTo : `${baseUrl}/`;
+        const parsed = new URL(redirectTo);
+        const baseOrigin = new URL(baseUrl);
+        const isHttps = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        const isSameOrigin = parsed.origin === baseOrigin.origin;
+        const isLocalhost =
+          parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+        absoluteRedirect = isHttps && (isSameOrigin || isLocalhost) ? redirectTo : `${baseUrl}/`;
       } catch {
         absoluteRedirect = `${baseUrl}/`;
       }
@@ -397,6 +492,64 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
       });
     } catch (error) {
       return handleError(error, 'Error logging out');
+    }
+  },
+});
+
+// ============================================================================
+// POST /auth/refresh
+// ============================================================================
+
+export const POST_REFRESH_ROUTE = createPublicRoute({
+  method: 'POST',
+  path: '/auth/refresh',
+  responseType: 'datastream-response',
+  responseSchema: refreshResponseSchema,
+  summary: 'Refresh session',
+  description: 'Refreshes the current session, extending its expiry. Sets a new session cookie on success.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, request } = ctx as any;
+
+    try {
+      const auth = getAuthProvider(mastra);
+
+      if (
+        !auth ||
+        !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
+        !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
+      ) {
+        throw new HTTPException(404, { message: 'Session refresh not configured' });
+      }
+
+      // Get session ID from request
+      const sessionId = auth.getSessionIdFromRequest(request);
+      if (!sessionId) {
+        throw new HTTPException(401, { message: 'No session' });
+      }
+
+      // Refresh the session
+      const newSession = await auth.refreshSession(sessionId);
+      if (!newSession) {
+        throw new HTTPException(401, { message: 'Session expired' });
+      }
+
+      // Build response with new session headers
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
+        const sessionHeaders = auth.getSessionHeaders(newSession);
+        for (const [key, value] of Object.entries(sessionHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error refreshing session');
     }
   },
 });
@@ -526,6 +679,7 @@ export const AUTH_ROUTES = [
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
   POST_LOGOUT_ROUTE,
+  POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
-];
+] as const;

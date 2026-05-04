@@ -10,11 +10,11 @@ const POLL_TIMEOUT_MS = 300_000;
 type ModelsLabModel = 'default';
 
 export type ModelsLabVoiceId =
-  | '1'  // Neutral
-  | '2'  // Male
-  | '3'  // Warm
-  | '4'  // Deep Male
-  | '5'  // Female
+  | '1' // Neutral
+  | '2' // Male
+  | '3' // Warm
+  | '4' // Deep Male
+  | '5' // Female
   | '6'; // Clear Female
 
 export const MODELSLAB_VOICES: { voiceId: ModelsLabVoiceId; name: string; language: string; gender: string }[] = [

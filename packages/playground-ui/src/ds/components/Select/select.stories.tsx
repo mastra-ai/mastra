@@ -7,7 +7,6 @@ const meta: Meta<typeof Select> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -31,7 +30,7 @@ export const Default: Story = {
 export const Experimental: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[180px]" variant="experimental" size="default">
+      <SelectTrigger className="w-[180px]" size="default">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>

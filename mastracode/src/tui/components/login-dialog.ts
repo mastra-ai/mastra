@@ -3,14 +3,15 @@
  */
 
 import { exec } from 'node:child_process';
-import { Box, Container, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import { getOAuthProviders } from '../../auth/index.js';
 import { theme } from '../theme.js';
+import { MaskedInput } from './masked-input.js';
 
 export class LoginDialogComponent extends Box implements Focusable {
   private contentContainer: Container;
-  private input: Input;
+  private input: MaskedInput;
   private tui: TUI;
   private abortController = new AbortController();
   private inputResolver?: (value: string) => void;
@@ -47,7 +48,7 @@ export class LoginDialogComponent extends Box implements Focusable {
     this.addChild(this.contentContainer);
 
     // Input (always present, used when needed)
-    this.input = new Input();
+    this.input = new MaskedInput();
     this.input.onSubmit = () => {
       if (this.inputResolver) {
         this.inputResolver(this.input.getValue());

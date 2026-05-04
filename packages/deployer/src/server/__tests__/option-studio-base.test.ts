@@ -56,7 +56,7 @@ vi.mock('../handlers/restart-active-runs', () => ({
 }));
 
 vi.mock('../welcome', () => ({
-  html: '<html><body>Welcome to Mastra</body></html>',
+  welcomeHtml: () => '<html><body>Welcome to Mastra</body></html>',
 }));
 
 describe('Mastra Studio "studioBase" functionality', () => {
@@ -76,7 +76,12 @@ describe('Mastra Studio "studioBase" functionality', () => {
     window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
     window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
     window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
+    window.MASTRA_TEMPLATES = '%%MASTRA_TEMPLATES%%';
     window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
+    window.MASTRA_SERVER_PROTOCOL = '%%MASTRA_SERVER_PROTOCOL%%';
+    window.MASTRA_CLOUD_API_ENDPOINT = '%%MASTRA_CLOUD_API_ENDPOINT%%';
+    window.MASTRA_EXPERIMENTAL_FEATURES = '%%MASTRA_EXPERIMENTAL_FEATURES%%';
+    window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
   </script>
 </body>
 </html>`;
@@ -230,6 +235,101 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).toContain("window.MASTRA_SERVER_PORT = '4111'");
     });
 
+    it('should use studioHost for MASTRA_SERVER_HOST when set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 4111,
+        host: '0.0.0.0',
+        studioHost: 'my-app.run.app',
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      // Studio should see the public host, not the bind address
+      expect(html).toContain("window.MASTRA_SERVER_HOST = 'my-app.run.app'");
+      expect(html).not.toContain("window.MASTRA_SERVER_HOST = '0.0.0.0'");
+    });
+
+    it('should fall back to host when studioHost is not set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 4111,
+        host: 'api.example.com',
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      expect(html).toContain("window.MASTRA_SERVER_HOST = 'api.example.com'");
+    });
+
+    it('should use studioProtocol for MASTRA_SERVER_PROTOCOL when set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 4111,
+        host: '0.0.0.0',
+        studioHost: 'my-app.run.app',
+        studioProtocol: 'https',
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      expect(html).toContain("window.MASTRA_SERVER_PROTOCOL = 'https'");
+      expect(html).toContain("window.MASTRA_SERVER_HOST = 'my-app.run.app'");
+    });
+
+    it('should fall back to auto-detected protocol when studioProtocol is not set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 4111,
+        host: 'localhost',
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      // No HTTPS config, so protocol should be 'http'
+      expect(html).toContain("window.MASTRA_SERVER_PROTOCOL = 'http'");
+    });
+
+    it('should use studioPort for MASTRA_SERVER_PORT when set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 8080,
+        host: '0.0.0.0',
+        studioHost: 'my-app.run.app',
+        studioProtocol: 'https',
+        studioPort: 443,
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      expect(html).toContain("window.MASTRA_SERVER_PORT = '443'");
+      expect(html).not.toContain("window.MASTRA_SERVER_PORT = '8080'");
+    });
+
+    it('should fall back to port when studioPort is not set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 5000,
+        host: 'localhost',
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      expect(html).toContain("window.MASTRA_SERVER_PORT = '5000'");
+    });
+
     it('should replace hideCloudCta placeholder based on environment variable', async () => {
       const originalEnv = process.env.MASTRA_HIDE_CLOUD_CTA;
       try {
@@ -246,6 +346,26 @@ describe('Mastra Studio "studioBase" functionality', () => {
           process.env.MASTRA_HIDE_CLOUD_CTA = originalEnv;
         } else {
           delete process.env.MASTRA_HIDE_CLOUD_CTA;
+        }
+      }
+    });
+
+    it('should replace templates placeholder based on environment variable', async () => {
+      const originalEnv = process.env.MASTRA_TEMPLATES;
+      try {
+        process.env.MASTRA_TEMPLATES = 'true';
+        vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
+        const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+        const response = await app.request('/admin');
+        const html = await response.text();
+
+        expect(html).toContain("window.MASTRA_TEMPLATES = 'true'");
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.MASTRA_TEMPLATES = originalEnv;
+        } else {
+          delete process.env.MASTRA_TEMPLATES;
         }
       }
     });

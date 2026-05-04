@@ -57,8 +57,9 @@ export function getAvailableModePacks(
 ): ModePack[] {
   const packs: ModePack[] = [];
 
-  const openaiCodex = 'openai/gpt-5.3-codex';
-  const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-6' : 'anthropic/claude-sonnet-4-5';
+  const openaiCodex = 'openai/gpt-5.5';
+  const openaiFast = 'openai/gpt-5.4-mini';
+  const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-7' : 'anthropic/claude-sonnet-4-6';
 
   if (access.anthropic) {
     packs.push({
@@ -83,7 +84,7 @@ export function getAvailableModePacks(
       models: {
         build: openaiCodex,
         plan: openaiCodex,
-        fast: 'openai/gpt-5.1-codex-mini',
+        fast: openaiFast,
       },
     });
   }
@@ -142,9 +143,9 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   if (access.openai) {
     packs.push({
       id: 'openai',
-      name: 'Codex Mini',
+      name: 'OpenAI Mini',
       description: access.openai === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key',
-      modelId: 'openai/gpt-5.1-codex-mini',
+      modelId: 'openai/gpt-5.4-mini',
     });
   }
 

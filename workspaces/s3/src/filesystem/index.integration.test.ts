@@ -235,6 +235,146 @@ describe.skipIf(!hasS3Credentials)('S3Filesystem Prefix Isolation', () => {
 });
 
 /**
+ * Workspace BM25 Search + S3 Integration Tests
+ *
+ * Verifies that workspace BM25 search works when backed by S3Filesystem.
+ * Tests auto-indexing and search with and without skills configured.
+ */
+describe.skipIf(!hasS3Credentials)('S3 Workspace BM25 Search', () => {
+  const config = getS3TestConfig();
+  let testPrefix: string;
+  let s3Fs: S3Filesystem;
+
+  /** Create a SKILL.md with valid frontmatter */
+  function skillContent(name: string, description: string): string {
+    return `---\nname: ${name}\ndescription: ${description}\n---\n\nInstructions for the ${name} skill. This skill helps with ${description}.\n`;
+  }
+
+  beforeEach(async () => {
+    testPrefix = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    s3Fs = new S3Filesystem({ ...config, prefix: testPrefix });
+    await s3Fs.init();
+
+    // Create test content
+    await s3Fs.writeFile(
+      '/guides/london/activities.md',
+      'London has many activities including visiting the Tower of London and Big Ben',
+    );
+    await s3Fs.writeFile(
+      '/guides/tokyo/activities.md',
+      'Tokyo offers amazing experiences like visiting Shibuya crossing and Senso-ji temple',
+    );
+    await s3Fs.writeFile('/guides/overview.txt', 'A travel guide covering major cities worldwide');
+
+    // Create skills
+    await s3Fs.writeFile(
+      '/skills/travel-tips/SKILL.md',
+      skillContent('travel-tips', 'providing travel tips and recommendations'),
+    );
+    await s3Fs.writeFile(
+      '/skills/language-helper/SKILL.md',
+      skillContent('language-helper', 'translating common phrases'),
+    );
+  });
+
+  afterEach(async () => {
+    try {
+      // Recursive cleanup of all test files
+      const cleanupDir = async (dir: string) => {
+        const entries = await s3Fs.readdir(dir);
+        for (const entry of entries) {
+          const entryPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+          if (entry.type === 'directory') {
+            await cleanupDir(entryPath);
+          } else {
+            await s3Fs.deleteFile(entryPath, { force: true });
+          }
+        }
+      };
+      await cleanupDir('/');
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should auto-index and search S3 files with plain autoIndexPaths', async () => {
+    const workspace = new Workspace({
+      filesystem: s3Fs,
+      bm25: true,
+      autoIndexPaths: ['/guides'],
+    });
+
+    await workspace.init();
+
+    const results = await workspace.search('London');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some(r => r.id.includes('london'))).toBe(true);
+
+    await workspace.destroy();
+  });
+
+  it('should auto-index and search S3 files with glob autoIndexPaths', async () => {
+    const workspace = new Workspace({
+      filesystem: s3Fs,
+      bm25: true,
+      autoIndexPaths: ['/guides/**/*.md'],
+    });
+
+    await workspace.init();
+
+    const results = await workspace.search('London');
+    expect(results.length).toBeGreaterThan(0);
+
+    // Glob should exclude .txt files
+    const overviewResults = await workspace.search('travel guide worldwide');
+    expect(overviewResults.every(r => r.id.endsWith('.md'))).toBe(true);
+
+    await workspace.destroy();
+  });
+
+  it('should search S3 files with skills configured', async () => {
+    const workspace = new Workspace({
+      filesystem: s3Fs,
+      bm25: true,
+      autoIndexPaths: ['/guides'],
+      skills: ['/skills'],
+    });
+
+    await workspace.init();
+
+    const results = await workspace.search('London');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some(r => r.id.includes('london'))).toBe(true);
+
+    await workspace.destroy();
+  });
+
+  it('should preserve S3 search results after skills.refresh()', async () => {
+    const workspace = new Workspace({
+      filesystem: s3Fs,
+      bm25: true,
+      autoIndexPaths: ['/guides'],
+      skills: ['/skills'],
+    });
+
+    await workspace.init();
+
+    const resultsBefore = await workspace.search('London');
+    expect(resultsBefore.length).toBeGreaterThan(0);
+
+    // Trigger skills refresh
+    await workspace.skills!.refresh();
+
+    // Search should STILL work
+    const resultsAfter = await workspace.search('London');
+    expect(resultsAfter.length).toBeGreaterThan(0);
+    expect(resultsAfter.some(r => r.id.includes('london'))).toBe(true);
+
+    await workspace.destroy();
+  });
+});
+
+/**
  * CompositeFilesystem Integration Tests
  *
  * These tests verify CompositeFilesystem behavior with two S3 mounts

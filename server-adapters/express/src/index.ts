@@ -4,7 +4,6 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { isProtectedCustomRoute } from '@mastra/server/auth';
-import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -14,6 +13,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -178,7 +179,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
-    const urlParams = request.params;
+    const urlParams = request.params as Record<string, string>;
     // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
     const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
@@ -279,6 +280,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   ): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        response.setHeader(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -290,13 +300,27 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        response.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             response.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          response.off('error', onResError);
           response.end();
         }
       } else {
@@ -410,7 +434,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         if (authError) {
-          return res.status(authError.status).json({ error: authError.error });
+          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              res.setHeader(key, value);
+            }
+          }
+
+          // If this is an auth error (not just a success-with-headers), return error response
+          if (authError.error) {
+            return res.status(authError.status).json({ error: authError.error });
+          }
         }
 
         const params = await this.getParams(route, req);
@@ -430,9 +464,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             this.mastra.getLogger()?.error('Error parsing query params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
-              return res.status(400).json(formatZodError(error, 'query parameters'));
+              const { status, body } = this.resolveValidationError(route, error, 'query');
+              return res.status(status).json(body);
             }
             return res.status(400).json({
               error: 'Invalid query parameters',
@@ -448,9 +482,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             this.mastra.getLogger()?.error('Error parsing body', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
-              return res.status(400).json(formatZodError(error, 'request body'));
+              const { status, body } = this.resolveValidationError(route, error, 'body');
+              return res.status(status).json(body);
             }
             return res.status(400).json({
               error: 'Invalid request body',
@@ -468,7 +502,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
             if (error instanceof ZodError) {
-              return res.status(400).json(formatZodError(error, 'path parameters'));
+              const { status, body } = this.resolveValidationError(route, error, 'path');
+              return res.status(status).json(body);
             }
             return res.status(400).json({
               error: 'Invalid path parameters',
@@ -567,7 +602,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         if (authError) {
-          return res.status(authError.status).json({ error: authError.error });
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              res.setHeader(key, value);
+            }
+          }
+          if (authError.error) {
+            return res.status(authError.status).json({ error: authError.error });
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;

@@ -15,16 +15,26 @@ export const RESOURCES = [
   'a2a',
   'agent-builder',
   'agents',
+  'background-tasks',
+  'channels',
+  'datasets',
+  'embedders',
+  'experiments',
   'logs',
   'mcp',
   'memory',
   'observability',
+  'processor-providers',
   'processors',
+  'schedules',
   'scores',
+  'stored',
   'stored-agents',
   'system',
+  'tool-providers',
   'tools',
   'vector',
+  'vectors',
   'workflows',
   'workspaces',
 ] as const;
@@ -43,7 +53,7 @@ export type Resource = (typeof RESOURCES)[number];
  * - DELETE → delete
  * - Additional actions from explicit requiresPermission overrides
  */
-export const ACTIONS = ['delete', 'execute', 'read', 'write'] as const;
+export const ACTIONS = ['create', 'delete', 'execute', 'read', 'write'] as const;
 
 /**
  * Action type union.
@@ -57,6 +67,8 @@ export type Action = (typeof ACTIONS)[number];
 export const PERMISSION_PATTERNS = {
   /** Full access to all resources and actions */
   '*': '*',
+  /** create all resources */
+  '*:create': '*:create',
   /** Delete all resources */
   '*:delete': '*:delete',
   /** Execute all resources */
@@ -71,6 +83,16 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to background-tasks */
+  'background-tasks:*': 'background-tasks:*',
+  /** Full access to channels */
+  'channels:*': 'channels:*',
+  /** Full access to datasets */
+  'datasets:*': 'datasets:*',
+  /** Full access to embedders */
+  'embedders:*': 'embedders:*',
+  /** Full access to experiments */
+  'experiments:*': 'experiments:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -79,18 +101,28 @@ export const PERMISSION_PATTERNS = {
   'memory:*': 'memory:*',
   /** Full access to traces and spans */
   'observability:*': 'observability:*',
+  /** Full access to processor-providers */
+  'processor-providers:*': 'processor-providers:*',
   /** Full access to processors */
   'processors:*': 'processors:*',
+  /** Full access to schedules */
+  'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
+  /** Full access to stored */
+  'stored:*': 'stored:*',
   /** Full access to stored agents */
   'stored-agents:*': 'stored-agents:*',
   /** Full access to system info */
   'system:*': 'system:*',
+  /** Full access to tool-providers */
+  'tool-providers:*': 'tool-providers:*',
   /** Full access to tools */
   'tools:*': 'tools:*',
   /** Full access to vector stores */
   'vector:*': 'vector:*',
+  /** Full access to vectors */
+  'vectors:*': 'vectors:*',
   /** Full access to workflows */
   'workflows:*': 'workflows:*',
   /** Full access to workspaces */
@@ -105,12 +137,34 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:read': 'agent-builder:read',
   /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
+  /** create agents */
+  'agents:create': 'agents:create',
+  /** Delete agents */
+  'agents:delete': 'agents:delete',
   /** Execute agents */
   'agents:execute': 'agents:execute',
   /** View agents */
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** View background-tasks */
+  'background-tasks:read': 'background-tasks:read',
+  /** View channels */
+  'channels:read': 'channels:read',
+  /** Create and modify channels */
+  'channels:write': 'channels:write',
+  /** Delete datasets */
+  'datasets:delete': 'datasets:delete',
+  /** Execute datasets */
+  'datasets:execute': 'datasets:execute',
+  /** View datasets */
+  'datasets:read': 'datasets:read',
+  /** Create and modify datasets */
+  'datasets:write': 'datasets:write',
+  /** View embedders */
+  'embedders:read': 'embedders:read',
+  /** View experiments */
+  'experiments:read': 'experiments:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -131,10 +185,18 @@ export const PERMISSION_PATTERNS = {
   'observability:read': 'observability:read',
   /** Create and modify traces and spans */
   'observability:write': 'observability:write',
+  /** View processor-providers */
+  'processor-providers:read': 'processor-providers:read',
   /** Execute processors */
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Execute schedules */
+  'schedules:execute': 'schedules:execute',
+  /** View schedules */
+  'schedules:read': 'schedules:read',
+  /** Create and modify schedules */
+  'schedules:write': 'schedules:write',
   /** View evaluation scores */
   'scores:read': 'scores:read',
   /** Create and modify evaluation scores */
@@ -145,8 +207,16 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:read': 'stored-agents:read',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
+  /** Delete stored */
+  'stored:delete': 'stored:delete',
+  /** View stored */
+  'stored:read': 'stored:read',
+  /** Create and modify stored */
+  'stored:write': 'stored:write',
   /** View system info */
   'system:read': 'system:read',
+  /** View tool-providers */
+  'tool-providers:read': 'tool-providers:read',
   /** Execute tools */
   'tools:execute': 'tools:execute',
   /** View tools */
@@ -159,6 +229,8 @@ export const PERMISSION_PATTERNS = {
   'vector:read': 'vector:read',
   /** Create and modify vector stores */
   'vector:write': 'vector:write',
+  /** View vectors */
+  'vectors:read': 'vectors:read',
   /** Delete workflows */
   'workflows:delete': 'workflows:delete',
   /** Execute workflows */
@@ -194,9 +266,20 @@ export const PERMISSIONS = [
   'agent-builder:execute',
   'agent-builder:read',
   'agent-builder:write',
+  'agents:create',
+  'agents:delete',
   'agents:execute',
   'agents:read',
   'agents:write',
+  'background-tasks:read',
+  'channels:read',
+  'channels:write',
+  'datasets:delete',
+  'datasets:execute',
+  'datasets:read',
+  'datasets:write',
+  'embedders:read',
+  'experiments:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -207,20 +290,29 @@ export const PERMISSIONS = [
   'memory:write',
   'observability:read',
   'observability:write',
+  'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'schedules:execute',
+  'schedules:read',
+  'schedules:write',
   'scores:read',
   'scores:write',
   'stored-agents:delete',
   'stored-agents:read',
   'stored-agents:write',
+  'stored:delete',
+  'stored:read',
+  'stored:write',
   'system:read',
+  'tool-providers:read',
   'tools:execute',
   'tools:read',
   'vector:delete',
   'vector:execute',
   'vector:read',
   'vector:write',
+  'vectors:read',
   'workflows:delete',
   'workflows:execute',
   'workflows:read',

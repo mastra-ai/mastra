@@ -1,7 +1,9 @@
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
+import { BackgroundTasksInMemory } from './domains/background-tasks/inmemory';
 import { InMemoryBlobStore } from './domains/blobs/inmemory';
+import { InMemoryChannelsStorage } from './domains/channels/inmemory';
 import { DatasetsInMemory } from './domains/datasets/inmemory';
 import { ExperimentsInMemory } from './domains/experiments/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
@@ -10,6 +12,7 @@ import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
+import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
@@ -59,6 +62,7 @@ export class InMemoryStore extends MastraCompositeStore {
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
+      channels: new InMemoryChannelsStorage(),
       datasets: new DatasetsInMemory({ db: this.#db }),
       experiments: new ExperimentsInMemory({ db: this.#db }),
       promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
@@ -68,6 +72,8 @@ export class InMemoryStore extends MastraCompositeStore {
       workspaces: new InMemoryWorkspacesStorage({ db: this.#db }),
       skills: new InMemorySkillsStorage({ db: this.#db }),
       blobs: new InMemoryBlobStore(),
+      backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
+      schedules: new InMemorySchedulesStorage({ db: this.#db }),
     };
   }
 
@@ -78,6 +84,8 @@ export class InMemoryStore extends MastraCompositeStore {
    */
   clear(): void {
     this.#db.clear();
+    // InMemoryChannelsStorage doesn't share the InMemoryDB
+    void this.stores.channels?.dangerouslyClearAll?.();
   }
 }
 

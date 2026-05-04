@@ -15,9 +15,8 @@
 import { Box, Container, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { ANTHROPIC_OAUTH_PROVIDER_ID, CLAUDE_MAX_OAUTH_WARNING_MESSAGE } from '../auth/claude-max-warning.js';
 import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline.js';
-import { theme, getSelectListTheme, mastra } from '../tui/theme.js';
+import { BOX_INDENT, theme, getSelectListTheme, mastra } from '../tui/theme.js';
 import type { ModePack, OMPack } from './packs.js';
 
 // ---------------------------------------------------------------------------
@@ -66,7 +65,7 @@ export interface OnboardingOptions {
 // Steps
 // ---------------------------------------------------------------------------
 
-type StepId = 'welcome' | 'auth' | 'claudeMaxWarning' | 'modePack' | 'omPack' | 'yolo' | 'done';
+type StepId = 'welcome' | 'auth' | 'modePack' | 'omPack' | 'yolo' | 'done';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -175,8 +174,6 @@ export class OnboardingInlineComponent extends Container implements Focusable {
         return this.renderWelcome();
       case 'auth':
         return this.renderAuth();
-      case 'claudeMaxWarning':
-        return this.renderClaudeMaxWarning();
       case 'modePack':
         return this.renderModePack();
       case 'omPack':
@@ -192,7 +189,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private makeBox(): Box {
     this.clearStep();
-    this.stepBox = new Box(1, 1, (text: string) => theme.bg('toolPendingBg', text));
+    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => theme.bg('toolPendingBg', text));
     // Add a spacer between steps, but not before the very first one
     if (this.stepCount > 0) {
       this.addChild(new Spacer(1));
@@ -271,9 +268,6 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     this.selectList.onSelect = (item: SelectItem) => {
       if (item.value === '__skip') {
         this.renderStep('modePack');
-      } else if (item.value === ANTHROPIC_OAUTH_PROVIDER_ID) {
-        // Show Claude Max ToS warning before proceeding
-        this.renderStep('claudeMaxWarning');
       } else {
         this.loginRequested = true;
         this.loginProvider = item.value;
@@ -290,44 +284,6 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     box.addChild(this.selectList);
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc skip'), 0, 0));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Step: Claude Max OAuth Warning
-  // ---------------------------------------------------------------------------
-
-  private renderClaudeMaxWarning(): void {
-    const box = this.makeBox();
-    box.addChild(new Text(theme.bold(theme.fg('warning', '⚠ Claude Max OAuth Warning')), 0, 0));
-    box.addChild(new Spacer(1));
-    box.addChild(new Text(theme.fg('text', CLAUDE_MAX_OAUTH_WARNING_MESSAGE), 0, 0));
-    box.addChild(new Spacer(1));
-
-    const items: SelectItem[] = [
-      { value: 'continue', label: `  ${theme.fg('success', 'Continue')}` },
-      { value: 'cancel', label: `  ${theme.fg('dim', 'Cancel')}` },
-    ];
-    this.selectList = new SelectList(items, items.length, getSelectListTheme());
-    this.selectList.onSelect = (item: SelectItem) => {
-      if (item.value === 'continue') {
-        this.loginRequested = true;
-        this.loginProvider = ANTHROPIC_OAUTH_PROVIDER_ID;
-        this.options.onLogin(ANTHROPIC_OAUTH_PROVIDER_ID, () => {
-          this.renderStep('modePack');
-        });
-      } else {
-        // Cancel — go back to auth provider list
-        this.renderStep('auth');
-      }
-    };
-    this.selectList.onCancel = () => {
-      // Esc — go back to auth provider list
-      this.renderStep('auth');
-    };
-
-    box.addChild(this.selectList);
-    box.addChild(new Spacer(1));
-    box.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc go back'), 0, 0));
   }
 
   // ---------------------------------------------------------------------------
@@ -472,9 +428,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     this.collapseStep(`Model pack → Custom (${packName})`);
 
     const modes: Array<{ id: 'plan' | 'build' | 'fast'; label: string; color: string }> = [
-      { id: 'plan', label: 'plan', color: mastra.blue },
-      { id: 'build', label: 'build', color: mastra.purple },
-      { id: 'fast', label: 'fast', color: mastra.green },
+      { id: 'plan', label: 'plan', color: mastra.purple },
+      { id: 'build', label: 'build', color: mastra.green },
+      { id: 'fast', label: 'fast', color: mastra.orange },
     ];
 
     const models: Record<string, string> = { build: '', plan: '', fast: '' };

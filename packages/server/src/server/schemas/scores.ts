@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { paginationInfoSchema } from './common';
 
 /**
@@ -36,6 +36,7 @@ export const scorerEntrySchema = z.object({
   agentNames: z.array(z.string()),
   workflowIds: z.array(z.string()),
   isRegistered: z.boolean(),
+  source: z.enum(['code', 'stored']),
 });
 
 /**

@@ -59,8 +59,6 @@
   "/models/providers/helicone": "v1",
   "/models/providers/cloudflare-ai-gateway": "v1",
   "/reference/core/listMemory": "v1",
-  "/reference/core/getStoredAgentById": "v1",
-  "/reference/core/listStoredAgents": "v1",
   "/reference/server/create-route": "v1",
   "/reference/server/routes": "v1",
   "/reference/server/mastra-server": "v1",

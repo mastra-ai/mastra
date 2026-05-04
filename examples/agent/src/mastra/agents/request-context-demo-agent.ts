@@ -139,9 +139,9 @@ export const requestContextDemoAgent = new Agent({
 
     // Use a faster model for development, more capable for production
     if (environment === 'production') {
-      return openai('gpt-4o');
+      return 'openai/gpt-5.4' as const;
     }
-    return openai('gpt-4o-mini');
+    return 'openai/gpt-5.4-mini' as const;
   },
 
   // Dynamic tools based on permissions and features

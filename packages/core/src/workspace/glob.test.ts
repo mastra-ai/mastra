@@ -44,39 +44,39 @@ describe('isGlobPattern', () => {
 // =============================================================================
 describe('extractGlobBase', () => {
   it('should return the path as-is for plain paths', () => {
-    expect(extractGlobBase('/docs')).toBe('/docs');
-    expect(extractGlobBase('/src/utils')).toBe('/src/utils');
+    expect(extractGlobBase('docs')).toBe('docs');
+    expect(extractGlobBase('src/utils')).toBe('src/utils');
   });
 
   it('should extract base from ** patterns', () => {
-    expect(extractGlobBase('/docs/**/*.md')).toBe('/docs');
-    expect(extractGlobBase('/src/utils/**')).toBe('/src/utils');
+    expect(extractGlobBase('docs/**/*.md')).toBe('docs');
+    expect(extractGlobBase('src/utils/**')).toBe('src/utils');
   });
 
-  it('should return root for patterns starting with **', () => {
-    expect(extractGlobBase('**/*.md')).toBe('/');
-    expect(extractGlobBase('**')).toBe('/');
+  it('should return workspace root for patterns starting with **', () => {
+    expect(extractGlobBase('**/*.md')).toBe('.');
+    expect(extractGlobBase('**')).toBe('.');
   });
 
   it('should extract base from * patterns', () => {
-    expect(extractGlobBase('/src/*.ts')).toBe('/src');
-    expect(extractGlobBase('/a/b/*.config.js')).toBe('/a/b');
+    expect(extractGlobBase('src/*.ts')).toBe('src');
+    expect(extractGlobBase('a/b/*.config.js')).toBe('a/b');
   });
 
   it('should handle brace expansion in path', () => {
-    expect(extractGlobBase('/src/{a,b}/index.ts')).toBe('/src');
+    expect(extractGlobBase('src/{a,b}/index.ts')).toBe('src');
   });
 
   it('should handle character classes in path', () => {
-    expect(extractGlobBase('/src/[A-Z]*.ts')).toBe('/src');
+    expect(extractGlobBase('src/[A-Z]*.ts')).toBe('src');
   });
 
   it('should handle ? wildcard', () => {
-    expect(extractGlobBase('/src/file?.ts')).toBe('/src');
+    expect(extractGlobBase('src/file?.ts')).toBe('src');
   });
 
-  it('should return root when glob is at top level', () => {
-    expect(extractGlobBase('/*.ts')).toBe('/');
+  it('should return workspace root when glob is at top level', () => {
+    expect(extractGlobBase('*.ts')).toBe('.');
   });
 
   it('should extract base from ./ prefixed patterns', () => {
@@ -229,7 +229,16 @@ function createMockReaddir(entries: Record<string, 'file' | 'directory'>) {
   }
 
   return vi.fn(async (dir: string): Promise<ReaddirEntry[]> => {
-    const contents = dirContents.get(dir);
+    // Normalize to absolute-style key since the mock uses absolute paths internally
+    let lookupDir: string;
+    if (dir === '.' || dir === '' || dir === '/') {
+      lookupDir = '/';
+    } else if (dir.startsWith('/')) {
+      lookupDir = dir;
+    } else {
+      lookupDir = `/${dir}`;
+    }
+    const contents = dirContents.get(lookupDir);
     if (!contents) throw new Error(`ENOENT: ${dir}`);
     return contents;
   });
@@ -310,9 +319,9 @@ describe('resolvePathPattern', () => {
     it('should match files across the tree with **/SKILL.md', async () => {
       const results = await resolvePathPattern('**/SKILL.md', readdir);
       const paths = results.map(r => r.path).sort();
-      expect(paths).toContain('/skills/api-design/SKILL.md');
-      expect(paths).toContain('/skills/customer-support/SKILL.md');
-      expect(paths).toContain('/src/skills/internal/SKILL.md');
+      expect(paths).toContain('skills/api-design/SKILL.md');
+      expect(paths).toContain('skills/customer-support/SKILL.md');
+      expect(paths).toContain('src/skills/internal/SKILL.md');
     });
   });
 
@@ -320,8 +329,8 @@ describe('resolvePathPattern', () => {
     it('should match directories with **/skills', async () => {
       const results = await resolvePathPattern('**/skills', readdir);
       const paths = results.map(r => r.path).sort();
-      expect(paths).toContain('/skills');
-      expect(paths).toContain('/src/skills');
+      expect(paths).toContain('skills');
+      expect(paths).toContain('src/skills');
       // All matches should be directories
       expect(results.every(r => r.type === 'directory')).toBe(true);
     });
@@ -342,12 +351,12 @@ describe('resolvePathPattern', () => {
     it('should match everything under a dir with **/skills/**', async () => {
       const results = await resolvePathPattern('**/skills/**', readdir);
       const paths = results.map(r => r.path).sort();
-      // Under /skills
-      expect(paths).toContain('/skills/api-design');
-      expect(paths).toContain('/skills/api-design/SKILL.md');
-      // Under /src/skills
-      expect(paths).toContain('/src/skills/internal');
-      expect(paths).toContain('/src/skills/internal/SKILL.md');
+      // Under skills/
+      expect(paths).toContain('skills/api-design');
+      expect(paths).toContain('skills/api-design/SKILL.md');
+      // Under src/skills/
+      expect(paths).toContain('src/skills/internal');
+      expect(paths).toContain('src/skills/internal/SKILL.md');
     });
   });
 });

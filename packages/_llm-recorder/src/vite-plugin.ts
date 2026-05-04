@@ -112,16 +112,26 @@ function matchesPattern(filepath: string, patterns: string[]): boolean {
     if (pattern.length > 500) return false;
 
     try {
+      const GLOBSTAR_DIR = '__GLOBSTAR_DIR__';
+      const GLOBSTAR = '__GLOBSTAR__';
       const regex = pattern
         // Escape regex-special chars except * and /
         .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
         // Replace **/ with a globstar that matches zero or more path segments (including the /)
-        .replace(/\*\*\//g, '(?:.*/)?')
+        .replace(/\*\*\//g, GLOBSTAR_DIR)
         // Replace remaining ** (at end of pattern) with match-all
-        .replace(/\*\*/g, '.*')
+        .replace(/\*\*/g, GLOBSTAR)
         // Replace single * with segment matcher (no path separators)
-        .replace(/\*/g, '[^/]*');
-      return new RegExp(`^${regex}$`).test(normalized);
+        .replace(/\*/g, '[^/]*')
+        .replaceAll(GLOBSTAR_DIR, '(?:.*/)?')
+        .replaceAll(GLOBSTAR, '.*');
+      // Only anchor to start for absolute patterns (starting with / or C:/)
+      // For relative patterns, allow matching anywhere in the path so that
+      // patterns like src/**/*.test.ts match /absolute/path/to/src/foo.test.ts
+      const isAbsolutePattern = pattern.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pattern);
+      const endAnchor = '\x24'; // $ character
+      const startPrefix = isAbsolutePattern ? '^' : '(?:^|/)';
+      return new RegExp(startPrefix + regex + endAnchor).test(normalized);
     } catch {
       // Invalid pattern — skip it
       return false;
@@ -199,9 +209,19 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
       const imports = [`import { useLLMRecording as __autoUseLLMRecording } from '@internal/llm-recorder';`];
       if (transformRequest) {
         const exportName = transformRequest.exportName || 'transformRequest';
-        imports.push(
-          `import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(transformRequest.importPath)};`,
-        );
+        // If importPath is relative, compute the path from the test file to the transform module
+        let importPath = transformRequest.importPath;
+        if (importPath.startsWith('./') || importPath.startsWith('../')) {
+          const testDir = path.dirname(id);
+          const projectRoot = process.cwd();
+          const absoluteTransformPath = path.resolve(projectRoot, importPath);
+          importPath = path.relative(testDir, absoluteTransformPath);
+          // Ensure the path starts with ./ for relative imports
+          if (!importPath.startsWith('.') && !importPath.startsWith('/')) {
+            importPath = './' + importPath;
+          }
+        }
+        imports.push(`import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(importPath)};`);
       }
 
       // Inject the imports and the auto-recording call at the top of the file

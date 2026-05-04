@@ -7,7 +7,7 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 
 Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
 
-## Database Migration
+## Database migration
 
 Run these SQL migrations through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process).
 
@@ -32,7 +32,7 @@ ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
 
 ### Duplicate spans migration
 
-If you're upgrading from an older version of Mastra, you may have duplicate `(traceId, spanId)` entries in your `mastra_spans` table. V1 adds a unique constraint on these columns to ensure data integrity, but this constraint cannot be added if duplicates exist.
+If you're upgrading from an older version of Mastra, you may have duplicate `(traceId, spanId)` entries in your `mastra_spans` table. V1 adds a unique constraint on these columns to ensure data integrity, but this constraint can't be added if duplicates exist.
 
 :::note[Who needs this migration]
 Only if you have existing spans data from Mastra versions prior to v1 and encounter errors about duplicate key violations or constraint creation failures.
@@ -104,7 +104,7 @@ USING snapshot::jsonb;
 
 ## Added
 
-### Storage composition in MastraCompositeStore
+### Storage composition in `MastraCompositeStore`
 
 `MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
@@ -501,7 +501,7 @@ To migrate, rename the method and use named arguments.
 + });
 ```
 
-### PostgresStore `schema` to `schemaName`
+### `PostgresStore`: `schema` to `schemaName`
 
 The `schema` parameter has been renamed to `schemaName` in the PostgresStore constructor. This change provides clearer naming to avoid confusion with database schema concepts.
 

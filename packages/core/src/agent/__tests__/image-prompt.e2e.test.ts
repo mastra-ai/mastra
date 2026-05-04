@@ -1,10 +1,15 @@
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV5 } from '@ai-sdk/openai-v5';
+import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
 
 config();
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
   const openaiModel = version === 'v1' ? openai('gpt-4o') : openaiV5('gpt-4o');

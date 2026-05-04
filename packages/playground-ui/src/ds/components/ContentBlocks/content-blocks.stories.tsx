@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { v4 as uuid } from '@lukeed/uuid';
 
-import { ContentBlocks } from './content-blocks';
-import { ContentBlock } from './content-block';
 import { useState } from 'react';
+import { ContentBlock } from './content-block';
+import { ContentBlocks } from './content-blocks';
+
+let nextId = 0;
 
 const meta: Meta<typeof ContentBlocks> = {
   title: 'Composite/ContentBlocks',
@@ -11,7 +12,6 @@ const meta: Meta<typeof ContentBlocks> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -39,7 +39,7 @@ const Components = () => {
   const [items, setItems] = useState<Array<Item>>([]);
 
   const addButton = () => {
-    setItems(state => [...state, { id: uuid(), content: `item content number ${state.length + 1}` }]);
+    setItems(state => [...state, { id: String(nextId++), content: `item content number ${state.length + 1}` }]);
   };
 
   const handleItemChange = (index: number, newValue: Item) => {

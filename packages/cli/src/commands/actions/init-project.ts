@@ -50,7 +50,7 @@ export const initProject = async (args: InitArgs) => {
           directory: 'src/',
           components: ['agents', 'tools', 'workflows'],
           llmProvider: 'openai',
-          addExample: true,
+          addExample: args.example === false ? false : true,
           mcpServer: args.mcp,
           versionTag,
         });

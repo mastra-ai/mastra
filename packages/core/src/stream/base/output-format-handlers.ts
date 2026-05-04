@@ -1,19 +1,20 @@
 import { TransformStream } from 'node:stream/web';
-import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
-import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type z3 from 'zod/v3';
-import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import { safeValidateTypes } from '../aisdk/v5/compat';
+import type { ZodType, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
-import type { OutputSchema, ZodLikePartialSchema } from './schema';
+import type { ZodLikePartialSchema } from './schema';
+
+type StreamTransformerStructuredOutput<OUTPUT> = Omit<StructuredOutputOptions<OUTPUT>, 'schema'> & {
+  schema: PublicSchema<OUTPUT>;
+};
 
 /**
  * Escapes unescaped newlines, carriage returns, and tabs within JSON string values.
@@ -123,14 +124,14 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * The original user-provided schema (Zod, JSON Schema, or AI SDK Schema).
    */
-  readonly schema: OutputSchema<OUTPUT> | undefined;
+  readonly schema: StandardSchemaWithJSON<OUTPUT> | undefined;
   /**
    * Validate partial chunks as they are streamed. @planned
    */
   readonly validatePartialChunks: boolean = false;
   readonly partialSchema?: ZodLikePartialSchema<OUTPUT> | undefined;
 
-  constructor(schema?: OutputSchema<OUTPUT>, options: { validatePartialChunks?: boolean } = {}) {
+  constructor(schema?: StandardSchemaWithJSON<OUTPUT>, options: { validatePartialChunks?: boolean } = {}) {
     this.schema = schema;
 
     if (
@@ -147,12 +148,12 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * Checks if the original schema is a Zod schema with safeParse method.
    */
-  protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
+  protected isZodSchema(schema: unknown): schema is ZodType {
     return isZodType(schema);
   }
 
   /**
-   * Validates a value against the schema, preferring Zod's safeParse.
+   * Validates a value against the schema using StandardSchemaWithJSON's validate method.
    */
   protected async validateValue(value: unknown): Promise<ValidationResult<OUTPUT>> {
     if (!this.schema) {
@@ -163,30 +164,39 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
     }
 
     if (this.isZodSchema(this.schema)) {
+      // Use Standard Schema for consistent error message format + safeParse for ZodError cause
       try {
-        const result = this.schema.safeParse(value);
-        if (result.success) {
+        const ssResult = await this.schema['~standard'].validate(value);
+
+        if (!ssResult.issues) {
           return {
             success: true,
-            value: result.data,
-          };
-        } else {
-          return {
-            success: false,
-            error: new MastraError(
-              {
-                domain: ErrorDomain.AGENT,
-                category: ErrorCategory.SYSTEM,
-                id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
-                details: {
-                  value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-                },
-              },
-              result.error,
-            ),
+            value: ssResult.value as OUTPUT,
           };
         }
+
+        // Format error message from Standard Schema issues
+        const errorMessages = ssResult.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+
+        // Also use safeParse to get ZodError as cause (for backward compatibility with tests)
+        const zodResult = this.schema.safeParse(value);
+        const zodError = !zodResult.success ? zodResult.error : undefined;
+
+        return {
+          success: false,
+          error: new MastraError(
+            {
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.SYSTEM,
+              id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+              text: `Structured output validation failed: ${errorMessages}`,
+              details: {
+                value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+              },
+            },
+            zodError,
+          ),
+        };
       } catch (error) {
         return {
           success: false,
@@ -195,25 +205,33 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
       }
     }
 
+    // For non-Zod StandardSchemaWithJSON schemas (JSON Schema, AI SDK Schema, ArkType, etc.)
+    // All schemas are wrapped via toStandardSchema() before reaching here,
+    // so we can use ~standard.validate() uniformly.
     try {
-      if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
-        // Plain JSONSchema7 object - wrap it using jsonSchema()
-        const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
-        return result as ValidationResult<OUTPUT>;
-      } else if ((this.schema as Schema<any>).jsonSchema) {
-        // Already an AI SDK Schema - use it directly
-        const result = await safeValidateTypes({
-          value,
-          schema: this.schema as Schema<OUTPUT>,
-        });
-        return result;
-      } else {
-        // Should not reach here, but handle as fallback
+      const ssResult = await this.schema['~standard'].validate(value);
+
+      if (!ssResult.issues) {
         return {
           success: true,
-          value: value as OUTPUT,
+          value: ssResult.value as OUTPUT,
         };
       }
+
+      const errorMessages = ssResult.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+
+      return {
+        success: false,
+        error: new MastraError({
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+          text: `Structured output validation failed: ${errorMessages}`,
+          details: {
+            value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+          },
+        }),
+      };
     } catch (error) {
       return {
         success: false,
@@ -258,16 +276,18 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
       }
     }
 
-    // Some LLMs wrap the JSON response in code blocks.
-    // In that case, first try to extract content from complete code blocks
-    if (processedText.includes('```json')) {
-      const match = processedText.match(/```json\s*\n?([\s\S]*?)\n?\s*```/);
+    // Some LLMs wrap the entire JSON response in a ```json code block.
+    // Only unwrap when the accumulated text itself starts with that fence so
+    // embedded examples inside valid JSON string values are preserved.
+    const trimmedStart = processedText.trimStart();
+    if (/^```json\b/.test(trimmedStart)) {
+      const match = trimmedStart.match(/^```json\s*\n?([\s\S]*?)\n?\s*```\s*$/);
       if (match && match[1]) {
         // Complete code block found - use content between tags
         processedText = match[1].trim();
       } else {
-        // No complete code block - just remove the opening ```json
-        processedText = processedText.replace(/^```json\s*\n?/, '');
+        // No complete code block yet - just remove the opening ```json prefix
+        processedText = trimmedStart.replace(/^```json\s*\n?/, '');
       }
     }
 
@@ -348,7 +368,7 @@ class ObjectFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> 
 class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'array' as const;
   /** Previously filtered array to track changes */
-  private textPreviousFilteredArray: any[] = [];
+  private textPreviousFilteredArray: unknown[] = [];
   /** Whether we've emitted the initial empty array */
   private hasEmittedInitialArray = false;
 
@@ -362,7 +382,13 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
     // using this.partialSchema / this.validatePartialChunks
     if (currentObjectJson !== undefined && !isDeepEqualData(previousObject, currentObjectJson)) {
       // For arrays, extract and filter elements
-      const rawElements = (currentObjectJson as any)?.elements || [];
+      const rawElements =
+        currentObjectJson &&
+        typeof currentObjectJson === 'object' &&
+        'elements' in currentObjectJson &&
+        Array.isArray(currentObjectJson.elements)
+          ? currentObjectJson.elements
+          : [];
       const filteredElements: Partial<OUTPUT>[] = [];
 
       // Filter out incomplete elements (like empty objects {})
@@ -373,12 +399,12 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
         if (i === rawElements.length - 1 && parseState !== 'successful-parse') {
           // Only include the last element if it has meaningful content
           if (element && typeof element === 'object' && Object.keys(element).length > 0) {
-            filteredElements.push(element);
+            filteredElements.push(element as Partial<OUTPUT>);
           }
         } else {
           // Include all non-last elements that have content
           if (element && typeof element === 'object' && Object.keys(element).length > 0) {
-            filteredElements.push(element);
+            filteredElements.push(element as Partial<OUTPUT>);
           }
         }
       }
@@ -446,21 +472,9 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
       return undefined;
     }
 
-    // Get enum values from the schema (need to wrap it first to get jsonSchema)
-    let enumValues: unknown[] | undefined;
-
-    if (this.isZodSchema(this.schema)) {
-      // Use transform-safe zodToJsonSchema to avoid "Transforms cannot be represented in JSON Schema" error
-      const convertedSchema = zodToJsonSchema(this.schema as z3.ZodType<any> | z4.ZodType<any, any>);
-      enumValues = (convertedSchema as JSONSchema7)?.enum;
-    } else if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
-      // Plain JSONSchema7
-      const wrappedSchema = jsonSchema(this.schema as JSONSchema7);
-      enumValues = wrappedSchema.jsonSchema?.enum;
-    } else {
-      // Already an AI SDK Schema
-      enumValues = (this.schema as Schema<any>).jsonSchema?.enum;
-    }
+    // Get enum values from the schema using StandardSchemaWithJSON's jsonSchema conversion
+    const outputJsonSchema = standardSchemaToJSONSchema(this.schema);
+    const enumValues = outputJsonSchema?.enum;
 
     if (!enumValues) {
       return undefined;
@@ -542,16 +556,20 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: OutputSchema<OUTPUT> }) {
-  const transformedSchema = getTransformedSchema(schema);
+function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
+  // Direct transformer callers can pass any PublicSchema; normalize it before
+  // selecting the format-specific handler.
+  const normalizedSchema = schema ? toStandardSchema(schema) : undefined;
+
+  const transformedSchema = getTransformedSchema(normalizedSchema);
   switch (transformedSchema?.outputFormat) {
     case 'array':
-      return new ArrayFormatHandler(schema);
+      return new ArrayFormatHandler(normalizedSchema);
     case 'enum':
-      return new EnumFormatHandler(schema);
+      return new EnumFormatHandler(normalizedSchema);
     case 'object':
     default:
-      return new ObjectFormatHandler(schema);
+      return new ObjectFormatHandler(normalizedSchema);
   }
 }
 
@@ -570,13 +588,13 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   structuredOutput,
   logger,
 }: {
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: StreamTransformerStructuredOutput<OUTPUT>;
   logger?: IMastraLogger;
 }) {
-  const handler = createOutputHandler({ schema: structuredOutput?.schema });
+  const handler = createOutputHandler<OUTPUT>({ schema: structuredOutput?.schema });
 
   let accumulatedText = '';
-  let previousObject: any = undefined;
+  let previousObject: unknown = undefined;
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
 
@@ -663,7 +681,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',
         type: 'object-result',
-        object: structuredOutput?.fallbackValue,
+        object: structuredOutput.fallbackValue as OUTPUT,
       });
     } else {
       controller.enqueue({
@@ -685,7 +703,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
  * - For arrays: emits opening bracket, new elements, and closing bracket
  * - For objects/no-schema: emits the object as JSON
  */
-export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: OutputSchema<OUTPUT>) {
+export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
   let chunkCount = 0;

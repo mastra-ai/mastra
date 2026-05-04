@@ -18,13 +18,19 @@ export const getFileContentType = async (url: string) => {
 
     return contentType;
   } catch {
-    const urlObject = new URL(url);
-    const pathname = urlObject.pathname;
-
-    const extension = pathname.split('.').pop();
-    if (!extension) return undefined;
-    const lowerCaseExtension = extension.toLowerCase();
-
-    return EXTENSION_TO_MIME[lowerCaseExtension];
+    // fetch failed — try to infer content type from the file extension
+    try {
+      const urlObject = new URL(url);
+      const pathname = urlObject.pathname;
+      const extension = pathname.split('.').pop();
+      if (!extension) return undefined;
+      return EXTENSION_TO_MIME[extension.toLowerCase()];
+    } catch {
+      // url is not a valid absolute URL (e.g. a relative path) — extract
+      // extension from the raw string so we still return a useful MIME type.
+      const extension = url.split('.').pop()?.split(/[?#]/)[0];
+      if (!extension) return undefined;
+      return EXTENSION_TO_MIME[extension.toLowerCase()];
+    }
   }
 };

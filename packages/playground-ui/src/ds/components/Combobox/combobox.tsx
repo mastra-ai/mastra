@@ -1,10 +1,11 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { buttonVariants } from '@/ds/components/Button/Button';
-import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
-import { type FormElementSize } from '@/ds/primitives/form-element';
 import { comboboxStyles } from './combobox-styles';
+import type { ButtonProps } from '@/ds/components/Button/Button';
+import { buttonVariants } from '@/ds/components/Button/Button';
+import type { FormElementSize } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {
   label: string;
@@ -23,8 +24,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
-  size?: FormElementSize;
+  variant?: Extract<ButtonProps['variant'], 'default' | 'ghost' | 'link'>;
+  size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -41,7 +42,7 @@ export function Combobox({
   className,
   disabled = false,
   variant = 'default',
-  size = 'md',
+  size = 'default',
   open,
   onOpenChange,
   container,

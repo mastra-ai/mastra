@@ -1,4 +1,5 @@
 // To setup an ElasticSearch server, run the docker compose file in the elasticsearch directory
+import { Client } from '@elastic/elasticsearch';
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import dotenv from 'dotenv';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -17,7 +18,11 @@ describe('ElasticSearchVector', () => {
     console.log(`🚀 Running tests against Elasticsearch: ${url}`);
     console.log(`Using API Key: ${api_key ? '****' + api_key.slice(-4) : 'None'}`);
 
-    vectorDB = new ElasticSearchVector({ url, id: 'elasticsearch-test', auth: { apiKey: api_key || undefined } });
+    vectorDB = new ElasticSearchVector({
+      url,
+      id: 'elasticsearch-test',
+      ...(api_key ? { auth: { apiKey: api_key } } : {}),
+    });
   });
 
   describe('Error Handling', () => {
@@ -76,13 +81,47 @@ describe('ElasticSearchVector', () => {
       }
     });
   });
+
+  describe('Constructor', () => {
+    it('should throw error if neither client nor url is passed', async () => {
+      expect(() => {
+        // @ts-expect-error - testing runtime validation for JS callers
+        new ElasticSearchVector({
+          id: 'elasticsearch-shared-test',
+          auth: { apiKey: process.env.ELASTICSEARCH_API_KEY ?? '' },
+        });
+      }).toThrowError('Invalid config: provide either { client } or { url }.');
+    });
+
+    it('should initialize with url', async () => {
+      expect(() => {
+        new ElasticSearchVector({
+          url: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+          id: 'elasticsearch-shared-test',
+        });
+      }).not.toThrowError();
+    });
+
+    it('should initialize with client', async () => {
+      expect(() => {
+        const client = new Client({
+          node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+        });
+        new ElasticSearchVector({
+          id: 'elasticsearch-shared-test',
+          client: client,
+        });
+      }).not.toThrowError();
+    });
+  });
 });
 
 // Shared vector store test suite
+const elasticSearchApiKey = process.env.ELASTICSEARCH_API_KEY;
 const elasticSearchVector = new ElasticSearchVector({
   url: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
   id: 'elasticsearch-shared-test',
-  auth: { apiKey: process.env.ELASTICSEARCH_API_KEY || undefined },
+  ...(elasticSearchApiKey ? { auth: { apiKey: elasticSearchApiKey } } : {}),
 });
 
 createVectorTestSuite({

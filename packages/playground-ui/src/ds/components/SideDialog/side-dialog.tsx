@@ -1,10 +1,10 @@
-import { SideDialogRoot } from './side-dialog-root';
 import { SideDialogCodeSection } from './side-dialog-code-section';
-import { SideDialogHeading } from './side-dialog-heading';
 import { SideDialogContent } from './side-dialog-content';
 import { SideDialogHeader } from './side-dialog-header';
-import { SideDialogTop } from './side-dialog-top';
+import { SideDialogHeading } from './side-dialog-heading';
 import { SideDialogNav } from './side-dialog-nav';
+import { SideDialogRoot } from './side-dialog-root';
+import { SideDialogTop } from './side-dialog-top';
 
 export { type SideDialogRootProps } from './side-dialog-root';
 

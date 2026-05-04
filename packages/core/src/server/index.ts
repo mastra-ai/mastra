@@ -5,7 +5,15 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
-export type { MastraAuthConfig, ContextWithMastra, ApiRoute, HttpLoggingConfig } from './types';
+export type {
+  MastraAuthConfig,
+  ContextWithMastra,
+  ApiRoute,
+  HttpLoggingConfig,
+  ValidationErrorContext,
+  ValidationErrorResponse,
+  ValidationErrorHook,
+} from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';

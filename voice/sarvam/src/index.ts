@@ -2,19 +2,36 @@ import { PassThrough } from 'node:stream';
 
 import { MastraVoice } from '@mastra/core/voice';
 import { SARVAM_VOICES } from './voices';
-import type { SarvamTTSLanguage, SarvamSTTLanguage, SarvamSTTModel, SarvamTTSModel, SarvamVoiceId } from './voices';
+import type {
+  SarvamTTSLanguage,
+  SarvamSTTLanguage,
+  SarvamSTTModel,
+  SarvamTTSModel,
+  SarvamVoiceId,
+  SarvamSTTMode,
+} from './voices';
 
 interface SarvamVoiceConfig {
   apiKey?: string;
   model?: SarvamTTSModel;
   language?: SarvamTTSLanguage;
   properties?: {
-    pitch?: number;
+    /** Controls the speed of the audio. Supported by bulbul:v2 (0.3–3.0) and bulbul:v3 (0.5–2.0). */
     pace?: number;
+    /** Sampling temperature. bulbul:v3 only. Range: 0.01–2.0. Default: 0.6. */
+    temperature?: number;
+    /** Pronunciation dictionary ID. bulbul:v3 only. */
+    dict_id?: string;
+    /** Controls the pitch of the audio. bulbul:v2 only. Range: -0.75–0.75. */
+    pitch?: number;
+    /** Controls the loudness of the audio. bulbul:v2 only. Range: 0.3–3.0. */
     loudness?: number;
-    speech_sample_rate?: 8000 | 16000 | 22050;
+    /** Enables normalization of English words and numeric entities. bulbul:v2 only. */
     enable_preprocessing?: boolean;
-    eng_interpolation_wt?: number;
+    /** Audio sample rate in Hz. */
+    speech_sample_rate?: 8000 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000;
+    /** Output audio codec. */
+    output_audio_codec?: 'mp3' | 'wav' | 'linear16' | 'mulaw' | 'alaw' | 'opus' | 'flac' | 'aac';
   };
 }
 
@@ -23,26 +40,28 @@ interface SarvamListenOptions {
   model?: SarvamSTTModel;
   languageCode?: SarvamSTTLanguage;
   filetype?: 'mp3' | 'wav';
+  /** Operation mode for saaras:v3. Ignored by other models. */
+  mode?: SarvamSTTMode;
 }
 
 const defaultSpeechModel = {
-  model: 'bulbul:v1' as const,
+  model: 'bulbul:v3' as const,
   apiKey: process.env.SARVAM_API_KEY,
   language: 'en-IN' as const,
 };
 
 const defaultListeningModel = {
-  model: 'saarika:v2' as const,
+  model: 'saarika:v2.5' as const,
   apiKey: process.env.SARVAM_API_KEY,
   language_code: 'unknown' as const,
 };
 
 export class SarvamVoice extends MastraVoice {
   private apiKey?: string;
-  private model: SarvamTTSModel = 'bulbul:v1';
+  private model: SarvamTTSModel = 'bulbul:v3';
   private language: SarvamTTSLanguage = 'en-IN';
   private properties: Record<string, any> = {};
-  speaker: SarvamVoiceId = 'meera';
+  speaker: SarvamVoiceId = 'shubh';
   private baseUrl = 'https://api.sarvam.ai';
 
   constructor({
@@ -61,19 +80,22 @@ export class SarvamVoice extends MastraVoice {
       },
       listeningModel: {
         name: listeningModel?.model ?? defaultListeningModel.model,
-        apiKey: listeningModel?.model ?? defaultListeningModel.apiKey,
+        apiKey: listeningModel?.apiKey ?? defaultListeningModel.apiKey,
       },
       speaker,
     });
 
-    this.apiKey = speechModel?.apiKey || defaultSpeechModel.apiKey;
+    this.apiKey = speechModel?.apiKey || listeningModel?.apiKey || defaultSpeechModel.apiKey;
     if (!this.apiKey) {
       throw new Error('SARVAM_API_KEY must be set');
     }
     this.model = speechModel?.model || defaultSpeechModel.model;
     this.language = speechModel?.language || defaultSpeechModel.language;
     this.properties = speechModel?.properties || {};
-    this.speaker = speaker || 'meera';
+    // bulbul:v2 and bulbul:v3 have non-overlapping speaker catalogs, so the
+    // default speaker depends on the selected TTS model.
+    const defaultSpeaker: SarvamVoiceId = this.model === 'bulbul:v2' ? 'anushka' : 'shubh';
+    this.speaker = speaker || defaultSpeaker;
   }
 
   private async makeRequest(endpoint: string, payload: any) {
@@ -117,7 +139,7 @@ export class SarvamVoice extends MastraVoice {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
     const payload = {
-      inputs: [text],
+      text,
       target_language_code: this.language,
       speaker: options?.speaker || this.speaker,
       model: this.model,
@@ -175,8 +197,12 @@ export class SarvamVoice extends MastraVoice {
     const blob = new Blob([audioBuffer], { type: mimeType });
 
     form.append('file', blob);
-    form.append('model', options?.model || 'saarika:v2');
+    form.append('model', options?.model || 'saarika:v2.5');
     form.append('language_code', options?.languageCode || 'unknown');
+    // `mode` is only meaningful for saaras:v3 — Sarvam ignores it for saarika models.
+    if (options?.mode) {
+      form.append('mode', options.mode);
+    }
     const requestOptions = {
       method: 'POST',
       headers: {
@@ -188,7 +214,6 @@ export class SarvamVoice extends MastraVoice {
     try {
       const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
       const result = (await response.json()) as any;
-      //console.log(result);
       return result.transcript;
     } catch (error) {
       console.error('Error during speech-to-text request:', error);

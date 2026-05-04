@@ -306,6 +306,28 @@ describe('GCSFilesystem', () => {
       // Now the Storage client should have been created
       expect(MockStorage).toHaveBeenCalled();
     });
+
+    it('exposes storage via public getter', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      const storage1 = fs.storage;
+      const storage2 = fs.storage;
+      expect(storage1).toBe(storage2);
+    });
+
+    it('exposes bucket via public getter', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      const bucket1 = fs.bucket;
+      const bucket2 = fs.bucket;
+      expect(bucket1).toBe(bucket2);
+    });
   });
 
   describe('Prefix Handling', () => {
@@ -770,6 +792,46 @@ describe('GCSFilesystem SDK Operations', () => {
     it('isDirectory("/") returns true', async () => {
       const result = await fs.isDirectory('/');
       expect(result).toBe(true);
+    });
+
+    it('exists(".") resolves to root and returns true', async () => {
+      const result = await fs.exists('.');
+      expect(result).toBe(true);
+      expect(mockBucket.file).not.toHaveBeenCalled();
+    });
+
+    it('stat(".") returns directory stat', async () => {
+      const stat = await fs.stat('.');
+      expect(stat.type).toBe('directory');
+    });
+
+    it('isDirectory(".") returns true', async () => {
+      const result = await fs.isDirectory('.');
+      expect(result).toBe(true);
+    });
+
+    it('isFile(".") returns false', async () => {
+      const result = await fs.isFile('.');
+      expect(result).toBe(false);
+    });
+
+    it('readdir(".") lists entries the same as readdir("/")', async () => {
+      const files = [
+        { name: 'file1.txt', metadata: { size: 100 } },
+        { name: 'subdir/nested.txt', metadata: { size: 50 } },
+      ];
+      mockBucket.getFiles.mockResolvedValueOnce([files]).mockResolvedValueOnce([files]);
+
+      const dotEntries = await fs.readdir('.');
+      const slashEntries = await fs.readdir('/');
+
+      expect(dotEntries).toEqual(slashEntries);
+    });
+
+    it('exists("./") resolves to root and returns true', async () => {
+      const result = await fs.exists('./');
+      expect(result).toBe(true);
+      expect(mockBucket.file).not.toHaveBeenCalled();
     });
   });
 

@@ -22,6 +22,8 @@ export interface PublicAuthCapabilities {
     type: 'sso' | 'credentials' | 'both';
     /** Whether sign-up is enabled (defaults to true) */
     signUpEnabled?: boolean;
+    /** Optional description explaining the auth requirement and what credentials to use */
+    description?: string;
     /** SSO configuration */
     sso?: {
       /** Provider name */
@@ -30,6 +32,8 @@ export interface PublicAuthCapabilities {
       text: string;
       /** Icon URL */
       icon?: string;
+      /** Description of the auth requirement */
+      description?: string;
       /** Login URL */
       url: string;
     };
@@ -142,6 +146,14 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
+
+  /**
+   * API route prefix used to construct SSO login URLs.
+   * Defaults to `/api` when not provided.
+   *
+   * @example `/mastra` results in SSO URL `/mastra/auth/sso/login`
+   */
+  apiPrefix?: string;
 }
 
 /**
@@ -179,6 +191,12 @@ export async function buildCapabilities(
   const hasSSO = implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud;
   const hasCredentials = implementsInterface<ICredentialsProvider>(auth, 'signIn') && isLicensedOrCloud;
 
+  // Build SSO login URL using the configured prefix (default: /api)
+  const raw = (options?.apiPrefix || '/api').trim();
+  const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  const prefix = withSlash.endsWith('/') ? withSlash.slice(0, -1) : withSlash;
+  const ssoLoginUrl = `${prefix}/auth/sso/login`;
+
   // Check if sign-up is enabled (defaults to true)
   let signUpEnabled = true;
   if (implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
@@ -193,18 +211,20 @@ export async function buildCapabilities(
     login = {
       type: 'both',
       signUpEnabled,
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
-        url: '/api/auth/sso/login',
+        url: ssoLoginUrl,
       },
     };
   } else if (hasSSO) {
     const ssoConfig = (auth as ISSOProvider).getLoginButtonConfig();
     login = {
       type: 'sso',
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
-        url: '/api/auth/sso/login',
+        url: ssoLoginUrl,
       },
     };
   } else if (hasCredentials) {
