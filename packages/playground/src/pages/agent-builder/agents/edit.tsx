@@ -230,12 +230,12 @@ const AgentBuilderAgentEditReady = ({
         backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            {isOwner && <PublishToSlackButton />}
+            {mode === 'edit' && isOwner && <PublishToSlackButton />}
             <VisibilitySelectConnected />
           </div>
         }
         primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} />}
-        mobileExtra={<AgentBuilderMobileMenuConnected showPublishToSlack={isOwner} />}
+        mobileExtra={<AgentBuilderMobileMenuConnected showPublishToSlack={mode === 'edit' && isOwner} />}
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected

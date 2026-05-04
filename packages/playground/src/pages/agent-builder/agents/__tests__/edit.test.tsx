@@ -156,10 +156,10 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
 
-    it('shows an active Publish to Slack button in create mode', () => {
-      const { getByTestId } = renderAt();
-      const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
-      expect(button.disabled).toBe(false);
+    it('does not render the Publish to Slack button in create mode', () => {
+      const { queryByTestId } = renderAt();
+      expect(queryByTestId('agent-builder-publish-slack')).toBeNull();
+      expect(queryByTestId('agent-builder-mobile-menu-publish-slack')).toBeNull();
     });
 
     it('renders Chat and Configuration tabs in create mode', () => {
