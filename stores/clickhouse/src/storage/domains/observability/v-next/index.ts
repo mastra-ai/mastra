@@ -87,7 +87,6 @@ import type {
 import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
 
-import * as branchesOps from './branches';
 import {
   ALL_TABLE_DDL,
   ALL_MV_DDL,
@@ -422,7 +421,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     try {
-      return await branchesOps.listBranches(this.#client, args);
+      return await tracingOps.listBranches(this.#client, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
