@@ -215,6 +215,10 @@ export const getMetricAggregateArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
     aggregation: aggregationTypeSchema,
+    distinctColumn: z
+      .string()
+      .optional()
+      .describe("Column to apply count_distinct over (required when aggregation is 'count_distinct')"),
     filters: metricsFilterSchema.optional(),
     comparePeriod: comparePeriodSchema.optional(),
   })
@@ -251,7 +255,23 @@ export const getMetricBreakdownArgsSchema = z
     name: z.array(z.string()).nonempty().describe('Metric name(s) to break down'),
     groupBy: groupBySchema,
     aggregation: aggregationTypeSchema,
+    distinctColumn: z
+      .string()
+      .optional()
+      .describe("Column to apply count_distinct over (required when aggregation is 'count_distinct')"),
     filters: metricsFilterSchema.optional(),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .max(1000)
+      .optional()
+      .describe('Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy.'),
+    orderBy: z
+      .enum(['value', 'dimension'])
+      .default('value')
+      .describe("Order groups by aggregated 'value' (default) or group 'dimension' key"),
+    orderDirection: sortDirectionSchema.default('DESC').describe('Order direction for groups (defaults to DESC)'),
   })
   .describe('Arguments for getting a metric breakdown');
 
@@ -281,6 +301,10 @@ export const getMetricTimeSeriesArgsSchema = z
     name: z.array(z.string()).nonempty().describe('Metric name(s)'),
     interval: aggregationIntervalSchema,
     aggregation: aggregationTypeSchema,
+    distinctColumn: z
+      .string()
+      .optional()
+      .describe("Column to apply count_distinct over (required when aggregation is 'count_distinct')"),
     filters: metricsFilterSchema.optional(),
     groupBy: groupBySchema.optional(),
   })
