@@ -305,12 +305,104 @@ function artifactIdentity(artifact: Artifact) {
   return artifact.artifactId || artifact.name;
 }
 
-function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefined) {
+function areArtifactPartsEqual(left: Artifact['parts'], right: Artifact['parts']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((part, index) => {
+    const other = right[index];
+    if (!other || part.kind !== other.kind) {
+      return false;
+    }
+
+    if (part.kind === 'text' && other.kind === 'text') {
+      return part.text === other.text;
+    }
+
+    if (part.kind === 'data' && other.kind === 'data') {
+      return JSON.stringify(part.data) === JSON.stringify(other.data);
+    }
+
+    return false;
+  });
+}
+
+function areArtifactsMetadataEqual(left: Artifact['metadata'], right: Artifact['metadata']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefined) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.artifactId === right.artifactId &&
+    left.name === right.name &&
+    left.description === right.description &&
+    areArtifactsMetadataEqual(left.metadata, right.metadata) &&
+    areArtifactPartsEqual(left.parts, right.parts)
+  );
+}
+
+function areStatusMessagePartsEqual(
+  left: NonNullable<Task['status']['message']>['parts'],
+  right: NonNullable<Task['status']['message']>['parts'],
+) {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((part, index) => {
+    const other = right[index];
+    return part.kind === other?.kind && part.text === other?.text;
+  });
+}
+
+function areStatusMessagesEqual(left: Task['status']['message'], right: Task['status']['message']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.messageId === right.messageId &&
+    left.kind === right.kind &&
+    left.role === right.role &&
+    areStatusMessagePartsEqual(left.parts, right.parts)
+  );
+}
+
 function didTaskStatusChange(previous: Task, next: Task) {
-  return JSON.stringify(previous.status) !== JSON.stringify(next.status);
+  return (
+    previous.status.state !== next.status.state ||
+    previous.status.timestamp !== next.status.timestamp ||
+    !areStatusMessagesEqual(previous.status.message, next.status.message)
+  );
 }
 
 function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task }) {
