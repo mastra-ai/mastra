@@ -92,6 +92,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
   if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
   if (field.includes('block')) return 'test-prompt-block';
+  if (field === 'uri') return 'ui://test/app';
 
   return 'test-string';
 }

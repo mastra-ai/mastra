@@ -296,7 +296,15 @@ export const READ_MCP_SERVER_RESOURCE_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' does not support reading resources` });
     }
 
-    return server.readResource(uri);
+    try {
+      return await server.readResource(uri);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('not found') || message.includes('not configured')) {
+        throw new HTTPException(404, { message: `Resource '${uri}' not found on server '${serverId}'` });
+      }
+      throw error;
+    }
   },
 });
 
