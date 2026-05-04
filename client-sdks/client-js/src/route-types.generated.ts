@@ -12682,6 +12682,141 @@ export interface PostObservabilityScores_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /observability/scores/:scoreId
+// ============================================================================
+export type GetObservabilityScoresScoreId_PathParams = {
+  scoreId: string;
+};
+
+export type GetObservabilityScoresScoreId_Response = {
+  score: {
+    /** Unique id for this score event */
+    scoreId?: (string | null) | undefined;
+    /** When the score was recorded */
+    timestamp: Date;
+    /** Trace that anchors the scored target when available */
+    traceId?: (string | null) | undefined;
+    /** Span ID this score applies to */
+    spanId?: (string | null) | undefined;
+    /** Identifier of the scorer (e.g., relevance, accuracy) */
+    scorerId: string;
+    scorerName?: (string | null) | undefined;
+    scorerVersion?: (string | null) | undefined;
+    scoreSource?: (string | null) | undefined;
+    source?: (string | null) | undefined;
+    /** Score value (range defined by scorer) */
+    score: number;
+    reason?: (string | null) | undefined;
+    entityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    parentEntityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    parentEntityId?: (string | null) | undefined;
+    parentEntityName?: (string | null) | undefined;
+    rootEntityType?:
+      | (
+          | (
+              | 'agent'
+              | 'scorer'
+              | 'rag_ingestion'
+              | 'trajectory'
+              | 'input_processor'
+              | 'input_step_processor'
+              | 'output_processor'
+              | 'output_step_processor'
+              | 'workflow_step'
+              | 'tool'
+              | 'workflow_run'
+              | 'memory'
+            )
+          | null
+        )
+      | undefined;
+    rootEntityId?: (string | null) | undefined;
+    rootEntityName?: (string | null) | undefined;
+    userId?: (string | null) | undefined;
+    organizationId?: (string | null) | undefined;
+    resourceId?: (string | null) | undefined;
+    runId?: (string | null) | undefined;
+    sessionId?: (string | null) | undefined;
+    threadId?: (string | null) | undefined;
+    requestId?: (string | null) | undefined;
+    environment?: (string | null) | undefined;
+    serviceName?: (string | null) | undefined;
+    scope?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    entityVersionId?: (string | null) | undefined;
+    parentEntityVersionId?: (string | null) | undefined;
+    rootEntityVersionId?: (string | null) | undefined;
+    experimentId?: (string | null) | undefined;
+    executionSource?: (string | null) | undefined;
+    tags?: (string[] | null) | undefined;
+    /** Trace ID of the scoring run for debugging score generation */
+    scoreTraceId?: (string | null) | undefined;
+    /** User-defined metadata */
+    metadata?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+  } | null;
+};
+
+export type GetObservabilityScoresScoreId_Request = Simplify<
+  (GetObservabilityScoresScoreId_PathParams extends never ? {} : { params: GetObservabilityScoresScoreId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityScoresScoreId_RouteContract {
+  pathParams: GetObservabilityScoresScoreId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetObservabilityScoresScoreId_Request;
+  response: GetObservabilityScoresScoreId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /observability/scores/aggregate
 // ============================================================================
 export type PostObservabilityScoresAggregate_Body = {
@@ -12689,7 +12824,7 @@ export type PostObservabilityScoresAggregate_Body = {
   scorerId: string;
   scoreSource?: string | undefined;
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -12825,7 +12960,7 @@ export type PostObservabilityScoresBreakdown_Body = {
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -12962,7 +13097,7 @@ export type PostObservabilityScoresTimeseries_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -13625,7 +13760,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
   feedbackType: string;
   feedbackSource?: string | undefined;
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -13760,7 +13895,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -13896,7 +14031,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
   filters?:
     | {
         /** Filter by timestamp range */
@@ -14170,7 +14305,24 @@ export type PostObservabilityMetricsAggregate_Body = {
   /** Metric name(s) to aggregate */
   name: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  distinctColumn?:
+    | (
+        | 'entityType'
+        | 'entityName'
+        | 'parentEntityType'
+        | 'parentEntityName'
+        | 'rootEntityType'
+        | 'rootEntityName'
+        | 'name'
+        | 'provider'
+        | 'model'
+        | 'environment'
+        | 'executionSource'
+        | 'serviceName'
+      )
+    | undefined;
   filters?:
     | {
         /** Filter by timestamp range */
@@ -14320,7 +14472,24 @@ export type PostObservabilityMetricsBreakdown_Body = {
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  distinctColumn?:
+    | (
+        | 'entityType'
+        | 'entityName'
+        | 'parentEntityType'
+        | 'parentEntityName'
+        | 'rootEntityType'
+        | 'rootEntityName'
+        | 'name'
+        | 'provider'
+        | 'model'
+        | 'environment'
+        | 'executionSource'
+        | 'serviceName'
+      )
+    | undefined;
   filters?:
     | {
         /** Filter by timestamp range */
@@ -14422,6 +14591,10 @@ export type PostObservabilityMetricsBreakdown_Body = {
           | undefined;
       }
     | undefined;
+  /** Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy. */
+  limit?: number | undefined;
+  /** Sort direction for the aggregated value (defaults to 'DESC' at the storage layer; pairs with limit for top/bottom-N). */
+  orderDirection?: ('ASC' | 'DESC') | undefined;
 };
 
 export type PostObservabilityMetricsBreakdown_Response = {
@@ -14467,7 +14640,24 @@ export type PostObservabilityMetricsTimeseries_Body = {
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'last';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  distinctColumn?:
+    | (
+        | 'entityType'
+        | 'entityName'
+        | 'parentEntityType'
+        | 'parentEntityName'
+        | 'rootEntityType'
+        | 'rootEntityName'
+        | 'name'
+        | 'provider'
+        | 'model'
+        | 'environment'
+        | 'executionSource'
+        | 'serviceName'
+      )
+    | undefined;
   filters?:
     | {
         /** Filter by timestamp range */
@@ -74204,6 +74394,7 @@ export interface RouteTypes {
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
   'POST /observability/scores': PostObservabilityScores_RouteContract;
+  'GET /observability/scores/:scoreId': GetObservabilityScoresScoreId_RouteContract;
   'POST /observability/scores/aggregate': PostObservabilityScoresAggregate_RouteContract;
   'POST /observability/scores/breakdown': PostObservabilityScoresBreakdown_RouteContract;
   'POST /observability/scores/timeseries': PostObservabilityScoresTimeseries_RouteContract;
@@ -74829,6 +75020,9 @@ export interface Client {
   '/observability/scores': {
     GET: GetObservabilityScores_RouteContract;
     POST: PostObservabilityScores_RouteContract;
+  };
+  '/observability/scores/:scoreId': {
+    GET: GetObservabilityScoresScoreId_RouteContract;
   };
   '/observability/scores/aggregate': {
     POST: PostObservabilityScoresAggregate_RouteContract;
