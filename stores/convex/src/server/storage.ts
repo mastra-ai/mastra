@@ -7,6 +7,7 @@ import {
 } from '@mastra/core/storage/constants';
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
+import type { GenericId } from 'convex/values';
 
 import type { StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
@@ -15,6 +16,56 @@ import { findBestIndex } from './index-map';
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
 const VECTOR_TABLE_PREFIX = 'mastra_vector_';
 const CONVEX_TABLE_WORKFLOW_SNAPSHOTS = 'mastra_workflow_snapshots';
+const STORAGE_MUTATION_BATCH_SIZE = 25;
+
+type ConvexDocWithId = { _id: GenericId<string> };
+type StorageRecord = Record<string, unknown> & { id?: unknown };
+
+async function mapInBatches<TInput, TOutput>(
+  inputs: TInput[],
+  batchSize: number,
+  mapper: (input: TInput) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  const results: TOutput[] = [];
+  for (let index = 0; index < inputs.length; index += batchSize) {
+    results.push(...(await Promise.all(inputs.slice(index, index + batchSize).map(mapper))));
+  }
+  return results;
+}
+
+async function deleteDocs(ctx: MutationCtx<any>, docs: ConvexDocWithId[]): Promise<void> {
+  await mapInBatches(docs, STORAGE_MUTATION_BATCH_SIZE, doc => ctx.db.delete(doc._id));
+}
+
+async function findExistingDocsByIds(
+  ids: string[],
+  findDoc: (id: string) => Promise<ConvexDocWithId | null | undefined>,
+): Promise<ConvexDocWithId[]> {
+  const docs = await mapInBatches([...new Set(ids)], STORAGE_MUTATION_BATCH_SIZE, findDoc);
+  return docs.filter((doc): doc is ConvexDocWithId => Boolean(doc));
+}
+
+function coalesceTypedRecordsForBatchInsert(records: StorageRecord[]): StorageRecord[] {
+  const recordsById = new Map<string, StorageRecord>();
+  for (const record of records) {
+    const id = record.id;
+    if (!id) continue;
+
+    const key = String(id);
+    recordsById.set(key, { ...(recordsById.get(key) ?? {}), ...record });
+  }
+  return [...recordsById.values()];
+}
+
+function coalesceLastRecordById(records: StorageRecord[]): StorageRecord[] {
+  const recordsById = new Map<string, StorageRecord>();
+  for (const record of records) {
+    const id = record.id;
+    if (!id) continue;
+    recordsById.set(String(id), record);
+  }
+  return [...recordsById.values()];
+}
 
 /**
  * Determines which Convex table to use based on the logical table name.
@@ -109,10 +160,9 @@ export async function handleTypedOperation(
     }
 
     case 'batchInsert': {
-      for (const record of request.records) {
+      const records = coalesceTypedRecordsForBatchInsert(request.records);
+      await mapInBatches(records, STORAGE_MUTATION_BATCH_SIZE, async record => {
         const id = record.id;
-        if (!id) continue;
-
         const existing = await ctx.db
           .query(convexTable)
           .withIndex('by_record_id', (q: any) => q.eq('id', id))
@@ -124,7 +174,7 @@ export async function handleTypedOperation(
         } else {
           await ctx.db.insert(convexTable, record);
         }
-      }
+      });
       return { ok: true };
     }
 
@@ -215,27 +265,22 @@ export async function handleTypedOperation(
     case 'dropTable': {
       // Delete a small batch per call to stay within Convex's 1-second mutation timeout.
       // Client must call repeatedly until hasMore is false.
-      const BATCH_SIZE = 25;
-      const docs = await ctx.db.query(convexTable).take(BATCH_SIZE + 1);
-      const hasMore = docs.length > BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, BATCH_SIZE) : docs;
+      const docs = await ctx.db.query(convexTable).take(STORAGE_MUTATION_BATCH_SIZE + 1);
+      const hasMore = docs.length > STORAGE_MUTATION_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
 
-      for (const doc of docsToDelete) {
-        await ctx.db.delete(doc._id);
-      }
+      await deleteDocs(ctx, docsToDelete);
       return { ok: true, hasMore };
     }
 
     case 'deleteMany': {
-      for (const id of request.ids) {
-        const doc = await ctx.db
+      const docsToDelete = await findExistingDocsByIds(request.ids, id =>
+        ctx.db
           .query(convexTable)
           .withIndex('by_record_id', (q: any) => q.eq('id', id))
-          .unique();
-        if (doc) {
-          await ctx.db.delete(doc._id);
-        }
-      }
+          .unique(),
+      );
+      await deleteDocs(ctx, docsToDelete);
       return { ok: true };
     }
 
@@ -284,9 +329,9 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     case 'batchInsert': {
-      for (const record of request.records) {
+      const records = coalesceLastRecordById(request.records);
+      await mapInBatches(records, STORAGE_MUTATION_BATCH_SIZE, async record => {
         const id = record.id;
-        if (!id) continue;
 
         // Find existing by composite key (indexName, id) to scope per index
         const existing = await ctx.db
@@ -307,7 +352,7 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
             metadata: record.metadata,
           });
         }
-      }
+      });
       return { ok: true };
     }
 
@@ -349,31 +394,26 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     case 'dropTable': {
       // Delete a small batch per call to stay within Convex's 1-second mutation timeout.
       // Client must call repeatedly until hasMore is false.
-      const BATCH_SIZE = 25;
       const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
-        .take(BATCH_SIZE + 1);
-      const hasMore = docs.length > BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, BATCH_SIZE) : docs;
+        .take(STORAGE_MUTATION_BATCH_SIZE + 1);
+      const hasMore = docs.length > STORAGE_MUTATION_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
 
-      for (const doc of docsToDelete) {
-        await ctx.db.delete(doc._id);
-      }
+      await deleteDocs(ctx, docsToDelete);
       return { ok: true, hasMore };
     }
 
     case 'deleteMany': {
-      for (const id of request.ids) {
+      const docsToDelete = await findExistingDocsByIds(request.ids, id =>
         // Use composite key (indexName, id) to scope deletion per index
-        const doc = await ctx.db
+        ctx.db
           .query(convexTable)
           .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', id))
-          .unique();
-        if (doc) {
-          await ctx.db.delete(doc._id);
-        }
-      }
+          .unique(),
+      );
+      await deleteDocs(ctx, docsToDelete);
       return { ok: true };
     }
 
@@ -416,8 +456,8 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
     }
 
     case 'batchInsert': {
-      for (const record of request.records) {
-        if (!record.id) continue;
+      const records = coalesceLastRecordById(request.records);
+      await mapInBatches(records, STORAGE_MUTATION_BATCH_SIZE, async record => {
         const primaryKey = String(record.id);
 
         const existing = await ctx.db
@@ -434,7 +474,7 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
             record,
           });
         }
-      }
+      });
       return { ok: true };
     }
 
@@ -483,30 +523,25 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
     case 'dropTable': {
       // Delete a small batch per call to stay within Convex's 1-second mutation timeout.
       // Client must call repeatedly until hasMore is false.
-      const BATCH_SIZE = 25;
       const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_table', (q: any) => q.eq('table', tableName))
-        .take(BATCH_SIZE + 1);
-      const hasMore = docs.length > BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, BATCH_SIZE) : docs;
+        .take(STORAGE_MUTATION_BATCH_SIZE + 1);
+      const hasMore = docs.length > STORAGE_MUTATION_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, STORAGE_MUTATION_BATCH_SIZE) : docs;
 
-      for (const doc of docsToDelete) {
-        await ctx.db.delete(doc._id);
-      }
+      await deleteDocs(ctx, docsToDelete);
       return { ok: true, hasMore };
     }
 
     case 'deleteMany': {
-      for (const id of request.ids) {
-        const existing = await ctx.db
+      const docsToDelete = await findExistingDocsByIds(request.ids, id =>
+        ctx.db
           .query(convexTable)
           .withIndex('by_table_primary', (q: any) => q.eq('table', tableName).eq('primaryKey', String(id)))
-          .unique();
-        if (existing) {
-          await ctx.db.delete(existing._id);
-        }
-      }
+          .unique(),
+      );
+      await deleteDocs(ctx, docsToDelete);
       return { ok: true };
     }
 

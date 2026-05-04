@@ -82,17 +82,26 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetStructureResponse,
   GetTraceArgs,
   GetTraceResponse,
-  GetTraceLightResponse,
   LightSpanRecord,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   SpanRecord,
   UpdateSpanArgs,
 } from './tracing';
 
-import { listTracesArgsSchema, TraceStatus, toTraceSpans } from './tracing';
+import {
+  BRANCH_SPAN_TYPE_SET,
+  listBranchesArgsSchema,
+  listTracesArgsSchema,
+  TraceStatus,
+  toTraceSpan,
+  toTraceSpans,
+} from './tracing';
 
 /**
  * Internal structure for storing a trace with computed properties for efficient filtering
@@ -270,7 +279,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+  async getTraceLight(args: GetTraceArgs): Promise<GetStructureResponse | null> {
     const { traceId } = args;
     const traceEntry = this.db.traces.get(traceId);
     if (!traceEntry) {
@@ -499,6 +508,129 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     // Has child error filter
     if (filters.hasChildError !== undefined && traceEntry.hasChildError !== filters.hasChildError) {
       return false;
+    }
+
+    return true;
+  }
+
+  async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
+
+    const allowedSpanTypes = filters?.spanType
+      ? BRANCH_SPAN_TYPE_SET.has(filters.spanType)
+        ? new Set([filters.spanType])
+        : new Set<typeof filters.spanType>()
+      : BRANCH_SPAN_TYPE_SET;
+
+    const matches: SpanRecord[] = [];
+    for (const [, traceEntry] of this.db.traces) {
+      for (const span of Object.values(traceEntry.spans)) {
+        if (!allowedSpanTypes.has(span.spanType)) continue;
+        if (!this.spanMatchesBranchFilters(span, filters)) continue;
+        matches.push(span);
+      }
+    }
+
+    const { field: sortField, direction: sortDirection } = orderBy;
+    matches.sort((a, b) => {
+      if (sortField === 'endedAt') {
+        const aVal = a.endedAt;
+        const bVal = b.endedAt;
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return sortDirection === 'DESC' ? -1 : 1;
+        if (bVal == null) return sortDirection === 'DESC' ? 1 : -1;
+        const diff = aVal.getTime() - bVal.getTime();
+        return sortDirection === 'DESC' ? -diff : diff;
+      }
+      const diff = a.startedAt.getTime() - b.startedAt.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
+    });
+
+    const total = matches.length;
+    const { page, perPage } = pagination;
+    const start = page * perPage;
+    const end = start + perPage;
+    const paged = matches.slice(start, end);
+
+    return {
+      pagination: { total, page, perPage, hasMore: end < total },
+      branches: paged.map(toTraceSpan),
+    };
+  }
+
+  /**
+   * Check if a single anchor span matches all provided branch filters. All
+   * predicates apply to the span itself (not the trace root) -- this is the
+   * key difference from {@link traceMatchesFilters}.
+   */
+  private spanMatchesBranchFilters(span: SpanRecord, filters: ListBranchesArgs['filters']): boolean {
+    if (!filters) return true;
+
+    if (filters.startedAt) {
+      if (filters.startedAt.start && span.startedAt < filters.startedAt.start) return false;
+      if (filters.startedAt.end && span.startedAt > filters.startedAt.end) return false;
+    }
+    if (filters.endedAt) {
+      if (span.endedAt == null) return false;
+      if (filters.endedAt.start && span.endedAt < filters.endedAt.start) return false;
+      if (filters.endedAt.end && span.endedAt > filters.endedAt.end) return false;
+    }
+
+    if (filters.traceId !== undefined && span.traceId !== filters.traceId) return false;
+
+    if (filters.entityType !== undefined && span.entityType !== filters.entityType) return false;
+    if (filters.entityId !== undefined && span.entityId !== filters.entityId) return false;
+    if (filters.entityName !== undefined && span.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && span.entityVersionId !== filters.entityVersionId) return false;
+    if (filters.parentEntityType !== undefined && span.parentEntityType !== filters.parentEntityType) return false;
+    if (filters.parentEntityId !== undefined && span.parentEntityId !== filters.parentEntityId) return false;
+    if (filters.parentEntityName !== undefined && span.parentEntityName !== filters.parentEntityName) return false;
+    if (filters.parentEntityVersionId !== undefined && span.parentEntityVersionId !== filters.parentEntityVersionId)
+      return false;
+    if (filters.rootEntityType !== undefined && span.rootEntityType !== filters.rootEntityType) return false;
+    if (filters.rootEntityId !== undefined && span.rootEntityId !== filters.rootEntityId) return false;
+    if (filters.rootEntityName !== undefined && span.rootEntityName !== filters.rootEntityName) return false;
+    if (filters.rootEntityVersionId !== undefined && span.rootEntityVersionId !== filters.rootEntityVersionId)
+      return false;
+
+    if (filters.experimentId !== undefined && span.experimentId !== filters.experimentId) return false;
+    if (filters.userId !== undefined && span.userId !== filters.userId) return false;
+    if (filters.organizationId !== undefined && span.organizationId !== filters.organizationId) return false;
+    if (filters.resourceId !== undefined && span.resourceId !== filters.resourceId) return false;
+    if (filters.runId !== undefined && span.runId !== filters.runId) return false;
+    if (filters.sessionId !== undefined && span.sessionId !== filters.sessionId) return false;
+    if (filters.threadId !== undefined && span.threadId !== filters.threadId) return false;
+    if (filters.requestId !== undefined && span.requestId !== filters.requestId) return false;
+    if (filters.environment !== undefined && span.environment !== filters.environment) return false;
+    if (filters.source !== undefined && span.source !== filters.source) return false;
+    if (filters.serviceName !== undefined && span.serviceName !== filters.serviceName) return false;
+
+    if (filters.scope != null && span.scope != null) {
+      for (const [key, value] of Object.entries(filters.scope)) {
+        if (!jsonValueEquals(span.scope[key], value)) return false;
+      }
+    } else if (filters.scope != null && span.scope == null) {
+      return false;
+    }
+
+    if (filters.metadata != null && span.metadata != null) {
+      for (const [key, value] of Object.entries(filters.metadata)) {
+        if (!jsonValueEquals(span.metadata[key], value)) return false;
+      }
+    } else if (filters.metadata != null && span.metadata == null) {
+      return false;
+    }
+
+    if (filters.tags != null && filters.tags.length > 0) {
+      if (span.tags == null) return false;
+      for (const tag of filters.tags) {
+        if (!span.tags.includes(tag)) return false;
+      }
+    }
+
+    if (filters.status !== undefined) {
+      const spanStatus = toTraceSpan(span).status;
+      if (spanStatus !== filters.status) return false;
     }
 
     return true;

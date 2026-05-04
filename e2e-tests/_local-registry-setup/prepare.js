@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
+const gitIdentityEnv = {
+  GIT_AUTHOR_NAME: 'GitHub Action',
+  GIT_AUTHOR_EMAIL: 'action@github.com',
+  GIT_COMMITTER_NAME: 'GitHub Action',
+  GIT_COMMITTER_EMAIL: 'action@github.com',
+};
 
 // 10 minutes timeout for changeset operations - CI can be slow
 const defaultTimeout = 10 * 60 * 1000;
@@ -145,6 +151,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         stdio: ['inherit', 'inherit', 'inherit'],
         env: {
           ...process.env,
+          ...gitIdentityEnv,
           HUSKY: '0',
         },
       });
