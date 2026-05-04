@@ -80,6 +80,7 @@ function prepareServeOptions({ mastra, inngest, functions: userFunctions = [], r
  *
  * @example Next.js
  * ```ts
+ * // app/inngest/api/route.ts — file path determines the route URL
  * import { createServe } from '@mastra/inngest';
  * import { serve } from 'inngest/next';
  *

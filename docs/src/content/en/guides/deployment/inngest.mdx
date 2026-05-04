@@ -405,9 +405,10 @@ The `createServe` function works with any Inngest adapter. See the [Inngest serv
 
 If you need to keep `/api/inngest` (for example to match Inngest's auto-discover convention without changing the dashboard URL), set `server.apiPrefix` to relocate Mastra's built-in routes:
 
-```ts title="src/mastra/index.ts" {6,9}
+```ts title="src/mastra/index.ts" {7,10}
 import { Mastra } from '@mastra/core'
 import { serve } from '@mastra/inngest'
+import { inngest } from './inngest'
 
 export const mastra = new Mastra({
   server: {

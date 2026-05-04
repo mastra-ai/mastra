@@ -2,15 +2,15 @@
 '@mastra/inngest': patch
 ---
 
-Updated JSDoc adapter examples to register Inngest at `/inngest/api` instead of `/api/inngest`. The Inngest deployment guide and the in-repo example projects use the same path.
+Updated the `serve` and `createServe` JSDoc adapter examples to register Inngest at `/inngest/api` instead of `/api/inngest`, matching the Inngest deployment guide and in-repo example projects.
 
 **Why**
 
-Mastra's server now rejects user-defined `apiRoutes[].path` values that start with the server's `apiPrefix` (default `/api`) because that prefix is reserved for built-in routes such as `/api/agents` and `/api/workflows`. Following the previous guide on a current `@mastra/core` caused the server to throw `Custom API route "/api/inngest" must not start with "/api"` at startup.
+Mastra reserves the `/api` prefix for built-in routes (agents, workflows, memory). Custom `apiRoutes[].path` values that start with the server's `apiPrefix` (default `/api`) are rejected at startup, so the previous JSDoc snippets threw `Custom API route "/api/inngest" must not start with "/api"` when copy-pasted into a current Mastra project.
 
 **Migration**
 
-If you registered Inngest with the previous guide:
+If you registered Inngest with the previous guide or JSDoc example:
 
 ```ts
 // Before
@@ -34,4 +34,4 @@ apiRoutes: [
 
 Update the dev server URL (`npx inngest-cli dev -u http://localhost:4111/inngest/api`) and, in production, set the **URL** field on your Inngest app to match.
 
-If you cannot change the path, set `server.apiPrefix` (for example `/_mastra`) to relocate Mastra's built-in routes and remember to update `server.auth.protected` and any `MastraClient` `apiPrefix` to match. See the [Inngest deployment guide](https://mastra.ai/guides/deployment/inngest) for the full walkthrough.
+If you cannot change the path, set `server.apiPrefix` (for example `/_mastra`) to relocate the built-in routes and remember to update `server.auth.protected` and any `MastraClient` `apiPrefix` to match. See the [Inngest deployment guide](https://mastra.ai/guides/deployment/inngest) for the full walkthrough.
