@@ -20,6 +20,7 @@ import {
   traceIdField,
   metadataField,
 } from '../shared';
+import type { AggregationType } from '../shared';
 
 // ============================================================================
 // Field Schemas
@@ -242,6 +243,15 @@ export const distinctColumnSchema = z
 
 // --- getMetricAggregate ---
 
+const requireDistinctColumnRefinement = {
+  check: (data: { aggregation: AggregationType; distinctColumn?: string | undefined }) =>
+    data.aggregation !== 'count_distinct' || data.distinctColumn !== undefined,
+  options: {
+    message: "distinctColumn is required when aggregation is 'count_distinct'",
+    path: ['distinctColumn'],
+  },
+};
+
 export const getMetricAggregateArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
@@ -250,6 +260,7 @@ export const getMetricAggregateArgsSchema = z
     filters: metricsFilterSchema.optional(),
     comparePeriod: comparePeriodSchema.optional(),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting a metric aggregate');
 
 export type GetMetricAggregateArgs = z.infer<typeof getMetricAggregateArgsSchema>;
@@ -293,9 +304,12 @@ export const getMetricBreakdownArgsSchema = z
       .optional()
       .describe('Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy.'),
     orderDirection: sortDirectionSchema
-      .default('DESC')
-      .describe('Sort direction for the aggregated value (defaults to DESC; pairs with limit for top/bottom-N)'),
+      .optional()
+      .describe(
+        "Sort direction for the aggregated value (defaults to 'DESC' at the storage layer; pairs with limit for top/bottom-N).",
+      ),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting a metric breakdown');
 
 export type GetMetricBreakdownArgs = z.infer<typeof getMetricBreakdownArgsSchema>;
@@ -328,6 +342,7 @@ export const getMetricTimeSeriesArgsSchema = z
     filters: metricsFilterSchema.optional(),
     groupBy: groupBySchema.optional(),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting metric time series');
 
 export type GetMetricTimeSeriesArgs = z.infer<typeof getMetricTimeSeriesArgsSchema>;

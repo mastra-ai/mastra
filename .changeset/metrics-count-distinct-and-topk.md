@@ -14,7 +14,7 @@ Added `count_distinct` aggregation and server-side TopK to the metrics storage A
 
 ```ts
 await store.getMetricAggregate({
-  name: 'mastra_llm_tokens_total',
+  name: ['mastra_llm_tokens_total'],
   aggregation: 'count_distinct',
   distinctColumn: 'model',
   filters: { timestamp: { start, end } },
@@ -27,9 +27,9 @@ await store.getMetricAggregate({
 
 ```ts
 await store.getMetricBreakdown({
-  name: 'mastra_agent_duration_ms',
+  name: ['mastra_agent_duration_ms'],
   aggregation: 'sum',
-  groupBy: 'threadId',
+  groupBy: ['threadId'],
   limit: 20,
   orderDirection: 'DESC',
 });
