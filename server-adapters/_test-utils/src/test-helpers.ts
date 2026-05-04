@@ -714,6 +714,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    const schedules = await storage.getStore('schedules');
+    if (schedules) {
+      const now = Date.now();
+      await schedules.createSchedule({
+        id: 'test-schedule',
+        target: { type: 'workflow', workflowId: 'test-workflow' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
     const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {
       if (!memoryStore) {
         return;

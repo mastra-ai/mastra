@@ -48,9 +48,9 @@ test('requests agent traces when runtime observability is available without pack
   });
 
   await page.goto('/agents/weather-agent/chat/new');
-  await expect(page.getByRole('button', { name: 'Evaluate' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Review' })).toBeVisible();
-  await page.getByRole('button', { name: 'Traces' }).click();
+  await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Review' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Traces' }).click();
 
   await expect(page).toHaveURL(/\/agents\/weather-agent\/traces$/);
   await expect(page.getByText('No traces yet.')).toBeVisible();

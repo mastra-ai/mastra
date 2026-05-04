@@ -30,11 +30,30 @@ import type {
   Processor,
   ProcessorMessageResult,
   ProcessorStreamWriter,
+  ProcessorViolation,
   ProcessorWorkflow,
   RunProcessInputStepArgs,
   RunProcessInputStepResult,
   ToolCallInfo,
 } from './index';
+
+/**
+ * Safely invoke a processor's onViolation callback when a TripWire is caught.
+ * Errors from the callback are silently caught.
+ */
+async function invokeOnViolation(processor: Processor, error: TripWire): Promise<void> {
+  if (!processor.onViolation) return;
+  try {
+    const violation: ProcessorViolation = {
+      processorId: error.processorId ?? processor.id,
+      message: error.message,
+      detail: error.options?.metadata,
+    };
+    await processor.onViolation(violation);
+  } catch {
+    // onViolation errors are silently caught
+  }
+}
 
 /**
  * Implementation of processor state management
@@ -522,6 +541,7 @@ export class ProcessorRunner {
               },
             },
           });
+          await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -662,6 +682,7 @@ export class ProcessorRunner {
                 },
               },
             });
+            await invokeOnViolation(processor, error);
             return {
               part: null,
               blocked: true,
@@ -984,6 +1005,7 @@ export class ProcessorRunner {
               },
             },
           });
+          await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1209,6 +1231,7 @@ export class ProcessorRunner {
               },
             },
           });
+          await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1445,6 +1468,7 @@ export class ProcessorRunner {
               },
             },
           });
+          await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1604,6 +1628,7 @@ export class ProcessorRunner {
               },
             },
           });
+          await invokeOnViolation(processor, processorError);
           throw processorError;
         }
 

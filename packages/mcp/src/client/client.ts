@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createRequire } from 'node:module';
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
@@ -73,9 +74,85 @@ export type {
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+const require = createRequire(import.meta.url);
 
 // Per MCP spec, only fallback to SSE for these status codes
 const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
+const DATADOG_TRACER_TEST_SYMBOL = Symbol.for('mastra.mcp.dd-trace-test-tracer');
+
+type DatadogScopeLike = {
+  activate<T>(span: unknown, callback: () => T): T;
+};
+
+type DatadogTracerLike = {
+  scope?: () => DatadogScopeLike;
+  default?: {
+    scope?: () => DatadogScopeLike;
+  };
+};
+
+function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
+  return (init?.method ?? 'GET').toUpperCase() === 'GET';
+}
+
+function getDatadogScope(): DatadogScopeLike | null {
+  const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
+    | DatadogTracerLike
+    | undefined;
+  const tracer = testTracer ?? loadDatadogTracer();
+
+  if (typeof tracer?.scope === 'function') {
+    return tracer.scope();
+  }
+
+  if (typeof tracer?.default?.scope === 'function') {
+    return tracer.default.scope();
+  }
+
+  return null;
+}
+
+function loadDatadogTracer(): DatadogTracerLike | null {
+  if (!isDatadogTracerLikelyLoaded()) {
+    return null;
+  }
+
+  try {
+    return require('dd-trace') as DatadogTracerLike;
+  } catch {
+    return null;
+  }
+}
+
+function isDatadogTracerLikelyLoaded(): boolean {
+  if ((globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL]) {
+    return true;
+  }
+
+  if (process.execArgv.some(arg => arg.includes('dd-trace'))) {
+    return true;
+  }
+
+  if (process.env.NODE_OPTIONS?.includes('dd-trace')) {
+    return true;
+  }
+
+  try {
+    const resolvedPath = require.resolve('dd-trace');
+    return Boolean(require.cache[resolvedPath]);
+  } catch {
+    return false;
+  }
+}
+
+function runOutsideDatadogTraceScope<T>(callback: () => T): T {
+  const scope = getDatadogScope();
+  if (!scope) {
+    return callback();
+  }
+
+  return scope.activate(null, callback);
+}
 
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
@@ -311,12 +388,15 @@ export class InternalMastraMCPClient extends MastraBase {
   private async connectHttp(url: URL) {
     const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
 
-    // Wrap the user's fetch function to inject requestContext as the third argument.
-    // The transport calls fetch with standard (url, init) signature, but we forward
-    // the current operation context so users can access request-scoped data (e.g., auth cookies).
-    const fetch: FetchLike | undefined = userFetch
-      ? (url: string | URL, init?: RequestInit) => userFetch(url, init, this.operationContextStore.getStore() ?? null)
-      : undefined;
+    // Wrap fetch so request-scoped metadata still flows through normal MCP POSTs, while
+    // the long-lived Streamable HTTP event stream does not inherit the active Datadog span.
+    const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
+      const requestContext = this.operationContextStore.getStore() ?? null;
+      const executeFetch = () =>
+        userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
+
+      return shouldDetachPersistentTransportRequest(init) ? runOutsideDatadogTraceScope(executeFetch) : executeFetch();
+    };
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -357,7 +437,7 @@ export class InternalMastraMCPClient extends MastraBase {
         // Fallback to SSE transport
         // If fetch is provided, ensure it's also in eventSourceInit for the EventSource connection
         // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream
-        const sseEventSourceInit = fetch ? { ...eventSourceInit, fetch } : eventSourceInit;
+        const sseEventSourceInit = { ...eventSourceInit, fetch };
 
         const sseTransport = new SSEClientTransport(url, {
           requestInit,

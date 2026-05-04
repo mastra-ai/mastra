@@ -6,7 +6,6 @@ import {
   LogsLayout,
   LogsListView,
   LogsToolbar,
-  NoDataPageLayout,
   NoLogsInfo,
   PageHeader,
   PageLayout,
@@ -127,78 +126,85 @@ export default function LogsPage() {
     [url],
   );
 
+  const pageTopArea = (
+    <PageLayout.TopArea>
+      <PageLayout.Row>
+        <PageLayout.Column>
+          <PageHeader>
+            <PageHeader.Title isLoading={isLoadingLogs}>
+              <LogsIcon /> Logs
+            </PageHeader.Title>
+          </PageHeader>
+        </PageLayout.Column>
+        <PageLayout.Column className="flex justify-end items-center gap-2">
+          <DateTimeRangePicker
+            preset={url.datePreset}
+            onPresetChange={url.handleDatePresetChange}
+            dateFrom={url.selectedDateFrom}
+            dateTo={url.selectedDateTo}
+            onDateChange={url.handleDateChange}
+            disabled={isLoadingLogs}
+            presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+          />
+          <PropertyFilterCreator
+            fields={filterFields}
+            tokens={url.filterTokens}
+            onTokensChange={url.handleFilterTokensChange}
+            disabled={isLoadingLogs}
+            onStartTextFilter={setAutoFocusFilterFieldId}
+          />
+          <ButtonWithTooltip
+            as="a"
+            href="https://mastra.ai/en/docs/observability/logging"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Logs documentation"
+            tooltipContent="Go to Logs documentation"
+          >
+            <BookIcon />
+          </ButtonWithTooltip>
+        </PageLayout.Column>
+      </PageLayout.Row>
+
+      <LogsToolbar
+        isLoading={isLoadingLogs}
+        filterFields={filterFields}
+        filterTokens={url.filterTokens}
+        onFilterTokensChange={url.handleFilterTokensChange}
+        onClear={handleClear}
+        onRemoveAll={url.handleRemoveAll}
+        onSave={persistence.handleSave}
+        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
+        autoFocusFilterFieldId={autoFocusFilterFieldId}
+      />
+    </PageLayout.TopArea>
+  );
+
   if (logsError) {
     return (
-      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
-        <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
-      </NoDataPageLayout>
+      <PageLayout width="wide" height="full">
+        {pageTopArea}
+        <PageLayout.MainArea isCentered>
+          <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
+        </PageLayout.MainArea>
+      </PageLayout>
     );
   }
 
-  const hasActiveFilters = url.filterTokens.length > 0 || url.datePreset !== 'last-24h' || !!url.selectedDateTo;
-
-  if (logs.length === 0 && !isLoadingLogs && !hasActiveFilters) {
+  if (logs.length === 0 && !isLoadingLogs && url.filterTokens.length === 0) {
     return (
-      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
-        <NoLogsInfo />
-      </NoDataPageLayout>
+      <PageLayout width="wide" height="full">
+        {pageTopArea}
+        <PageLayout.MainArea isCentered>
+          <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
+        </PageLayout.MainArea>
+      </PageLayout>
     );
   }
 
   return (
     <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoadingLogs}>
-                <LogsIcon /> Logs
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end items-center gap-2">
-            <DateTimeRangePicker
-              preset={url.datePreset}
-              onPresetChange={url.handleDatePresetChange}
-              dateFrom={url.selectedDateFrom}
-              dateTo={url.selectedDateTo}
-              onDateChange={url.handleDateChange}
-              disabled={isLoadingLogs}
-              presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-            />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={url.filterTokens}
-              onTokensChange={url.handleFilterTokensChange}
-              disabled={isLoadingLogs}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-            />
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/observability/logs/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Logs documentation"
-              tooltipContent="Go to Logs documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
-
-        <LogsToolbar
-          isLoading={isLoadingLogs}
-          filterFields={filterFields}
-          filterTokens={url.filterTokens}
-          onFilterTokensChange={url.handleFilterTokensChange}
-          onClear={handleClear}
-          onRemoveAll={url.handleRemoveAll}
-          onSave={persistence.handleSave}
-          onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
-      </PageLayout.TopArea>
-
+      {pageTopArea}
       <LogsLayout
         logCollapsed={logDetailsCollapsed}
         listSlot={

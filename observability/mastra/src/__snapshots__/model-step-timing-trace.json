@@ -129,7 +129,16 @@
                   },
                   "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Hello"
+                  }
+                ],
                 "output": {
                   "text": "Hello world",
                   "toolCalls": []

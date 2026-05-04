@@ -312,6 +312,19 @@ export type ProcessAPIErrorResult = {
  * @template TId - The processor's unique identifier type
  * @template TTripwireMetadata - The type of metadata passed when calling abort()
  */
+/**
+ * A violation event emitted by a processor when it detects a policy breach.
+ * Generic enough to be used by any processor (cost guard, moderation, PII, etc.).
+ */
+export interface ProcessorViolation<TDetail = unknown> {
+  /** The processor that detected the violation */
+  processorId: string;
+  /** Human-readable description of the violation */
+  message: string;
+  /** Processor-specific violation details */
+  detail: TDetail;
+}
+
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
@@ -326,6 +339,13 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
 
   /** When true, this processor will also receive `data-*` chunks in processOutputStream. Default: false. */
   processDataParts?: boolean;
+
+  /**
+   * Optional callback invoked when this processor detects a violation, regardless of strategy.
+   * Use for side effects like alerting, logging to external systems, or emailing users.
+   * Errors thrown by this callback are silently caught to prevent interfering with processor logic.
+   */
+  onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
 
   /**
    * Process input messages before they are sent to the LLM

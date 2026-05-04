@@ -310,6 +310,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 warnings = w || [];
                 request = r || {};
                 rawResponse = rr || {};
+                modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
 
                 if (pubsub) {
                   void emitStepStartEvent(pubsub, runId, {

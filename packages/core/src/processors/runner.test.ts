@@ -221,6 +221,64 @@ describe('ProcessorRunner', () => {
       expect(executionOrder).toEqual(['processor1']);
     });
 
+    it('should call onViolation when a processor triggers abort()', async () => {
+      const onViolation = vi.fn();
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Cost exceeded', { metadata: { limit: 5, usage: 7 } });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'guard-processor',
+        message: 'Cost exceeded',
+        detail: { limit: 5, usage: 7 },
+      });
+    });
+
+    it('should not fail if onViolation throws', async () => {
+      const onViolation = vi.fn().mockRejectedValue(new Error('callback error'));
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Blocked');
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalled();
+    });
+
     it('should skip processors that do not implement processInput', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [

@@ -102,6 +102,25 @@ export const TitleOnly: Story = {
   render: () => <Notice variant="warning" title="Action required" />,
 };
 
+export const MessageOnly: Story = {
+  render: () => <Notice variant="info">No eligible scorers have been defined to run.</Notice>,
+};
+
+export const MessageOnlyWithAction: Story = {
+  render: () => (
+    <Notice
+      variant="destructive"
+      action={
+        <Notice.Button>
+          Retry <RefreshCwIcon />
+        </Notice.Button>
+      }
+    >
+      Failed to load scorers.
+    </Notice>
+  ),
+};
+
 export const CustomIcon: Story = {
   render: () => (
     <Notice variant="success" title="Achievement unlocked" icon={<TrophyIcon />}>

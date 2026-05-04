@@ -128,6 +128,49 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           safeEnqueue(controller, processedChunk);
           return;
         }
+
+        // Non data-* chunks injected via this writer (e.g. `tool-output` from
+        // sub-agents delegated through the `agents:` option, or
+        // `workflow-step-output` from workflow tools) bypass the LLM's own
+        // processor pipeline. Route them through configured output processors
+        // here so users can filter/redact nested chunks via processOutputStream.
+        if (dataChunkProcessorRunner) {
+          const {
+            part: processed,
+            blocked,
+            reason,
+            tripwireOptions,
+            processorId,
+          } = await dataChunkProcessorRunner.processPart(
+            chunk,
+            (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
+            undefined,
+            requestContext,
+            messageList,
+            0,
+            dataChunkStreamWriter,
+          );
+
+          if (blocked) {
+            safeEnqueue(controller, {
+              type: 'tripwire',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                reason: reason || 'Output processor blocked content',
+                retry: tripwireOptions?.retry,
+                metadata: tripwireOptions?.metadata,
+                processorId,
+              },
+            } as ChunkType<OUTPUT>);
+            return;
+          }
+
+          if (!processed) return;
+          safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          return;
+        }
+
         safeEnqueue(controller, chunk);
       };
 
