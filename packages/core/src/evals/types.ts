@@ -610,7 +610,13 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
   const steps: ToolCallStep[] = [];
 
   for (const message of output) {
-    const toolInvocations = message?.content?.toolInvocations;
+    const toolInvocations =
+      message?.content?.toolInvocations ??
+      message?.content?.parts
+        ?.filter((part): part is typeof part & { type: 'tool-invocation'; toolInvocation: NonNullable<typeof part>['toolInvocation'] } => {
+          return part?.type === 'tool-invocation' && !!part.toolInvocation;
+        })
+        .map(part => part.toolInvocation);
     if (!toolInvocations) continue;
 
     for (const invocation of toolInvocations) {
