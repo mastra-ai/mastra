@@ -39,7 +39,7 @@ export function TimelineExpandCol({
   collapseAll,
   totalDescendants = 0,
   allDescendantsExpanded,
-  numOfChildren,
+  numOfChildren = 0,
   toggleSiblings,
   siblingsAllExpanded,
   siblingsWithChildrenCount = 0,
