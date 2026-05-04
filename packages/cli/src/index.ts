@@ -1,4 +1,5 @@
 #! /usr/bin/env node
+import { coreFeatures } from '@mastra/core/features';
 import { Command } from 'commander';
 import pc from 'picocolors';
 import type { PackageJson } from 'type-fest';
@@ -214,10 +215,12 @@ deployCommand
   .option('--tail <n>', 'Number of recent log lines')
   .action(wrapAction(logsAction));
 
-deployCommand
-  .command('suggestions [deploy-id]')
-  .description('Show deploy suggestions for a failed deploy')
-  .action(wrapAction(suggestionsAction));
+if (coreFeatures.has('deploy-diagnosis')) {
+  deployCommand
+    .command('suggestions [deploy-id]')
+    .description('Show deploy suggestions for a failed deploy')
+    .action(wrapAction(suggestionsAction));
+}
 
 const studioProjects = studioCommand
   .command('projects')
@@ -282,11 +285,13 @@ const serverDeployCommand = serverCommand
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));
 
-serverDeployCommand
-  .command('suggestions [deploy-id]')
-  .description('Show deploy suggestions for a failed deploy')
-  .option('--org <id>', 'Organization ID')
-  .action(wrapAction(serverSuggestionsAction));
+if (coreFeatures.has('deploy-diagnosis')) {
+  serverDeployCommand
+    .command('suggestions [deploy-id]')
+    .description('Show deploy suggestions for a failed deploy')
+    .option('--org <id>', 'Organization ID')
+    .action(wrapAction(serverSuggestionsAction));
+}
 
 serverCommand
   .command('pause')
