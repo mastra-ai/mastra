@@ -1826,6 +1826,85 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('streams status updates when only status message metadata changes', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+            metadata: { phase: 'initial' },
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: task,
+      });
+
+      const secondPromise = result.next();
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          ...task,
+          status: {
+            ...task.status,
+            message: {
+              ...task.status.message!,
+              metadata: { phase: 'updated' },
+            },
+          },
+        },
+      });
+
+      const second = await secondPromise;
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          contextId: 'context-1',
+          final: false,
+          kind: 'status-update',
+          status: {
+            message: {
+              kind: 'message',
+              messageId: 'message-1',
+              metadata: { phase: 'updated' },
+              parts: [{ kind: 'text', text: 'Still working...' }],
+              role: 'agent',
+            },
+            state: 'working',
+            timestamp: '2025-05-08T11:47:38.458Z',
+          },
+          taskId: 'task-1',
+        },
+      });
+    });
+
     it('streams each changed artifact in order before the final status update', async () => {
       const task: Task = {
         id: 'task-1',

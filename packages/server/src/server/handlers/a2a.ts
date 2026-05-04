@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type {
   MessageSendParams,
@@ -350,26 +351,7 @@ function areStatusMessagePartsEqual(
   left: NonNullable<Task['status']['message']>['parts'],
   right: NonNullable<Task['status']['message']>['parts'],
 ) {
-  if (left === right) {
-    return true;
-  }
-
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((part, index) => {
-    const other = right[index];
-    if (!other || part.kind !== other.kind) {
-      return false;
-    }
-
-    if (part.kind === 'text' && other.kind === 'text') {
-      return part.text === other.text;
-    }
-
-    return part === other;
-  });
+  return left === right || isDeepStrictEqual(left, right);
 }
 
 function areStatusMessagesEqual(left: Task['status']['message'], right: Task['status']['message']) {
@@ -385,6 +367,11 @@ function areStatusMessagesEqual(left: Task['status']['message'], right: Task['st
     left.messageId === right.messageId &&
     left.kind === right.kind &&
     left.role === right.role &&
+    left.contextId === right.contextId &&
+    left.taskId === right.taskId &&
+    isDeepStrictEqual(left.referenceTaskIds, right.referenceTaskIds) &&
+    isDeepStrictEqual(left.extensions, right.extensions) &&
+    isDeepStrictEqual(left.metadata, right.metadata) &&
     areStatusMessagePartsEqual(left.parts, right.parts)
   );
 }
