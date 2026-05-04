@@ -1,7 +1,8 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
-import type { MastraMemory } from '@mastra/core/memory';
-import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
+import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
+import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import {
@@ -59,7 +60,7 @@ import {
   toLocalMessage,
   toLocalOMRecord,
 } from './gateway-memory-client';
-import { validateBody, getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
+import { validateBody, getEffectiveResourceId, getEffectiveThreadId, enforceThreadAccess } from './utils';
 
 interface MemoryContext extends Context {
   agentId?: string;
@@ -80,6 +81,108 @@ interface SearchResult {
     before?: SearchResult[];
     after?: SearchResult[];
   };
+}
+
+function hasFGAUser(requestContext?: RequestContext): requestContext is RequestContext {
+  const user = requestContext?.get('user');
+  return !!user && typeof user === 'object';
+}
+
+function shouldFilterThreadsWithFGA(mastra: any, requestContext?: RequestContext): requestContext is RequestContext {
+  return !!mastra.getServer?.()?.fga && hasFGAUser(requestContext);
+}
+
+async function filterAccessibleThreads({
+  mastra,
+  requestContext,
+  threads,
+}: {
+  mastra: any;
+  requestContext?: RequestContext;
+  threads: StorageThreadType[];
+}): Promise<StorageThreadType[]> {
+  const fgaProvider = mastra.getServer?.()?.fga;
+  if (!fgaProvider || !hasFGAUser(requestContext) || threads.length === 0) {
+    return threads;
+  }
+
+  return fgaProvider.filterAccessible(
+    requestContext.get('user') as { id: string; [key: string]: unknown },
+    threads,
+    'thread',
+    MastraFGAPermissions.MEMORY_READ,
+  );
+}
+
+function paginateThreads({
+  threads,
+  page,
+  perPage,
+}: {
+  threads: StorageThreadType[];
+  page?: number;
+  perPage?: number | false;
+}): StorageListThreadsOutput {
+  const effectivePage = page ?? 0;
+  const effectivePerPage: number | false = perPage ?? 100;
+
+  if (effectivePerPage === false) {
+    return {
+      threads,
+      page: effectivePage,
+      perPage: false,
+      total: threads.length,
+      hasMore: false,
+    };
+  }
+
+  const start = effectivePage * effectivePerPage;
+  const pagedThreads = threads.slice(start, start + effectivePerPage);
+
+  return {
+    threads: pagedThreads,
+    page: effectivePage,
+    perPage: effectivePerPage,
+    total: threads.length,
+    hasMore: start + pagedThreads.length < threads.length,
+  };
+}
+
+async function enforceDeleteMessagesThreadAccess({
+  mastra,
+  requestContext,
+  memoryStore,
+  messageIds,
+  effectiveResourceId,
+}: {
+  mastra: any;
+  requestContext?: RequestContext;
+  memoryStore: MemoryStorage;
+  messageIds: string[];
+  effectiveResourceId?: string;
+}): Promise<void> {
+  const { messages } = await memoryStore.listMessagesById({ messageIds });
+  const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+
+  if (messages.some(message => !message.threadId)) {
+    throw new HTTPException(403, { message: 'Access denied: unable to verify message thread access' });
+  }
+
+  for (const threadId of threadIds) {
+    const thread = await memoryStore.getThreadById({ threadId });
+    if (!thread) {
+      throw new HTTPException(403, { message: 'Access denied: unable to verify message thread access' });
+    }
+
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      thread,
+      effectiveResourceId,
+      permission: MastraFGAPermissions.MEMORY_DELETE,
+    });
+  }
 }
 
 export function getTextContent(message: MastraDBMessage): string {
@@ -714,6 +817,34 @@ export const LIST_THREADS_ROUTE = createRoute({
       if (agent && isGateway) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          if (shouldFilterThreadsWithFGA(mastra, requestContext)) {
+            const initialResult = await gwClient.listThreads({
+              resourceId: effectiveResourceId,
+              limit: 1,
+              offset: 0,
+            });
+            const allThreads =
+              initialResult.total > 0
+                ? (
+                    await gwClient.listThreads({
+                      resourceId: effectiveResourceId,
+                      limit: initialResult.total,
+                      offset: 0,
+                    })
+                  ).threads.map(toLocalThread)
+                : [];
+            const accessibleThreads = await filterAccessibleThreads({
+              mastra,
+              requestContext,
+              threads: allThreads,
+            });
+            return paginateThreads({
+              threads: accessibleThreads,
+              page,
+              perPage,
+            });
+          }
+
           const effectivePage = page ?? 0;
           const effectivePerPage = perPage ?? 100;
           const offset = effectivePage * effectivePerPage;
@@ -746,13 +877,34 @@ export const LIST_THREADS_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       if (memory) {
-        const result = await memory.listThreads({
-          filter,
+        const result = await memory.listThreads(
+          shouldFilterThreadsWithFGA(mastra, requestContext)
+            ? {
+                filter,
+                perPage: false,
+                orderBy,
+              }
+            : {
+                filter,
+                page,
+                perPage,
+                orderBy,
+              },
+        );
+        if (!shouldFilterThreadsWithFGA(mastra, requestContext)) {
+          return result;
+        }
+
+        const accessibleThreads = await filterAccessibleThreads({
+          mastra,
+          requestContext,
+          threads: result.threads,
+        });
+        return paginateThreads({
+          threads: accessibleThreads,
           page,
           perPage,
-          orderBy,
         });
-        return result;
       }
 
       // Fallback to storage (covers stored agents whose memory can't be resolved)
@@ -760,13 +912,34 @@ export const LIST_THREADS_ROUTE = createRoute({
       if (storage) {
         const memoryStore = await storage.getStore('memory');
         if (memoryStore) {
-          const result = await memoryStore.listThreads({
-            filter,
+          const result = await memoryStore.listThreads(
+            shouldFilterThreadsWithFGA(mastra, requestContext)
+              ? {
+                  filter,
+                  perPage: false,
+                  orderBy,
+                }
+              : {
+                  filter,
+                  page,
+                  perPage,
+                  orderBy,
+                },
+          );
+          if (!shouldFilterThreadsWithFGA(mastra, requestContext)) {
+            return result;
+          }
+
+          const accessibleThreads = await filterAccessibleThreads({
+            mastra,
+            requestContext,
+            threads: result.threads,
+          });
+          return paginateThreads({
+            threads: accessibleThreads,
             page,
             perPage,
-            orderBy,
           });
-          return result;
         }
       }
 
@@ -814,7 +987,13 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
             };
           }
           const thread = toLocalThread(result.thread);
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId!,
+            thread,
+            effectiveResourceId,
+          });
           return thread;
         }
       }
@@ -825,7 +1004,13 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         if (!thread) {
           throw new HTTPException(404, { message: 'Thread not found' });
         }
-        await validateThreadOwnership(thread, effectiveResourceId);
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId!,
+          thread,
+          effectiveResourceId,
+        });
         return thread;
       }
 
@@ -838,7 +1023,13 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
           if (!thread) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId!,
+            thread,
+            effectiveResourceId,
+          });
           return thread;
         }
       }
@@ -891,7 +1082,13 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           // Validate thread ownership before returning messages
           const threadResult = await gwClient.getThread(effectiveThreadId);
           if (threadResult) {
-            await validateThreadOwnership(toLocalThread(threadResult.thread), effectiveResourceId);
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId,
+              thread: toLocalThread(threadResult.thread),
+              effectiveResourceId,
+            });
           }
 
           const effectivePage = page ?? 0;
@@ -919,7 +1116,13 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         if (!thread) {
           throw new HTTPException(404, { message: 'Thread not found' });
         }
-        await validateThreadOwnership(thread, effectiveResourceId);
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId,
+          thread,
+          effectiveResourceId,
+        });
 
         const result = await memory.recall({
           threadId: effectiveThreadId,
@@ -943,7 +1146,13 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           if (!thread) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
 
           const result = await memoryStore.listMessages({
             threadId: effectiveThreadId,
@@ -997,8 +1206,17 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
         return { workingMemory: null, source: 'thread' as const, workingMemoryTemplate: null, threadExists: false };
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
-      if (thread) {
-        await validateThreadOwnership(thread, effectiveResourceId);
+      const config = memory.getMergedThreadConfig(memoryConfig || {});
+      const source: 'thread' | 'resource' =
+        config.workingMemory?.scope !== 'thread' && effectiveResourceId ? 'resource' : 'thread';
+      if (thread || source === 'resource') {
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId!,
+          thread,
+          effectiveResourceId,
+        });
       }
       const threadExists = !!thread;
       const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
@@ -1011,9 +1229,6 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
         resourceId: effectiveResourceId,
         memoryConfig,
       });
-      const config = memory.getMergedThreadConfig(memoryConfig || {});
-      const source: 'thread' | 'resource' =
-        config.workingMemory?.scope !== 'thread' && effectiveResourceId ? 'resource' : 'thread';
       return { workingMemory, source, workingMemoryTemplate, threadExists };
     } catch (error) {
       return handleError(error, 'Error getting working memory');
@@ -1049,6 +1264,21 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Messages should be an array' });
       }
 
+      const resourceIdByThread = new Map<string, string>();
+      for (const message of messages) {
+        if (!message.threadId || !message.resourceId) {
+          continue;
+        }
+        const existingResourceId = resourceIdByThread.get(message.threadId);
+        if (!existingResourceId) {
+          resourceIdByThread.set(message.threadId, message.resourceId);
+        } else if (existingResourceId !== message.resourceId) {
+          throw new HTTPException(400, {
+            message: 'All messages for the same threadId must use the same resourceId.',
+          });
+        }
+      }
+
       // Validate that all messages have threadId and resourceId
       const invalidMessages = messages.filter(message => !message.threadId || !message.resourceId);
       if (invalidMessages.length > 0) {
@@ -1070,9 +1300,27 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
-          // Thread may not exist yet (will be created on first message save), which is allowed
-          // But if it exists, it must belong to the same resource
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId,
+            thread,
+            effectiveResourceId,
+            permission: MastraFGAPermissions.MEMORY_WRITE,
+          });
+        }
+      } else {
+        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        for (const threadId of threadIds) {
+          const thread = await memory.getThreadById({ threadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId,
+            thread,
+            effectiveResourceId: resourceIdByThread.get(threadId),
+            permission: MastraFGAPermissions.MEMORY_WRITE,
+          });
         }
       }
 
@@ -1104,15 +1352,24 @@ export const CREATE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, title, metadata, threadId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveThreadId = threadId ?? mastra.generateId();
+      validateBody({ resourceId: effectiveResourceId });
+
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       // Gateway proxy: create thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
-          validateBody({ resourceId: effectiveResourceId });
           const result = await gwClient.createThread({
-            id: threadId,
+            id: effectiveThreadId,
             resourceId: effectiveResourceId!,
             title,
             metadata,
@@ -1127,13 +1384,11 @@ export const CREATE_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
-      validateBody({ resourceId: effectiveResourceId });
-
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,
         title,
         metadata,
-        threadId,
+        threadId: effectiveThreadId,
       });
       return result;
     } catch (error) {
@@ -1168,7 +1423,14 @@ export const UPDATE_THREAD_ROUTE = createRoute({
           // Validate ownership before mutating
           const existing = await gwClient.getThread(effectiveThreadId!);
           if (existing) {
-            await validateThreadOwnership(toLocalThread(existing.thread), effectiveResourceId);
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId!,
+              thread: toLocalThread(existing.thread),
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
           }
           const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
           if (!result) {
@@ -1190,7 +1452,14 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       if (!thread) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
-      await validateThreadOwnership(thread, effectiveResourceId);
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId!,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       const updatedThread = {
         ...thread,
@@ -1238,7 +1507,14 @@ export const DELETE_THREAD_ROUTE = createRoute({
           // Validate ownership before deleting
           const existing = await gwClient.getThread(effectiveThreadId!);
           if (existing) {
-            await validateThreadOwnership(toLocalThread(existing.thread), effectiveResourceId);
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId!,
+              thread: toLocalThread(existing.thread),
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_DELETE,
+            });
           }
           const deleteResult = await gwClient.deleteThread(effectiveThreadId!);
           if (!deleteResult.ok) {
@@ -1257,7 +1533,14 @@ export const DELETE_THREAD_ROUTE = createRoute({
       if (!thread) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
-      await validateThreadOwnership(thread, effectiveResourceId);
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId!,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_DELETE,
+      });
 
       await memory.deleteThread(effectiveThreadId!);
       return { result: 'Thread deleted' };
@@ -1283,6 +1566,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveNewThreadId = newThreadId ?? mastra.generateId();
       validateBody({ threadId: effectiveThreadId });
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -1295,13 +1579,25 @@ export const CLONE_THREAD_ROUTE = createRoute({
       if (!sourceThread) {
         throw new HTTPException(404, { message: 'Source thread not found' });
       }
-      await validateThreadOwnership(sourceThread, effectiveResourceId);
-
+      const cloneResourceId = effectiveResourceId ?? sourceThread.resourceId ?? undefined;
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId!,
+        thread: sourceThread,
+        effectiveResourceId,
+      });
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveNewThreadId,
+        effectiveResourceId: cloneResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
       const result = await memory.cloneThread({
         sourceThreadId: effectiveThreadId!,
-        newThreadId,
-        // Use effective resourceId for the cloned thread
-        resourceId: effectiveResourceId,
+        newThreadId: effectiveNewThreadId,
+        resourceId: cloneResourceId,
         title,
         metadata,
         options,
@@ -1346,7 +1642,14 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
       if (!thread) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
-      await validateThreadOwnership(thread, effectiveResourceId);
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId!,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       await memory.updateWorkingMemory({
         threadId: effectiveThreadId!,
@@ -1412,21 +1715,28 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
           throw new HTTPException(400, { message: 'Memory is not initialized' });
         }
 
-        // Get messages to find their threads
-        const { messages } = await memoryStore.listMessagesById({ messageIds: stringIds });
-
-        // Collect unique thread IDs
-        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
-
-        // Validate ownership of all threads
-        for (const threadId of threadIds) {
-          const thread = await memoryStore.getThreadById({ threadId });
-          if (thread && thread.resourceId && thread.resourceId !== effectiveResourceId) {
-            throw new HTTPException(403, {
-              message: 'Access denied: message belongs to a thread owned by a different resource',
-            });
-          }
+        await enforceDeleteMessagesThreadAccess({
+          mastra,
+          requestContext,
+          memoryStore,
+          messageIds: stringIds,
+          effectiveResourceId,
+        });
+      } else if (stringIds.length > 0) {
+        const storage = memory?.storage || getStorageFromContext({ mastra });
+        if (!storage) {
+          throw new HTTPException(400, { message: 'Memory is not initialized' });
         }
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) {
+          throw new HTTPException(400, { message: 'Memory is not initialized' });
+        }
+        await enforceDeleteMessagesThreadAccess({
+          mastra,
+          requestContext,
+          memoryStore,
+          messageIds: stringIds,
+        });
       }
 
       if (memory) {
@@ -1496,6 +1806,32 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true;
 
       const searchResults: SearchResult[] = [];
+      let accessibleThreadsForResource: StorageThreadType[] | undefined;
+      let accessibleThreadIds: Set<string> | undefined;
+
+      if (resourceScope && effectiveResourceId && shouldFilterThreadsWithFGA(mastra, requestContext)) {
+        const { threads } = await memory.listThreads({
+          filter: { resourceId: effectiveResourceId },
+          perPage: false,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
+        });
+        accessibleThreadsForResource = await filterAccessibleThreads({
+          mastra,
+          requestContext,
+          threads,
+        });
+        accessibleThreadIds = new Set(accessibleThreadsForResource.map(thread => thread.id));
+
+        if (accessibleThreadsForResource.length === 0) {
+          return {
+            results: [],
+            count: 0,
+            query: searchQuery,
+            searchScope: resourceScope ? 'resource' : 'thread',
+            searchType: hasSemanticRecall ? 'semantic' : 'text',
+          };
+        }
+      }
 
       // If threadId is provided and scope is thread-based, check if the thread exists
       if (effectiveThreadId && !resourceScope) {
@@ -1510,7 +1846,13 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
             searchType: hasSemanticRecall ? 'semantic' : 'text',
           };
         }
-        await validateThreadOwnership(thread, effectiveResourceId);
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId,
+          thread,
+          effectiveResourceId,
+        });
       }
 
       // Use effectiveThreadId or find one from the resource
@@ -1518,12 +1860,16 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       // If no threadId provided, get one from the resource
       if (!searchThreadId) {
-        const { threads } = await memory.listThreads({
-          filter: { resourceId: effectiveResourceId },
-          page: 0,
-          perPage: 1,
-          orderBy: { field: 'updatedAt', direction: 'DESC' },
-        });
+        const threads =
+          accessibleThreadsForResource ??
+          (
+            await memory.listThreads({
+              filter: { resourceId: effectiveResourceId },
+              page: 0,
+              perPage: 1,
+              orderBy: { field: 'updatedAt', direction: 'DESC' },
+            })
+          ).threads;
 
         if (threads.length === 0) {
           return {
@@ -1575,17 +1921,32 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         threadConfig: config,
         vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
       });
+      const accessibleMessages = accessibleThreadIds
+        ? result.messages.filter((message: MastraDBMessage) =>
+            accessibleThreadIds!.has(message.threadId || searchThreadId!),
+          )
+        : result.messages;
+
+      if (accessibleMessages.length === 0) {
+        return {
+          results: [],
+          count: 0,
+          query: searchQuery,
+          searchScope: resourceScope ? 'resource' : 'thread',
+          searchType: hasSemanticRecall ? 'semantic' : 'text',
+        };
+      }
 
       // Get all threads to build context and show which thread each message is from
       // Fetch threads by IDs from the actual messages to avoid truncation
       const threadIds = Array.from(
-        new Set(result.messages.map((m: MastraDBMessage) => m.threadId || searchThreadId!).filter(Boolean)),
+        new Set(accessibleMessages.map((m: MastraDBMessage) => m.threadId || searchThreadId!).filter(Boolean)),
       );
       const fetched = await Promise.all(threadIds.map((id: string) => memory.getThreadById({ threadId: id })));
       const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
       // Process each message in the results
-      for (const msg of result.messages) {
+      for (const msg of accessibleMessages) {
         const content = getTextContent(msg);
 
         const msgThreadId = msg.threadId || searchThreadId;
