@@ -1,22 +1,21 @@
-import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Mastra } from '../../mastra';
 import { EntityType } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ObservabilityStorage } from '../../storage/domains';
-import type { LanguageModelUsage } from '../../stream/types';
 import type { ProcessInputStepArgs, Processor, ProcessorViolation } from '../index';
 
 /**
  * Cost scope determines what usage is tracked:
- * - 'run': Only tokens from the current agent run (default)
- * - 'resource': Cumulative cost across runs for the same resourceId (requires observability storage)
- * - 'thread': Cumulative cost across runs for the same threadId (requires observability storage)
+ * - 'run': Only cost from the current agent run (default)
+ * - 'resource': Cumulative cost across runs for the same resourceId
+ * - 'thread': Cumulative cost across runs for the same threadId
  */
 export type CostScope = 'run' | 'resource' | 'thread';
 
 /**
- * Named time windows for cost aggregation
+ * Named time windows for cost aggregation.
+ * Only applicable to 'resource' and 'thread' scopes.
  */
 export type CostWindow = '1h' | '6h' | '24h' | '7d' | '30d' | '365d';
 
@@ -52,8 +51,8 @@ export interface CostGuardOptions {
   /**
    * Scope for cost tracking:
    * - 'run': Track cost within the current agent run only (default)
-   * - 'resource': Track cumulative cost per resourceId across runs (requires observability storage)
-   * - 'thread': Track cumulative cost per threadId across runs (requires observability storage)
+   * - 'resource': Track cumulative cost per resourceId across runs
+   * - 'thread': Track cumulative cost per threadId across runs
    */
   scope?: CostScope;
 
@@ -107,15 +106,22 @@ const WINDOW_MS: Record<CostWindow, number> = {
  * CostGuardProcessor monitors cumulative estimated cost across the agentic loop,
  * blocking or warning when a configurable monetary limit is exceeded.
  *
- * Uses `processInputStep` to check the cost limit before each LLM call. For 'resource' and 'thread'
- * scopes, queries the observability storage APIs to retrieve cumulative cost across runs within
- * a configurable time window (defaults to 7 days).
+ * **Important:** This is an approximate cost guard. Cost data is queried from
+ * observability storage, which persists metrics asynchronously via buffered exporters.
+ * Fast-running agents may exceed the configured limit before metrics are available
+ * for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
+ *
+ * Uses `processInputStep` to check the cost limit before each LLM call.
+ * Queries the observability storage APIs (`getMetricAggregate`) to retrieve
+ * estimated cost. For 'resource' and 'thread' scopes, aggregates cost across
+ * runs within a configurable time window (defaults to 7 days). For 'run' scope,
+ * queries cost for the current trace.
  *
  * For token-based limits, use `TokenLimiterProcessor` instead.
  *
- * Requires the observability APIs (specifically `getMetricAggregate`) when using 'resource'
- * or 'thread' scopes. If the Mastra instance does not have observability storage configured,
- * an error is thrown at registration time.
+ * Requires observability storage with `getMetricAggregate` support. If the Mastra
+ * instance does not have observability storage configured, an error is thrown at
+ * registration time.
  *
  * @example Run-scoped cost limit:
  * ```typescript
@@ -166,51 +172,38 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.scope = options.scope ?? 'run';
     this.window = options.window ?? '7d';
     this.strategy = options.strategy ?? 'block';
-    this.messageTemplate = options.message ?? 'Cost guard: cost limit exceeded ({usage}/{limit})';
+    this.messageTemplate = options.message ?? 'Cost guard: estimated cost limit exceeded ({usage}/{limit})';
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
-    if (this.scope !== 'run') {
-      const storage = mastra.getStorage();
-      const obsStorage = storage?.stores?.observability;
-      if (!obsStorage || typeof obsStorage.getMetricAggregate !== 'function') {
-        throw new Error(
-          `CostGuardProcessor with scope '${this.scope}' requires observability storage with getMetricAggregate support. ` +
-            'Configure observability storage on your Mastra instance to use resource or thread scoping.',
-        );
-      }
-      this.observabilityStorage = obsStorage;
+    const storage = mastra.getStorage();
+    const obsStorage = storage?.stores?.observability;
+    if (!obsStorage || typeof obsStorage.getMetricAggregate !== 'function') {
+      throw new Error(
+        `CostGuardProcessor requires observability storage with getMetricAggregate support. ` +
+          'Configure observability storage on your Mastra instance.',
+      );
     }
+    this.observabilityStorage = obsStorage;
   }
 
-  private computeRunCost(steps: Array<StepResult<any>>): CostGuardUsage {
-    let totalCost = 0;
-    let costUnit: string | null = null;
-    for (const step of steps) {
-      const usage = step.usage as LanguageModelUsage | undefined;
-      if (usage) {
-        const meta = step.providerMetadata as Record<string, Record<string, unknown>> | undefined;
-        const costInfo = meta?.['mastra']?.['cost'] as { estimatedCost?: number; costUnit?: string } | undefined;
-        if (costInfo?.estimatedCost) {
-          totalCost += costInfo.estimatedCost;
-          if (costInfo.costUnit) costUnit = costInfo.costUnit;
-        }
-      }
+  private resolveScopeFilter(
+    requestContext?: RequestContext,
+    traceId?: string,
+  ): { filter: Record<string, string>; scopeKey?: string } | undefined {
+    if (this.scope === 'run') {
+      if (!traceId) return undefined;
+      return { filter: { traceId } };
     }
-    return {
-      estimatedCost: totalCost > 0 ? totalCost : null,
-      costUnit,
-    };
-  }
-
-  private resolveScopeFilter(requestContext?: RequestContext): { resourceId?: string; threadId?: string } | undefined {
     if (this.scope === 'resource') {
       const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-      return resourceId ? { resourceId } : undefined;
+      if (!resourceId) return undefined;
+      return { filter: { resourceId }, scopeKey: `resource:${resourceId}` };
     }
     if (this.scope === 'thread') {
       const threadId = requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-      return threadId ? { threadId } : undefined;
+      if (!threadId) return undefined;
+      return { filter: { threadId }, scopeKey: `thread:${threadId}` };
     }
     return undefined;
   }
@@ -220,16 +213,20 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     return { start: new Date(Date.now() - windowMs) };
   }
 
-  private async queryPersistedCost(scopeFilter: { resourceId?: string; threadId?: string }): Promise<CostGuardUsage> {
+  private async queryCost(scopeFilter: Record<string, string>): Promise<CostGuardUsage> {
     if (!this.observabilityStorage) {
       return { estimatedCost: null, costUnit: null };
     }
     try {
-      const filters = {
+      const filters: Record<string, unknown> = {
         ...scopeFilter,
         entityType: EntityType.AGENT,
-        timestamp: this.getWindowTimestamp(),
       };
+
+      // Apply time window for resource/thread scopes
+      if (this.scope !== 'run') {
+        filters['timestamp'] = this.getWindowTimestamp();
+      }
 
       const [inputResult, outputResult] = await Promise.all([
         this.observabilityStorage.getMetricAggregate({
@@ -258,50 +255,23 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     }
   }
 
-  private async getTotalUsage(
-    steps: Array<StepResult<any>>,
-    requestContext?: RequestContext,
-  ): Promise<{ usage: CostGuardUsage; scopeKey?: string }> {
-    const runUsage = this.computeRunCost(steps);
-
-    if (this.scope === 'run') {
-      return { usage: runUsage };
-    }
-
-    const scopeFilter = this.resolveScopeFilter(requestContext);
-    if (!scopeFilter) {
-      return { usage: runUsage };
-    }
-
-    const scopeKey = scopeFilter.resourceId ? `resource:${scopeFilter.resourceId}` : `thread:${scopeFilter.threadId}`;
-
-    const persistedUsage = await this.queryPersistedCost(scopeFilter);
-    const runCost = runUsage.estimatedCost ?? 0;
-    const persistedCost = persistedUsage.estimatedCost ?? 0;
-    const totalCost = runCost + persistedCost;
-
-    return {
-      usage: {
-        estimatedCost: totalCost > 0 ? totalCost : null,
-        costUnit: persistedUsage.costUnit ?? runUsage.costUnit,
-      },
-      scopeKey,
-    };
-  }
-
   private formatMessage(usage: number, limit: number): string {
     return this.messageTemplate.replace('{usage}', String(usage)).replace('{limit}', String(limit));
   }
 
   async processInputStep(args: ProcessInputStepArgs<CostGuardTripwireMetadata>): Promise<void> {
-    const { usage, scopeKey } = await this.getTotalUsage(args.steps, args.requestContext);
+    const traceId = args.tracing?.currentSpan?.traceId;
+    const resolved = this.resolveScopeFilter(args.requestContext, traceId);
+    if (!resolved) return;
+
+    const { filter, scopeKey } = resolved;
+    const usage = await this.queryCost(filter);
 
     if (usage.estimatedCost === null || usage.estimatedCost < this.maxCost) return;
 
     const message = this.formatMessage(usage.estimatedCost, this.maxCost);
 
     if (this.strategy === 'warn') {
-      // For warn strategy, manually invoke onViolation since no TripWire is thrown
       if (this.onViolation) {
         try {
           await this.onViolation({
@@ -323,7 +293,6 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       return;
     }
 
-    // For block strategy, onViolation is called by the runner when the TripWire is caught
     args.abort(message, {
       retry: false,
       metadata: {

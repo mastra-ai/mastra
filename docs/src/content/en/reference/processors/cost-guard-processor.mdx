@@ -9,15 +9,17 @@ packages:
 
 The `CostGuardProcessor` enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded.
 
-It uses `processInputStep` to check the cost limit before each LLM call. For `resource` and `thread` scopes, it queries the observability storage APIs to retrieve cumulative cost data across runs within a configurable time window (defaults to 7 days).
+It uses `processInputStep` to check the cost limit before each LLM call. Cost data is queried from the observability storage APIs (`getMetricAggregate`) for all scopes. For `resource` and `thread` scopes, it aggregates cost across runs within a configurable time window (defaults to 7 days). For `run` scope, it queries cost for the current trace.
 
 For token-based limits, use `TokenLimiterProcessor` instead.
 
 Supports three scoping modes:
 
-- **Run scope** (default): Tracks cost within a single agent run
-- **Resource scope**: Tracks cumulative cost per `resourceId` across runs (requires observability storage)
-- **Thread scope**: Tracks cumulative cost per `threadId` across runs (requires observability storage)
+- **Run scope** (default): Tracks cost within a single agent run via trace ID
+- **Resource scope**: Tracks cumulative cost per `resourceId` across runs
+- **Thread scope**: Tracks cumulative cost per `threadId` across runs
+
+> **Approximate cost guard.** Cost data is persisted asynchronously via buffered exporters in the observability pipeline. Fast-running agents may exceed the configured limit before metrics are available for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
 
 ## Usage example
 
@@ -76,14 +78,14 @@ const agent = new Agent({
     name: 'maxCost',
     type: 'number',
     description:
-      'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics.',
+      'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics. This is an approximate limit due to metric persistence delays.',
     isOptional: false,
   },
   {
     name: 'scope',
     type: "'run' | 'resource' | 'thread'",
     description:
-      "Scope for cost tracking. 'run' tracks cost within the current agent run. 'resource' tracks cumulative cost per resourceId across runs. 'thread' tracks cumulative cost per threadId across runs. Resource and thread scopes require observability storage with getMetricAggregate support.",
+      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs. 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
     isOptional: true,
     defaultValue: "'run'",
   },
@@ -140,7 +142,7 @@ const agent = new Agent({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Checks cumulative estimated cost against maxCost before each LLM call. For resource and thread scopes, queries observability storage for historical cost within the configured time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy).',
+      'Checks cumulative estimated cost against maxCost before each LLM call. Queries observability storage for cost data: run scope filters by trace ID, resource/thread scopes filter by their respective IDs with a time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy). Cost checks are approximate due to metric persistence delays.',
     isOptional: false,
   },
 ]}
@@ -158,12 +160,16 @@ When the `block` strategy is active (default), `CostGuardProcessor` calls `abort
 
 ## Scoping behavior
 
-| Scope | Tracks across runs | Requires | Requires context |
+| Scope | Tracks across runs | Filter | Requires context |
 | - | - | - | - |
-| `run` | No | Nothing | No |
-| `resource` | Yes | Observability storage with `getMetricAggregate` | `resourceId` in `RequestContext` |
-| `thread` | Yes | Observability storage with `getMetricAggregate` | `threadId` in `RequestContext` |
+| `run` | No | `traceId` from current span | Tracing context (automatic) |
+| `resource` | Yes | `resourceId` + time window | `resourceId` in `RequestContext` |
+| `thread` | Yes | `threadId` + time window | `threadId` in `RequestContext` |
 
-For `resource` and `thread` scopes, the processor queries the observability storage APIs (`getMetricAggregate`) with a time window filter to retrieve cumulative cost data. If the Mastra instance does not have observability storage configured with `getMetricAggregate` support, an error is thrown at registration time.
+All scopes require observability storage with `getMetricAggregate` support. If the Mastra instance does not have observability storage configured, an error is thrown at registration time.
 
-If the required context ID is missing at runtime, the processor falls back to run-scoped tracking. Observability query failures are handled with a fail-open strategy: if a query fails, historical cost starts from zero.
+For `run` scope, the processor reads the trace ID from the current span's tracing context. If no tracing context is available, the check is skipped (fail-open).
+
+For `resource` and `thread` scopes, if the required context ID is missing at runtime, the check is skipped. Observability query failures are handled with a fail-open strategy: if a query fails, cost is treated as zero.
+
+> **Note on metric persistence delay.** The observability pipeline uses buffered exporters that flush metrics asynchronously. There is a short delay between when an LLM call completes and when its cost metrics are available for query. During high-frequency agent execution, the cost guard may not detect a limit breach until one or more steps after the actual cost exceeded the threshold.

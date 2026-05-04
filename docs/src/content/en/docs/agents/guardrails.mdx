@@ -223,7 +223,7 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 ### Enforce cost limits
 
-The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It uses `processInputStep` to check costs before each LLM call.
+The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate — metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
 
 ```typescript {7-11} title="src/mastra/agents/budgeted-agent.ts"
 import { CostGuardProcessor } from '@mastra/core/processors'
@@ -243,7 +243,7 @@ export const budgetedAgent = new Agent({
 
 :::note
 
-Visit [`CostGuardProcessor()`](/reference/processors/cost-guard-processor) reference for scoping modes, time windows, and the `onViolation` callback.
+Visit [`CostGuardProcessor()`](/reference/processors/cost-guard-processor) reference for scoping modes, time windows, metric persistence delays, and the `onViolation` callback. Requires observability storage with `getMetricAggregate` support.
 
 :::
 
