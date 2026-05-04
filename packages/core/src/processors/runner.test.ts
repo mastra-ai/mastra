@@ -775,6 +775,32 @@ describe('ProcessorRunner', () => {
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('original text');
       expect(result.blocked).toBe(false);
     });
+
+    it('should close spans on finish chunk when no output processors exist', async () => {
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const mockSpan = {
+        end: vi.fn(),
+      };
+
+      const processorStates = new Map();
+      processorStates.set('test', {
+        span: mockSpan,
+        getFinalOutput: () => ({ totalChunks: 1, accumulatedText: 'done' }),
+      } as any);
+
+      const result = await runner.processPart({ type: 'finish' } as any, processorStates);
+
+      expect(result.blocked).toBe(false);
+      expect(mockSpan.end).toHaveBeenCalledWith({
+        output: { totalChunks: 1, accumulatedText: 'done' },
+      });
+    });
   });
 
   describe('Stateful Stream Processing', () => {

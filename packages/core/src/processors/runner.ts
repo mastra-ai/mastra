@@ -571,6 +571,12 @@ export class ProcessorRunner {
     processorId?: string;
   }> {
     if (!this.outputProcessors.length) {
+      // Still need to handle finish chunk to close spans
+      if (part.type === 'finish') {
+        for (const state of processorStates.values()) {
+          state.span?.end({ output: state.getFinalOutput() });
+        }
+      }
       return { part, blocked: false };
     }
 
