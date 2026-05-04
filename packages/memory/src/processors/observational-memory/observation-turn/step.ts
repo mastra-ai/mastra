@@ -246,7 +246,9 @@ export class ObservationStep {
     }
 
     // ── Refresh cross-thread context (resource scope) ──────────
-    const otherThreadsContext = await this.turn.refreshOtherThreadsContext();
+    const otherThreadsContext =
+      om.scope === 'resource' ? statusSnapshot.otherThreadsContext : await this.turn.refreshOtherThreadsContext();
+    this.turn.context.otherThreadsContext = otherThreadsContext;
 
     // ── Build system messages (one per cache-stable chunk) ────
     const systemMessage = await om.buildContextSystemMessages({
@@ -282,6 +284,7 @@ export class ObservationStep {
         pendingTokens: statusSnapshot.pendingTokens,
         threshold: statusSnapshot.threshold,
         effectiveObservationTokensThreshold: statusSnapshot.effectiveObservationTokensThreshold,
+        otherThreadsContext,
         shouldObserve: statusSnapshot.shouldObserve,
         shouldBuffer: statusSnapshot.shouldBuffer,
         shouldReflect: statusSnapshot.shouldReflect,

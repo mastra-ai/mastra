@@ -38,6 +38,7 @@ export interface StepContext {
     pendingTokens: number;
     threshold: number;
     effectiveObservationTokensThreshold: number;
+    otherThreadsContext?: string;
     shouldObserve: boolean;
     shouldBuffer: boolean;
     shouldReflect: boolean;

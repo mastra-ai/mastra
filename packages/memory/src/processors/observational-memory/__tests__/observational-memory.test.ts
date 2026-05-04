@@ -145,6 +145,31 @@ function createInMemoryStorage(): InMemoryMemory {
   return new InMemoryMemory({ db });
 }
 
+async function saveTestThread(storage: InMemoryMemory, threadId: string, resourceId: string) {
+  await storage.saveThread({
+    thread: {
+      id: threadId,
+      resourceId,
+      title: threadId,
+      createdAt: new Date('2025-01-01T08:00:00Z'),
+      updatedAt: new Date('2025-01-01T08:00:00Z'),
+      metadata: {},
+    },
+  });
+}
+
+function createBasicMockModel() {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      content: [{ type: 'text' as const, text: 'ok' }],
+      warnings: [],
+    }),
+  });
+}
+
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
     const originalDoGenerate = config.doGenerate;
@@ -14484,6 +14509,126 @@ describe('OM context loading with no prior observations', () => {
     expect(saved.length).toBeGreaterThanOrEqual(2);
     expect(saved.find(m => m.id === 'user-msg-1')).toBeDefined();
     expect(saved.find(m => m.id === 'assistant-msg-1')).toBeDefined();
+  });
+
+  it('persists step pending tokens without recounting messages after prepare', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-token-thread';
+    const resourceId = 'pending-token-resource';
+
+    await saveTestThread(storage, threadId, resourceId);
+
+    const mockModel = createBasicMockModel();
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+    const countSpy = vi.spyOn(om.getTokenCounter(), 'countMessagesAsync');
+
+    const message = {
+      ...createTestMessage('Please remember this lightweight request.', 'user', 'pending-token-msg'),
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      threadId,
+      resourceId,
+    };
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(message, 'input');
+
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(countSpy).toHaveBeenCalledTimes(1);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record?.pendingMessageTokens).toBeGreaterThan(0);
+  });
+
+  it('reuses the resource-scope context loaded during status checks', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const resourceId = 'resource-context-reuse';
+    const currentThreadId = 'resource-current-thread';
+    const otherThreadId = 'resource-other-thread';
+
+    for (const threadId of [currentThreadId, otherThreadId]) {
+      await saveTestThread(storage, threadId, resourceId);
+    }
+
+    await storage.saveMessages({
+      messages: [
+        {
+          ...createTestMessage('Sibling thread context should be available once.', 'user', 'resource-other-msg'),
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId: otherThreadId,
+          resourceId,
+        },
+      ],
+    });
+
+    const mockModel = createBasicMockModel();
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+    const otherThreadsSpy = vi.spyOn(om, 'getOtherThreadsContext');
+
+    const messageList = new MessageList({ threadId: currentThreadId, resourceId });
+    const currentMessage = {
+      ...createTestMessage('Current thread input.', 'user', 'resource-current-msg'),
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      threadId: currentThreadId,
+      resourceId,
+    };
+    messageList.add(currentMessage, 'input');
+
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: currentThreadId }, resourceId });
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(otherThreadsSpy).toHaveBeenCalledTimes(1);
+    const record = await storage.getObservationalMemory(null, resourceId);
+    expect(record?.pendingMessageTokens).toBeGreaterThan(om.getTokenCounter().countMessages([currentMessage]));
   });
 });
 

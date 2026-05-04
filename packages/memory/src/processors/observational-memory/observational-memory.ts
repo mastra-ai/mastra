@@ -2645,6 +2645,7 @@ ${formattedMessages}
     asyncObservationEnabled: boolean;
     asyncReflectionEnabled: boolean;
     scope: 'resource' | 'thread';
+    otherThreadsContext?: string;
   }> {
     const { threadId, resourceId } = opts;
     const record = await this.getOrCreateRecord(threadId, resourceId);
@@ -2666,9 +2667,10 @@ ${formattedMessages}
     // Count tokens
     const contextWindowTokens = await this.tokenCounter.countMessagesAsync(unobservedMessages);
     let otherThreadTokens = 0;
+    let otherThreadsContext: string | undefined;
     if (this.scope === 'resource' && resourceId) {
-      const otherContext = await this.getOtherThreadsContext(resourceId, threadId);
-      otherThreadTokens = otherContext ? this.tokenCounter.countString(otherContext) : 0;
+      otherThreadsContext = await this.getOtherThreadsContext(resourceId, threadId);
+      otherThreadTokens = otherThreadsContext ? this.tokenCounter.countString(otherThreadsContext) : 0;
     }
     const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
@@ -2729,6 +2731,7 @@ ${formattedMessages}
       asyncObservationEnabled,
       asyncReflectionEnabled: this.buffering.isAsyncReflectionEnabled(),
       scope: this.scope,
+      otherThreadsContext,
     };
   }
 

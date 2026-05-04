@@ -256,12 +256,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
 
         // ── Token persistence (processor-specific) ──────────
-        const allDbMsgs = messageList.get.all.db();
-        const tokenCounter = this.engine.getTokenCounter();
-        const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
-        const otherThreadsContext = this.turn.context.otherThreadsContext;
-        const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
-        const finalTotalPending = contextTokens + otherThreadTokens;
+        const finalTotalPending = ctx.status.pendingTokens;
 
         await this.engine
           .getStorage()
