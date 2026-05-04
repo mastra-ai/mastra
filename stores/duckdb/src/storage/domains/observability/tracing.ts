@@ -19,7 +19,6 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 import { BRANCH_SPAN_TYPES, toTraceSpans } from '@mastra/core/storage';
-import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
@@ -227,6 +226,60 @@ const PREFILTER_KEYS = new Set([
 ]);
 
 /**
+ * Order-by fields whose start-row value matches the reconstructed root-span
+ * value, so ordering inside the prefilter (before GROUP BY) yields the same
+ * sequence as ordering on reconstructed rows. Anything outside this set must
+ * fall back to the slow path so pagination stays correct.
+ *
+ * `endedAt` is intentionally excluded — start rows always have NULL `endedAt`,
+ * so ordering by it on raw rows would compare NULLs and produce wrong pages.
+ */
+const SAFE_PREFILTER_ORDER_FIELDS = new Set(['startedAt']);
+
+type DateRangeBounds = {
+  start?: Date;
+  startExclusive?: boolean;
+  end?: Date;
+  endExclusive?: boolean;
+};
+
+/**
+ * Intersect the existing prefilter timestamp range with an incoming bound.
+ * Each bound is an exact constraint on the start-row `timestamp`, so the
+ * intersection is the **tighter** of the two on each side: the later `start`
+ * wins, the earlier `end` wins. When two bounds tie on a side, the result is
+ * exclusive if either input was exclusive (the union of exclusivity).
+ *
+ * Required for cases like `{ startedAt: { end: B }, endedAt: { end: C } }`:
+ * both bound the start-row timestamp from above and we want `min(B, C)`,
+ * regardless of insertion order.
+ */
+function intersectTimestampRange(existing: DateRangeBounds | undefined, incoming: DateRangeBounds): DateRangeBounds {
+  if (!existing) return { ...incoming };
+  const merged: DateRangeBounds = { ...existing };
+
+  if (incoming.start !== undefined) {
+    if (merged.start === undefined || incoming.start.getTime() > merged.start.getTime()) {
+      merged.start = incoming.start;
+      merged.startExclusive = incoming.startExclusive;
+    } else if (incoming.start.getTime() === merged.start.getTime()) {
+      merged.startExclusive = (merged.startExclusive ?? false) || (incoming.startExclusive ?? false);
+    }
+  }
+
+  if (incoming.end !== undefined) {
+    if (merged.end === undefined || incoming.end.getTime() < merged.end.getTime()) {
+      merged.end = incoming.end;
+      merged.endExclusive = incoming.endExclusive;
+    } else if (incoming.end.getTime() === merged.end.getTime()) {
+      merged.endExclusive = (merged.endExclusive ?? false) || (incoming.endExclusive ?? false);
+    }
+  }
+
+  return merged;
+}
+
+/**
  * Split a span-anchor filter set into a `prefilter` half (pushed to raw
  * `span_events` start rows) and a `postAgg` half (applied after the
  * reconstruction GROUP BY). Used by both `listTraces` and `listBranches`.
@@ -254,26 +307,27 @@ function partitionAnchorFilters(filters: Record<string, unknown>): {
 
     if (key === 'startedAt') {
       // startedAt == min(timestamp) on the start row, so a startedAt range is
-      // exactly the start-row timestamp range. Pushable to the prefilter.
-      prefilter.timestamp = value;
+      // exactly the start-row timestamp range. Intersect with anything already
+      // pushed down (e.g. an endedAt-derived upper bound from a prior iter).
+      prefilter.timestamp = intersectTimestampRange(
+        prefilter.timestamp as DateRangeBounds | undefined,
+        value as DateRangeBounds,
+      );
       continue;
     }
 
     if (key === 'endedAt') {
       // endedAt lives on the end event and can only be checked after reconstruct.
       postAgg.endedAt = value;
-      // As a safe over-approximation, apply `endedAt.end` as an upper bound on
-      // the start-row timestamp so we never scan events created strictly after
-      // the requested window. (A span that started after `endedAt.end` can't
-      // have ended before it.)
-      const dateRange = value as { end?: Date; endExclusive?: boolean };
+      // Safe over-approximation: a span that started after `endedAt.end` can't
+      // have ended before it, so `endedAt.end` is also a valid upper bound on
+      // the start-row timestamp. Intersect with whatever's already there.
+      const dateRange = value as DateRangeBounds;
       if (dateRange?.end) {
-        const existing = prefilter.timestamp as { start?: Date; end?: Date } | undefined;
-        prefilter.timestamp = {
-          ...(existing ?? {}),
+        prefilter.timestamp = intersectTimestampRange(prefilter.timestamp as DateRangeBounds | undefined, {
           end: dateRange.end,
           endExclusive: dateRange.endExclusive,
-        };
+        });
       }
       continue;
     }
@@ -571,23 +625,23 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
 
   const outerAlias = 'outer_root';
 
-  // For ordering on the prefilter, `startedAt` maps to the start-row `timestamp`.
-  const orderByField = orderBy.field === 'startedAt' ? 'timestamp' : parseFieldKey(orderBy.field);
   const orderDir = orderBy.direction.toUpperCase();
   if (orderDir !== 'ASC' && orderDir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
-  const prefilterOrderBy = `ORDER BY ${orderByField} ${orderDir}`;
 
-  // The fast path orders + paginates on `span_events` `start` rows. Those rows
-  // never carry a non-null `endedAt`, so ordering by `endedAt` would compare
-  // NULLs and produce incorrect pagination. In that case fall back to the slow
-  // path which orders against the reconstructed root spans.
-  const hasPostAggFilters =
-    Object.keys(postAgg).length > 0 || hasChildError !== undefined || orderBy.field === 'endedAt';
+  // The fast path orders + paginates on raw `span_events` start rows. That's
+  // only safe when the order field's start-row value matches the reconstructed
+  // value — otherwise pagination would slice on the wrong column. Anything not
+  // in SAFE_PREFILTER_ORDER_FIELDS forces the slow path.
+  const canOrderInPrefilter = SAFE_PREFILTER_ORDER_FIELDS.has(orderBy.field);
+  const hasPostAggFilters = Object.keys(postAgg).length > 0 || hasChildError !== undefined || !canOrderInPrefilter;
 
   if (!hasPostAggFilters) {
     // Fast path: order + paginate in the prefilter, reconstruct only the page.
+    // Only `startedAt` reaches here (per SAFE_PREFILTER_ORDER_FIELDS), and on
+    // start rows it lives in the `timestamp` column.
+    const prefilterOrderBy = `ORDER BY timestamp ${orderDir}`;
     const offset = page * perPage;
 
     const countSql = `
@@ -756,21 +810,20 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
 
   const outerAlias = 'outer_anchor';
 
-  // For ordering on the prefilter, `startedAt` maps to the start-row `timestamp`.
-  const orderByField = orderBy.field === 'startedAt' ? 'timestamp' : parseFieldKey(orderBy.field);
   const orderDir = orderBy.direction.toUpperCase();
   if (orderDir !== 'ASC' && orderDir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
-  const prefilterOrderBy = `ORDER BY ${orderByField} ${orderDir}`;
 
-  // Same caveat as listTraces: ordering by `endedAt` requires reconstructed
-  // values (start rows always have NULL `endedAt`), so fall back to the slow
-  // path in that case.
-  const hasPostAggFilters = Object.keys(postAgg).length > 0 || orderBy.field === 'endedAt';
+  // Same allowlist gate as listTraces — see SAFE_PREFILTER_ORDER_FIELDS.
+  const canOrderInPrefilter = SAFE_PREFILTER_ORDER_FIELDS.has(orderBy.field);
+  const hasPostAggFilters = Object.keys(postAgg).length > 0 || !canOrderInPrefilter;
 
   if (!hasPostAggFilters) {
     // Fast path: order + paginate in the prefilter, reconstruct only the page.
+    // Only `startedAt` reaches here (per SAFE_PREFILTER_ORDER_FIELDS), and on
+    // start rows it lives in the `timestamp` column.
+    const prefilterOrderBy = `ORDER BY timestamp ${orderDir}`;
     const offset = page * perPage;
 
     const countSql = `

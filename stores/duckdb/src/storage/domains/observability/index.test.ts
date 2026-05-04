@@ -350,6 +350,100 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(tagTraceIds).not.toContain('trace-scalar-b');
     });
 
+    it('listTraces intersects startedAt and endedAt upper bounds on the prefilter', async () => {
+      // Span A starts at 12:00 and ends at 12:01 — fits inside both ranges.
+      // Span B starts at 12:30 (outside startedAt) and ends at 12:35 (inside
+      // endedAt). With a buggy partition that overwrites the prefilter end
+      // bound, span B would leak through; with the intersection fix it stays
+      // out.
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-bound-a',
+            spanId: 'root-a',
+            parentSpanId: null,
+            name: 'within-window',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-a',
+            entityName: 'agentA',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-02-01T12:00:00Z'),
+            endedAt: new Date('2026-02-01T12:01:00Z'),
+          },
+          {
+            traceId: 'trace-bound-b',
+            spanId: 'root-b',
+            parentSpanId: null,
+            name: 'started-after-startedAt-end',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-b',
+            entityName: 'agentB',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-02-01T12:30:00Z'),
+            endedAt: new Date('2026-02-01T12:35:00Z'),
+          },
+        ],
+      });
+
+      const filters = {
+        startedAt: { end: new Date('2026-02-01T12:10:00Z') },
+        endedAt: { end: new Date('2026-02-01T13:00:00Z') },
+      };
+      const tightUpperBound = await storage.listTraces({ filters });
+      const traceIds = tightUpperBound.spans.map(s => s.traceId);
+      expect(traceIds).toContain('trace-bound-a');
+      expect(traceIds).not.toContain('trace-bound-b');
+
+      // Same query with keys reversed — JS `Object.entries` iterates insertion
+      // order, so this exercises the other partition path.
+      const filtersReversed = {
+        endedAt: { end: new Date('2026-02-01T13:00:00Z') },
+        startedAt: { end: new Date('2026-02-01T12:10:00Z') },
+      };
+      const reversed = await storage.listTraces({ filters: filtersReversed });
+      const reversedIds = reversed.spans.map(s => s.traceId);
+      expect(reversedIds).toContain('trace-bound-a');
+      expect(reversedIds).not.toContain('trace-bound-b');
+    });
+
     it('batch deletes traces', async () => {
       await storage.createSpan({
         span: {
