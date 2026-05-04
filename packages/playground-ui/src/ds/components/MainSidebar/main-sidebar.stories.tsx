@@ -4,7 +4,14 @@ import { useState, forwardRef } from 'react';
 import { TooltipProvider } from '../Tooltip';
 import { MainSidebar, MainSidebarProvider } from './main-sidebar';
 import type { MainSidebarProviderProps } from './main-sidebar';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/ds/components/Dialog';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (
@@ -85,16 +92,9 @@ export const Default: Story = {
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Home', url: '/', icon: <Home /> }}
-                isActive
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home /> }} isActive />
+              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
@@ -114,16 +114,9 @@ export const WithSections: Story = {
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Main</MainSidebar.NavHeader>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Dashboard', url: '/', icon: <Home /> }}
-                isActive
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Dashboard', url: '/', icon: <Home /> }} isActive />
+              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
 
@@ -132,12 +125,8 @@ export const WithSections: Story = {
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Data</MainSidebar.NavHeader>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Storage', url: '/storage', icon: <Database /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Logs', url: '/logs', icon: <FileText /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Storage', url: '/storage', icon: <Database /> }} />
+              <MainSidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
@@ -156,31 +145,18 @@ export const WithBottom: Story = {
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Home', url: '/', icon: <Home /> }}
-                isActive
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home /> }} isActive />
+              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
 
         <MainSidebar.Bottom>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink
-                link={{ name: 'Team', url: '/team', icon: <Users /> }}
-            />
-            <MainSidebar.NavLink
-                link={{ name: 'Notifications', url: '/notifications', icon: <Bell /> }}
-            />
-            <MainSidebar.NavLink
-                link={{ name: 'Settings', url: '/settings', icon: <Settings /> }}
-            />
+            <MainSidebar.NavLink link={{ name: 'Team', url: '/team', icon: <Users /> }} />
+            <MainSidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <Bell /> }} />
+            <MainSidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
           </MainSidebar.NavList>
           <MainSidebar.Trigger />
         </MainSidebar.Bottom>
@@ -197,16 +173,9 @@ export const FullSidebar: Story = {
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Overview', url: '/', icon: <Home /> }}
-                isActive
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
+              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
 
@@ -215,12 +184,8 @@ export const FullSidebar: Story = {
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Resources</MainSidebar.NavHeader>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Storage', url: '/storage', icon: <Database /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Logs', url: '/logs', icon: <FileText /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Storage', url: '/storage', icon: <Database /> }} />
+              <MainSidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
@@ -228,9 +193,7 @@ export const FullSidebar: Story = {
         <MainSidebar.Bottom>
           <MainSidebar.NavSeparator />
           <MainSidebar.NavList>
-            <MainSidebar.NavLink
-                link={{ name: 'Settings', url: '/settings', icon: <Settings /> }}
-            />
+            <MainSidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
           </MainSidebar.NavList>
           <MainSidebar.Trigger />
         </MainSidebar.Bottom>
@@ -249,16 +212,9 @@ const SidebarBody = () => (
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
         <MainSidebar.NavList>
-          <MainSidebar.NavLink
-                link={{ name: 'Overview', url: '/', icon: <Home /> }}
-            isActive
-          />
-          <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-          />
-          <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-          />
+          <MainSidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
+          <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+          <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
         </MainSidebar.NavList>
       </MainSidebar.NavSection>
     </MainSidebar.Nav>
@@ -348,16 +304,9 @@ export const Floating: Story = {
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
             <MainSidebar.NavList>
-              <MainSidebar.NavLink
-                link={{ name: 'Overview', url: '/', icon: <Home /> }}
-                isActive
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-              />
-              <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-              />
+              <MainSidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
+              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
@@ -374,9 +323,7 @@ export const Floating: Story = {
 /* ------------------------------------------------------------------------- */
 
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[500px] w-[840px] gap-4 bg-surface1 border border-border1 rounded-lg p-3">
-    {children}
-  </div>
+  <div className="flex h-[500px] w-[840px] gap-4 bg-surface1 border border-border1 rounded-lg p-3">{children}</div>
 );
 
 const ParityBody = () => (
@@ -385,24 +332,15 @@ const ParityBody = () => (
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
         <MainSidebar.NavList>
-          <MainSidebar.NavLink
-                link={{ name: 'Overview', url: '/', icon: <Home /> }}
-            isActive
-          />
-          <MainSidebar.NavLink
-                link={{ name: 'Agents', url: '/agents', icon: <Bot /> }}
-          />
-          <MainSidebar.NavLink
-                link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }}
-          />
+          <MainSidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
+          <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+          <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
         </MainSidebar.NavList>
       </MainSidebar.NavSection>
     </MainSidebar.Nav>
     <MainSidebar.Bottom>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink
-                link={{ name: 'Settings', url: '/settings', icon: <Settings /> }}
-        />
+        <MainSidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
       </MainSidebar.NavList>
       <MainSidebar.Trigger />
     </MainSidebar.Bottom>

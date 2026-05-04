@@ -43,9 +43,12 @@ export const navItemClasses = ({ isActive, isCollapsed, isFeatured, indent }: It
     isCollapsed && 'w-9 mx-auto p-0 justify-center',
     isActive && 'text-neutral5 bg-surface4 [&_svg]:text-neutral5',
     isCollapsed && '[&_svg]:text-neutral3',
-    isFeatured && 'rounded-md my-2 bg-accent1Dark hover:bg-accent1Darker text-accent1 hover:text-accent1 border border-accent1/30',
-    isFeatured && 'dark:bg-accent1 dark:hover:bg-accent1/90 dark:text-black dark:hover:text-black dark:border-transparent',
-    isFeatured && '[&_svg]:text-accent1 [&:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&:hover_svg]:text-black',
+    isFeatured &&
+      'rounded-md my-2 bg-accent1Dark hover:bg-accent1Darker text-accent1 hover:text-accent1 border border-accent1/30',
+    isFeatured &&
+      'dark:bg-accent1 dark:hover:bg-accent1/90 dark:text-black dark:hover:text-black dark:border-transparent',
+    isFeatured &&
+      '[&_svg]:text-accent1 [&:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&:hover_svg]:text-black',
     indent && !isCollapsed && 'pl-7 text-ui-sm',
   );
 
@@ -137,7 +140,7 @@ export function MainSidebarNavLink({
           </TooltipContent>
         </Tooltip>
       ) : (
-        interactiveEl ?? children
+        (interactiveEl ?? children)
       )}
     </li>
   );

@@ -36,10 +36,7 @@ type MobileDrawerContext = {
   setOpenMobile: (open: boolean) => void;
 };
 
-const MainSidebarContext = React.createContext<Omit<
-  MainSidebarContext,
-  'openMobile' | 'setOpenMobile'
-> | null>(null);
+const MainSidebarContext = React.createContext<Omit<MainSidebarContext, 'openMobile' | 'setOpenMobile'> | null>(null);
 const MobileDrawerContext = React.createContext<MobileDrawerContext | null>(null);
 
 export function useMainSidebar(): MainSidebarContext {
@@ -288,10 +285,7 @@ export function MainSidebarProvider({
     ],
   );
 
-  const drawerValue = React.useMemo<MobileDrawerContext>(
-    () => ({ openMobile, setOpenMobile }),
-    [openMobile],
-  );
+  const drawerValue = React.useMemo<MobileDrawerContext>(() => ({ openMobile, setOpenMobile }), [openMobile]);
 
   // CSS var owned exclusively by writeCssVar (single source of truth).
   // SSR seeds the initial value here; post-mount writeCssVar takes over.

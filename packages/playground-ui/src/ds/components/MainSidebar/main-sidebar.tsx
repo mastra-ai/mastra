@@ -11,11 +11,7 @@ import { MainSidebarRoot } from './main-sidebar-root';
 import { MainSidebarSections } from './main-sidebar-sections';
 import { MainSidebarTrigger } from './main-sidebar-trigger';
 
-export {
-  MainSidebarProvider,
-  type SidebarState,
-  type MainSidebarProviderProps,
-} from './main-sidebar-context';
+export { MainSidebarProvider, type SidebarState, type MainSidebarProviderProps } from './main-sidebar-context';
 export { useMainSidebar, useMaybeSidebar } from './main-sidebar-context';
 export { type NavLink, navItemClasses } from './main-sidebar-nav-link';
 export { type NavSection } from './main-sidebar-nav-section';
