@@ -194,7 +194,7 @@ export default function Scorer() {
             <BookIcon />
           </ButtonWithTooltip>
           {scorer?.scorer?.source === 'stored' && (
-            <Button variant="light" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
+            <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
               <PencilIcon /> Edit
             </Button>
           )}

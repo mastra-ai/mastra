@@ -43,6 +43,7 @@ const createMockObservabilityStore = () => ({
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
+  getScoreById: vi.fn(),
   getScoreAggregate: vi.fn(),
   getScoreBreakdown: vi.fn(),
   getScoreTimeSeries: vi.fn(),
@@ -1073,6 +1074,28 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list scores'");
+    });
+  });
+
+  describe('GET_SCORE_ROUTE', () => {
+    it('should get a score directly by scoreId', async () => {
+      const mockScore = {
+        scoreId: 'score-123',
+        timestamp: new Date('2024-01-01T00:00:00Z'),
+        scorerId: 'accuracy',
+        score: 0.95,
+      };
+
+      (mockObservabilityStore.getScoreById as ReturnType<typeof vi.fn>).mockResolvedValue(mockScore);
+
+      const result = await NEW_ROUTES.GET_SCORE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreId: 'score-123',
+      });
+
+      expect(result).toEqual({ score: mockScore });
+      expect(mockObservabilityStore.getScoreById).toHaveBeenCalledWith('score-123');
+      expect(mockObservabilityStore.listScores).not.toHaveBeenCalled();
     });
   });
 

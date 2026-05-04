@@ -194,12 +194,12 @@ function CmsScorersEditForm({
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the scorer.</Notice.Message>
           <div className="flex gap-2">
-            <Button type="button" variant="light" size="sm" onClick={onClearVersion}>
+            <Button type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
             <Button
               type="button"
-              variant="light"
+              variant="default"
               size="sm"
               onClick={handlePublishVersion}
               disabled={selectedVersionId === activeVersionId || isSubmitting}

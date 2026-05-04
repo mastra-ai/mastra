@@ -803,6 +803,116 @@ describe('ModelSpanTracker', () => {
       expect(stepSpans[0]!.input).toEqual(messages);
     });
 
+    it('should prefer final Mastra input messages over provider request body', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const inputMessages = [
+        {
+          role: 'system',
+          content: 'WORKING_MEMORY_SYSTEM_INSTRUCTION:\n<working_memory_data>saved</working_memory_data>',
+        },
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ];
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            inputMessages,
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [{ role: 'user', content: 'Hello' }],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        {
+          role: 'system',
+          content: 'WORKING_MEMORY_SYSTEM_INSTRUCTION:\n<working_memory_data>saved</working_memory_data>',
+        },
+        { role: 'user', content: 'Hello' },
+      ]);
+    });
+
+    it('should preserve final Mastra input when a later step-start chunk has only request metadata', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      const inputMessages = [
+        {
+          role: 'system',
+          content: 'WORKING_MEMORY_SYSTEM_INSTRUCTION:\n<working_memory_data>saved</working_memory_data>',
+        },
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ];
+
+      tracker.startStep();
+      tracker.updateStep({
+        messageId: 'msg-1',
+        inputMessages,
+        request: {
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: 'Hello' }],
+          }),
+        },
+      });
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [{ role: 'user', content: 'Hello' }],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        {
+          role: 'system',
+          content: 'WORKING_MEMORY_SYSTEM_INSTRUCTION:\n<working_memory_data>saved</working_memory_data>',
+        },
+        { role: 'user', content: 'Hello' },
+      ]);
+    });
+
     it('should extract a shallow message preview from Google/Gemini-format request body', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

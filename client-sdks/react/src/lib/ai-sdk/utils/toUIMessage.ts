@@ -136,18 +136,18 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
   // Handle data-* chunks (custom data chunks from writer.custom())
   if (chunk.type.startsWith('data-')) {
+    const dataPart = {
+      type: chunk.type as `data-${string}`,
+      data: 'data' in chunk ? chunk.data : undefined,
+      ...('id' in chunk && typeof chunk.id === 'string' ? { id: chunk.id } : {}),
+    };
     const lastMessage = result[result.length - 1];
     if (!lastMessage || lastMessage.role !== 'assistant') {
       // Create a new assistant message with the data part
       const newMessage: MastraUIMessage = {
         id: `data-${chunk.runId}-${Date.now()}`,
         role: 'assistant',
-        parts: [
-          {
-            type: chunk.type as `data-${string}`,
-            data: 'data' in chunk ? chunk.data : undefined,
-          },
-        ],
+        parts: [dataPart],
         metadata,
       };
       return [...result, newMessage];
@@ -156,13 +156,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     // Add data part to existing assistant message
     const updatedMessage: MastraUIMessage = {
       ...lastMessage,
-      parts: [
-        ...lastMessage.parts,
-        {
-          type: chunk.type as `data-${string}`,
-          data: 'data' in chunk ? chunk.data : undefined,
-        },
-      ],
+      parts: [...lastMessage.parts, dataPart],
     };
     return [...result.slice(0, -1), updatedMessage];
   }
@@ -757,6 +751,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
                 suspendPayload: chunk.payload.suspendPayload,
+                runId: chunk.runId,
               },
             },
           },

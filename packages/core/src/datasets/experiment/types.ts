@@ -1,3 +1,4 @@
+import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
@@ -48,8 +49,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
 
   // === Scoring ===
 
-  /** Scorers — MastraScorer instances or string IDs */
-  scorers?: (MastraScorer<any, any, any, any> | string)[];
+  /** Scorers — flat array, or the same categorised shape accepted by runEvals */
+  scorers?: (MastraScorer<any, any, any, any> | string)[] | AgentScorerConfig | WorkflowScorerConfig;
 
   // === Options ===
 
@@ -126,6 +127,21 @@ export interface ScorerResult {
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /**
+   * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
+   * taxonomy from observability so consumers can differentiate span-level
+   * (agent/workflow/step) and trajectory scores in the flat `scores` array.
+   * Defaults to 'span' when omitted.
+   */
+  targetScope?: 'span' | 'trajectory';
+  /**
+   * ID of the workflow step this score targets. Only set for per-step
+   * dispatch (`scorers: { steps: { ... } }`). Step scores keep
+   * `targetScope: 'span'` and use `stepId` to identify the step, matching
+   * how `runEvals` encodes step identity via `targetEntityType` +
+   * `targetMetadata`.
+   */
+  stepId?: string;
 }
 
 /**

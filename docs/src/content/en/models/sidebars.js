@@ -398,6 +398,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neuralwatt',
+          label: 'Neuralwatt',
+        },
+        {
+          type: 'doc',
           id: 'providers/nova',
           label: 'Nova',
         },

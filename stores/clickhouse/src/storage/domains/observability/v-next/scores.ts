@@ -7,6 +7,7 @@ import type {
   CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -205,6 +206,16 @@ export async function listScores(client: ClickHouseClient, args: ListScoresArgs)
     },
     scores: rows.map(rowToScoreRecord),
   };
+}
+
+export async function getScoreById(client: ClickHouseClient, scoreId: string): Promise<ScoreRecord | null> {
+  const rows = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${TABLE_SCORE_EVENTS} WHERE scoreId = {scoreId:String} LIMIT 1`,
+    { scoreId },
+  );
+
+  return rows[0] ? rowToScoreRecord(rows[0]) : null;
 }
 
 // ============================================================================

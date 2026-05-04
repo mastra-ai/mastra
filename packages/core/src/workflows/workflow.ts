@@ -8,6 +8,7 @@ import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from 
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MessageInput } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -345,7 +346,11 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    return createStepFromProcessor(params);
+    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
+      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+    };
+    step.providesSkillDiscovery = params.providesSkillDiscovery;
+    return step;
   }
 
   throw new Error('Invalid input: expected StepParams, Agent, ToolStep, or Processor');
@@ -1480,6 +1485,35 @@ export function isProcessor(obj: unknown): obj is Processor {
  */
 export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
 
+/**
+ * Registration slot for the evented `createWorkflow` factory.
+ *
+ * The evented module registers itself here at module-load time. We use a
+ * registration slot rather than a static import because `evented/workflow.ts`
+ * already imports `Workflow` from this module, and a reverse static import
+ * would create an init-time cycle that leaves `Workflow` undefined when
+ * `class EventedWorkflow extends Workflow` evaluates.
+ *
+ * Any caller that needs schedule promotion must ensure the evented module is
+ * loaded — typically by importing from `@mastra/core/workflows` (which
+ * re-exports `./evented`) or by an explicit `import '@mastra/core/workflows/evented'`.
+ */
+type EventedCreateWorkflowFn = (
+  params: WorkflowConfig<any, any, any, any, any, any>,
+) => Workflow<any, any, any, any, any, any, any, any>;
+
+// `var` is intentional: it is hoisted and initialized to `undefined` at the top
+// of module evaluation, which avoids TDZ if the evented module ends up being
+// evaluated before this module finishes its body (e.g. when both are reached
+// via different import chains during the same load).
+
+var eventedCreateWorkflow: EventedCreateWorkflowFn | undefined;
+
+/** @internal Called once by the evented module at load time. */
+export function __registerEventedCreateWorkflow(fn: EventedCreateWorkflowFn): void {
+  eventedCreateWorkflow = fn;
+}
+
 export function createWorkflow<
   TWorkflowId extends string = string,
   TState = unknown,
@@ -1488,6 +1522,35 @@ export function createWorkflow<
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  // A workflow that declares a `schedule` is auto-promoted to the evented engine.
+  // The public Workflow API surface is unchanged — EventedWorkflow extends Workflow
+  // and overrides createRun/start/startAsync/streamLegacy/stream/resume with matching
+  // signatures. Users keep calling it the same way; manual runs and scheduled fires
+  // share a single execution path.
+  if (params.schedule) {
+    if (!eventedCreateWorkflow) {
+      throw new MastraError({
+        id: 'MASTRA_WORKFLOW_SCHEDULE_EVENTED_MODULE_NOT_LOADED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${params.id}" declares a schedule, which auto-promotes it to the evented execution engine, ` +
+          `but the evented module has not been loaded. This usually means you imported \`createWorkflow\` from a deep path. ` +
+          `Import from \`@mastra/core/workflows\` or add \`import '@mastra/core/workflows/evented';\` to your entry file.`,
+        details: { workflowId: String(params.id ?? '') },
+      });
+    }
+    return eventedCreateWorkflow(params) as unknown as Workflow<
+      DefaultEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TInput,
+      TRequestContext
+    >;
+  }
   return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
 }
 
@@ -2077,8 +2140,19 @@ export class Workflow<
     >;
   }
 
-  dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      TStepInputSchema,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType,
+      // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+      // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+      unknown extends TStepRC ? unknown : TRequestContext
+    >,
     condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
@@ -2101,7 +2175,7 @@ export class Workflow<
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dowhile',
     });
-    this.steps[step.id] = step;
+    this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2114,8 +2188,19 @@ export class Workflow<
     >;
   }
 
-  dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      TStepInputSchema,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType,
+      // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+      // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+      unknown extends TStepRC ? unknown : TRequestContext
+    >,
     condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
@@ -2138,7 +2223,7 @@ export class Workflow<
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dountil',
     });
-    this.steps[step.id] = step;
+    this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2157,9 +2242,21 @@ export class Workflow<
     TStepInputSchema extends TPrevSchema extends (infer TElement)[] ? TElement : never,
     TStepId extends string,
     TSchemaOut,
+    TStepRC,
   >(
     step: TPrevIsArray extends true
-      ? Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>
+      ? Step<
+          TStepId,
+          SubsetOf<TStepState, TState>,
+          TStepInputSchema,
+          TSchemaOut,
+          any,
+          any,
+          TEngineType,
+          // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+          // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+          unknown extends TStepRC ? unknown : TRequestContext
+        >
       : 'Previous step must return an array type',
     opts?: {
       concurrency: number;
@@ -2425,6 +2522,21 @@ export class Workflow<
   } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
     const observabilityContext = resolveObservabilityContext(rest);
     this.__registerMastra(mastra);
+
+    // FGA authorization check
+    const fgaProvider = mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = requestContext?.get('user' as any);
+      if (user) {
+        const { checkFGA } = await import('../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'workflow', id: this.id },
+          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        });
+      }
+    }
 
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;
 

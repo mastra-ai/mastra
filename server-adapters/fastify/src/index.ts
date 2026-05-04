@@ -7,6 +7,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -258,25 +259,29 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
       });
 
-      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
-        const chunks: Buffer[] = [];
-        let limitExceeded = false;
+      busboy.on(
+        'file',
+        (fieldname: string, file: NodeJS.ReadableStream, _filename: string, _encoding: string, _mimetype: string) => {
+          const chunks: Buffer[] = [];
+          let limitExceeded = false;
 
-        file.on('data', (chunk: Buffer) => {
-          chunks.push(chunk);
-        });
+          file.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
 
-        file.on('limit', () => {
-          limitExceeded = true;
-          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
-        });
+          file.on('limit', () => {
+            limitExceeded = true;
+            file.resume();
+            reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+          });
 
-        file.on('end', () => {
-          if (!limitExceeded) {
-            result[fieldname] = Buffer.concat(chunks);
-          }
-        });
-      });
+          file.on('end', () => {
+            if (!limitExceeded) {
+              result[fieldname] = Buffer.concat(chunks);
+            }
+          });
+        },
+      );
 
       busboy.on('field', (fieldname: string, value: string) => {
         // Try to parse JSON strings (like 'options')
@@ -575,6 +580,16 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
+      // Check FGA authorization (EE feature)
+      const fgaError = await checkRouteFGA(this.mastra, route, request.requestContext, {
+        ...params.urlParams,
+        ...params.queryParams,
+        ...(typeof params.body === 'object' ? params.body : {}),
+      });
+      if (fgaError) {
+        return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+      }
+
       try {
         const result = await route.handler(handlerParams);
         await this.sendResponse(route, reply, result, request, prefix);
@@ -656,6 +671,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         responseType: 'json',
         handler: async () => {},
         requiresAuth: route.requiresAuth,
+        requiresPermission: route.requiresPermission,
+        fga: route.fga,
       };
 
       const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -702,6 +719,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
               });
             }
           }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, request.requestContext, {
+          ...(request.params as Record<string, string>),
+          ...(request.query as Record<string, string>),
+          ...(typeof request.body === 'object' && request.body !== null
+            ? (request.body as Record<string, unknown>)
+            : {}),
+        });
+        if (fgaError) {
+          return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
         }
 
         const response = await this.handleCustomRouteRequest(

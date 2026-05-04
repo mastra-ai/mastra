@@ -40,6 +40,11 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     pendingQueuedActions: [],
     pendingSlashCommands: [],
     pendingTools: new Map(),
+    chatContainer: { children: [], invalidate: vi.fn() },
+    allToolComponents: [],
+    allSlashCommandComponents: [],
+    allSystemReminderComponents: [],
+    allShellComponents: [],
     ui: { requestRender: vi.fn() } as TUIState['ui'],
     ...overrides,
   } as unknown as TUIState;
@@ -138,8 +143,7 @@ describe('MastraTUI queueing', () => {
       { content: 'second message', images: undefined },
     ]);
     expect(tui.state.pendingSlashCommands).toEqual(['/help']);
-    expect(mocks.addUserMessage).toHaveBeenCalledTimes(2);
-    expect(mocks.showInfo).toHaveBeenCalledWith(tui.state, 'Slash command queued: /help');
+    expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
   });
 
   it('drains queued messages and slash commands in FIFO order on agent end', async () => {
