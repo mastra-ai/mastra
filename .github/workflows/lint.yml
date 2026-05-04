@@ -93,6 +93,9 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+      - name: Validate generated files are committed
+        run: bash .github/scripts/check-clean-worktree.bash
+
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm install --ignore-workspace

@@ -2,19 +2,23 @@ import type {
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
   LightSpanRecord,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   SpanRecord,
 } from '@mastra/core/storage';
-import { toTraceSpans } from '@mastra/core/storage';
+import { BRANCH_SPAN_TYPES, toTraceSpans } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
@@ -488,5 +492,121 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
       hasMore: (page + 1) * perPage < total,
     },
     spans: toTraceSpans(spans),
+  };
+}
+
+// ============================================================================
+// listBranches / getSpans
+// ============================================================================
+
+const BRANCH_SPAN_TYPE_PLACEHOLDERS = BRANCH_SPAN_TYPES.map(() => '?').join(', ');
+
+/**
+ * Reconstruct multiple spans by spanId within a single trace. Single round-trip
+ * fetch used by the optimized {@link import('@mastra/core/storage').getBranch}
+ * path: getStructure walks the skeleton to identify branch spanIds, then this
+ * pulls full data for only those spans instead of the whole trace.
+ */
+export async function getSpans(db: DuckDBConnection, args: GetSpansArgs): Promise<GetSpansResponse> {
+  if (args.spanIds.length === 0) {
+    return { traceId: args.traceId, spans: [] };
+  }
+
+  const placeholders = args.spanIds.map(() => '?').join(', ');
+  const rows = await db.query(
+    `${SPAN_RECONSTRUCT_SELECT}
+     WHERE traceId = ? AND spanId IN (${placeholders})
+     GROUP BY traceId, spanId`,
+    [args.traceId, ...args.spanIds],
+  );
+
+  return {
+    traceId: args.traceId,
+    spans: rows.map(row => rowToSpanRecord(row as Record<string, unknown>)),
+  };
+}
+
+/**
+ * List branch anchor spans (named-entity invocations) across all traces with
+ * filtering, ordering, and pagination. Pre-filters raw `span_events` by
+ * `spanType IN (branch types)` before the reconstruct GROUP BY, so we don't
+ * pay reconstruction cost for the high-volume sub-operation events
+ * (MODEL_STEP, MODEL_CHUNK, etc.) that are never anchors.
+ */
+export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs): Promise<ListBranchesResponse> {
+  const filters = args.filters ?? {};
+  const page = Number(args.pagination?.page ?? 0);
+  const perPage = Number(args.pagination?.perPage ?? 10);
+  const orderBy = { field: args.orderBy?.field ?? 'startedAt', direction: args.orderBy?.direction ?? 'DESC' } as const;
+
+  // spanType is consumed by the prefilter; pass the rest of the filter set
+  // through buildWhereClause unchanged.
+  const { spanType, ...passthroughFilters } = filters as Record<string, unknown>;
+  const { clause: filterClause, params: filterParams } = buildWhereClause(passthroughFilters);
+  const orderByClause = buildOrderByClause(orderBy);
+  const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+
+  // Prefilter raw events to branch-anchor types. Unlike the ClickHouse path
+  // which reads from an MV-filtered table, DuckDB queries raw span_events
+  // directly, so this guard is what enforces "listBranches only returns
+  // branches" here. Caller-supplied spanType narrows further; if it's not a
+  // branch type, the intersection is empty and we short-circuit to no rows
+  // (instead of silently widening to all branches or leaking the non-branch
+  // type through).
+  let prefilterClause: string;
+  let prefilterParams: unknown[];
+  if (typeof spanType === 'string') {
+    if (!(BRANCH_SPAN_TYPES as readonly string[]).includes(spanType)) {
+      // Caller asked for a non-branch span type; "branch anchors with that
+      // type" is an empty set by definition.
+      return {
+        pagination: { total: 0, page, perPage, hasMore: false },
+        branches: [],
+      };
+    }
+    prefilterClause = `WHERE spanType = ?`;
+    prefilterParams = [spanType];
+  } else {
+    prefilterClause = `WHERE spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS})`;
+    prefilterParams = [...BRANCH_SPAN_TYPES];
+  }
+
+  const cteSql = `
+    WITH branch_anchors AS (
+      ${SPAN_RECONSTRUCT_SELECT}
+      ${prefilterClause}
+      GROUP BY traceId, spanId
+    )
+  `;
+
+  const countSql = `
+    ${cteSql}
+    SELECT COUNT(*) as total FROM branch_anchors ${filterClause}
+  `;
+  const countResult = await db.query<{ total: number }>(countSql, [...prefilterParams, ...filterParams]);
+  const total = Number(countResult[0]?.total ?? 0);
+
+  if (total === 0) {
+    return {
+      pagination: { total: 0, page, perPage, hasMore: false },
+      branches: [],
+    };
+  }
+
+  const dataSql = `
+    ${cteSql}
+    SELECT * FROM branch_anchors ${filterClause} ${orderByClause} ${paginationClause}
+  `;
+  const rows = await db.query(dataSql, [...prefilterParams, ...filterParams, ...paginationParams]);
+  const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+
+  return {
+    pagination: {
+      total,
+      page,
+      perPage,
+      hasMore: (page + 1) * perPage < total,
+    },
+    branches: toTraceSpans(spans),
   };
 }

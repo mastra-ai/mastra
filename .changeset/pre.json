@@ -135,11 +135,13 @@
     "@mastra/google-drive": "0.1.0",
     "@mastra/modal": "0.2.0",
     "@mastra/s3": "0.5.0",
-    "@mastra/vercel": "0.1.0"
+    "@mastra/vercel": "0.1.0",
+    "@mastra/temporal": "0.0.1"
   },
   "changesets": [
     "automated-provider-registry-20260501-070830",
     "chilly-lies-fail",
+    "cool-windows-search",
     "dirty-items-rule",
     "few-buses-shave",
     "gold-mammals-hang",

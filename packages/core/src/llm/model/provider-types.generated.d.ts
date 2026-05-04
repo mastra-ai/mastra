@@ -773,6 +773,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4-5',
     'anthropic/claude-opus-4-6',
+    'anthropic/claude-opus-4-7',
     'anthropic/claude-sonnet-4-5',
     'anthropic/claude-sonnet-4-6',
     'google/gemini-2.5-flash',
@@ -784,6 +785,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.1',
     'openai/gpt-5.2',
     'openai/gpt-5.4',
+    'openai/gpt-5.5',
     'perplexity/sonar',
     'xai/grok-4-1-fast-non-reasoning',
   ];
@@ -2534,7 +2536,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
-  readonly 'zhipuai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1'];
+  readonly 'zhipuai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5v-turbo'];
   readonly 'alibaba-coding-plan': readonly [
     'MiniMax-M2.5',
     'glm-4.7',
@@ -2685,6 +2687,7 @@ export type ProviderModelsMap = {
     'hf:moonshotai/Kimi-K2-Instruct-0905',
     'hf:moonshotai/Kimi-K2-Thinking',
     'hf:moonshotai/Kimi-K2.5',
+    'hf:moonshotai/Kimi-K2.6',
     'hf:nvidia/Kimi-K2.5-NVFP4',
     'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
     'hf:openai/gpt-oss-120b',
@@ -2747,6 +2750,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-instruct-0905',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2.5',
+    'moonshotai/kimi-k2.6',
     'nvidia/cosmos-nemotron-34b',
     'nvidia/llama-3.1-nemotron-51b-instruct',
     'nvidia/llama-3.1-nemotron-70b-instruct',
