@@ -364,14 +364,16 @@ export function aiV5UIMessagesToAIV5ModelMessages(
         : undefined;
 
     if (providerMetadata) {
-      let target = produced.length - 1;
+      let target = -1;
       for (let index = produced.length - 1; index >= 0; index--) {
         if (produced[index]?.role === uiMsg.role) {
           target = index;
           break;
         }
       }
-      produced[target] = { ...produced[target], providerOptions: providerMetadata } as AIV5Type.ModelMessage;
+      if (target !== -1) {
+        produced[target] = { ...produced[target], providerOptions: providerMetadata } as AIV5Type.ModelMessage;
+      }
     }
 
     converted.push(...produced);

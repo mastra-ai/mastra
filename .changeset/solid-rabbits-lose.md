@@ -2,9 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed message-level `providerOptions` being dropped or attached to the wrong message when the conversation history contained tool calls. This blocked Anthropic prompt-cache markers (`cacheControl: { type: 'ephemeral' }`) from reaching the API on the right message and prevented the rolling cache-breakpoint pattern for tool-using agents.
-
-The `UIMessage → ModelMessage` conversion mapped messages by array index, but an assistant turn with a tool call splits into `[assistant tool-call, tool tool-result]`, throwing the index alignment off for every message after it. The conversion now walks UI messages individually and attaches metadata to the produced model message of matching role.
+Fixed a bug where message-level `providerOptions` could be lost or attached to the wrong message after a tool-call turn in the conversation history. Anthropic `cacheControl` markers now stay on the message they were set on, enabling the rolling prompt-cache breakpoint pattern for tool-using agents.
 
 ```ts
 await agent.generate([
