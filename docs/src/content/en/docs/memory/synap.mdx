@@ -1,3 +1,10 @@
+---
+title: "Synap Memory | Memory"
+description: "Add persistent, cross-session user memory to your Mastra agents with Synap."
+packages:
+  - "@maximem/synap-mastra"
+---
+
 # Synap Memory Integration for Mastra
 
 [Synap](https://maximem.ai) is a managed memory layer for AI agents. The Mastra
@@ -17,20 +24,20 @@ Get an API key at [synap.maximem.ai](https://synap.maximem.ai).
 Attach `SynapMemory` to any Mastra agent to give it persistent, cross-session memory:
 
 ```typescript
-import { Agent } from '@mastra/core';
-import { SynapMemory } from '@maximem/synap-mastra';
+import { Agent } from '@mastra/core/agent'
+import { SynapMemory } from '@maximem/synap-mastra'
 
 const memory = new SynapMemory({
   apiKey: process.env.SYNAP_API_KEY!,
   userId: 'user_123',
   customerId: 'acme_corp',
-});
+})
 
 const agent = new Agent({
   name: 'my-agent',
   model: 'claude-sonnet-4-6',
   memory,
-});
+})
 ```
 
 Memory is scoped to the `userId` and `customerId` you provide, ensuring strict isolation
@@ -41,8 +48,8 @@ in multi-tenant applications.
 For agents that should decide when to access memory explicitly:
 
 ```typescript
-import { Agent } from '@mastra/core';
-import { synapSearchTool, synapStoreTool } from '@maximem/synap-mastra';
+import { Agent } from '@mastra/core/agent'
+import { synapSearchTool, synapStoreTool } from '@maximem/synap-mastra'
 
 const agent = new Agent({
   name: 'my-agent',
@@ -59,7 +66,7 @@ const agent = new Agent({
       customerId: 'acme_corp',
     }),
   },
-});
+})
 ```
 
 ## More Resources

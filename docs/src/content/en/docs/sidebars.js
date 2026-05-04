@@ -188,6 +188,11 @@ const sidebars = {
           id: 'memory/memory-processors',
           label: 'Memory Processors',
         },
+        {
+          type: 'doc',
+          id: 'memory/synap',
+          label: 'Synap',
+        },
       ],
     },
     {
