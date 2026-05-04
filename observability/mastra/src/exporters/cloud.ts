@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -39,6 +39,8 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   feedback: '/feedback/publish',
 };
 
+const DEFAULT_CLOUD_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
+
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   traces: 'spans',
   logs: 'logs',
@@ -46,8 +48,6 @@ const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   scores: 'scores',
   feedback: 'feedback',
 };
-
-const DEFAULT_CLOUD_ENDPOINT = 'https://api.mastra.ai';
 
 function trimTrailingSlashes(value: string): string {
   let end = value.length;
@@ -237,7 +237,7 @@ export class CloudExporter extends BaseExporter {
     const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
     const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
+      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
@@ -247,7 +247,7 @@ export class CloudExporter extends BaseExporter {
     if (tracesEndpointOverride) {
       tracesEndpoint = resolveExplicitSignalEndpoint('traces', tracesEndpointOverride, projectId);
     } else {
-      baseEndpoint = resolveBaseEndpoint(config.endpoint ?? DEFAULT_CLOUD_ENDPOINT);
+      baseEndpoint = resolveBaseEndpoint(config.endpoint ?? 'https://observability.mastra.ai');
       tracesEndpoint = buildSignalEndpoint(baseEndpoint, 'traces', projectId);
     }
 
@@ -293,6 +293,10 @@ export class CloudExporter extends BaseExporter {
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     // Cloud Observability only process SPAN_ENDED events
     if (event.type !== TracingEventType.SPAN_ENDED) {
+      return;
+    }
+
+    if (!DEFAULT_CLOUD_SPAN_FILTER(event.exportedSpan)) {
       return;
     }
 

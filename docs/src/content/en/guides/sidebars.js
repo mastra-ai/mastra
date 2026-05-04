@@ -50,6 +50,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'getting-started/nestjs',
+          label: 'NestJS',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/hono',
           label: 'Hono',
         },
@@ -153,6 +158,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/temporal',
+          label: 'Temporal',
+        },
+        {
+          type: 'doc',
           id: 'deployment/vercel',
           label: 'Vercel',
         },
@@ -238,13 +248,23 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
+          id: 'guide/github-actions-pr-description',
+          label: 'GitHub Actions: PR Description',
         },
         {
           type: 'doc',
-          id: 'guide/github-actions-pr-description',
-          label: 'GitHub Actions: PR Description',
+          id: 'guide/slack-assistant',
+          label: 'Channels: Slack Assistant',
+        },
+        {
+          type: 'doc',
+          id: 'guide/publishing-mcp-server',
+          label: 'Publishing an MCP Server',
+        },
+        {
+          type: 'doc',
+          id: 'guide/whatsapp-chat-bot',
+          label: 'WhatsApp Chat Bot',
         },
       ],
     },

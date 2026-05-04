@@ -32,7 +32,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@types/node": "22.19.15",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "zod": "catalog:"

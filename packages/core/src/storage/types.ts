@@ -2422,6 +2422,10 @@ export interface AddExperimentResultInput {
 
 export interface ListExperimentsInput {
   datasetId?: string;
+  targetType?: TargetType;
+  targetId?: string;
+  agentVersion?: string;
+  status?: ExperimentStatus;
   pagination: StoragePagination;
 }
 
@@ -2432,6 +2436,8 @@ export interface ListExperimentsOutput {
 
 export interface ListExperimentResultsInput {
   experimentId: string;
+  traceId?: string;
+  status?: ExperimentResultStatus;
   pagination: StoragePagination;
 }
 

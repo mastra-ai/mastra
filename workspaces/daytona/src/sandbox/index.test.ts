@@ -594,6 +594,341 @@ describe('DaytonaSandbox', () => {
     });
   });
 
+  describe('Mount Configuration', () => {
+    it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.includes('mountpoint -q') && command.includes('echo "mounted"')) {
+          return { exitCode: 0, result: 'not mounted' };
+        }
+        if (command.includes('echo "non-empty" || echo "ok"')) {
+          return { exitCode: 0, result: 'ok' };
+        }
+        if (command.includes('sudo mkdir -p')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('which s3fs')) {
+          return { exitCode: 0, result: '/usr/bin/s3fs' };
+        }
+        if (command.includes('id -u && id -g')) {
+          return { exitCode: 0, result: '1000\n1000' };
+        }
+        if (command.includes('chmod a+rw /dev/fuse')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('s3fs') && command.includes('/data/s3-prefix')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('mkdir -p /tmp/.mastra-mounts')) {
+          return { exitCode: 0, result: '' };
+        }
+        return { exitCode: 0, result: '' };
+      });
+
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-s3-prefix',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+          prefix: 'workspace/data/',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/s3-prefix');
+
+      const mountCall = mockSandbox.process.executeCommand.mock.calls.find((call: any[]) => {
+        const command = call[0] || '';
+        return command.includes('s3fs') && command.includes('/data/s3-prefix') && !command.includes('which s3fs');
+      });
+
+      expect(mountCall).toBeDefined();
+      if (mountCall) {
+        expect(mountCall[0]).toContain('test-bucket:/workspace/data');
+        expect(mountCall[0]).not.toContain('test-bucket:/workspace/data/');
+      }
+    });
+  });
+
+  describe('Azure Blob Mount Configuration', () => {
+    const setupAzureMocks = () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.includes('which blobfuse2')) {
+          return { exitCode: 0, result: '/usr/bin/blobfuse2' };
+        }
+        if (command.includes('id -u && id -g')) {
+          return { exitCode: 0, result: '1000\n1000' };
+        }
+        if (command.includes('curl') && command.includes('blob.core.windows.net')) {
+          return { exitCode: 0, result: '' };
+        }
+        return { exitCode: 0, result: '' };
+      });
+    };
+
+    const findBlobfuseMountCall = (target: string) =>
+      mockSandbox.process.executeCommand.mock.calls.find((call: any[]) => {
+        const command = call[0] || '';
+        return command.includes('blobfuse2 mount') && command.includes(target) && !command.includes('which blobfuse2');
+      });
+
+    const findWrittenConfig = (): string | undefined => {
+      const upload = mockSandbox.fs.uploadFile.mock.calls.find((call: any[]) =>
+        String(call[1]).includes('.blobfuse2-config'),
+      );
+      return upload ? Buffer.from(upload[0]).toString('utf-8') : undefined;
+    };
+
+    it('account-key auth writes mode: key with account-name, account-key, container', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-key',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'test-container',
+          accountName: 'mystorage',
+          accountKey: 'a-secret-key',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-key');
+
+      const mountCall = findBlobfuseMountCall('/data/azure-key');
+      expect(mountCall).toBeDefined();
+      expect(mountCall![0]).toContain('--config-file=');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: key');
+      expect(yaml).toContain('account-name: "mystorage"');
+      expect(yaml).toContain('account-key: "a-secret-key"');
+      expect(yaml).toContain('container: "test-container"');
+      expect(yaml).toContain('read-only: false');
+      expect(yaml).not.toContain('  type: block');
+    });
+
+    it('SAS token auth writes mode: sas with sas field (no account-key)', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-sas',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'sas-container',
+          accountName: 'mystorage',
+          sasToken: 'sv=2022-11-02&ss=b&srt=co&sp=rl&se=2030-01-01T00:00:00Z&sig=xyz',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-sas');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: sas');
+      expect(yaml).toContain('sas: ');
+      expect(yaml).not.toContain('account-key:');
+    });
+
+    it('useDefaultCredential writes mode: msi (no key, no sas)', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-msi',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'msi-container',
+          accountName: 'mystorage',
+          useDefaultCredential: true,
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-msi');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: msi');
+      expect(yaml).not.toContain('account-key:');
+      expect(yaml).not.toContain('sas:');
+    });
+
+    it('connection string is parsed for AccountName, AccountKey, BlobEndpoint', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-cs',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'cs-container',
+          connectionString:
+            'DefaultEndpointsProtocol=https;AccountName=fromstring;AccountKey=keyvalue;BlobEndpoint=https://fromstring.blob.core.windows.net/;EndpointSuffix=core.windows.net',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-cs');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('mode: key');
+      expect(yaml).toContain('account-name: "fromstring"');
+      expect(yaml).toContain('account-key: "keyvalue"');
+      expect(yaml).toContain('endpoint: "https://fromstring.blob.core.windows.net"');
+    });
+
+    it('connection string synthesizes endpoint from EndpointSuffix when BlobEndpoint is omitted', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-cs-suffix',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'cs-container',
+          connectionString:
+            'DefaultEndpointsProtocol=https;AccountName=fromstring;AccountKey=keyvalue;EndpointSuffix=core.usgovcloudapi.net',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-cs-suffix');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('endpoint: "https://fromstring.blob.core.usgovcloudapi.net"');
+    });
+
+    it('readOnly writes read-only: true in config', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-ro',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'ro-container',
+          accountName: 'mystorage',
+          accountKey: 'k',
+          readOnly: true,
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-ro');
+
+      const yaml = findWrittenConfig();
+      expect(yaml).toBeDefined();
+      expect(yaml).toContain('read-only: true');
+    });
+
+    it('prefix mount uses blobfuse2 subdirectory flag', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-prefix',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'prefix-container',
+          accountName: 'mystorage',
+          accountKey: 'k',
+          prefix: '/workspace/data/',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/azure-prefix');
+
+      const mountCall = findBlobfuseMountCall('/data/azure-prefix');
+      expect(mountCall).toBeDefined();
+      expect(mountCall![0]).toContain('--virtual-directory=true');
+      expect(mountCall![0]).toContain('--subdirectory=workspace/data');
+    });
+
+    it('missing credentials produces a clear error', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-nocreds',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'no-creds',
+          accountName: 'mystorage',
+        }),
+      } as any;
+
+      const result = await sandbox.mount(mockFilesystem, '/data/azure-nocreds');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credentials/i);
+    });
+
+    it('invalid container name is rejected before any mount command', async () => {
+      setupAzureMocks();
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-azure-bad-name',
+        name: 'AzureBlobFilesystem',
+        provider: 'azure-blob',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'azure-blob',
+          container: 'Bad_Name',
+          accountName: 'mystorage',
+          accountKey: 'k',
+        }),
+      } as any;
+
+      const result = await sandbox.mount(mockFilesystem, '/data/azure-bad');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Invalid Azure container name/i);
+      expect(findBlobfuseMountCall('/data/azure-bad')).toBeUndefined();
+    });
+  });
+
   describe('Stop & Destroy', () => {
     it('stop calls daytona.stop()', async () => {
       const sandbox = new DaytonaSandbox();

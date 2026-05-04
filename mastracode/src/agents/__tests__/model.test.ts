@@ -184,14 +184,16 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
-    it('does not use env API key when no stored Anthropic credential exists', () => {
+    it('falls back to env API key when no stored Anthropic credential exists', () => {
       process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
       const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('claude-max-oauth');
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(result.modelId).toBe('claude-sonnet-4-20250514');
+      expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
     it('uses stored API key credential when not logged in via OAuth', () => {
@@ -607,10 +609,10 @@ describe('getAnthropicApiKey', () => {
     expect(getAnthropicApiKey()).toBeUndefined();
   });
 
-  it('ignores env var when no stored credential exists', () => {
+  it('falls back to env var when no stored credential exists', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-env-key';
     mockAuthStorageInstance.get.mockReturnValue(undefined);
-    expect(getAnthropicApiKey()).toBeUndefined();
+    expect(getAnthropicApiKey()).toBe('sk-env-key');
   });
 });
 

@@ -14,6 +14,8 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   SpanRecord,
 } from '@mastra/core/storage';
 
@@ -100,6 +102,40 @@ export async function getTrace(client: ClickHouseClient, args: GetTraceArgs): Pr
   if (!rows || rows.length === 0) return null;
 
   const spans: SpanRecord[] = rows.map(rowToSpanRecord);
+  return { traceId: args.traceId, spans };
+}
+
+/**
+ * Lightweight trace fetch — only timeline-relevant columns.
+ */
+export async function getTraceLight(
+  client: ClickHouseClient,
+  args: GetTraceArgs,
+): Promise<GetTraceLightResponse | null> {
+  const result = await client.query({
+    query: `
+      SELECT traceId, spanId, parentSpanId, name,
+        entityType, entityId, entityName,
+        spanType, error, isEvent,
+        startedAt, endedAt
+      FROM (
+        SELECT *
+        FROM ${TABLE_SPAN_EVENTS}
+        WHERE traceId = {traceId:String}
+        ORDER BY dedupeKey, endedAt DESC
+        LIMIT 1 BY dedupeKey
+      )
+      ORDER BY startedAt ASC
+    `,
+    query_params: { traceId: args.traceId },
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_SETTINGS,
+  });
+
+  const rows = (await result.json()) as Record<string, any>[];
+  if (!rows || rows.length === 0) return null;
+
+  const spans: LightSpanRecord[] = rows.map(rowToSpanRecord);
   return { traceId: args.traceId, spans };
 }
 

@@ -169,6 +169,138 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
     });
 
+    describe('getTraceLight', () => {
+      it('should return null for non-existent trace', async () => {
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'non-existent' });
+        expect(trace).toBeNull();
+      });
+
+      it('should return trace with all associated spans (light fields only)', async () => {
+        const rootSpan = createSpan({ traceId: 'trace-1', spanId: 'root' });
+        const child1 = createChildSpan('root', { traceId: 'trace-1', spanId: 'child-1' });
+        const child2 = createChildSpan('root', { traceId: 'trace-1', spanId: 'child-2' });
+
+        await observabilityStorage.batchCreateSpans({ records: [rootSpan, child1, child2] });
+
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'trace-1' });
+        expect(trace).not.toBeNull();
+        expect(trace!.traceId).toBe('trace-1');
+        expect(trace!.spans.length).toBe(3);
+      });
+
+      it('should include required lightweight fields', async () => {
+        const span = createSpan({
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          name: 'Test Span',
+          spanType: SpanType.AGENT_RUN,
+          entityType: EntityType.AGENT,
+          entityId: 'agent-1',
+          entityName: 'My Agent',
+          input: { message: 'hello' },
+          output: { result: 'success' },
+          attributes: { model: 'gpt-4' },
+          metadata: { custom: 'data' },
+        });
+        await observabilityStorage.createSpan({ span });
+
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'trace-1' });
+        expect(trace).not.toBeNull();
+        const lightSpan = trace!.spans[0]!;
+
+        // Required fields must be present
+        expect(lightSpan.traceId).toBe('trace-1');
+        expect(lightSpan.spanId).toBe('span-1');
+        expect(lightSpan.name).toBe('Test Span');
+        expect(lightSpan.spanType).toBe(SpanType.AGENT_RUN);
+        expect(lightSpan.isEvent).toBe(false);
+        expect(lightSpan.startedAt).toBeDefined();
+
+        // Entity context fields
+        expect(lightSpan.entityType).toBe(EntityType.AGENT);
+        expect(lightSpan.entityId).toBe('agent-1');
+        expect(lightSpan.entityName).toBe('My Agent');
+      });
+
+      it('should NOT include heavy fields (input, output, attributes, metadata, tags, links)', async () => {
+        const span = createSpan({
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          input: { message: 'hello world' },
+          output: { result: 'response' },
+          attributes: { model: 'gpt-4' },
+          metadata: { custom: 'data' },
+          tags: ['production'],
+        });
+        await observabilityStorage.createSpan({ span });
+
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'trace-1' });
+        const lightSpan = trace!.spans[0]! as Record<string, unknown>;
+
+        // Heavy fields must NOT be present
+        expect(lightSpan.input).toBeUndefined();
+        expect(lightSpan.output).toBeUndefined();
+        expect(lightSpan.attributes).toBeUndefined();
+        expect(lightSpan.metadata).toBeUndefined();
+        expect(lightSpan.tags).toBeUndefined();
+        expect(lightSpan.links).toBeUndefined();
+      });
+
+      it('should return spans ordered by startedAt ASC', async () => {
+        const baseDate = new Date('2024-01-01T00:00:00Z');
+        const span1 = createSpan({
+          traceId: 'trace-1',
+          spanId: 'span-3',
+          startedAt: new Date(baseDate.getTime() + 2000),
+        });
+        const span2 = createSpan({
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          startedAt: new Date(baseDate.getTime()),
+        });
+        const span3 = createSpan({
+          traceId: 'trace-1',
+          spanId: 'span-2',
+          startedAt: new Date(baseDate.getTime() + 1000),
+        });
+
+        await observabilityStorage.batchCreateSpans({ records: [span1, span2, span3] });
+
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'trace-1' });
+        expect(trace!.spans[0]!.spanId).toBe('span-1');
+        expect(trace!.spans[1]!.spanId).toBe('span-2');
+        expect(trace!.spans[2]!.spanId).toBe('span-3');
+      });
+
+      it('should handle parent-child span hierarchy', async () => {
+        const rootSpan = createSpan({ traceId: 'trace-1', spanId: 'root', parentSpanId: null });
+        const childSpan = createChildSpan('root', { traceId: 'trace-1', spanId: 'child' });
+
+        await observabilityStorage.batchCreateSpans({ records: [rootSpan, childSpan] });
+
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'trace-1' });
+        const root = trace!.spans.find(s => s.spanId === 'root');
+        const child = trace!.spans.find(s => s.spanId === 'child');
+
+        expect(root!.parentSpanId).toBeNull();
+        expect(child!.parentSpanId).toBe('root');
+      });
+
+      it('should preserve error field for status computation', async () => {
+        const span = createSpan({
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          error: { message: 'Something went wrong', stack: 'Error at...' },
+        });
+        await observabilityStorage.createSpan({ span });
+
+        const trace = await observabilityStorage.getTraceLight({ traceId: 'trace-1' });
+        const lightSpan = trace!.spans[0]!;
+        expect(lightSpan.error).toBeDefined();
+        expect((lightSpan.error as any).message).toBe('Something went wrong');
+      });
+    });
+
     describe('getSpan', () => {
       it('should return null for non-existent span', async () => {
         const result = await observabilityStorage.getSpan({ traceId: 'non-existent', spanId: 'non-existent' });

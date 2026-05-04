@@ -4,6 +4,7 @@ description: Overview of voice capabilities in Mastra, including text-to-speech,
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
+  - "@mastra/voice-aws-nova-sonic"
   - "@mastra/voice-azure"
   - "@mastra/voice-cloudflare"
   - "@mastra/voice-deepgram"
@@ -290,7 +291,7 @@ For detailed configuration options and advanced features, check out our [Text-to
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
+      speaker: 'shubh', // Optional: specify a bulbul:v3 speaker
     })
 
     playAudio(audioStream)
@@ -620,6 +621,49 @@ For detailed configuration options and advanced features, check out [Speech to S
 
     Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
   </TabItem>
+
+  <TabItem value="aws-nova-sonic" label="AWS Nova Sonic">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+    import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: 'openai/gpt-5.4',
+      voice: new NovaSonicVoice({
+        region: 'us-east-1',
+        speaker: 'matthew',
+        // Static credentials are optional. The default AWS credential
+        // provider chain is used when none are passed.
+      }),
+    })
+
+    // Connect before using speak/send
+    await voiceAgent.voice.connect()
+
+    // Listen for assistant audio (Int16Array PCM)
+    voiceAgent.voice.on('speaking', ({ audioData }) => {
+      if (audioData) playAudio(audioData)
+    })
+
+    // Listen for transcribed text
+    voiceAgent.voice.on('writing', ({ text, role }) => {
+      console.log(`${role}: ${text}`)
+    })
+
+    // Initiate the conversation
+    await voiceAgent.voice.speak('How can I help you today?')
+
+    // Send continuous audio from the microphone
+    const micStream = getMicrophoneStream()
+    await voiceAgent.voice.send(micStream)
+    ```
+
+    Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
+  </TabItem>
 </Tabs>
 
 ## Voice configuration
@@ -794,12 +838,15 @@ Each voice provider can be configured with different models and options. Below a
     // Sarvam Voice Configuration
     const voice = new SarvamVoice({
       speechModel: {
-        name: 'sarvam-voice', // Example model name
+        model: 'bulbul:v3', // TTS model (bulbul:v2 or bulbul:v3)
         apiKey: process.env.SARVAM_API_KEY,
-        language: 'en-IN', // Language code
-        style: 'conversational', // Style setting
+        language: 'en-IN', // BCP-47 language code
       },
-      // Sarvam may not have a separate listening model
+      listeningModel: {
+        model: 'saarika:v2.5', // STT model (saarika:v2.5 or saaras:v3)
+        apiKey: process.env.SARVAM_API_KEY,
+      },
+      speaker: 'shubh', // Default bulbul:v3 speaker
     })
     ```
 
@@ -858,6 +905,28 @@ Each voice provider can be configured with different models and options. Below a
     ```
 
     Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+  </TabItem>
+
+  <TabItem value="aws-nova-sonic" label="AWS Nova Sonic">
+    ```typescript
+    // AWS Nova Sonic Voice Configuration
+    const voice = new NovaSonicVoice({
+      region: 'us-east-1',
+      speaker: 'matthew',
+      sessionConfig: {
+        inferenceConfiguration: {
+          temperature: 0.7,
+          maxTokens: 1024,
+        },
+        turnDetectionConfiguration: {
+          endpointingSensitivity: 'MEDIUM',
+        },
+      },
+      // AWS Nova Sonic is a realtime bidirectional API without separate speech and listening models
+    })
+    ```
+
+    Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
   </TabItem>
 
   <TabItem value="aisdk" label="AI SDK">
@@ -990,6 +1059,7 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [Azure Voice](/reference/voice/azure)
 - [Google Voice](/reference/voice/google)
 - [Google Gemini Live Voice](/reference/voice/google-gemini-live)
+- [AWS Nova Sonic Voice](/reference/voice/aws-nova-sonic)
 - [Deepgram Voice](/reference/voice/deepgram)
 - [PlayAI Voice](/reference/voice/playai)
 - [Voice Examples](https://github.com/mastra-ai/voice-examples)

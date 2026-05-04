@@ -29,7 +29,8 @@
         "metadata": {
           "runId": "<runId-1>",
           "resourceId": "test-resource-id",
-          "threadId": "test-thread-id"
+          "threadId": "test-thread-id",
+          "environment": "test"
         },
         "input": "Calculate 5 + 3",
         "output": {
@@ -56,9 +57,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -77,7 +76,8 @@
             "metadata": {
               "runId": "<runId-1>",
               "resourceId": "test-resource-id",
-              "threadId": "test-thread-id"
+              "threadId": "test-thread-id",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -143,9 +143,19 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Calculate 5 + 3"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -181,7 +191,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id"
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -214,7 +225,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id"
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "input": {
                       "operation": "add",
@@ -247,10 +259,8 @@
                       "resourceId": "test-resource-id",
                       "threadId": "test-thread-id",
                       "toolCallId": "call-calc-1",
-                      "toolName": "calculator"
-                    },
-                    "output": {
-                      "result": 8
+                      "toolName": "calculator",
+                      "environment": "test"
                     }
                   }
                 }
@@ -292,9 +302,27 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Calculate 5 + 3"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: calculator]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: calculator]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
@@ -322,7 +350,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id"
+                      "threadId": "test-thread-id",
+                      "environment": "test"
                     },
                     "output": {
                       "text": {

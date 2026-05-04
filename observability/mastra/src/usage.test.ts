@@ -151,6 +151,54 @@ describe('extractUsageMetrics', () => {
       expect(result.outputDetails?.text).toBe(50);
     });
 
+    it('should not double count Anthropic cache tokens when raw field is absent but cachedInputTokens is set', () => {
+      const usage = {
+        inputTokens: 3493,
+        outputTokens: 125,
+        cachedInputTokens: 3170,
+      } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 3170,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(3493);
+      expect(result.inputDetails?.text).toBe(323);
+      expect(result.inputDetails?.cacheRead).toBe(3170);
+      expect(result.outputTokens).toBe(125);
+    });
+
+    it('should sum Anthropic cache write across multi-step runs via usage.cacheCreationInputTokens', () => {
+      // Regression for PR #14674: 3-step Anthropic prompt-caching aggregation.
+      // Mastra-summed usage must win over per-step providerMetadata.
+      const usage: LanguageModelUsage = {
+        inputTokens: 17962,
+        outputTokens: 1500,
+        cachedInputTokens: 12686,
+        cacheCreationInputTokens: 5268,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 4551,
+          cacheCreationInputTokens: 4005,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(17962);
+      expect(result.outputTokens).toBe(1500);
+      expect(result.inputDetails?.cacheRead).toBe(12686);
+      expect(result.inputDetails?.cacheWrite).toBe(5268);
+      expect(result.inputDetails?.text).toBe(8);
+      expect(result.outputDetails?.text).toBe(1500);
+    });
+
     it('should not double count Anthropic cache tokens when v6 usage already includes them', () => {
       const usage: LanguageModelUsage = {
         inputTokens: 106,
@@ -373,7 +421,7 @@ describe('extractUsageMetrics', () => {
 
       const providerMetadata: ProviderMetadata = {
         anthropic: {
-          cacheReadInputTokens: 3000, // last step only — should be ignored
+          cacheReadInputTokens: 3000, // last step only - should be ignored
           cacheCreationInputTokens: 0,
         },
       };

@@ -9,6 +9,15 @@ packages:
 
 The `SkillSearchProcessor` is an **input processor** that enables on-demand skill discovery and loading. Instead of injecting all skill metadata into the system prompt upfront (like `SkillsProcessor`), it gives the agent two meta-tools (`search_skills` and `load_skill`) that let it find and load skills on demand. This reduces context token usage when workspaces have many skills.
 
+By default, when you attach only `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
+
+- The default eager `SkillsProcessor` is not auto-added.
+- `search_skills` and `load_skill` are exposed for discovery and instruction loading.
+- Overlapping `skill` and `skill_search` tools are hidden.
+- `skill_read` remains available so the agent can read supporting skill files such as references, scripts, and assets.
+
+If you explicitly configure `SkillsProcessor` alongside `SkillSearchProcessor`, the agent preserves the eager `skill` and `skill_search` tools as an opt-in path.
+
 ## Usage example
 
 ```typescript
@@ -94,6 +103,12 @@ const skillSearch = new SkillSearchProcessor({
     isOptional: false,
   },
   {
+    name: 'providesSkillDiscovery',
+    type: "'on-demand'",
+    description: 'Signals to the agent that this processor owns skill discovery and instruction loading.',
+    isOptional: false,
+  },
+  {
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
     description:
@@ -112,7 +127,7 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './project' }),
-  skills: ['/skills'],
+  skills: ['skills'],
   bm25: true,
 })
 
@@ -141,6 +156,14 @@ The agent workflow is:
 1. Agent reviews results and calls `load_skill` with the skill name
 1. The skill's instructions appear as system messages on the next turn
 1. Agent follows the loaded skill's instructions
+
+## Workspace file tools
+
+`SkillSearchProcessor` loads skill instructions into the conversation. It does not block workspace file tools from reading files.
+
+Use `skill_read` for supporting files that belong to a loaded skill, such as files under `references/`, `scripts/`, or `assets/`.
+
+Reserve workspace file tools such as `mastra_workspace_read_file` for explicit file inspection or editing workflows. During normal task execution, the agent does not need to read the same `SKILL.md` file after `load_skill` succeeds.
 
 ## Compared to SkillsProcessor
 

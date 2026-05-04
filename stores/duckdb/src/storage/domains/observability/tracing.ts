@@ -6,6 +6,8 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
@@ -35,6 +37,7 @@ const COLUMNS = [
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
   'userId',
   'organizationId',
   'resourceId',
@@ -80,6 +83,7 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('entityType')},
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
+    ${argMaxNonNull('entityVersionId')},
     ${argMaxNonNull('userId')},
     ${argMaxNonNull('organizationId')},
     ${argMaxNonNull('resourceId')},
@@ -102,6 +106,42 @@ const SPAN_RECONSTRUCT_SELECT = `
   FROM span_events
 `;
 
+/** Lightweight variant — only timeline-relevant columns. */
+const SPAN_RECONSTRUCT_SELECT_LIGHT = `
+  SELECT
+    traceId, spanId,
+    ${argMaxNonNull('name')},
+    ${argMaxNonNull('spanType')},
+    ${argMaxNonNull('parentSpanId')},
+    ${argMaxNonNull('isEvent')},
+    coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
+    ${argMaxNonNull('endedAt')},
+    ${argMaxNonNull('entityType')},
+    ${argMaxNonNull('entityId')},
+    ${argMaxNonNull('entityName')},
+    ${argMaxNonNull('error')}
+  FROM span_events
+`;
+
+function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
+  return {
+    traceId: row.traceId as string,
+    spanId: row.spanId as string,
+    name: row.name as string,
+    spanType: row.spanType as LightSpanRecord['spanType'],
+    parentSpanId: (row.parentSpanId as string) ?? null,
+    isEvent: row.isEvent as boolean,
+    startedAt: toDate(row.startedAt),
+    endedAt: toDateOrNull(row.endedAt),
+    entityType: (row.entityType as LightSpanRecord['entityType']) ?? null,
+    entityId: (row.entityId as string) ?? null,
+    entityName: (row.entityName as string) ?? null,
+    error: parseJson(row.error),
+    createdAt: toDate(row.startedAt), // DuckDB event-sourced — use startedAt as proxy
+    updatedAt: toDateOrNull(row.endedAt),
+  };
+}
+
 function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
   return {
     traceId: row.traceId as string,
@@ -116,6 +156,7 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     entityType: (row.entityType as SpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
+    entityVersionId: (row.entityVersionId as string) ?? null,
     userId: (row.userId as string) ?? null,
     organizationId: (row.organizationId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
@@ -174,6 +215,7 @@ interface SpanEventRow {
   entityType: string | null;
   entityId: string | null;
   entityName: string | null;
+  entityVersionId: string | null;
   userId: string | null;
   organizationId: string | null;
   resourceId: string | null;
@@ -210,6 +252,7 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.entityType),
     v(row.entityId),
     v(row.entityName),
+    v(row.entityVersionId),
     v(row.userId),
     v(row.organizationId),
     v(row.resourceId),
@@ -257,6 +300,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
     entityName: s.entityName ?? null,
+    entityVersionId: s.entityVersionId ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -294,6 +338,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
     entityName: s.entityName ?? null,
+    entityVersionId: s.entityVersionId ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -376,6 +421,18 @@ export async function getTrace(db: DuckDBConnection, args: GetTraceArgs): Promis
   return {
     traceId: args.traceId,
     spans: rows.map(row => rowToSpanRecord(row as Record<string, unknown>)),
+  };
+}
+
+/** Reconstruct lightweight spans belonging to a trace (timeline fields only). */
+export async function getTraceLight(db: DuckDBConnection, args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+  const rows = await db.query(`${SPAN_RECONSTRUCT_SELECT_LIGHT} WHERE traceId = ? GROUP BY traceId, spanId`, [
+    args.traceId,
+  ]);
+  if (rows.length === 0) return null;
+  return {
+    traceId: args.traceId,
+    spans: rows.map(row => rowToLightSpanRecord(row as Record<string, unknown>)),
   };
 }
 

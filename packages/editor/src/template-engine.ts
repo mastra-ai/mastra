@@ -54,6 +54,9 @@ export function renderTemplate(template: string, context: Record<string, unknown
       const resolved = resolvePath(context, variablePath);
 
       if (resolved !== undefined && resolved !== null) {
+        if (typeof resolved === 'object') {
+          return JSON.stringify(resolved);
+        }
         return String(resolved);
       }
 

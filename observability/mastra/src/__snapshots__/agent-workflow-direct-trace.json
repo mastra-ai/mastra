@@ -28,7 +28,8 @@
           "availableTools": ["workflow-simpleWorkflow"]
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
@@ -55,9 +56,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -74,7 +73,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -138,9 +138,19 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You can execute workflows that exist in your config"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Execute the simpleWorkflow with test input"
+                  }
+                ],
                 "output": {
                   "text": "",
                   "toolCalls": [
@@ -174,7 +184,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "workflow-simpleWorkflow",
@@ -205,7 +216,8 @@
                       "success": true
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "input": {
                       "inputData": {
@@ -236,7 +248,8 @@
                           "status": "success"
                         },
                         "metadata": {
-                          "runId": "<runId-2>"
+                          "runId": "<runId-2>",
+                          "environment": "test"
                         },
                         "input": {
                           "input": "test input"
@@ -262,7 +275,8 @@
                               "status": "success"
                             },
                             "metadata": {
-                              "runId": "<runId-2>"
+                              "runId": "<runId-2>",
+                              "environment": "test"
                             },
                             "input": {
                               "input": "test input"
@@ -295,13 +309,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "toolCallId": "call-workflow-1",
-                      "toolName": "workflow-simpleWorkflow"
-                    },
-                    "output": {
-                      "result": {
-                        "output": "test input processed"
-                      },
-                      "runId": "<runId-2>"
+                      "toolName": "workflow-simpleWorkflow",
+                      "environment": "test"
                     }
                   }
                 }
@@ -341,9 +350,27 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You can execute workflows that exist in your config"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Execute the simpleWorkflow with test input"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: workflow-simpleWorkflow]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: workflow-simpleWorkflow]"
+                  }
+                ],
                 "output": {
                   "text": {
                     "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
@@ -369,7 +396,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": {

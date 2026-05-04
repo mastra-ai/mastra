@@ -18,7 +18,7 @@ export type MultiComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: 'default' | 'outline' | 'ghost';
   size?: FormElementSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;

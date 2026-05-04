@@ -10,12 +10,22 @@ import type {
 import type {
   CallWarning as AISDKCallWarningV6,
   FinishReason as FinishReasonV6,
+  InferUIMessageChunk as InferUIMessageChunkV6,
   LanguageModelUsage as AISDKLanguageModelUsageV6,
+  ToolApprovalRequest,
+  UIMessage as UIMessageV6,
 } from '@internal/ai-v6';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
 import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
-
 import { isDataChunkType } from './utils';
+
+/**
+ * Separator used to encode both runId and toolCallId into a single approvalId string.
+ * Chosen because neither runId nor toolCallId can contain ":" in normal usage
+ * (UUIDs are hex + hyphens; provider tool call IDs are alphanumeric + underscores).
+ * The server splits on this separator to recover the runId for resumeStream.
+ */
+export const APPROVAL_ID_SEPARATOR = '::';
 
 /**
  * Maps Mastra's extended finish reasons to AI SDK-compatible values.
@@ -32,6 +42,7 @@ export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
 export type OutputChunkType<OUTPUT = undefined> =
   | TextStreamPart<ToolSet>
   | ObjectStreamPart<Partial<OUTPUT>>
+  | ToolApprovalRequest
   | DataChunkType
   | undefined;
 
@@ -393,7 +404,31 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
 }: {
   chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType<OUTPUT> {
+}): OutputChunkType<OUTPUT> | OutputChunkType<OUTPUT>[] {
+  if (chunk.type === 'tool-call-approval') {
+    // Emit both the native v6 tool-approval-request AND the legacy data-tool-call-approval
+    // so that consumers using the data stream protocol remain backwards-compatible.
+    return [
+      {
+        type: 'tool-approval-request',
+        approvalId: `${chunk.runId}${APPROVAL_ID_SEPARATOR}${chunk.payload.toolCallId}`,
+        toolCallId: chunk.payload.toolCallId,
+      } as OutputChunkType<OUTPUT>,
+      {
+        type: 'data-tool-call-approval',
+        id: chunk.payload.toolCallId,
+        data: {
+          state: 'data-tool-call-approval',
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
+          resumeSchema: chunk.payload.resumeSchema,
+        },
+      } satisfies DataChunkType,
+    ];
+  }
+
   return convertMastraChunkToAISDKBase({
     chunk,
     mode,
@@ -415,7 +450,11 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   responseMessageId,
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
-  part: TextStreamPart<ToolSet> | DataChunkType | { type: 'tool-output'; toolCallId: string; output: any };
+  part:
+    | TextStreamPart<ToolSet>
+    | DataChunkType
+    | ToolApprovalRequest
+    | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -423,7 +462,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | ToolWorkflowChunkType | ToolNetworkChunkType | undefined {
+}):
+  | InferUIMessageChunk<UI_MESSAGE>
+  | InferUIMessageChunkV6<UIMessageV6>
+  | ToolAgentChunkType
+  | ToolWorkflowChunkType
+  | ToolNetworkChunkType
+  | undefined {
   const partType = part?.type;
 
   switch (partType) {
@@ -545,6 +590,14 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+      };
+    }
+
+    case 'tool-approval-request': {
+      return {
+        type: 'tool-approval-request',
+        approvalId: part.approvalId,
+        toolCallId: part.toolCallId,
       };
     }
 

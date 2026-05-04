@@ -138,8 +138,58 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     defaultValue: 'true',
     description: 'Whether to enable logging for this server.',
   },
+  {
+    name: 'requireToolApproval',
+    type: 'boolean | (params: RequireToolApprovalContext) => boolean | Promise<boolean>',
+    isOptional: true,
+    description:
+      'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, and request context to dynamically decide whether approval is needed.',
+  },
 ]}
 />
+
+## Tool approval
+
+Use `requireToolApproval` on a server definition to require human approval before any tool from that server is executed. This works with the existing [human-in-the-loop](/docs/workflows/human-in-the-loop) approval flow.
+
+### Require approval for all tools
+
+Set `requireToolApproval` to `true` to require approval for every tool on the server:
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: true,
+    },
+  },
+})
+```
+
+### Dynamic approval with a function
+
+Pass a function to decide per-call whether approval is needed. The function receives the tool name, the arguments the model passed, and any request context from the incoming request:
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: ({ toolName, args, requestContext }) => {
+        // Read-only tools don't need approval
+        if (toolName === 'list_repos') return false
+        // Destructive tools with force flag always need approval
+        if (toolName === 'delete_repo') return args.force === true
+        // Non-admin users need approval for everything else
+        return requestContext?.userRole !== 'admin'
+      },
+    },
+  },
+})
+```
+
+The function can also be async. It receives `requestContext` from the incoming request, which you can use for auth checks or other per-request logic.
 
 ## Methods
 

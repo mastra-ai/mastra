@@ -1,21 +1,18 @@
 import { coreFeatures } from '@mastra/core/features';
-import {
-  MainContentLayout,
-  AgentPageTabs,
-  AgentTopBarControls,
-  useIsCmsAvailable,
-  useHasObservability,
-  useAgent,
-  cleanProviderId,
-  SchemaRequestContextProvider,
-  PlaygroundModelProvider,
-  ReviewQueueProvider,
-  GenerationProvider,
-} from '@mastra/playground-ui';
-import type { AgentPageTab } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
-
 import { AgentHeader } from './agent-header';
+import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
+import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
+import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
+import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
+import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
+import { GenerationProvider } from '@/domains/datasets/context/generation-context';
+import { cleanProviderId } from '@/domains/llm/utils';
+import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
