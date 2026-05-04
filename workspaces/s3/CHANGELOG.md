@@ -1,5 +1,14 @@
 # @mastra/s3
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#16127](https://github.com/mastra-ai/mastra/pull/16127))
+  - Updated dependency [`@aws-sdk/client-s3@^3.1040.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-s3/v/3.1040.0) (from `^3.1032.0`, in `dependencies`)
+- Updated dependencies [[`86c0298`](https://github.com/mastra-ai/mastra/commit/86c0298e647306423c842f9d5ac827bd616bd13d), [`7fce309`](https://github.com/mastra-ai/mastra/commit/7fce30912b14170bfc41f0ac736cca0f39fe0cd4), [`7997c2e`](https://github.com/mastra-ai/mastra/commit/7997c2e55ddd121562a4098cd8d2b89c68433bf1), [`e97ccb9`](https://github.com/mastra-ai/mastra/commit/e97ccb900f8b7a390ce82c9f8eb8d6eb2c5e3777), [`c5daf48`](https://github.com/mastra-ai/mastra/commit/c5daf48556e98c46ae06caf00f92c249912007e9), [`cd96779`](https://github.com/mastra-ai/mastra/commit/cd9677937f113b2856dc8b9f3d4bdabcee58bb2e)]:
+  - @mastra/core@1.32.0-alpha.2
+
 ## 0.5.0
 
 ### Minor Changes

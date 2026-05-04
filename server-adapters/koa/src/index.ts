@@ -3,11 +3,12 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { isProtectedCustomRoute } from '@mastra/server/auth';
+import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -29,7 +30,6 @@ type RouteDispatcherGroup = {
   routes: RegisteredKoaRoute[];
   stackLengthAfterRegistration: number;
 };
-
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
@@ -464,6 +464,18 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
     }
 
+    // Check FGA authorization (EE feature)
+    const fgaError = await checkRouteFGA(this.mastra, route, ctx.state.requestContext, {
+      ...params.urlParams,
+      ...params.queryParams,
+      ...(typeof params.body === 'object' ? params.body : {}),
+    });
+    if (fgaError) {
+      ctx.status = fgaError.status;
+      ctx.body = { error: fgaError.error, message: fgaError.message };
+      return;
+    }
+
     try {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
@@ -825,61 +837,79 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Check if this request matches a protected custom route and run auth
       const path = String(ctx.path || '/');
       const method = String(ctx.method || 'GET');
+      const matchedRoute = findMatchingCustomRoute(
+        path,
+        method,
+        server.customApiRoutes ?? server.mastra.getServer()?.apiRoutes,
+      );
+      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, server.customRouteAuthConfig);
+      const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
-      if (isProtectedCustomRoute(path, method, server.customRouteAuthConfig)) {
+      if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
         const serverRoute: ServerRoute = {
-          method: method as any,
-          path,
+          method: (matchedRoute?.route.method ?? method) as any,
+          path: matchedRoute?.route.path ?? path,
           responseType: 'json',
           handler: async () => {},
+          requiresAuth: matchedRoute?.route.requiresAuth,
+          requiresPermission: matchedRoute?.route.requiresPermission,
+          fga: matchedRoute?.route.fga,
         };
 
-        const authError = await server.checkRouteAuth(serverRoute, {
-          path,
-          method,
-          getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
-          getQuery: name => (ctx.query as Record<string, string>)[name],
-          requestContext: ctx.state.requestContext,
-          request: toWebRequest(ctx),
-          buildAuthorizeContext: () => toWebRequest(ctx),
-        });
+        if (shouldRunCustomRouteAuth) {
+          const authError = await server.checkRouteAuth(serverRoute, {
+            path,
+            method,
+            getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+            getQuery: name => (ctx.query as Record<string, string>)[name],
+            requestContext: ctx.state.requestContext,
+            request: toWebRequest(ctx),
+            buildAuthorizeContext: () => toWebRequest(ctx),
+          });
 
-        if (authError) {
-          if (authError.headers) {
-            for (const [key, value] of Object.entries(authError.headers)) {
-              ctx.set(key, value);
+          if (authError) {
+            if (authError.headers) {
+              for (const [key, value] of Object.entries(authError.headers)) {
+                ctx.set(key, value);
+              }
             }
-          }
-          if (authError.error) {
-            ctx.status = authError.status;
-            ctx.body = { error: authError.error };
-            return;
-          }
-        }
-
-        const authConfig = server.mastra.getServer()?.auth;
-        if (authConfig) {
-          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
-          try {
-            ({ hasPermission } = await import('@mastra/core/auth/ee'));
-          } catch {
-            console.error(
-              '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-            );
-          }
-
-          if (hasPermission) {
-            const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
-            const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-            if (permissionError) {
-              ctx.status = permissionError.status;
-              ctx.body = {
-                error: permissionError.error,
-                message: permissionError.message,
-              };
+            if (authError.error) {
+              ctx.status = authError.status;
+              ctx.body = { error: authError.error };
               return;
             }
           }
+
+          const authConfig = server.mastra.getServer()?.auth;
+          if (authConfig) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+              const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              if (permissionError) {
+                ctx.status = permissionError.status;
+                ctx.body = {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                };
+                return;
+              }
+            }
+          }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
+          ...(matchedRoute?.params ?? {}),
+          ...(ctx.query as Record<string, string>),
+          ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
+            ? (ctx.request.body as Record<string, unknown>)
+            : {}),
+        });
+        if (fgaError) {
+          ctx.status = fgaError.status;
+          ctx.body = { error: fgaError.error, message: fgaError.message };
+          return;
         }
       }
 

@@ -16,6 +16,11 @@ import {
   getSpanArgsSchema,
   getSpanResponseSchema,
   dateRangeSchema,
+  branchesFilterSchema,
+  branchesOrderBySchema,
+  listBranchesResponseSchema,
+  getBranchArgsSchema,
+  getBranchResponseSchema,
 } from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
@@ -125,6 +130,63 @@ export const LIST_TRACES_ROUTE = createRoute({
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       return handleError(error, 'Error listing traces');
+    }
+  },
+});
+
+/** Route: GET /observability/branches - paginated branch-anchor span listing across all traces. */
+export const LIST_BRANCHES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/branches',
+  responseType: 'json',
+  queryParamSchema: wrapSchemaForQueryParams(
+    branchesFilterSchema.extend(paginationArgsSchema.shape).extend(branchesOrderBySchema.shape).partial(),
+  ),
+  responseSchema: listBranchesResponseSchema,
+  summary: 'List trace branches',
+  description:
+    'Returns a paginated list of branch-anchor spans (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL) across all traces. Unlike listTraces (one row per root-rooted trace), each row here is a single anchor span -- including ones nested under a different root entity.',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    try {
+      const filters = pickParams(branchesFilterSchema, params);
+      const pagination = pickParams(paginationArgsSchema, params);
+      const orderBy = pickParams(branchesOrderBySchema, params);
+
+      const observabilityStore = await getObservabilityStore(mastra);
+      return await observabilityStore.listBranches({ filters, pagination, orderBy });
+    } catch (error) {
+      return handleError(error, 'Error listing branches');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/branches/:spanId - retrieve the subtree rooted at a span. */
+export const GET_BRANCH_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/branches/:spanId',
+  responseType: 'json',
+  pathParamSchema: getBranchArgsSchema.pick({ traceId: true, spanId: true }),
+  queryParamSchema: wrapSchemaForQueryParams(getBranchArgsSchema.pick({ depth: true })),
+  responseSchema: getBranchResponseSchema,
+  summary: 'Get trace branch by span ID',
+  description:
+    'Returns the subtree of spans rooted at the given span. The optional `depth` query param bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId, spanId, depth }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const branch = await observabilityStore.getBranch({ traceId, spanId, depth });
+
+      if (!branch) {
+        throw new HTTPException(404, { message: `Branch not found for span '${spanId}' in trace '${traceId}'` });
+      }
+
+      return branch;
+    } catch (error) {
+      return handleError(error, 'Error getting branch');
     }
   },
 });

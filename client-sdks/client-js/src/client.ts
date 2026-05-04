@@ -8,6 +8,10 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
   // Logs
   ListLogsArgs,
   ListLogsResponse,
@@ -175,6 +179,11 @@ import type {
   ListBackgroundTasksResponse,
   BackgroundTaskResponse,
   StreamBackgroundTasksParams,
+  ListSchedulesParams,
+  ListSchedulesResponse,
+  ScheduleResponse,
+  ListScheduleTriggersParams,
+  ListScheduleTriggersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -945,6 +954,24 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
+   * ones nested under a different root entity. Pairs with {@link getBranch} to expand
+   * a single branch into its subtree.
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    return this.observability.listBranches(params);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span. The optional `depth` field
+   * bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    return this.observability.getBranch(params);
   }
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
@@ -1934,5 +1961,56 @@ export class MastraClient extends BaseResource {
         },
       }),
     );
+  }
+
+  /**
+   * Lists workflow schedules with optional filtering by workflowId or status.
+   */
+  public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.workflowId) searchParams.set('workflowId', params.workflowId);
+    if (params.status) searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    return this.request(`/schedules${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single schedule by ID.
+   */
+  public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Lists trigger history for a schedule, ordered by actualFireAt descending.
+   */
+  public listScheduleTriggers(
+    scheduleId: string,
+    params: ListScheduleTriggersParams = {},
+  ): Promise<ListScheduleTriggersResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.fromActualFireAt !== undefined) searchParams.set('fromActualFireAt', String(params.fromActualFireAt));
+    if (params.toActualFireAt !== undefined) searchParams.set('toActualFireAt', String(params.toActualFireAt));
+    const qs = searchParams.toString();
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/triggers${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Pauses a schedule. The scheduler tick loop will skip paused schedules.
+   * Idempotent — pausing an already-paused schedule returns the current state unchanged.
+   * Pause status survives redeploys.
+   */
+  public pauseSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/pause`, { method: 'POST' });
+  }
+
+  /**
+   * Resumes a paused schedule. Recomputes nextFireAt from "now" so a long-paused schedule
+   * does not fire a backlog. Idempotent — resuming an already-active schedule returns
+   * the current state unchanged.
+   */
+  public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
   }
 }

@@ -2,6 +2,12 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    "generate:route-types": {
+      "cache": false,
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "scripts/generate-route-types.ts", "package.json"],
+      "outputs": ["../../client-sdks/client-js/src/route-types.generated.ts"]
+    },
     "build:lib": {
       "dependsOn": ["^build"],
       "inputs": [

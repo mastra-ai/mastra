@@ -1,7 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { checkRouteFGA } from '../server-adapter';
 import {
   LIST_MCP_SERVERS_ROUTE,
   GET_MCP_SERVER_DETAIL_ROUTE,
@@ -412,6 +414,31 @@ describe('MCP Registry Handlers', () => {
   });
 
   describe('EXECUTE_MCP_SERVER_TOOL_ROUTE', () => {
+    it('should declare FGA for MCP tool execution', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const check = vi.fn().mockResolvedValue(true);
+      const mastra = {
+        getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
+        getServer: vi.fn(() => ({ fga: { check } })),
+      } as unknown as Mastra;
+
+      const result = await checkRouteFGA(mastra, EXECUTE_MCP_SERVER_TOOL_ROUTE as any, requestContext as any, {
+        serverId: 'server1',
+        toolId: 'tool1',
+      });
+
+      expect(result).toBeNull();
+      expect(check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'tool', id: JSON.stringify(['server1', 'tool1']) },
+          permission: 'tools:execute',
+          context: { resourceId: JSON.stringify(['server1', 'tool1']), requestContext },
+        },
+      );
+    });
+
     it('should throw 404 when server not found', async () => {
       await expect(
         EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
@@ -445,7 +472,11 @@ describe('MCP Registry Handlers', () => {
       expect(result).toEqual({
         result: { result: 'success', toolId: 'tool1', data: testData },
       });
-      expect(mockMCPServer.executeTool).toHaveBeenCalledWith('tool1', testData);
+      expect(mockMCPServer.executeTool).toHaveBeenCalledWith(
+        'tool1',
+        testData,
+        expect.objectContaining({ requestContext: expect.any(RequestContext) }),
+      );
     });
 
     it('should execute tool without data', async () => {
@@ -458,7 +489,11 @@ describe('MCP Registry Handlers', () => {
       expect(result).toEqual({
         result: { result: 'success', toolId: 'tool1', data: undefined },
       });
-      expect(mockMCPServer.executeTool).toHaveBeenCalledWith('tool1', undefined);
+      expect(mockMCPServer.executeTool).toHaveBeenCalledWith(
+        'tool1',
+        undefined,
+        expect.objectContaining({ requestContext: expect.any(RequestContext) }),
+      );
     });
 
     it('should handle tool execution errors', async () => {
