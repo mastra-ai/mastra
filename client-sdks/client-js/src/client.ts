@@ -8,6 +8,10 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
   // Logs
   ListLogsArgs,
   ListLogsResponse,
@@ -950,6 +954,24 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
+   * ones nested under a different root entity. Pairs with {@link getBranch} to expand
+   * a single branch into its subtree.
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    return this.observability.listBranches(params);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span. The optional `depth` field
+   * bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    return this.observability.getBranch(params);
   }
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
