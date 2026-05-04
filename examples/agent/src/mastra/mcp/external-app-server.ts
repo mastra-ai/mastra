@@ -53,7 +53,7 @@ const colorMixerHtml = `<!DOCTYPE html>
   </div>
   <div id="result" class="result" style="display:none;"></div>
   <script type="module">
-    import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps@1.7.1';
+    import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps@1.7.1/+esm';
 
     var app = new App({ name: 'ColorMixer', version: '1.0.0' });
 

@@ -57,7 +57,7 @@ const server = new MCPServer({
           <h2>Calculator</h2>
           <button id="btn">Compute</button>
           <script type="module">
-            import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps';
+            import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm';
             const app = new App({ name: 'Calculator', version: '1.0.0' });
             app.ontoolinput = (params) => {
               console.log('Tool input:', params.arguments);
@@ -187,7 +187,7 @@ execute: async ({ num1, num2, operation }) => {
 MCP App HTML uses the standard [`App` class from `@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps) to communicate with the host. Import it via ESM CDN or bundle it.
 
 ```javascript
-import { App } from 'https://esm.sh/@modelcontextprotocol/ext-apps'
+import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
 const app = new App({ name: 'MyApp', version: '1.0.0' })
 ```
 

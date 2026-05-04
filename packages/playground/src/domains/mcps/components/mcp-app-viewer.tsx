@@ -66,6 +66,11 @@ export function McpAppViewer({
   const appRef = useRef<AppRendererHandle>(null);
   const [height, setHeight] = useState(400);
 
+  // hostInfo MUST be memoized — it is a dependency of the bridge creation effect
+  // in AppRenderer. A new object reference triggers bridge recreation → sandbox
+  // timeout → toolInput never delivered.
+  const hostInfo = useMemo(() => ({ name: 'Mastra Studio', version: '1.0.0' }), []);
+
   const normalizedToolResult: CallToolResult | undefined = useMemo(() => {
     if (toolResult === undefined) return undefined;
     if (toolResult && typeof toolResult === 'object' && Array.isArray((toolResult as CallToolResult).content)) {
@@ -139,6 +144,10 @@ export function McpAppViewer({
     }
   }, []);
 
+  const handleError = useCallback((error: Error) => {
+    console.error('[McpAppViewer]', error);
+  }, []);
+
   return (
     <div
       className={className}
@@ -157,12 +166,12 @@ export function McpAppViewer({
         html={html}
         toolInput={toolInput}
         toolResult={normalizedToolResult}
-        hostInfo={{ name: 'Mastra Studio', version: '1.0.0' }}
+        hostInfo={hostInfo}
         onCallTool={handleCallTool}
         onMessage={handleMessage}
         onOpenLink={handleOpenLink}
         onSizeChanged={handleSizeChanged}
-        onError={error => console.error('[McpAppViewer]', error)}
+        onError={handleError}
       />
     </div>
   );
