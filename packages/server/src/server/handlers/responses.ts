@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
+import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -42,7 +43,7 @@ import type {
   ThreadExecutionContext,
   UsageLike,
 } from './responses.storage';
-import { getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
+import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
 type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
@@ -215,7 +216,13 @@ async function resolveThreadExecutionContext({
       throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
     }
 
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId: conversationId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -242,7 +249,13 @@ async function resolveThreadExecutionContext({
   const threadId = effectiveThreadId;
   const existingThread = await memory.getThreadById({ threadId });
   if (existingThread) {
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -886,7 +899,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   description: 'Creates a response through a Mastra-hosted Responses API-compatible route',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
       const {
@@ -988,7 +1001,7 @@ export const GET_RESPONSE_ROUTE = createRoute({
   description: 'Returns a previously stored response object',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
@@ -1013,7 +1026,7 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   description: 'Deletes a stored response so it can no longer be retrieved or chained',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:delete',
+  requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });

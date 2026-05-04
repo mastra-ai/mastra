@@ -1244,13 +1244,28 @@ describe('MCPServer', () => {
   });
 
   describe('MCPServer Session Management', () => {
+    // These tests boot a real HTTP server and complete an MCP handshake over it.
+    // Default 20s vitest timeout is tight on shared CI runners, so bump it.
+    vi.setConfig({ testTimeout: 30_000 });
+
     let sessionServer: MCPServer;
     let sessionHttpServer: http.Server;
     let currentTestPort: number;
 
-    beforeEach(() => {
-      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
-    });
+    // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
+    // Avoids the random-port collisions that were flaking these tests on CI.
+    const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+      new Promise<number>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, () => {
+          const address = server.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+          } else {
+            reject(new Error('Failed to obtain ephemeral port'));
+          }
+        });
+      });
 
     afterEach(async () => {
       if (sessionHttpServer) {
@@ -1285,7 +1300,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
@@ -1324,7 +1339,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
@@ -1363,7 +1378,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
@@ -1411,7 +1426,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
@@ -1451,7 +1466,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
@@ -1487,7 +1502,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       // Send a POST request with a session ID that doesn't exist on the server
       const response = await fetch(`http://localhost:${currentTestPort}/http`, {
@@ -2107,7 +2122,22 @@ describe('MCPServer - Elicitation', () => {
   let elicitationServer: MCPServer;
   let elicitationClient: InternalMastraMCPClient;
   let elicitationHttpServer: http.Server;
-  const ELICITATION_PORT = 9600 + Math.floor(Math.random() * 1000);
+  let ELICITATION_PORT: number;
+
+  // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
+  // Avoids the random-port collisions that were flaking these tests on CI.
+  const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+    new Promise<number>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, () => {
+        const address = server.address();
+        if (address && typeof address === 'object') {
+          resolve(address.port);
+        } else {
+          reject(new Error('Failed to obtain ephemeral port'));
+        }
+      });
+    });
 
   beforeAll(async () => {
     elicitationServer = new MCPServer({
@@ -2170,7 +2200,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    await new Promise<void>(resolve => elicitationHttpServer.listen(ELICITATION_PORT, () => resolve()));
+    ELICITATION_PORT = await listenOnEphemeralPort(elicitationHttpServer);
   });
 
   afterAll(async () => {

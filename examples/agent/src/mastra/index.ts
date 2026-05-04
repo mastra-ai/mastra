@@ -7,7 +7,7 @@ import { DuckDBStore } from '@mastra/duckdb';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
-// import { mastraAuth, rbacProvider } from './auth';
+import { mastraAuth, rbacProvider, fgaProvider } from './auth';
 
 import {
   agentThatHarassesYou,
@@ -22,6 +22,7 @@ import {
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -111,6 +112,8 @@ export const mastra = new Mastra({
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
+    heartbeatWorkflow,
+    multiCadenceWorkflow,
   },
   bundler: {
     sourcemap: true,
@@ -125,10 +128,11 @@ export const mastra = new Mastra({
       baseUrl: process.env.MASTRA_BASE_URL,
     }),
   },
-  // server: {
-  //   auth: mastraAuth,
-  //   rbac: rbacProvider,
-  // },
+  server: {
+    auth: mastraAuth,
+    rbac: rbacProvider,
+    fga: fgaProvider,
+  },
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,

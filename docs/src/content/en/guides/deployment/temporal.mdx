@@ -1,0 +1,221 @@
+---
+title: "Temporal | Deployment"
+description: "Deploy Mastra workflows with Temporal"
+---
+
+# Temporal workflow
+
+[Temporal](https://temporal.io/) is a durable execution platform for orchestrating long-running, fault-tolerant workflows. The `@mastra/temporal` package lets you author workflows with the standard Mastra API and run them on a Temporal cluster.
+
+:::warning
+`@mastra/temporal` is experimental and not ready for production use. The API may change between releases. See the [package README](https://github.com/mastra-ai/mastra/tree/main/workflows/temporal) for the current state.
+:::
+
+## How Temporal works with Mastra
+
+Mastra workflows authored with `createWorkflow()` and `createStep()` map onto Temporal's workflow and activity model. The `MastraPlugin` for the Temporal worker compiles your Mastra entry file at bundle time:
+
+- Each `createStep()` handler is extracted into a Temporal activity.
+- Each `createWorkflow()` is rewritten into a Temporal workflow that invokes those activities.
+- The plugin registers the generated activities and workflows with the worker automatically.
+
+When a run starts through `mastra.getWorkflow(...).createRun().start(...)`, the Mastra client hands control to Temporal. Temporal then drives durable execution, retries, and state persistence on the worker.
+
+## Setup
+
+Install the required packages:
+
+```bash npm2yarn
+npm install @mastra/temporal@latest @temporalio/client @temporalio/worker @temporalio/envconfig
+```
+
+You also need access to a Temporal cluster. For local development, you can run one with Docker (see [Running locally](#running-locally)).
+
+## Building a Temporal-backed workflow
+
+This guide walks through creating a workflow with Temporal and Mastra, demonstrating a counter application that increments a value.
+
+### Temporal initialization
+
+Initialize the Temporal integration to obtain Mastra-compatible workflow helpers. The `createWorkflow()` and `createStep()` functions are bound to a Temporal client and a task queue.
+
+```ts title="src/mastra/temporal/index.ts"
+import { init } from '@mastra/temporal'
+import { Client, Connection } from '@temporalio/client'
+import { loadClientConnectConfig } from '@temporalio/envconfig'
+
+const config = loadClientConnectConfig()
+const connection = await Connection.connect(config.connectionOptions)
+const client = new Client({ connection })
+
+export const { createWorkflow, createStep } = init({
+  client,
+  taskQueue: 'mastra',
+})
+```
+
+`loadClientConnectConfig()` reads standard Temporal environment variables such as `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and mTLS settings. See the [Temporal envconfig docs](https://docs.temporal.io/develop/typescript/temporal-clients) for the full list.
+
+### Creating steps
+
+Define the individual steps that will compose your workflow. Each step becomes a Temporal activity.
+
+```ts title="src/mastra/workflows/index.ts"
+import { z } from 'zod'
+import { createWorkflow, createStep } from '../temporal'
+
+const incrementStep = createStep({
+  id: 'increment',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 }
+  },
+})
+```
+
+### Creating the workflow
+
+Compose the steps into a workflow. The workflow `id` must be a static string literal so the build-time transformer can derive its Temporal export name.
+
+```ts title="src/mastra/workflows/index.ts"
+const workflow = createWorkflow({
+  id: 'increment-workflow',
+  steps: [incrementStep],
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+}).then(incrementStep)
+
+workflow.commit()
+
+export { workflow as incrementWorkflow }
+```
+
+### Configuring the Mastra instance
+
+Register the workflow with Mastra. The execution is driven by the Temporal worker.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+import { incrementWorkflow } from './workflows'
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+})
+```
+
+## Running the worker
+
+The worker is a long-lived Node.js process that polls a Temporal task queue. Install `MastraPlugin` and point its `src` option at the Mastra entry file that registers your workflows.
+
+```ts title="src/mastra/worker.ts"
+import { MastraPlugin } from '@mastra/temporal/worker'
+import { NativeConnection, Worker } from '@temporalio/worker'
+
+const connection = await NativeConnection.connect({
+  address: 'localhost:7233',
+})
+
+const mastraPlugin = new MastraPlugin()
+
+await mastraPlugin.prebuild({
+  entryFile: import.meta.resolve('./index.ts'),
+})
+
+const worker = await Worker.create({
+  connection,
+  namespace: 'default',
+  taskQueue: 'mastra',
+  plugins: [mastraPlugin],
+})
+
+await worker.run()
+```
+
+`MastraPlugin` rewrites the entry file into a workflow-only bundle and wires step handlers in as Temporal activities. You do not need to pass `activities` or `workflowsPath` to `Worker.create()` manually.
+
+## Running workflows
+
+### Running locally
+
+1. Start a local Temporal server. The simplest option is the `temporalio/auto-setup` Docker image:
+
+   ```bash
+   docker run --rm -p 7233:7233 -p 8080:8080 temporalio/auto-setup:latest
+   ```
+
+1. Open the Temporal UI at [http://localhost:8080](http://localhost:8080) to inspect namespaces, workflows, and activities.
+
+1. Start the worker. In a new terminal, run:
+
+   ```bash
+   npx tsx src/mastra/worker.ts
+   ```
+
+1. Trigger a workflow run from a script or any process that imports your Mastra instance:
+
+   ```ts title="scripts/run.ts"
+   import { mastra } from '../src/mastra'
+
+   const run = await mastra.getWorkflow('incrementWorkflow').createRun()
+   const result = await run.start({ inputData: { value: 5 } })
+
+   console.log(result)
+   ```
+
+1. Monitor execution in the Temporal UI under **Workflows** to see step-by-step activity progress and retry history.
+
+### Running in production
+
+For production, use [Temporal Cloud](https://temporal.io/cloud) or a self-hosted Temporal cluster. Configure the client and worker connections through environment variables read by `@temporalio/envconfig`:
+
+```bash title=".env"
+TEMPORAL_ADDRESS=your-namespace.tmprl.cloud:7233
+TEMPORAL_NAMESPACE=your-namespace
+TEMPORAL_API_KEY=your-api-key
+```
+
+See the [Temporal Cloud connection docs](https://docs.temporal.io/cloud/get-started) for mTLS and API key options.
+
+:::warning
+The Temporal worker must run as a long-lived process. Do not deploy it to serverless platforms with short execution limits, such as AWS Lambda or Vercel functions. Use a container, VM, or worker-friendly platform such as Fly.io, Railway, or Kubernetes.
+:::
+
+## Configuration options
+
+### `taskQueue`
+
+Required. Identifies the Temporal task queue your worker polls. The same value must be passed to `init()` (used by the client to start runs) and to `Worker.create()` (used by the worker to receive them).
+
+### `startToCloseTimeout`
+
+Optional. Sets the maximum time a single activity (step) is allowed to run before Temporal cancels it and applies the retry policy. Defaults to `1 minute`.
+
+```ts title="src/mastra/temporal/index.ts"
+export const { createWorkflow, createStep } = init({
+  client,
+  taskQueue: 'mastra',
+  startToCloseTimeout: '5 minutes',
+})
+```
+
+## Constraints and notes
+
+- Workflow ids must be static string literals. The build-time transformer reads the literal value to derive Temporal workflow export names.
+- Activities are generated automatically from `createStep()` handlers. Do not pass them in `Worker.create({ activities })`.
+
+## Related
+
+- [Workflow runners](/docs/deployment/workflow-runners)
+- [Workflows overview](/docs/workflows/overview)
+- [Temporal documentation](https://docs.temporal.io/)
