@@ -67,7 +67,7 @@ function createRunScopeGuard(
   obsStorage: ObservabilityStorage,
   opts?: { strategy?: 'block' | 'warn'; message?: string },
 ) {
-  const guard = new CostGuardProcessor({ maxCost, ...opts });
+  const guard = new CostGuardProcessor({ maxCost, scope: 'run', ...opts });
   (guard as any).observabilityStorage = obsStorage;
   return guard;
 }
@@ -90,9 +90,9 @@ describe('CostGuardProcessor', () => {
       expect(guard.name).toBe('Cost Guard');
     });
 
-    it('defaults scope to run', () => {
+    it('defaults scope to resource', () => {
       const guard = new CostGuardProcessor({ maxCost: 1.0 });
-      expect((guard as any).scope).toBe('run');
+      expect((guard as any).scope).toBe('resource');
     });
 
     it('defaults window to 7d', () => {
@@ -237,6 +237,7 @@ describe('CostGuardProcessor', () => {
 
       const guard = new CostGuardProcessor({
         maxCost: 0.5,
+        scope: 'run',
         message: 'Budget exceeded: ${usage} of ${limit} allowed',
       });
       (guard as any).observabilityStorage = obsStorage;
@@ -803,7 +804,7 @@ describe('CostGuardProcessor', () => {
     });
 
     it('no observability storage set → query returns null (fail-open for run scope)', async () => {
-      const guard = new CostGuardProcessor({ maxCost: 0.01 });
+      const guard = new CostGuardProcessor({ maxCost: 0.01, scope: 'run' });
       // Not registered → no observability storage
 
       const args = createInputStepArgs({

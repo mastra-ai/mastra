@@ -15,15 +15,15 @@ For token-based limits, use `TokenLimiterProcessor` instead.
 
 Supports three scoping modes:
 
-- **Run scope** (default): Tracks cost within a single agent run via trace ID
-- **Resource scope**: Tracks cumulative cost per `resourceId` across runs
+- **Run scope**: Tracks cost within a single agent run via trace ID
+- **Resource scope** (default): Tracks cumulative cost per `resourceId` across runs
 - **Thread scope**: Tracks cumulative cost per `threadId` across runs
 
 > **Approximate cost guard.** Cost data is persisted asynchronously via buffered exporters in the observability pipeline. Fast-running agents may exceed the configured limit before metrics are available for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
 
 ## Usage example
 
-Track cost within a single agent run:
+Track cumulative cost per resource (default scope):
 
 ```typescript
 import { CostGuardProcessor } from '@mastra/core/processors'
@@ -85,9 +85,9 @@ const agent = new Agent({
     name: 'scope',
     type: "'run' | 'resource' | 'thread'",
     description:
-      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs. 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
+      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs (default). 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
     isOptional: true,
-    defaultValue: "'run'",
+    defaultValue: "'resource'",
   },
   {
     name: 'window',

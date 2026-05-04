@@ -7,8 +7,8 @@ import type { ProcessInputStepArgs, Processor, ProcessorViolation } from '../ind
 
 /**
  * Cost scope determines what usage is tracked:
- * - 'run': Only cost from the current agent run (default)
- * - 'resource': Cumulative cost across runs for the same resourceId
+ * - 'run': Only cost from the current agent run
+ * - 'resource': Cumulative cost across runs for the same resourceId (default)
  * - 'thread': Cumulative cost across runs for the same threadId
  */
 export type CostScope = 'run' | 'resource' | 'thread';
@@ -50,8 +50,8 @@ export interface CostGuardOptions {
 
   /**
    * Scope for cost tracking:
-   * - 'run': Track cost within the current agent run only (default)
-   * - 'resource': Track cumulative cost per resourceId across runs
+   * - 'run': Track cost within the current agent run only
+   * - 'resource': Track cumulative cost per resourceId across runs (default)
    * - 'thread': Track cumulative cost per threadId across runs
    */
   scope?: CostScope;
@@ -123,7 +123,7 @@ const WINDOW_MS: Record<CostWindow, number> = {
  * instance does not have observability storage configured, an error is thrown at
  * registration time.
  *
- * @example Run-scoped cost limit:
+ * @example Resource-scoped cost limit (default):
  * ```typescript
  * new CostGuardProcessor({
  *   maxCost: 1.00,
@@ -169,7 +169,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     }
 
     this.maxCost = options.maxCost;
-    this.scope = options.scope ?? 'run';
+    this.scope = options.scope ?? 'resource';
     this.window = options.window ?? '7d';
     this.strategy = options.strategy ?? 'block';
     this.messageTemplate = options.message ?? 'Cost guard: estimated cost limit exceeded ({usage}/{limit})';
