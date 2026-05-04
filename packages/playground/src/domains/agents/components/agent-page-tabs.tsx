@@ -115,8 +115,8 @@ export function AgentPageTabs({
   };
 
   return (
-    <div className="bg-surface2 px-4">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange}>
+    <div className="bg-surface2 px-4 flex items-center gap-2">
+      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
         <TabList>
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
@@ -148,9 +148,9 @@ export function AgentPageTabs({
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
-          {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
         </TabList>
       </Tabs>
+      {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }
