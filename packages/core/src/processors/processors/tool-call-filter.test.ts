@@ -121,6 +121,50 @@ describe('ToolCallFilter', () => {
       }
     });
 
+    it('should preserve top-level text when all tool parts are filtered', async () => {
+      const filter = new ToolCallFilter();
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'assistant-with-text-fallback',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I found three relevant papers.',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'search_papers',
+                  args: { query: 'attention mechanisms' },
+                  result: { papers: ['paper-1', 'paper-2', 'paper-3'] },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0]!.content).toMatchObject({
+        content: 'I found three relevant papers.',
+        parts: [],
+      });
+    });
+
     it('should handle messages without tool calls', async () => {
       const filter = new ToolCallFilter();
 
@@ -313,6 +357,50 @@ describe('ToolCallFilter', () => {
   });
 
   describe('exclude specific tool calls', () => {
+    it('should preserve top-level text when all excluded tool parts are filtered', async () => {
+      const filter = new ToolCallFilter({ exclude: ['search_papers'] });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'assistant-with-specific-text-fallback',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I found three relevant papers.',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'search_papers',
+                  args: { query: 'attention mechanisms' },
+                  result: { papers: ['paper-1', 'paper-2', 'paper-3'] },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0]!.content).toMatchObject({
+        content: 'I found three relevant papers.',
+        parts: [],
+      });
+    });
+
     it('should exclude only specified tool calls', async () => {
       const filter = new ToolCallFilter({ exclude: ['weather'] });
 

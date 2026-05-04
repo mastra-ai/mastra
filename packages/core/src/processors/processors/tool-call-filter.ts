@@ -152,10 +152,6 @@ export class ToolCallFilter implements Processor {
           return preserveToolCallIds.has(part.toolInvocation?.toolCallId ?? part.toolInvocation?.toolCall?.id);
         });
 
-        if (nonToolParts.length === 0) {
-          return null;
-        }
-
         const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
         const updatedContent: any = {
           ...contentWithoutToolInvocations,
@@ -169,6 +165,13 @@ export class ToolCallFilter implements Processor {
           if (preservedToolInvocations.length > 0) {
             updatedContent.toolInvocations = preservedToolInvocations;
           }
+        }
+
+        const hasNoToolParts = nonToolParts.length === 0;
+        const hasNoTextContent = !updatedContent.content || updatedContent.content.trim() === '';
+
+        if (hasNoToolParts && hasNoTextContent) {
+          return null;
         }
 
         return {
@@ -237,10 +240,6 @@ export class ToolCallFilter implements Processor {
 
           return true;
         });
-
-        if (filteredParts.length === 0) {
-          return null;
-        }
 
         const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
         const updatedContent: any = {
