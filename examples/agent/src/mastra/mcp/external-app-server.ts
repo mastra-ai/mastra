@@ -22,7 +22,8 @@ const colorMixerHtml = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #1a1a2e; color: #e0e0e0; opacity: 0; transition: opacity 0.15s; }
+    body.ready { opacity: 1; }
     h2 { font-size: 18px; margin-bottom: 8px; color: #e94560; }
     p { color: #aaa; font-size: 13px; margin-bottom: 16px; }
     .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
@@ -98,6 +99,8 @@ const colorMixerHtml = `<!DOCTYPE html>
     }
 
     await app.connect();
+    // Reveal after connection (color mixer doesn't receive tool input for hydration)
+    setTimeout(function() { document.body.classList.add('ready'); }, 150);
   </script>
 </body>
 </html>`;

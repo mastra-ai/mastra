@@ -15,7 +15,8 @@ const calculatorAppHtml = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; padding: 20px; background: #fafafa; color: #1a1a1a; }
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #fafafa; color: #1a1a1a; opacity: 0; transition: opacity 0.15s; }
+    body.ready { opacity: 1; }
     h2 { font-size: 18px; margin-bottom: 12px; }
     .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
     input, select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
@@ -61,6 +62,7 @@ const calculatorAppHtml = `<!DOCTYPE html>
       if (args.num2 !== undefined) document.getElementById('n2').value = args.num2;
       if (args.operation) document.getElementById('op').value = args.operation;
       calc();
+      document.body.classList.add('ready');
     };
 
     document.getElementById('btn').addEventListener('click', calc);
@@ -134,6 +136,8 @@ const calculatorAppHtml = `<!DOCTYPE html>
     }
 
     await app.connect();
+    // Fallback: reveal after connection if no tool input arrives (e.g. tool page)
+    setTimeout(function() { document.body.classList.add('ready'); }, 150);
   </script>
 </body>
 </html>`;
@@ -144,7 +148,8 @@ const greetingAppHtml = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; padding: 20px; background: #f0f4ff; color: #1a1a1a; }
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #f0f4ff; color: #1a1a1a; opacity: 0; transition: opacity 0.15s; }
+    body.ready { opacity: 1; }
     h2 { font-size: 18px; margin-bottom: 12px; }
     .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
     input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; flex: 1; }
@@ -179,6 +184,7 @@ const greetingAppHtml = `<!DOCTYPE html>
         document.getElementById('name').value = args.name;
         greet();
       }
+      document.body.classList.add('ready');
     };
 
     document.getElementById('btn').addEventListener('click', greet);
@@ -223,6 +229,8 @@ const greetingAppHtml = `<!DOCTYPE html>
     }
 
     await app.connect();
+    // Fallback: reveal after connection if no tool input arrives (e.g. tool page)
+    setTimeout(function() { document.body.classList.add('ready'); }, 150);
   </script>
 </body>
 </html>`;

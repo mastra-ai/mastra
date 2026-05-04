@@ -223,6 +223,37 @@ app.ontoolinput = params => {
 }
 ```
 
+:::tip[Preventing UI flicker]
+
+If your app has default form values, the user may briefly see them before `ontoolinput` hydrates the correct values. To prevent this, start the body hidden and reveal it after hydration:
+
+```html
+<style>
+  body {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  body.ready {
+    opacity: 1;
+  }
+</style>
+<script type="module">
+  import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
+  const app = new App({ name: 'MyApp', version: '1.0.0' })
+
+  app.ontoolinput = params => {
+    // Hydrate form fields from params.arguments
+    document.body.classList.add('ready')
+  }
+
+  await app.connect()
+  // Fallback: reveal after connection if no tool input arrives
+  setTimeout(() => document.body.classList.add('ready'), 150)
+</script>
+```
+
+:::
+
 ### `app.connect()`
 
 Establishes the connection to the host. Call this after registering all event handlers.
