@@ -28,6 +28,20 @@ describe('buildManifest', () => {
     expect(manifest.display_information.description).toBe('My custom bot');
   });
 
+  it('truncates description to 139 characters with ellipsis when too long', () => {
+    const longDesc = 'A'.repeat(200);
+    const manifest = buildManifest({ ...baseOptions, description: longDesc });
+    expect(manifest.display_information.description).toHaveLength(139);
+    expect(manifest.display_information.description).toBe('A'.repeat(136) + '...');
+  });
+
+  it('does not truncate description at exactly 139 characters', () => {
+    const exact = 'E'.repeat(139);
+    const manifest = buildManifest({ ...baseOptions, description: exact });
+    expect(manifest.display_information.description).toBe(exact);
+    expect(manifest.display_information.description).toHaveLength(139);
+  });
+
   it('includes default bot scopes', () => {
     const manifest = buildManifest(baseOptions);
     const scopes = manifest.oauth_config?.scopes?.bot ?? [];

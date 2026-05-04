@@ -1,5 +1,20 @@
 # mastracode
 
+## 0.17.1-alpha.1
+
+### Patch Changes
+
+- Added the OS temp directory (/tmp) as a default allowed workspace path so the agent can use it as a scratchpad without requesting access each time ([#16094](https://github.com/mastra-ai/mastra/pull/16094))
+
+- Only log skill directories that actually exist on disk, reducing startup noise ([#16068](https://github.com/mastra-ai/mastra/pull/16068))
+
+- Updated dependencies [[`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`319a94c`](https://github.com/mastra-ai/mastra/commit/319a94c6bf1f8f4ac8249a40b0c99b9c1e0d4598), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d), [`39a3768`](https://github.com/mastra-ai/mastra/commit/39a3768a980c31ee689c675aa0015609f76191c4)]:
+  - @mastra/core@1.32.0-alpha.1
+  - @mastra/memory@1.17.5-alpha.0
+  - @mastra/libsql@1.10.0-alpha.0
+  - @mastra/pg@1.10.0-alpha.0
+  - @mastra/observability@1.11.1-alpha.1
+
 ## 0.17.1-alpha.0
 
 ### Patch Changes

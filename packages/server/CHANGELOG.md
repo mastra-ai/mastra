@@ -1,5 +1,20 @@
 # @mastra/server
 
+## 1.32.0-alpha.1
+
+### Minor Changes
+
+- Added HTTP routes for scheduled workflows. ([#15830](https://github.com/mastra-ai/mastra/pull/15830))
+  - `GET /api/schedules` — list schedules across the project, optionally filtered by `workflowId`.
+  - `GET /api/schedules/:scheduleId` — fetch a schedule with its most recent run summary.
+  - `GET /api/schedules/:scheduleId/triggers` — paginated trigger history joined to the corresponding workflow run.
+  - `POST /api/schedules/:scheduleId/pause` and `POST /api/schedules/:scheduleId/resume` — durable pause/resume. Both require `schedules:write` and are idempotent. Resume recomputes `nextFireAt` from now so a long-paused schedule does not fire a backlog.
+
+### Patch Changes
+
+- Updated dependencies [[`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d)]:
+  - @mastra/core@1.32.0-alpha.1
+
 ## 1.31.1-alpha.0
 
 ### Patch Changes

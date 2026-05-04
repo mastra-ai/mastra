@@ -665,6 +665,42 @@ The retry mechanism:
 - Tracks retry count via the `retryCount` parameter
 - Respects `maxProcessorRetries` limit on the agent
 
+### Violation callbacks
+
+All processors expose an `onViolation` property that fires whenever a policy violation is detected — both when `abort()` is called (block strategy) and when a processor issues a warning (warn strategy). Use it for alerting, logging, or side effects without affecting the processor's main logic:
+
+```typescript title="src/mastra/processors/violation-logging.ts"
+import { ModerationProcessor, CostGuardProcessor } from '@mastra/core/processors'
+
+const moderation = new ModerationProcessor({
+  model: 'openai/gpt-5-nano',
+  strategy: 'block',
+})
+
+moderation.onViolation = ({ processorId, message, detail }) => {
+  // Log to external monitoring, send alerts, update dashboards
+  monitor.track('processor_violation', { processorId, message, detail })
+}
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 10.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ processorId, message, detail }) => {
+  alertSystem.notify(`[${processorId}] ${message}`)
+}
+```
+
+The callback receives a `ProcessorViolation` object with:
+
+- `processorId`: The ID of the processor that detected the violation
+- `message`: A human-readable description of what was violated
+- `detail`: Processor-specific metadata (e.g. cost usage, detected PII types, moderation categories)
+
+`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are silently caught to prevent interfering with the processor pipeline.
+
 ### Abort and tripwire chunks
 
 Calling `abort(reason, options)` throws a `TripWire` error that ends processing. On streams, Mastra emits a `tripwire` chunk clients can detect:

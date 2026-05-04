@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build:lib": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "@mastra/server#generate:route-types"],
       "inputs": [
         "src/**",
         "tsup.config.ts",

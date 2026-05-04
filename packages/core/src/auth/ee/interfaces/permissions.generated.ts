@@ -26,6 +26,7 @@ export const RESOURCES = [
   'observability',
   'processor-providers',
   'processors',
+  'schedules',
   'scores',
   'stored',
   'stored-agents',
@@ -104,6 +105,8 @@ export const PERMISSION_PATTERNS = {
   'processor-providers:*': 'processor-providers:*',
   /** Full access to processors */
   'processors:*': 'processors:*',
+  /** Full access to schedules */
+  'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
   /** Full access to stored */
@@ -188,6 +191,12 @@ export const PERMISSION_PATTERNS = {
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Execute schedules */
+  'schedules:execute': 'schedules:execute',
+  /** View schedules */
+  'schedules:read': 'schedules:read',
+  /** Create and modify schedules */
+  'schedules:write': 'schedules:write',
   /** View evaluation scores */
   'scores:read': 'scores:read',
   /** Create and modify evaluation scores */
@@ -284,6 +293,9 @@ export const PERMISSIONS = [
   'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'schedules:execute',
+  'schedules:read',
+  'schedules:write',
   'scores:read',
   'scores:write',
   'stored-agents:delete',
