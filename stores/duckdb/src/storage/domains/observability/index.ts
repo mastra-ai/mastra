@@ -23,6 +23,7 @@ import type {
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -288,6 +289,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoreOps.listScores(this.db, args);
+  }
+  async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    return scoreOps.getScoreById(this.db, scoreId);
   }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);
