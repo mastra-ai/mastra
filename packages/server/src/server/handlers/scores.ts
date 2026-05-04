@@ -1,4 +1,4 @@
-import type { ListScoresResponse, MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
@@ -7,15 +7,12 @@ import {
   listScorersResponseSchema,
   scorerEntrySchema,
   scorerIdPathParams,
-  scoreIdPathParams,
   entityPathParams,
-  listScoresQuerySchema,
   listScoresByRunIdQuerySchema,
   listScoresByScorerIdQuerySchema,
   listScoresByEntityIdQuerySchema,
   saveScoreBodySchema,
   scoresWithPaginationResponseSchema,
-  getScoreResponseSchema,
   saveScoreResponseSchema,
 } from '../schemas/scores';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -221,66 +218,6 @@ export const GET_SCORER_ROUTE = createRoute({
 
     return scorer;
   }) as any,
-});
-
-export const LIST_SCORES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/scores',
-  responseType: 'json',
-  queryParamSchema: listScoresQuerySchema,
-  responseSchema: scoresWithPaginationResponseSchema,
-  summary: 'List scores',
-  description: 'Returns scores filtered by run, scorer, or entity',
-  tags: ['Scoring'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const { page, perPage, runId, scorerId, entityId, entityType } = params;
-      const pagination: StoragePagination = { page: page ?? 0, perPage: perPage ?? 10 };
-      const scoresStore = await mastra.getStorage()?.getStore('scores');
-      const empty: ListScoresResponse = { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
-      let scoreResults: ListScoresResponse = empty;
-
-      if (runId) {
-        scoreResults = (await scoresStore?.listScoresByRunId?.({ runId, pagination })) || empty;
-      } else if (scorerId) {
-        const filters = Object.fromEntries(
-          Object.entries({ entityId, entityType }).filter(([_, v]) => v !== undefined),
-        );
-        scoreResults = (await scoresStore?.listScoresByScorerId?.({ scorerId, pagination, ...filters })) || empty;
-      } else if (entityId && entityType) {
-        scoreResults = (await scoresStore?.listScoresByEntityId?.({ entityId, entityType, pagination })) || empty;
-      }
-
-      return {
-        pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
-      };
-    } catch (error) {
-      return handleError(error, 'Error listing scores');
-    }
-  },
-});
-
-export const GET_SCORE_ROUTE = createRoute({
-  method: 'GET',
-  path: '/scores/:scoreId',
-  responseType: 'json',
-  pathParamSchema: scoreIdPathParams,
-  responseSchema: getScoreResponseSchema,
-  summary: 'Get score by ID',
-  description: 'Returns a score record by ID',
-  tags: ['Scoring'],
-  requiresAuth: true,
-  handler: async ({ mastra, scoreId }) => {
-    try {
-      const scoresStore = await mastra.getStorage()?.getStore('scores');
-      const score = (await scoresStore?.getScoreById?.({ id: scoreId })) ?? null;
-      return { score };
-    } catch (error) {
-      return handleError(error, 'Error getting score');
-    }
-  },
 });
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({

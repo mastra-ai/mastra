@@ -50,10 +50,6 @@ export const scorerIdPathParams = z.object({
   scorerId: z.string().describe('Unique identifier for the scorer'),
 });
 
-export const scoreIdPathParams = z.object({
-  scoreId: z.string().describe('Unique identifier for the score'),
-});
-
 export const entityPathParams = z.object({
   entityType: z.string().describe('Type of the entity (AGENT or WORKFLOW)'),
   entityId: z.string().describe('Unique identifier for the entity'),
@@ -62,15 +58,6 @@ export const entityPathParams = z.object({
 // Query parameter schemas
 // HTTP query params must be flat (e.g., ?page=0&perPage=10)
 // Adapters should transform these into nested pagination objects for handlers if needed
-
-export const listScoresQuerySchema = z.object({
-  runId: z.string().optional(),
-  scorerId: z.string().optional(),
-  entityId: z.string().optional(),
-  entityType: z.string().optional(),
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
-});
 
 export const listScoresByRunIdQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
@@ -98,10 +85,6 @@ export const saveScoreBodySchema = z.object({
 export const scoresWithPaginationResponseSchema = z.object({
   pagination: paginationInfoSchema,
   scores: z.array(z.unknown()), // Array of score records
-});
-
-export const getScoreResponseSchema = z.object({
-  score: z.unknown().nullable(),
 });
 
 export const saveScoreResponseSchema = z.object({
