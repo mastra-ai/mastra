@@ -9,8 +9,12 @@ import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 
 export type MainSidebarSectionsProps = {
   sections: NavSection[];
-  /** Called per link to decide the active state. Default: strict `url` match. */
-  isActive?: (link: NavLink) => boolean;
+  /**
+   * Called per link to decide the active state. Receives sibling links so
+   * callers can use `getIsLinkActive` (or any sibling-aware logic) without
+   * re-scanning `sections` from the outside. Default: each link's `isActive`.
+   */
+  isActive?: (link: NavLink, siblings: NavLink[]) => boolean;
   className?: string;
 };
 
@@ -28,16 +32,21 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
             aria-labelledby={headerId}
             aria-label={!headerId ? section.key : undefined}
           >
+            {/* Render separator and header independently — a section can have
+                both (titled group preceded by a divider). */}
+            {showSeparator ? <MainSidebarNavSeparator /> : null}
             {section.title ? (
               <MainSidebarNavHeader id={headerId} href={section.href} isActive={section.isHeaderActive}>
                 {section.title}
               </MainSidebarNavHeader>
-            ) : showSeparator ? (
-              <MainSidebarNavSeparator />
             ) : null}
             <MainSidebarNavList>
               {section.links.map(link => (
-                <MainSidebarNavLink key={link.name} link={link} isActive={isActive?.(link) ?? link.isActive} />
+                <MainSidebarNavLink
+                  key={link.name}
+                  link={link}
+                  isActive={isActive?.(link, section.links) ?? link.isActive}
+                />
               ))}
             </MainSidebarNavList>
           </MainSidebarNavSection>

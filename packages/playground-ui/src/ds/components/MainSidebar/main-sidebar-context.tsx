@@ -72,7 +72,7 @@ export type MainSidebarProviderProps = {
   minWidth?: number;
   /** Maximum draggable width in px. Defaults to `480`. */
   maxWidth?: number;
-  /** Drag below this value snaps the sidebar closed. Defaults to `0` (no snap). */
+  /** Drag below this value snaps the sidebar closed. Defaults to `minWidth` (snap to collapsed when dragged below the expanded minimum). Pass `0` to disable snap. */
   collapseBelow?: number;
   /** Width in px when collapsed. Defaults to `64`. Set to `0` for fully hidden. */
   collapsedWidth?: number;
@@ -193,6 +193,9 @@ export function MainSidebarProvider({
     }
     setState(prev => {
       const next = prev === 'default' ? 'collapsed' : 'default';
+      // Sync ref so a synchronous follow-up `commit()` (e.g. keyboard handler)
+      // persists the new state instead of the stale render-time value.
+      stateRef.current = next;
       persistState(next);
       return next;
     });
@@ -207,8 +210,16 @@ export function MainSidebarProvider({
     [safeMin, safeMax, writeCssVar],
   );
 
-  const collapse = React.useCallback(() => setState('collapsed'), []);
-  const expand = React.useCallback(() => setState('default'), []);
+  const collapse = React.useCallback(() => {
+    stateRef.current = 'collapsed';
+    persistState('collapsed');
+    setState('collapsed');
+  }, [persistState]);
+  const expand = React.useCallback(() => {
+    stateRef.current = 'default';
+    persistState('default');
+    setState('default');
+  }, [persistState]);
 
   const commit = React.useCallback(() => {
     setWidthState(widthRef.current);

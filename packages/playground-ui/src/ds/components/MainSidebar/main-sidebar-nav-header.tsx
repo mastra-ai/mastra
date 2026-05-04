@@ -31,7 +31,11 @@ export function MainSidebarNavHeader({
   if (!isDefaultState) {
     return (
       <div className={cn('grid items-center min-h-11', className)}>
-        <VisuallyHidden>{children}</VisuallyHidden>
+        {/* Keep `...props` on the slotted <header> so consumers' `id` reaches the
+            DOM — `MainSidebarSections` uses it as the section's `aria-labelledby`. */}
+        <VisuallyHidden asChild>
+          <header {...props}>{children}</header>
+        </VisuallyHidden>
         <MainSidebarNavSeparator />
       </div>
     );

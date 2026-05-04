@@ -163,12 +163,17 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   );
 
   // Mobile: render as an off-canvas drawer via Radix Dialog.
-  // Auto-close on link navigation (standard drawer UX).
+  // Auto-close on link navigation (standard drawer UX). Don't gate on
+  // `defaultPrevented` — client-side router links call `preventDefault()` for
+  // SPA navigation, and we still want to close the drawer when they do.
   const closeOnAnchor = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       const anchor = (event.target as HTMLElement).closest('a');
-      if (!anchor || event.defaultPrevented) return;
-      if (!anchor.hasAttribute('href')) return;
+      if (!anchor || !anchor.hasAttribute('href')) return;
+      // Skip non-primary clicks and modifier-clicks (open in new tab/window).
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      // Skip explicit external/download targets.
+      if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
       setOpenMobile(false);
     },
     [setOpenMobile],
@@ -242,9 +247,12 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         // value props + keyboard semantics. Click toggles; Arrow keys resize.
         role="separator"
         aria-orientation="vertical"
-        aria-valuenow={currentWidth}
-        aria-valuemin={minWidth}
-        aria-valuemax={maxWidth}
+        // Collapsed: omit the numeric range so AT doesn't see contradictory
+        // values (valuenow=0/64 inside valuemin=200..valuemax=480). `valuetext`
+        // still describes the state.
+        aria-valuenow={isCollapsed ? undefined : currentWidth}
+        aria-valuemin={isCollapsed ? undefined : minWidth}
+        aria-valuemax={isCollapsed ? undefined : maxWidth}
         aria-valuetext={isCollapsed ? 'collapsed' : `${currentWidth} pixels`}
         aria-label={`Resize sidebar. Arrow keys to resize, Enter to ${isCollapsed ? 'expand' : 'collapse'}.`}
         tabIndex={0}
