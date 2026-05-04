@@ -548,7 +548,7 @@ describe('ObservabilityStorageDuckDB', () => {
 
     it('listBranches narrows by spanType and respects pagination', async () => {
       const baseStartedAt = new Date('2026-04-02T10:00:00Z').getTime();
-      const records = Array.from({ length: 5 }, (_, i) => ({
+      const toolRecords = Array.from({ length: 5 }, (_, i) => ({
         ...baseSpan,
         traceId: `pag-${i}`,
         spanId: `tool-${i}`,
@@ -561,7 +561,20 @@ describe('ObservabilityStorageDuckDB', () => {
         startedAt: new Date(baseStartedAt + i * 1000),
         endedAt: new Date(baseStartedAt + i * 1000 + 500),
       }));
-      await storage.batchCreateSpans({ records });
+      // Plus a MODEL_STEP span so the "non-branch types yield nothing"
+      // assertion below isn't vacuous -- the row exists in span_events but
+      // listBranches must not surface it (MODEL_STEP isn't a branch anchor).
+      const modelStepRecord = {
+        ...baseSpan,
+        traceId: 'pag-model',
+        spanId: 'model-step-1',
+        parentSpanId: 'pag-model-root',
+        name: 'gpt-4-call',
+        spanType: SpanType.MODEL_STEP,
+        startedAt: new Date(baseStartedAt + 100),
+        endedAt: new Date(baseStartedAt + 200),
+      };
+      await storage.batchCreateSpans({ records: [...toolRecords, modelStepRecord] });
 
       const onlyTools = await storage.listBranches({
         filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
@@ -578,11 +591,18 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(page2.branches).toHaveLength(1);
       expect(page2.pagination.hasMore).toBe(false);
 
-      // Sub-operation span types yield nothing even when explicitly asked for.
+      // Sub-operation span types yield nothing even when explicitly asked for,
+      // even though a MODEL_STEP row exists in span_events.
       const noModelSteps = await storage.listBranches({
         filters: { spanType: SpanType.MODEL_STEP },
       });
       expect(noModelSteps.branches).toHaveLength(0);
+
+      // Unfiltered listBranches must also exclude the MODEL_STEP row -- only
+      // the 5 TOOL_CALL anchors should surface.
+      const allBranches = await storage.listBranches({ pagination: { perPage: 100 } });
+      expect(allBranches.branches.every(b => b.spanType === SpanType.TOOL_CALL)).toBe(true);
+      expect(allBranches.branches).toHaveLength(5);
     });
 
     it('getSpans batch-fetches a subset of spans within a trace', async () => {

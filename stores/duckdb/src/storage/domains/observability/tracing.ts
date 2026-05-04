@@ -546,12 +546,24 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
-  // Prefilter raw events by spanType. If the caller supplied a single spanType
-  // (must be one of BRANCH_SPAN_TYPES to match anything), narrow to that;
-  // otherwise restrict to the branch-anchor set.
+  // Prefilter raw events to branch-anchor types. Unlike the ClickHouse path
+  // which reads from an MV-filtered table, DuckDB queries raw span_events
+  // directly, so this guard is what enforces "listBranches only returns
+  // branches" here. Caller-supplied spanType narrows further; if it's not a
+  // branch type, the intersection is empty and we short-circuit to no rows
+  // (instead of silently widening to all branches or leaking the non-branch
+  // type through).
   let prefilterClause: string;
   let prefilterParams: unknown[];
   if (typeof spanType === 'string') {
+    if (!(BRANCH_SPAN_TYPES as readonly string[]).includes(spanType)) {
+      // Caller asked for a non-branch span type; "branch anchors with that
+      // type" is an empty set by definition.
+      return {
+        pagination: { total: 0, page, perPage, hasMore: false },
+        branches: [],
+      };
+    }
     prefilterClause = `WHERE spanType = ?`;
     prefilterParams = [spanType];
   } else {
