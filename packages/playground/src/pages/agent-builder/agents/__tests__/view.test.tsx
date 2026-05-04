@@ -248,13 +248,13 @@ describe('AgentBuilderAgentView', () => {
   it('switching to the Configuration tab toggles which panel is active', () => {
     const { getByTestId } = renderAt();
     const chatPanel = getByTestId('agent-builder-panel-chat');
-    const configurePanel = getByTestId('agent-builder-panel-configure');
+    const configureTab = getByTestId('agent-builder-tab-configure');
     expect(chatPanel.getAttribute('data-active-tab')).toBe('chat');
-    expect(configurePanel.getAttribute('data-active-tab')).toBe('chat');
+    expect(configureTab.getAttribute('aria-selected')).toBe('false');
 
-    fireEvent.click(getByTestId('agent-builder-tab-configure'));
+    fireEvent.click(configureTab);
 
     expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
-    expect(configurePanel.getAttribute('data-active-tab')).toBe('configure');
+    expect(configureTab.getAttribute('aria-selected')).toBe('true');
   });
 });

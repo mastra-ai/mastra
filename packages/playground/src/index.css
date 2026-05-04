@@ -265,6 +265,10 @@ th:has(header) {
     transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
+  .agent-builder-workspace-grid {
+    transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
   .agent-builder-panel-slide {
     transition:
       transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -286,6 +290,7 @@ th:has(header) {
 
   @media (prefers-reduced-motion: reduce) {
     .agent-builder-panel-grid,
+    .agent-builder-workspace-grid,
     .agent-builder-panel-slide,
     .agent-builder-detail-pane {
       transition: none;

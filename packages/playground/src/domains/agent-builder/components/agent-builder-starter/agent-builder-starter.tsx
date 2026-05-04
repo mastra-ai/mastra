@@ -47,13 +47,6 @@ export const AgentBuilderStarter = () => {
     });
   };
 
-  const handleCreateManually = () => {
-    const id = nanoid();
-    void navigate(`/agent-builder/agents/${id}/edit`, {
-      viewTransition: true,
-    });
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -126,17 +119,6 @@ export const AgentBuilderStarter = () => {
               </button>
             );
           })}
-        </div>
-
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={handleCreateManually}
-            data-testid="agent-builder-starter-create-manually"
-            className="text-ui-sm text-neutral3 transition-colors hover:text-neutral5"
-          >
-            or create manually
-          </button>
         </div>
       </div>
     </div>

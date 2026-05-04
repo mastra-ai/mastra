@@ -316,10 +316,11 @@ describe('AgentConfigurePanel disabled propagation', () => {
     cleanup();
   });
 
-  it('disables name, description, avatar trigger, and config rows when disabled is true', () => {
+  it('disables form mutations but keeps config rows navigable when disabled is true', () => {
+    const onActiveDetailChange = vi.fn();
     render(
       <FormWrapper>
-        <AgentConfigurePanel disabled />
+        <AgentConfigurePanel disabled onActiveDetailChange={onActiveDetailChange} />
       </FormWrapper>,
     );
 
@@ -332,8 +333,11 @@ describe('AgentConfigurePanel disabled propagation', () => {
     expect(nameInput.disabled).toBe(true);
     expect(descInput.disabled).toBe(true);
     expect(avatarBtn.disabled).toBe(true);
-    expect(instructionsRow.disabled).toBe(true);
-    expect(toolsRow.disabled).toBe(true);
+    expect(instructionsRow.disabled).toBe(false);
+    expect(toolsRow.disabled).toBe(false);
+
+    fireEvent.click(instructionsRow);
+    expect(onActiveDetailChange).toHaveBeenCalledWith('instructions');
   });
 
   it('renders enabled controls by default', () => {

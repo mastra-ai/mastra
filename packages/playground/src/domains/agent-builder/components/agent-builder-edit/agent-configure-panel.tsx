@@ -85,7 +85,7 @@ function ConfigurePanelContent({
   activeDetail,
   onActiveDetailChange,
   editable,
-  disabled = false,
+  disabled: propDisabled = false,
 }: ConfigurePanelContentProps) {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
@@ -97,20 +97,20 @@ function ConfigurePanelContent({
   const draftInstructions = formMethods.watch('instructions') ?? '';
   const draftAvatarUrl = formMethods.watch('avatarUrl');
 
-  const mutationsDisabled = disabled || !editable;
+  const disabled = propDisabled || !editable;
   const panelName = editable ? draftName : (agent?.name ?? draftName);
   const panelDescription = editable ? draftDescription : (agent?.description ?? draftDescription);
   const panelInstructions = editable ? draftInstructions : (agent?.systemPrompt ?? draftInstructions);
   const panelAvatarUrl = editable ? draftAvatarUrl : (agent?.avatarUrl ?? draftAvatarUrl);
 
   const setDraftName = (value: string) => {
-    if (!mutationsDisabled) formMethods.setValue('name', value, { shouldDirty: true });
+    if (!disabled) formMethods.setValue('name', value, { shouldDirty: true });
   };
   const setDraftDescription = (value: string) => {
-    if (!mutationsDisabled) formMethods.setValue('description', value, { shouldDirty: true });
+    if (!disabled) formMethods.setValue('description', value, { shouldDirty: true });
   };
   const setDraftInstructions = (value: string) => {
-    if (!mutationsDisabled) formMethods.setValue('instructions', value, { shouldDirty: true });
+    if (!disabled) formMethods.setValue('instructions', value, { shouldDirty: true });
   };
 
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
@@ -140,7 +140,7 @@ function ConfigurePanelContent({
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || mutationsDisabled) return;
+    if (!file || disabled) return;
 
     try {
       const { dataUrl } = await downscaleImageToDataUrl(file);
@@ -154,7 +154,7 @@ function ConfigurePanelContent({
   const modelSectionVisible = features.model || policy.active;
 
   return (
-    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden">
+    <div className="relative h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden lg:rounded-none lg:border-0 lg:border-l lg:border-l-border1">
       <div
         className={cn(
           'agent-builder-detail-pane absolute inset-0 z-10 overflow-hidden bg-surface2',
@@ -170,7 +170,7 @@ function ConfigurePanelContent({
         <DetailPane
           activeDetail={renderedDetail}
           features={features}
-          editable={!mutationsDisabled}
+          editable={!disabled}
           instructionsPrompt={panelInstructions}
           onInstructionsChange={setDraftInstructions}
           onClose={closeDetail}
@@ -194,7 +194,7 @@ function ConfigurePanelContent({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={mutationsDisabled}
+                    disabled={disabled}
                     className="group relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Upload avatar"
                     data-testid="agent-configure-avatar-trigger"
@@ -226,7 +226,7 @@ function ConfigurePanelContent({
               value={panelName}
               placeholder="Untitled agent"
               onChange={e => setDraftName(e.target.value)}
-              disabled={mutationsDisabled}
+              disabled={disabled}
               testId="agent-configure-name"
             />
 
@@ -236,11 +236,11 @@ function ConfigurePanelContent({
               value={panelDescription}
               placeholder="What is this agent for?"
               onChange={e => setDraftDescription(e.target.value)}
-              disabled={mutationsDisabled}
+              disabled={disabled}
               testId="agent-configure-description"
             />
 
-            {modelSectionVisible && <ModelSection editable={!mutationsDisabled} />}
+            {modelSectionVisible && <ModelSection editable={!disabled} />}
           </div>
 
           <ConfigRows
@@ -253,7 +253,6 @@ function ConfigurePanelContent({
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
             disabled={disabled}
-            mutationsDisabled={mutationsDisabled}
           />
         </div>
       </div>
@@ -373,10 +372,7 @@ interface ConfigRowsProps {
   totalSkillsCount: number;
   activeDetail: ActiveDetail;
   toggleDetail: (next: ActiveDetail) => void;
-  /** Blocks row click (e.g. while a stream is running). */
   disabled?: boolean;
-  /** Blocks mutation controls inside rows (e.g. browser toggle) when read-only. */
-  mutationsDisabled?: boolean;
 }
 
 function BrowserToggleRow({ disabled = false }: { disabled?: boolean }) {
@@ -416,7 +412,6 @@ function ConfigRows({
   activeDetail,
   toggleDetail,
   disabled = false,
-  mutationsDisabled = false,
 }: ConfigRowsProps) {
   return (
     <div className="flex flex-col">
@@ -426,7 +421,6 @@ function ConfigRows({
         value={instructionsDescription}
         isActive={activeDetail === 'instructions'}
         onClick={() => toggleDetail('instructions')}
-        disabled={disabled}
         testId="agent-preview-edit-system-prompt"
       />
       {features.tools && (
@@ -437,7 +431,6 @@ function ConfigRows({
           total={totalToolsCount}
           isActive={activeDetail === 'tools'}
           onClick={() => toggleDetail('tools')}
-          disabled={disabled}
           testId="agent-preview-tools-button"
         />
       )}
@@ -449,11 +442,10 @@ function ConfigRows({
           total={totalSkillsCount}
           isActive={activeDetail === 'skills'}
           onClick={() => toggleDetail('skills')}
-          disabled={disabled}
           testId="agent-preview-skills-button"
         />
       )}
-      {features.browser && <BrowserToggleRow disabled={mutationsDisabled} />}
+      {features.browser && <BrowserToggleRow disabled={disabled} />}
     </div>
   );
 }
@@ -508,30 +500,17 @@ interface ConfigRowProps {
   isActive?: boolean;
   onClick: () => void;
   testId: string;
-  disabled?: boolean;
 }
 
-const ConfigRow = ({
-  icon,
-  label,
-  value,
-  count,
-  total,
-  isActive = false,
-  onClick,
-  testId,
-  disabled = false,
-}: ConfigRowProps) => (
+const ConfigRow = ({ icon, label, value, count, total, isActive = false, onClick, testId }: ConfigRowProps) => (
   <button
     type="button"
     onClick={onClick}
-    disabled={disabled}
     data-testid={testId}
     aria-pressed={isActive}
     className={cn(
       'group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3',
       isActive && 'bg-surface3',
-      disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent',
     )}
   >
     <span

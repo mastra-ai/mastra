@@ -61,16 +61,8 @@ describe('AgentBuilderStarter', () => {
     });
   });
 
-  it('renders a "create manually" button that navigates without a user message', () => {
-    const { getByTestId } = renderStarter();
-    const btn = getByTestId('agent-builder-starter-create-manually');
-
-    fireEvent.click(btn);
-
-    expect(navigateMock).toHaveBeenCalledTimes(1);
-    const [path, opts] = navigateMock.mock.calls[0];
-    expect(path).toMatch(/^\/agent-builder\/agents\/[^/]+\/edit$/);
-    expect(opts).toMatchObject({ viewTransition: true });
-    expect(opts.state).toBeUndefined();
+  it('does not render a "create manually" affordance — users must use the prompt input', () => {
+    const { queryByTestId } = renderStarter();
+    expect(queryByTestId('agent-builder-starter-create-manually')).toBeNull();
   });
 });
