@@ -252,7 +252,22 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   -- Information-only JSON payloads
   costMetadata       Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Bloom-filter skip indexes for high-cardinality ID drilldowns.
+  -- Equality and IN filters on these columns can skip granule chunks that
+  -- definitely do not contain the value. GRANULARITY 2 = 16K-row chunks.
+  -- ID columns are out-of-sort-key, so without these every drilldown scans
+  -- every row in the time range.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -605,7 +620,37 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Metric skip indexes — additive, instant DDL. Existing parts keep no index
+  // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
+  // immediately. With normal retention turning over the table, the index
+  // converges to full coverage without an explicit backfill.
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2`,
 ];
+
+/**
+ * Names of the bloom-filter skip indexes added to `metric_events`. Exposed so
+ * tooling (e.g. a follow-up `mastra migrate` command) can detect and optionally
+ * `MATERIALIZE INDEX` them across pre-existing parts.
+ */
+export const METRIC_SKIP_INDEX_NAMES = [
+  'idx_traceId',
+  'idx_threadId',
+  'idx_resourceId',
+  'idx_userId',
+  'idx_organizationId',
+  'idx_experimentId',
+  'idx_runId',
+  'idx_sessionId',
+  'idx_requestId',
+] as const;
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
