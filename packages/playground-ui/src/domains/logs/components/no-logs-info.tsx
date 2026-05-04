@@ -20,8 +20,7 @@ export interface NoLogsInfoProps {
 
 const DATE_FORMAT = 'MMM d, yyyy HH:mm';
 
-const LEVEL_TIP =
-  'Pick a wider range or lower the logging level — verbose entries (debug, info) may be filtered out.';
+const LEVEL_TIP = 'Pick a wider range or lower the logging level — verbose entries (debug, info) may be filtered out.';
 
 function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { title: string; description: string } {
   if (datePreset && datePreset !== 'all' && datePreset !== 'custom') {
@@ -60,7 +59,7 @@ export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/docs/observability/logging"
+            href="https://mastra.ai/en/docs/observability/logging"
             target="_blank"
             rel="noopener noreferrer"
           >
