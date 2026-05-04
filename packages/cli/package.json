@@ -52,9 +52,10 @@
   "dependencies": {
     "@clack/prompts": "^1.1.0",
     "@expo/devcert": "^1.2.1",
-    "archiver": "^7.0.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
+    "acorn": "^8.16.0",
+    "archiver": "^7.0.1",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",

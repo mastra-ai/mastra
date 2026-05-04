@@ -2933,6 +2933,9 @@ importers:
       '@mastra/loggers':
         specifier: workspace:^
         version: link:../loggers
+      acorn:
+        specifier: ^8.16.0
+        version: 8.16.0
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
