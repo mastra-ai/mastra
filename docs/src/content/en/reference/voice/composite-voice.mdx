@@ -13,7 +13,7 @@ The CompositeVoice class allows you to combine different voice providers for tex
 
 CompositeVoice supports both Mastra voice providers and AI SDK model providers
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -48,7 +48,7 @@ CompositeVoice supports both Mastra voice providers and AI SDK model providers
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using the configured speaking provider.
 
@@ -75,7 +75,7 @@ Notes:
 - Options are passed through to the configured speaking provider
 - Returns a stream of audio data
 
-### listen()
+### `listen()`
 
 Converts speech to text using the configured listening provider.
 
@@ -102,7 +102,7 @@ Notes:
 - Options are passed through to the configured listening provider
 - Returns either a string or a stream of transcribed text, depending on the provider
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns a list of available voices from the speaking provider, where each node contains:
 
@@ -130,7 +130,7 @@ Notes:
 - Each voice object will have at least a voiceId property
 - Additional voice properties depend on the speaking provider
 
-## Usage Examples
+## Usage examples
 
 ### Using Mastra Voice Providers
 

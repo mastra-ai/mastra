@@ -1,0 +1,217 @@
+---
+title: "Datadog bridge | Tracing | Observability"
+description: "Integrate Mastra tracing with Datadog APM and LLM Observability"
+packages:
+  - "@mastra/observability"
+  - "@mastra/datadog"
+---
+
+# Datadog bridge
+
+:::warning
+
+The Datadog Bridge is currently **experimental**. APIs and configuration options may change in future releases.
+
+:::
+
+The Datadog Bridge enables bidirectional integration between Mastra's tracing system and Datadog. Unlike exporters that send trace data after execution completes, the bridge creates native dd-trace spans in real time so that auto-instrumented APM operations (HTTP calls, database queries, etc.) inside your tools and processors are correctly nested under their parent Mastra spans.
+
+:::info Not using dd-trace APM?
+
+If you only need to send LLM Observability data and don't use `dd-trace` APM auto-instrumentation, the [Datadog Exporter](/docs/observability/tracing/exporters/datadog) is simpler — it supports agentless mode and sends spans directly to Datadog without a local agent.
+
+:::
+
+## When to use the bridge
+
+Use the DatadogBridge when you:
+
+- Use `dd-trace` auto-instrumentation in your application (HTTP servers, database clients, etc.)
+- Want APM service calls made by tools, MCP tools, or output processors to appear under their parent Mastra span instead of the request handler
+- Need both APM traces and LLM Observability data to share a consistent trace topology
+- Are building a distributed system where Datadog trace context must propagate across services
+
+## How it works
+
+The DatadogBridge participates in two parts of the dd-trace pipeline:
+
+**APM context propagation (real time):**
+
+- Creates a dd-trace APM span via `tracer.startSpan()` when each Mastra span is created
+- Activates the APM span in dd-trace's scope via `tracer.scope().activate()` during execution
+- Auto-instrumented operations inside the active scope are parented to the correct Mastra span
+- Inherits the active dd-trace context (e.g., an incoming request span) when no explicit Mastra parent exists
+
+**LLM Observability emission (on span end):**
+
+- Emits annotations (model info, token usage, input/output, errors) through `dd-trace`'s LLM Observability pipeline
+- Maintains parent-child relationships in Datadog LLM Observability using nested `llmobs.trace()` calls
+- Reuses the same data shape and span-kind mapping as the [Datadog Exporter](/docs/observability/tracing/exporters/datadog#span-type-mapping)
+
+## Why this matters
+
+Without the bridge, the Datadog Exporter only creates LLM Observability spans after a trace completes. During execution, no `dd-trace` span is active in scope, so any HTTP or database call made by a tool falls back to whatever `dd-trace` span is active at the time — typically the incoming request handler. The result is that service calls from MCP tools or output processors appear as children of the request span instead of the agent or processor span that actually made them.
+
+The bridge fixes this by creating real dd-trace spans up front, so the scope is correct when auto-instrumentation runs.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/datadog dd-trace
+```
+
+The bridge requires `dd-trace` to be installed and a local Datadog Agent (or compatible OTLP receiver) to receive APM data. See the [APM prerequisites](/docs/observability/tracing/exporters/datadog#prerequisites) on the exporter page for agent setup details.
+
+## Configuration
+
+Using the DatadogBridge requires two steps:
+
+1. Initialize `dd-trace` so its auto-instrumentation patches HTTP, database, and framework libraries
+1. Add the DatadogBridge to your Mastra observability config
+
+### Step 1: Initialize dd-trace
+
+`dd-trace` must be initialized before any other imports so its auto-instrumentation can patch libraries at load time. The bridge will detect an already-initialized tracer and reuse it.
+
+```typescript title="src/mastra/index.ts"
+import tracer from 'dd-trace'
+
+tracer.init({
+  service: process.env.DD_SERVICE || 'my-mastra-app',
+  env: process.env.DD_ENV || 'production',
+  version: process.env.DD_VERSION,
+})
+
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { DatadogBridge } from '@mastra/datadog'
+
+// ...
+```
+
+:::note
+Import and initialize `dd-trace` at the very top of your application's entry file, before any other imports.
+:::
+
+### Step 2: Mastra Configuration
+
+Add the DatadogBridge to your Mastra observability config:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-mastra-app',
+        bridge: new DatadogBridge({
+          mlApp: process.env.DD_LLMOBS_ML_APP!,
+        }),
+      },
+    },
+  }),
+  bundler: {
+    externals: [
+      'dd-trace',
+      '@datadog/native-metrics',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/pprof',
+    ],
+  },
+})
+```
+
+```bash title=".env"
+DD_SERVICE=my-mastra-app
+DD_ENV=production
+DD_VERSION=1.0.0
+DD_LLMOBS_ML_APP=my-llm-app
+```
+
+When `dd-trace` is initialized, it routes APM data to your local Datadog Agent on `localhost:8126`. The bridge enables LLM Observability on top of the same tracer, so both sets of data appear under the same service in Datadog.
+
+No Mastra exporters are required when using the bridge — both APM and LLM Observability data flow through `dd-trace`. You can still add Mastra exporters if you want to send traces to additional destinations.
+
+## Agent vs. agentless mode
+
+The bridge defaults to **agent mode** (`agentless: false`). This assumes a local Datadog Agent is running on `localhost:8126` to receive both APM and LLM Observability data. This is the typical setup when using `dd-trace` auto-instrumentation, since APM data always routes through the agent.
+
+If you don't have a local Datadog Agent and only need LLM Observability data (no APM auto-instrumentation), you can enable agentless mode to send data directly to Datadog. In this case, you must provide an API key.
+
+```typescript
+new DatadogBridge({
+  mlApp: process.env.DD_LLMOBS_ML_APP!,
+  apiKey: process.env.DD_API_KEY!,
+  agentless: true,
+})
+```
+
+:::note
+For most bridge users, agent mode is the right choice. APM data cannot be sent in agentless mode, so enabling agentless splits LLM Observability traffic away from APM traffic. If you want LLM Observability only without an agent, use the [Datadog Exporter](/docs/observability/tracing/exporters/datadog) instead.
+:::
+
+## Trace hierarchy
+
+With the DatadogBridge, your traces maintain proper hierarchy across dd-trace and Mastra boundaries. Service calls made by tools and processors appear under the correct Mastra span:
+
+```
+HTTP POST /api/chat (from web framework instrumentation)
+└── agent.orchestrator (from Mastra via DatadogBridge)
+    ├── chat gpt-5.4 (LLM call)
+    ├── tool.execute search (tool execution)
+    │   └── HTTP GET api.example.com (auto-instrumented from inside the tool)
+    └── processor.guardrail (output processor)
+        └── HTTP POST guardrail-service/check (auto-instrumented from inside the processor)
+```
+
+In Datadog, the APM trace shows this full topology, and the LLM Observability product shows the agent and LLM-specific spans with their inputs, outputs, and token metrics.
+
+## Span type mapping
+
+The bridge uses the same span-kind mapping as the Datadog Exporter for LLM Observability. See [span type mapping](/docs/observability/tracing/exporters/datadog#span-type-mapping) on the exporter page.
+
+## Using tags
+
+Tags help you categorize and filter traces in Datadog. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate('Hello', {
+  tracingOptions: {
+    tags: ['production', 'experiment-v2', 'user-request'],
+  },
+})
+```
+
+Tags formatted as `key:value` (e.g., `instance_name:career-scout-api`) are split into structured tag entries; tags without a colon are set with a `true` value.
+
+## Promoting context keys to flat tags
+
+Use `requestContextKeys` to promote specific keys from the request context or span attributes into flat, indexable LLM Observability tags. This makes them filterable in the Datadog UI:
+
+```typescript
+new DatadogBridge({
+  mlApp: process.env.DD_LLMOBS_ML_APP!,
+  requestContextKeys: ['tenantId', 'agentId'],
+})
+```
+
+Promoted keys are removed from `annotations.metadata` and added as flat tags on each LLM Observability span.
+
+## Troubleshooting
+
+If APM spans aren't connecting to Mastra spans as expected:
+
+- Verify `dd-trace` is initialized **before** any other imports (it patches libraries at load time)
+- Verify a local Datadog Agent is running and reachable at `localhost:8126`
+- Ensure the DatadogBridge is set as `bridge` (not as an entry in `exporters`) in your observability config
+- Confirm you haven't also added the `DatadogExporter` to `exporters` — using both will double-emit LLM Observability data
+
+For native-module compatibility issues with `dd-trace` and bundler externals, see the [Datadog exporter troubleshooting](/docs/observability/tracing/exporters/datadog#troubleshooting) section.
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [Datadog Exporter](/docs/observability/tracing/exporters/datadog) - LLM Observability only, no `dd-trace` APM
+- [DatadogBridge Reference](/reference/observability/tracing/bridges/datadog) - API documentation
+- [Datadog APM documentation](https://docs.datadoghq.com/tracing/)
+- [Datadog LLM Observability documentation](https://docs.datadoghq.com/llm_observability/)

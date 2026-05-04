@@ -5,11 +5,13 @@
  *
  * Also includes formatToolResult helper.
  */
-import { Text } from '@mariozechner/pi-tui';
+
 import type { TaskItem } from '@mastra/core/harness';
+import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
@@ -50,7 +52,7 @@ export function formatToolResult(result: unknown): string {
       }
     }
     try {
-      return JSON.stringify(result, null, 2);
+      return safeStringify(result, 2);
     } catch {
       return String(result);
     }
@@ -126,7 +128,12 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       return;
     }
 
-    ctx.addChildBeforeFollowUps(new Text('', 0, 0));
+    // Skip creating regular component for ask_user — it uses AskQuestionInlineComponent
+    // (normally created by handleToolInputStart, but handleToolStart may fire first)
+    if (toolName === 'ask_user') {
+      return;
+    }
+
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       args,
@@ -145,16 +152,10 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     state.ui.requestRender();
   }
 
-  // Track ask_user tool components for inline question placement
+  // Track submit_plan tool components for inline plan approval placement
   const component = state.pendingTools.get(toolCallId);
-  if (component) {
-    if (toolName === 'ask_user') {
-      state.lastAskUserComponent = component;
-    }
-    // Track submit_plan tool components for inline plan approval placement
-    if (toolName === 'submit_plan') {
-      state.lastSubmitPlanComponent = component;
-    }
+  if (component && toolName === 'submit_plan') {
+    state.lastSubmitPlanComponent = component;
   }
 
   // File modification tracking is handled by the Harness display state
@@ -203,8 +204,21 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   }
 
   // Create the component early so deltas can update it
-  // Skip for subagent (handled by SubagentExecutionComponent) and task_write (streams to pinned TaskProgressComponent)
-  if (toolName === 'task_write') {
+  // Skip for subagent (handled by SubagentExecutionComponent),
+  // task_write (streams to pinned TaskProgressComponent),
+  // and ask_user (uses AskQuestionInlineComponent)
+  if (toolName === 'ask_user') {
+    const askComponent = AskQuestionInlineComponent.createStreaming(state.ui);
+    ctx.addChildBeforeFollowUps(askComponent);
+    state.lastAskUserComponent = askComponent;
+    state.pendingAskUserComponents.set(toolCallId, askComponent);
+
+    // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
+
+    state.ui.requestRender();
+  } else if (toolName === 'task_write') {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskWriteInsertIndex = state.chatContainer.children.length;
 
@@ -215,7 +229,6 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     ctx.addChildBeforeFollowUps(state.streamingComponent);
     state.ui.requestRender();
   } else if (toolName !== 'subagent') {
-    ctx.addChildBeforeFollowUps(new Text('', 0, 0));
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
@@ -254,6 +267,18 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
       const component = state.pendingTools.get(toolCallId);
       if (component) {
         component.updateArgs(partialArgs);
+      }
+
+      // For ask_user, stream partial args into the question component
+      if (buffer.toolName === 'ask_user') {
+        const askComponent = state.pendingAskUserComponents.get(toolCallId);
+        if (askComponent) {
+          try {
+            askComponent.updateArgs(partialArgs);
+          } catch {
+            // Don't crash on malformed partial args
+          }
+        }
       }
 
       // For task_write, stream partial tasks into the pinned TaskProgressComponent.
@@ -313,6 +338,9 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   }
 
   // File modification tracking is handled by the Harness display state
+
+  // Clean up ask_user component tracking
+  state.pendingAskUserComponents.delete(toolCallId);
 
   const component = state.pendingTools.get(toolCallId);
   if (component) {

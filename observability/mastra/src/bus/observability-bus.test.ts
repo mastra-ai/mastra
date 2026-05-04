@@ -51,6 +51,7 @@ function createLogEvent(): LogEvent {
   return {
     type: 'log',
     log: {
+      logId: 'log-bus-test',
       timestamp: new Date(),
       level: 'info',
       message: 'test log message',
@@ -63,9 +64,9 @@ function createMetricEvent(): MetricEvent {
   return {
     type: 'metric',
     metric: {
+      metricId: 'metric-bus-test',
       timestamp: new Date(),
       name: 'mastra_test_counter',
-      metricType: 'counter',
       value: 1,
       labels: { env: 'test' },
     },
@@ -76,9 +77,10 @@ function createScoreEvent(): ScoreEvent {
   return {
     type: 'score',
     score: {
+      scoreId: 'score-bus-test',
       timestamp: new Date(),
       traceId: 'trace-1',
-      scorerName: 'relevance',
+      scorerId: 'relevance',
       score: 0.85,
       reason: 'Relevant response',
     },
@@ -89,6 +91,7 @@ function createFeedbackEvent(): FeedbackEvent {
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: 'feedback-bus-test',
       timestamp: new Date(),
       traceId: 'trace-1',
       source: 'user',
@@ -948,6 +951,194 @@ describe('ObservabilityBus', () => {
 
       await bus.shutdown();
       await bus.flush(); // should not throw
+    });
+  });
+
+  describe('deepClean payload sanitization', () => {
+    it('should deepClean log events before delivering to handlers (defaults)', () => {
+      const onLogEvent = vi.fn();
+      bus.registerExporter(createMockExporter({ onLogEvent }));
+
+      // Circular ref + function should be stripped by deepClean defaults.
+      const circular: any = { name: 'circ' };
+      circular.self = circular;
+      const event: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'hello',
+          data: { circular, fn: () => 'nope', ok: 'value' },
+        } as any,
+      };
+
+      bus.emit(event);
+
+      expect(onLogEvent).toHaveBeenCalledTimes(1);
+      const delivered = onLogEvent.mock.calls[0]![0] as LogEvent;
+      // Cleaning replaces the payload object with a sanitized clone.
+      expect(delivered.log).not.toBe(event.log);
+      // JSON-safe (no circular refs, no functions).
+      expect(() => JSON.stringify(delivered)).not.toThrow();
+      const data = (delivered.log as any).data;
+      expect(data.ok).toBe('value');
+      expect(typeof data.fn).not.toBe('function');
+    });
+
+    it('should deepClean metric / score / feedback payloads before delivery', () => {
+      const onMetricEvent = vi.fn();
+      const onScoreEvent = vi.fn();
+      const onFeedbackEvent = vi.fn();
+      bus.registerExporter(createMockExporter({ onMetricEvent, onScoreEvent, onFeedbackEvent }));
+
+      const circular: any = { x: 1 };
+      circular.self = circular;
+
+      bus.emit({
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_test_counter',
+          value: 1,
+          labels: { env: 'test' },
+          metadata: { circular },
+        } as any,
+      });
+      bus.emit({
+        type: 'score',
+        score: {
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          scorerId: 'rel',
+          score: 0.5,
+          metadata: { circular },
+        } as any,
+      });
+      bus.emit({
+        type: 'feedback',
+        feedback: {
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          source: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          metadata: { circular },
+        } as any,
+      });
+
+      expect(() => JSON.stringify(onMetricEvent.mock.calls[0]![0])).not.toThrow();
+      expect(() => JSON.stringify(onScoreEvent.mock.calls[0]![0])).not.toThrow();
+      expect(() => JSON.stringify(onFeedbackEvent.mock.calls[0]![0])).not.toThrow();
+    });
+
+    it('should pass cleaned events to bridges as well as exporters', () => {
+      const onLogEvent = vi.fn();
+      const bridgeOnLog = vi.fn();
+      bus.registerExporter(createMockExporter({ onLogEvent }));
+      bus.registerBridge(createMockBridge({ onLogEvent: bridgeOnLog } as any));
+
+      const circular: any = {};
+      circular.self = circular;
+
+      bus.emit({
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'hi',
+          data: { circular },
+        } as any,
+      });
+
+      expect(() => JSON.stringify(onLogEvent.mock.calls[0]![0])).not.toThrow();
+      expect(() => JSON.stringify(bridgeOnLog.mock.calls[0]![0])).not.toThrow();
+    });
+
+    it('should honor custom serializationOptions for non-tracing signals', async () => {
+      const customBus = new ObservabilityBus({
+        serializationOptions: {
+          maxStringLength: 10,
+          maxArrayLength: 2,
+        },
+      });
+      const onLogEvent = vi.fn();
+      const onMetricEvent = vi.fn();
+      const onScoreEvent = vi.fn();
+      const onFeedbackEvent = vi.fn();
+      customBus.registerExporter(createMockExporter({ onLogEvent, onMetricEvent, onScoreEvent, onFeedbackEvent }));
+
+      const longStr = 'x'.repeat(500);
+
+      customBus.emit({
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: longStr,
+          data: { arr: [1, 2, 3, 4, 5] },
+        } as any,
+      });
+      customBus.emit({
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_test_counter',
+          value: 1,
+          labels: { env: 'test' },
+          metadata: { note: longStr },
+        } as any,
+      });
+      customBus.emit({
+        type: 'score',
+        score: {
+          timestamp: new Date(),
+          traceId: 't',
+          scorerId: 's',
+          score: 0.5,
+          reason: longStr,
+        } as any,
+      });
+      customBus.emit({
+        type: 'feedback',
+        feedback: {
+          timestamp: new Date(),
+          traceId: 't',
+          source: 'user',
+          feedbackType: 'comment',
+          value: 1,
+          comment: longStr,
+        } as any,
+      });
+
+      const log = onLogEvent.mock.calls[0]![0] as LogEvent;
+      // Custom maxStringLength applied (longStr is 500 chars, capped to 10
+      // plus a truncation marker — must be drastically shorter than original).
+      expect((log.log as any).message.length).toBeLessThan(longStr.length);
+      // Custom maxArrayLength applied.
+      expect((log.log as any).data.arr.length).toBeLessThanOrEqual(3); // 2 + truncation marker tolerance
+
+      const metric = onMetricEvent.mock.calls[0]![0] as MetricEvent;
+      expect((metric.metric as any).metadata.note.length).toBeLessThan(longStr.length);
+
+      const score = onScoreEvent.mock.calls[0]![0] as ScoreEvent;
+      expect((score.score as any).reason.length).toBeLessThan(longStr.length);
+
+      const feedback = onFeedbackEvent.mock.calls[0]![0] as FeedbackEvent;
+      expect((feedback.feedback as any).comment.length).toBeLessThan(longStr.length);
+
+      await customBus.shutdown();
+    });
+
+    it('should leave tracing events unchanged (already cleaned at span construction)', () => {
+      const onTracingEvent = vi.fn();
+      bus.registerExporter(createMockExporter({ onTracingEvent }));
+
+      const event = createTracingEvent();
+      bus.emit(event);
+
+      // Same reference passes through — bus does not re-clean tracing events.
+      expect(onTracingEvent).toHaveBeenCalledTimes(1);
+      expect(onTracingEvent.mock.calls[0]![0]).toBe(event);
     });
   });
 });

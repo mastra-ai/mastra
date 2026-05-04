@@ -7,12 +7,14 @@
  */
 
 import { Agent } from '@mastra/core/agent';
+import { ProcessorStepSchema } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-import { Memory } from '../../../..';
+import { Memory } from '../../../index';
 
 // =============================================================================
 // Mock Models
@@ -297,6 +299,22 @@ const omTriggerTool = createTool({
 
 const longResponseText = `I understand your request completely. Let me provide you with a comprehensive and detailed response that covers all the important aspects of what you asked about. Here are my thoughts and recommendations based on the information you provided. I hope this detailed explanation helps clarify everything you need to know about the topic at hand. Please let me know if you have any follow-up questions or need additional clarification on any of these points.`;
 
+function createPassthroughProcessorWorkflow(id: string) {
+  return createWorkflow({
+    id,
+    inputSchema: ProcessorStepSchema,
+    outputSchema: ProcessorStepSchema,
+    type: 'processor',
+  })
+    .then({
+      id: `${id}-step`,
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      execute: async ({ inputData }) => inputData,
+    })
+    .commit();
+}
+
 // =============================================================================
 // Test 1: Error State - Observer fails, agent still completes
 // =============================================================================
@@ -337,7 +355,11 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     });
   });
 
-  it('should complete agent execution even when observer fails', async () => {
+  it('should return empty text when observer fails', async () => {
+    // When observation fails, OM calls abort() which triggers a TripWire.
+    // The agent architecture converts TripWire to a successful result with empty text,
+    // not a thrown error. This is by design - the tripwire mechanism returns early
+    // with empty text rather than propagating the error.
     const result = await agent.generate('Hello, I need help.', {
       memory: {
         thread: 'test-error-thread',
@@ -345,14 +367,15 @@ describe('OM Error State', { timeout: 30_000 }, () => {
       },
     });
 
-    // Agent should still produce output despite observer failure
-    expect(result.text).toBeTruthy();
-    expect(result.text).toContain('I understand your request');
+    // Agent returns empty text when tripwire is triggered (observation failure)
+    expect(result.text).toBe('');
+    expect(result.tripwire).toBeDefined();
+    expect(result.tripwire?.reason).toContain('Encountered error during memory observation');
   });
 
-  it('should emit data-om-observation-failed during streaming when observer fails', async () => {
-    const allParts: any[] = [];
-
+  it('should emit tripwire in response when observer fails during streaming', async () => {
+    // When observation fails, OM calls abort() which triggers a TripWire.
+    // The stream completes with a tripwire part, not an error throw.
     const response = await agent.stream('Hello, I need help.', {
       memory: {
         thread: 'test-error-stream',
@@ -361,35 +384,39 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     });
 
     const reader = response.fullStream.getReader();
+    let tripwireEmitted = false;
+    let textContent = '';
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        allParts.push(value);
+
+        if (value.type === 'tripwire') {
+          tripwireEmitted = true;
+          expect(value.payload?.reason).toBeDefined();
+          expect(value.payload?.reason).toContain('Encountered error during memory observation');
+        }
+        if (value.type === 'text-delta') {
+          textContent += (value as any).delta || (value.payload as any)?.delta || '';
+        }
       }
     } finally {
       reader.releaseLock();
     }
 
-    // Agent should have produced text
-    const hasText = allParts.some(p => p.type === 'text-delta');
-    expect(hasText).toBe(true);
-
-    // Should have emitted data-om-observation-failed
-    const failedParts = allParts.filter(p => p.type === 'data-om-observation-failed');
-    expect(failedParts.length).toBeGreaterThan(0);
-
-    // The failed part should contain error info
-    const failedPart = failedParts[0];
-    expect(failedPart.data).toBeTruthy();
-    expect(failedPart.data.error).toBeTruthy();
+    // Tripwire should be emitted in the stream
+    expect(tripwireEmitted).toBe(true);
+    // Text content should be empty when tripwire is triggered
+    expect(textContent).toBe('');
   });
 
-  it('should persist data-om-observation-failed parts to storage', async () => {
+  it('should emit tripwire when observer fails and persist lifecycle marker parts through OM', async () => {
+    // When observation fails, OM calls abort() which triggers a TripWire.
+    // The stream completes with a tripwire part, not an error throw.
     const threadId = 'test-error-persist';
     const resourceId = 'test-resource';
 
-    // Stream a conversation that triggers observation (which will fail)
     const response = await agent.stream('Hello, I need help with something important.', {
       memory: {
         thread: threadId,
@@ -397,31 +424,36 @@ describe('OM Error State', { timeout: 30_000 }, () => {
       },
     });
 
-    // Consume the full stream
     const reader = response.fullStream.getReader();
+    let tripwireEmitted = false;
     try {
       while (true) {
-        const { done } = await reader.read();
+        const { done, value } = await reader.read();
         if (done) break;
+
+        if (value.type === 'tripwire') {
+          tripwireEmitted = true;
+        }
       }
     } finally {
       reader.releaseLock();
     }
 
-    // Check storage - messages should contain data-om-observation-failed parts
+    // Tripwire should be emitted (not an error thrown)
+    expect(tripwireEmitted).toBe(true);
+
     const memoryStore = await store.getStore('memory');
     const result = await memoryStore!.listMessages({ threadId });
-
-    const assistantMessages = result.messages.filter((m: any) => m.role === 'assistant');
-    expect(assistantMessages.length).toBeGreaterThan(0);
-
-    // Check if any message has data-om-observation-failed parts
-    const hasFailedParts = assistantMessages.some((msg: any) => {
-      const parts = msg.content?.parts || [];
-      return parts.some((p: any) => p.type === 'data-om-observation-failed');
+    const persistedObservationMarkerParts = result.messages.flatMap((message: any) => {
+      const parts = message.content?.parts || [];
+      return parts.filter(
+        (part: any) => typeof part.type === 'string' && /^data-om-(observation|reflection)-/.test(part.type),
+      );
     });
 
-    expect(hasFailedParts).toBe(true);
+    expect(persistedObservationMarkerParts.map((part: any) => part.type)).toEqual(
+      expect.arrayContaining(['data-om-observation-start', 'data-om-observation-failed']),
+    );
   });
 });
 
@@ -511,6 +543,52 @@ describe('OM Persistence', () => {
     const hasOmParts = assistantMessages.some((msg: any) => {
       const parts = msg.content?.parts || [];
       return parts.some((p: any) => typeof p.type === 'string' && p.type.startsWith('data-om-'));
+    });
+
+    expect(hasOmParts).toBe(true);
+  });
+
+  it('should persist OM messages when a workflow processor runs before memory processors', async () => {
+    const threadId = 'test-workflow-processor-thread';
+    const resourceId = 'test-resource';
+    const workflowProcessor = createPassthroughProcessorWorkflow('pre-om-workflow');
+
+    const agentWithWorkflowProcessor = new Agent({
+      id: 'test-persist-agent-with-workflow-processor',
+      name: 'Test Persist Agent With Workflow Processor',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory,
+      inputProcessors: [workflowProcessor],
+    });
+
+    const response = await agentWithWorkflowProcessor.stream('Hello, I need help with something important.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    const reader = response.fullStream.getReader();
+    try {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const memoryStore = await store.getStore('memory');
+    const result = await memoryStore!.listMessages({ threadId });
+
+    const assistantMessages = result.messages.filter((message: any) => message.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    const hasOmParts = assistantMessages.some((message: any) => {
+      const parts = message.content?.parts || [];
+      return parts.some((part: any) => typeof part.type === 'string' && part.type.startsWith('data-om-'));
     });
 
     expect(hasOmParts).toBe(true);

@@ -51,6 +51,33 @@ export function runScorer({
     return;
   }
 
+  // Extract all primitive (string | number | boolean) values from requestContext,
+  // flattening nested objects so scorers can access any key regardless of depth.
+  // Non-primitive values (objects with circular refs, buffers, functions, env vars)
+  // are skipped to keep the payload lightweight and safe.
+  const safeContext: Record<string, any> = {};
+  if (requestContext) {
+    const MAX_DEPTH = 8;
+    const visited = new WeakSet<object>();
+    const flatten = (obj: Record<string, unknown>, prefix?: string, depth = 0) => {
+      if (depth > MAX_DEPTH) return;
+      if (visited.has(obj)) return;
+      visited.add(obj);
+
+      const entries: Iterable<[string, unknown]> =
+        typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
+      for (const [key, value] of entries) {
+        const flatKey = prefix ? `${prefix}.${key}` : key;
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          safeContext[flatKey] = value;
+        } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+          flatten(value as Record<string, unknown>, flatKey, depth + 1);
+        }
+      }
+    };
+    flatten(requestContext as Record<string, unknown>);
+  }
+
   const payload: ScoringHookInput = {
     scorer: {
       id: scorerObject.scorer?.id || scorerId,
@@ -59,7 +86,7 @@ export function runScorer({
     },
     input,
     output,
-    requestContext: Object.fromEntries(requestContext.entries()),
+    requestContext: safeContext,
     runId,
     source,
     entity,

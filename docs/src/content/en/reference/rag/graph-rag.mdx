@@ -9,7 +9,7 @@ packages:
 
 The `GraphRAG` class implements a graph-based approach to retrieval augmented generation. It creates a knowledge graph from document chunks where nodes represent documents and edges represent semantic relationships, enabling both direct similarity matching and discovery of related content through graph traversal.
 
-## Basic Usage
+## Basic usage
 
 ```typescript
 import { GraphRAG } from '@mastra/rag'
@@ -31,7 +31,7 @@ const results = await graphRag.query({
 })
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -54,7 +54,7 @@ const results = await graphRag.query({
 
 ## Methods
 
-### createGraph
+### `createGraph`
 
 Creates a knowledge graph from document chunks and their embeddings.
 
@@ -162,7 +162,7 @@ Returns an array of `RankedNode` objects, where each node contains:
 ]}
 />
 
-## Advanced Example
+## Advanced example
 
 ```typescript
 const graphRag = new GraphRAG({

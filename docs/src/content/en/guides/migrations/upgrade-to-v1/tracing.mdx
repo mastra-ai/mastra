@@ -7,7 +7,7 @@ description: "Migration guide for updating from otel-telemetry or AI tracing to 
 
 The observability system has been restructured in v1 with a dedicated `@mastra/observability` package. This guide covers two migration paths depending on which version you're upgrading from.
 
-## Migration Paths
+## Migration paths
 
 ### From OTEL-based Telemetry (0.x)
 
@@ -50,8 +50,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new DefaultExporter(), // Persists traces to storage for Studio
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -307,7 +307,7 @@ node --env-file=".env" .mastra/output/index.mjs
 
 No separate instrumentation files or special startup flags required.
 
-## Provider Migration Reference
+## Provider migration reference
 
 If you were using OTEL-based telemetry with specific providers in 0.x, here's how to configure them in v1:
 

@@ -166,34 +166,32 @@ describe('Standalone observe() method', () => {
       // Create enough messages to exceed the 100 token threshold
       const messages = createMessagesExceedingThreshold(10);
 
-      await om.observe({
+      const result = await om.observe({
         threadId,
         messages,
       });
 
-      // Check that observations were saved
-      const record = await om.getRecord(threadId);
-      expect(record).toBeTruthy();
-      expect(record!.activeObservations).toBeTruthy();
-      expect(record!.activeObservations).toContain('User discussed testing');
-      expect(record!.lastObservedAt).toBeDefined();
+      // observe() should return a result
+      expect(result.observed).toBe(true);
+      expect(result.record).toBeTruthy();
+      expect(result.record.activeObservations).toBeTruthy();
+      expect(result.record.activeObservations).toContain('User discussed testing');
+      expect(result.record.lastObservedAt).toBeDefined();
     });
 
     it('should skip observation when messages do not exceed threshold', async () => {
       // Create very few messages (below 100 token threshold)
       const messages = [createTestMessage('Hi', 'user', 'msg-1')];
 
-      await om.observe({
+      const result = await om.observe({
         threadId,
         messages,
       });
 
-      // Record should be created but no observations
-      const record = await om.getRecord(threadId);
-      // If the record was created at all, observations should be empty
-      if (record) {
-        expect(record.activeObservations).toBeFalsy();
-      }
+      // observe() should report no observation
+      expect(result.observed).toBe(false);
+      expect(result.record).toBeTruthy();
+      expect(result.record.activeObservations).toBeFalsy();
     });
 
     it('should call onObservationStart and onObservationEnd hooks', async () => {
@@ -213,6 +211,9 @@ describe('Standalone observe() method', () => {
 
       expect(onObservationStart).toHaveBeenCalledOnce();
       expect(onObservationEnd).toHaveBeenCalledOnce();
+      expect(onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
 
     it('should NOT call hooks when threshold is not met', async () => {
@@ -294,17 +295,17 @@ describe('Standalone observe() method', () => {
     it('should trigger observation in resource scope when threshold is met', async () => {
       const messages = createMessagesExceedingThreshold(10);
 
-      await resourceOm.observe({
+      const result = await resourceOm.observe({
         threadId,
         resourceId,
         messages,
       });
 
-      // In resource scope, the record key uses resourceId
-      const record = await resourceOm.getRecord(threadId, resourceId);
-      expect(record).toBeTruthy();
-      expect(record!.activeObservations).toBeTruthy();
-      expect(record!.activeObservations).toContain('User discussed testing');
+      // observe() should return a result
+      expect(result.observed).toBe(true);
+      expect(result.record).toBeTruthy();
+      expect(result.record.activeObservations).toBeTruthy();
+      expect(result.record.activeObservations).toContain('User discussed testing');
     });
 
     it('should call hooks in resource scope', async () => {
@@ -325,6 +326,9 @@ describe('Standalone observe() method', () => {
 
       expect(onObservationStart).toHaveBeenCalledOnce();
       expect(onObservationEnd).toHaveBeenCalledOnce();
+      expect(onObservationEnd).toHaveBeenCalledWith({
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      });
     });
   });
 

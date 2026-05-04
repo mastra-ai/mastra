@@ -1,0 +1,1 @@
+../../.mastracode/commands/gh-bulk-issues.md

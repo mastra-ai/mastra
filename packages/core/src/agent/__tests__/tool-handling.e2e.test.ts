@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3') {
   const dummyModel = getSingleDummyResponseModel(version);

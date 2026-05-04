@@ -1,11 +1,16 @@
 import { openai } from '@ai-sdk/openai';
+import { createLLMMock } from '@internal/test-utils';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { createAgentTestRun, createTestMessage, getTextContentFromMastraDBMessage } from '../../utils';
 import { createContextRelevanceScorerLLM } from '.';
 
 describe('Context Relevance Scorer', () => {
   const mockModel = openai('gpt-4o-mini');
+  const mock = createLLMMock(mockModel);
+
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
 
   describe('Basic Configuration', () => {
     it('should create scorer with context provided', () => {

@@ -1,0 +1,172 @@
+---
+title: 'Reference: filterRun() | Evals'
+description: 'API reference for filterRun(), a utility that creates a prepareRun function to filter and limit scorer input data.'
+packages:
+  - '@mastra/core'
+---
+
+# filterRun()
+
+Creates a `prepareRun` function from declarative options. Pass the result to `createScorer()` to filter messages, limit context size, and drop unnecessary fields before the scorer pipeline runs.
+
+Use [`filterRun()`](#usage-example) for declarative filtering. Write a custom `prepareRun` function directly when you need imperative logic that `filterRun()` doesn't cover. See [Custom scorers: input filtering](/docs/evals/custom-scorers#input-filtering) for more.
+
+## Usage example
+
+The following example creates a scorer that only sees tool invocations and text messages, limited to the 20 most recent context messages:
+
+```typescript title="src/mastra/scorers/tool-scorer.ts"
+import { createScorer, filterRun } from '@mastra/core/evals'
+
+const toolScorer = createScorer({
+  id: 'tool-usage',
+  description: 'Evaluates tool usage patterns',
+  type: 'agent',
+  prepareRun: filterRun({
+    partTypes: ['tool-invocation', 'text'],
+    maxRememberedMessages: 20,
+  }),
+}).generateScore(({ run }) => {
+  // run.input.rememberedMessages contains only tool and text messages
+  // run.output contains only tool and text messages
+  return 1
+})
+```
+
+### Filter by tool name
+
+Keep only messages involving specific tools:
+
+```typescript
+import { createScorer, filterRun } from '@mastra/core/evals'
+
+const fileEditScorer = createScorer({
+  id: 'file-edit-quality',
+  description: 'Evaluates file editing patterns',
+  type: 'agent',
+  prepareRun: filterRun({
+    toolNames: ['write_file', 'string_replace_lsp', 'view'],
+  }),
+}).generateScore(({ run }) => {
+  // Only messages with these tool calls remain
+  return 1
+})
+```
+
+### Drop fields
+
+Remove fields the scorer doesn't need:
+
+```typescript
+import { createScorer, filterRun } from '@mastra/core/evals'
+
+const simpleScorer = createScorer({
+  id: 'response-length',
+  description: 'Checks response length',
+  type: 'agent',
+  prepareRun: filterRun({
+    dropRequestContext: true,
+    dropExpectedTrajectory: true,
+    dropGroundTruth: true,
+    maxOutputMessages: 5,
+  }),
+}).generateScore(({ run }) => {
+  return run.output.length > 0 ? 1 : 0
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'FilterRunOptions',
+    isOptional: false,
+    description: 'Configuration object that controls what data the scorer receives.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'partTypes',
+            type: 'MastraPartType[]',
+            isOptional: true,
+            description:
+              "Keep only messages whose parts match these types. Each entry is prefix-matched against the message part's type. Plain text messages (no tool invocations) are always kept unless explicitly excluded. System messages and tagged system messages are never filtered.",
+          },
+          {
+            name: 'toolNames',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              'Keep only tool-invocation messages for these specific tools. Each entry is prefix-matched against the tool name. Non-tool messages (text, data) are unaffected.',
+          },
+          {
+            name: 'maxRememberedMessages',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Maximum number of messages to keep in remembered messages (context). Takes from the end (most recent). Applied after type and tool filtering.',
+          },
+          {
+            name: 'maxOutputMessages',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Maximum number of messages to keep in the output. Takes from the end. Applied after type and tool filtering.',
+          },
+          {
+            name: 'dropRequestContext',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Remove request context from the run entirely.',
+          },
+          {
+            name: 'dropExpectedTrajectory',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Remove expected trajectory from the run.',
+          },
+          {
+            name: 'dropGroundTruth',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Remove ground truth from the run.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+**Returns:** `(run: ScorerRun) => ScorerRun` — A function suitable for the `prepareRun` option on [`createScorer()`](/reference/evals/create-scorer).
+
+## Part types
+
+The `partTypes` option accepts `MastraPartType` values. Each value is prefix-matched, so `'data-'` matches all data part types.
+
+| Type | Description |
+| - | - |
+| `'text'` | Text content parts |
+| `'tool-invocation'` | Tool call and result parts |
+| `'reasoning'` | Chain-of-thought reasoning parts |
+| `'step-start'` | Step marker parts |
+| `'image'` | Image parts |
+| `'file'` | File parts |
+| `'source'` | Source reference parts |
+| `'source-document'` | Source document parts |
+| `'data-'` | All data parts (matches any `data-*` prefix) |
+| `'data-om-'` | Observational memory data parts |
+| `'data-workspace-'` | Workspace data parts |
+| `'data-sandbox-'` | Sandbox data parts |
+| `'data-tool-'` | Tool-related data parts |
+
+## Filtering behavior
+
+- **Part type filtering** applies to both `input.rememberedMessages` and `output` when they contain agent message arrays.
+- **Tool name filtering** only affects messages that contain tool invocations. Text-only messages pass through.
+- **System messages** (`systemMessages`, `taggedSystemMessages`) are never filtered, regardless of `partTypes` or `toolNames`.
+- **Message limits** (`maxRememberedMessages`, `maxOutputMessages`) apply after type and tool filtering, taking the most recent messages.
+- When both `partTypes` and `toolNames` are set, a message must satisfy both filters to be kept.

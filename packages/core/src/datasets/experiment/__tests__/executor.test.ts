@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
+import { RequestContext } from '../../../request-context';
 import type { Workflow } from '../../../workflows';
 import { executeTarget } from '../executor';
 
@@ -65,6 +66,34 @@ describe('executeTarget', () => {
         scorers: {},
         returnScorerData: true,
       });
+    });
+
+    it('passes requestContext to agent.generate as a RequestContext instance', async () => {
+      const mockAgent = createMockAgent('Hello response');
+
+      await executeTarget(
+        mockAgent,
+        'agent',
+        {
+          id: 'item-1',
+          datasetId: 'ds-1',
+          input: 'Hello',
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { requestContext: { userId: 'dev-user-123', environment: 'development' } },
+      );
+
+      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
+      const callArgs = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0];
+      const options = callArgs[1];
+
+      // requestContext should be a RequestContext instance
+      expect(options.requestContext).toBeInstanceOf(RequestContext);
+      // It should contain the values we passed
+      expect(options.requestContext.all).toEqual({ userId: 'dev-user-123', environment: 'development' });
     });
 
     it('handles messages array input and returns FullOutput', async () => {
@@ -280,6 +309,69 @@ describe('executeTarget', () => {
 
       expect(result.output).toEqual({ processed: true });
       expect(result.error).toBeNull();
+    });
+
+    it('surfaces stepResults, stepExecutionPath and spanId from a successful run', async () => {
+      const stepResults = {
+        chat: { status: 'success', payload: { prompt: 'hi' }, output: { text: 'hello' } },
+      };
+      const mockWorkflow = createMockWorkflow({
+        status: 'success',
+        result: { text: 'hello' },
+        steps: stepResults,
+        stepExecutionPath: ['chat'],
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      });
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-7',
+        datasetId: 'ds-1',
+        input: { prompt: 'hi' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toEqual({ text: 'hello' });
+      expect(result.stepResults).toEqual(stepResults);
+      expect(result.stepExecutionPath).toEqual(['chat']);
+      expect(result.traceId).toBe('trace-1');
+      expect(result.spanId).toBe('span-1');
+    });
+
+    it('forwards requestContext and observability context into run.start', async () => {
+      const startSpy = vi.fn().mockResolvedValue({ status: 'success', result: {}, steps: {} });
+      const mockWorkflow = {
+        id: 'test-workflow',
+        name: 'Test Workflow',
+        createRun: vi.fn().mockResolvedValue({ start: startSpy }),
+      } as unknown as Workflow;
+
+      await executeTarget(
+        mockWorkflow,
+        'workflow',
+        {
+          id: 'item-8',
+          datasetId: 'ds-1',
+          input: { prompt: 'hi' },
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { requestContext: { tenantId: 't-1' } },
+      );
+
+      expect(startSpy).toHaveBeenCalledTimes(1);
+      const startArgs = startSpy.mock.calls[0][0];
+      expect(startArgs.inputData).toEqual({ prompt: 'hi' });
+      expect(startArgs.requestContext).toBeInstanceOf(RequestContext);
+      expect(startArgs.requestContext.all).toEqual({ tenantId: 't-1' });
+      // Observability context fields are spread in (no-op when item carries no tracing context)
+      expect(startArgs).toHaveProperty('tracing');
+      expect(startArgs).toHaveProperty('tracingContext');
     });
   });
 

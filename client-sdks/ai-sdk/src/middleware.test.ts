@@ -1,4 +1,13 @@
 import { generateText, streamText } from '@internal/ai-sdk-v5';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV5,
+  MockLanguageModelV2,
+} from '@internal/ai-sdk-v5/test';
+import { generateText as generateTextV6 } from '@internal/ai-v6';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV6,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type {
   InputProcessor,
@@ -11,7 +20,6 @@ import type {
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { ObservationalMemory } from '@mastra/memory/processors';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createProcessorMiddleware, withMastra } from './middleware';
@@ -27,7 +35,7 @@ function createMockModel(response: string = 'Test response') {
       warnings: [],
     }),
     doStream: async () => ({
-      stream: convertArrayToReadableStream([
+      stream: convertArrayToReadableStreamV5([
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
         { type: 'text-start', id: '1' },
@@ -41,6 +49,39 @@ function createMockModel(response: string = 'Test response') {
         },
       ]),
       rawCall: { rawPrompt: [], rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
+function createMockModelV3(response: string = 'Test response') {
+  return new MockLanguageModelV3({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: response }],
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 5, text: 5, reasoning: undefined },
+      },
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStreamV6([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: 'Test ' },
+        { type: 'text-delta', id: '1', delta: 'response' },
+        { type: 'text-end', id: '1' },
+        {
+          type: 'finish',
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 5, text: 5, reasoning: undefined },
+          },
+        },
+      ]),
       warnings: [],
     }),
   });
@@ -79,6 +120,17 @@ describe('withMastra middleware', () => {
       });
 
       expect(processedInputs).toContain('Hello world');
+      expect(result.text).toBe('Test response');
+    });
+
+    it('should accept LanguageModelV3 models', async () => {
+      const model = withMastra(createMockModelV3(), {});
+
+      const result = await generateTextV6({
+        model,
+        prompt: 'Hello from V3',
+      });
+
       expect(result.text).toBe('Test response');
     });
 
@@ -408,7 +460,7 @@ describe('withMastra middleware', () => {
 
       const errorModel = new MockLanguageModelV2({
         doStream: async () => ({
-          stream: convertArrayToReadableStream([
+          stream: convertArrayToReadableStreamV5([
             { type: 'stream-start', warnings: [] },
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Partial' },
@@ -459,7 +511,7 @@ describe('withMastra middleware', () => {
 
       const toolModel = new MockLanguageModelV2({
         doStream: async () => ({
-          stream: convertArrayToReadableStream([
+          stream: convertArrayToReadableStreamV5([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
             { type: 'text-start', id: '1' },

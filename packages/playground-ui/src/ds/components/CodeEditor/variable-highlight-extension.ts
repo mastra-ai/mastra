@@ -1,4 +1,5 @@
-import { Decoration, DecorationSet, EditorView, MatchDecorator, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import type { DecorationSet, EditorView, ViewUpdate } from '@codemirror/view';
+import { Decoration, MatchDecorator, ViewPlugin } from '@codemirror/view';
 
 /**
  * Regex pattern to match variable placeholders like {{variableName}} or {{user.name}}

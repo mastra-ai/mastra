@@ -77,6 +77,12 @@ export interface WriteOptions {
   overwrite?: boolean;
   /** MIME type hint */
   mimeType?: string;
+  /**
+   * If provided, the write will fail with a StaleFileError if the file's
+   * current mtime doesn't match. Used for optimistic concurrency control
+   * to detect external modifications between read and write.
+   */
+  expectedMtime?: Date;
 }
 
 export interface ListOptions {
@@ -204,6 +210,12 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    * @returns Mount configuration for the filesystem
    */
   getMountConfig?(): FilesystemMountConfig;
+
+  /**
+   * Resolve a path to its canonical form.
+   * Filesystems without symlink or alias semantics can return the input path unchanged.
+   */
+  realpath?(path: string): Promise<string>;
 
   // ---------------------------------------------------------------------------
   // File Operations

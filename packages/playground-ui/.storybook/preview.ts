@@ -4,6 +4,20 @@ import './tailwind.css';
 import { Colors } from '@/ds/tokens/colors';
 
 const preview: Preview = {
+  tags: ['autodocs'],
+  decorators: [
+    (Story, context) => {
+      const bg = context.globals?.backgrounds?.value;
+      if (bg === 'light') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+      } else {
+        document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+      }
+      return Story();
+    },
+  ],
   parameters: {
     docs: {
       theme: themes.dark,

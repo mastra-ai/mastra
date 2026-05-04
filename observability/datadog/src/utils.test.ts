@@ -145,6 +145,39 @@ describe('formatInput', () => {
       const result = formatInput({ query: 'search term', filters: { date: '2024' } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'user', content: '{"query":"search term","filters":{"date":"2024"}}' }]);
     });
+
+    it('normalizes Gemini content array to message format', () => {
+      const contents = [
+        { role: 'user', parts: [{ text: 'Hello' }] },
+        { role: 'model', parts: [{ text: 'Hi ' }, { text: 'there!' }] },
+      ];
+      const result = formatInput(contents, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([
+        { role: 'user', content: 'Hello' },
+        { role: 'model', content: 'Hi there!' },
+      ]);
+    });
+
+    it('redacts binary data and summarizes tool calls in Gemini parts', () => {
+      const contents = [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Describe this image: ' },
+            { inlineData: { mimeType: 'image/png', data: 'iVBORw0KGgo...base64...' } },
+          ],
+        },
+        {
+          role: 'model',
+          parts: [{ functionCall: { name: 'analyze_image', args: { format: 'png' } } }],
+        },
+      ];
+      const result = formatInput(contents, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([
+        { role: 'user', content: 'Describe this image: [image/png]' },
+        { role: 'model', content: '[tool: analyze_image]' },
+      ]);
+    });
   });
 
   describe('non-LLM spans (TOOL_CALL)', () => {

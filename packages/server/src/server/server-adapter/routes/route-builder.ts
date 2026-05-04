@@ -1,8 +1,8 @@
 import type { ValidationErrorHook } from '@mastra/core/server';
-import { z } from 'zod';
-import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
+import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
+import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
 import { generateRouteOpenAPI } from '../openapi-utils';
-import type { InferParams, ResponseType, ServerRoute, ServerRouteHandler } from './index';
+import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
 /**
  * Extracts parameters matching a Zod schema's shape from a params object.
@@ -79,35 +79,21 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
 }
 
 /**
- * Gets the type name from a Zod schema's internal definition.
- * Works across zod v3 and v4 by checking _def.typeName.
- */
-function getZodTypeName(schema: ZodTypeAny): string | undefined {
-  return (schema as any)?._def?.typeName;
-}
-
-/**
  * Checks if a Zod schema represents a complex type that needs JSON parsing from query strings.
  * Complex types: arrays, objects, records (these can't be represented as simple strings)
  * Simple types: strings, numbers, booleans, enums (can use z.coerce for conversion)
- *
- * Uses _def.typeName string comparison instead of instanceof to support both zod v3 and v4,
- * since instanceof checks fail across different zod versions in bundled code.
  */
 function isComplexType(schema: ZodTypeAny): boolean {
   // Unwrap all optional/nullable layers to check the inner type
   // Note: .partial() can create nested optionals (e.g., ZodOptional<ZodOptional<ZodObject>>)
   let inner: ZodTypeAny = schema;
-  let typeName = getZodTypeName(inner);
 
-  while (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
-    // Access innerType directly from _def to avoid version-specific method differences
-    inner = (inner as any)._def.innerType;
-    typeName = getZodTypeName(inner);
+  while (inner instanceof ZodOptional || inner instanceof ZodNullable) {
+    inner = inner.unwrap() as ZodTypeAny;
   }
 
   // Complex types that need JSON parsing
-  return typeName === 'ZodArray' || typeName === 'ZodRecord' || typeName === 'ZodObject';
+  return inner instanceof ZodArray || inner instanceof ZodRecord || inner instanceof ZodObject;
 }
 
 /**
@@ -135,15 +121,17 @@ function isComplexType(schema: ZodTypeAny): boolean {
  * ```
  */
 export function wrapSchemaForQueryParams<T extends ZodRawShape>(schema: ZodObject<T>): ZodObject<ZodRawShape> {
-  const newShape: ZodRawShape = {};
+  const newShape: Record<string, ZodTypeAny> = {};
 
-  for (const [key, fieldSchema] of Object.entries(schema.shape)) {
-    if (isComplexType(fieldSchema as ZodTypeAny)) {
+  // schema.shape is Readonly in Zod v4, so we need to create a mutable copy
+  const shape = schema.shape as unknown as Record<string, ZodTypeAny>;
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    if (isComplexType(fieldSchema)) {
       // Wrap complex types to accept JSON strings
-      newShape[key] = jsonQueryParam(fieldSchema as ZodTypeAny);
+      newShape[key] = jsonQueryParam(fieldSchema);
     } else {
       // Keep simple types as-is
-      newShape[key] = fieldSchema as ZodTypeAny;
+      newShape[key] = fieldSchema;
     }
   }
 
@@ -156,9 +144,11 @@ interface RouteConfig<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 > {
-  method: ServerRoute['method'];
-  path: string;
+  method: TMethod;
+  path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream'
   handler: ServerRouteHandler<
@@ -250,12 +240,17 @@ export function createRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>,
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
   const { summary, description, tags, deprecated, requiresAuth, requiresPermission, onValidationError, ...baseRoute } =
     config;
@@ -280,7 +275,7 @@ export function createRoute<
 
   return {
     ...baseRoute,
-    openapi: openapi as any,
+    openapi,
     deprecated,
     requiresAuth,
     requiresPermission,
@@ -330,12 +325,20 @@ export function createPublicRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: Omit<RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>, 'requiresAuth'>,
+  config: Omit<
+    RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
+    'requiresAuth'
+  >,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
   return createRoute({
     ...config,

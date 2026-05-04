@@ -40,6 +40,11 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_dataset_versions: new Map(),
       mastra_experiments: new Map(),
       mastra_experiment_results: new Map(),
+      mastra_background_tasks: new Map(),
+      mastra_schedules: new Map(),
+      mastra_schedule_triggers: new Map(),
+      mastra_channel_installations: new Map(),
+      mastra_channel_config: new Map(),
     };
   }
 
@@ -76,8 +81,6 @@ export class StoreOperationsInMemory extends StoreOperations {
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    this.logger.debug(`MockStore: load called for ${tableName} with keys`, keys);
-
     const table = this.data[tableName];
 
     const records = Array.from(table.values());
@@ -87,40 +90,32 @@ export class StoreOperationsInMemory extends StoreOperations {
 
   async createTable({
     tableName,
-    schema,
+    schema: _schema,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
-    this.logger.debug(`MockStore: createTable called for ${tableName} with schema`, schema);
-
     this.data[tableName] = new Map();
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    this.logger.debug(`MockStore: clearTable called for ${tableName}`);
-
     this.data[tableName].clear();
   }
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    this.logger.debug(`MockStore: dropTable called for ${tableName}`);
     this.data[tableName].clear();
   }
 
   async alterTable({
-    tableName,
-    schema,
+    tableName: _tableName,
+    schema: _schema,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
-  }): Promise<void> {
-    this.logger.debug(`MockStore: alterTable called for ${tableName} with schema`, schema);
-  }
+  }): Promise<void> {}
 
-  async hasColumn(table: string, column: string): Promise<boolean> {
-    this.logger.debug(`MockStore: hasColumn called for ${table} with column ${column}`);
+  async hasColumn(_table: string, _column: string): Promise<boolean> {
     return true;
   }
 }

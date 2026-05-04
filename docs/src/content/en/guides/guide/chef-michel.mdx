@@ -1,5 +1,5 @@
 ---
-title: "Guide: Building an AI Chef Assistant"
+title: "Guide: How to build an AI chef assistant"
 description: Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
 ---
 
@@ -7,7 +7,7 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import YouTube from "@site/src/components/YouTube-player";
 
-# Building an AI Chef Assistant
+# How to build an AI chef assistant
 
 In this guide, you'll create a "Chef Assistant" agent that helps users cook meals with available ingredients.
 
@@ -21,7 +21,7 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
-## Creating the Agent
+## Create the agent
 
 To create an agent in Mastra use the `Agent` class to define it and then register it with Mastra.
 
@@ -38,7 +38,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
       instructions:
         'You are Michel, a practical and experienced home chef' +
         'You help people cook with whatever ingredients they have available.',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
     })
     ```
   </StepItem>
@@ -57,7 +57,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
   </StepItem>
 </Steps>
 
-## Interacting with the Agent
+## Interact with the agent
 
 Depending on your requirements you can interact and get responses from the agent in different formats. In the following steps you'll learn how to generate, stream, and get structured output.
 
@@ -139,7 +139,7 @@ Depending on your requirements you can interact and get responses from the agent
   </StepItem>
 
   <StepItem>
-    Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/agents/overview#structured-output).
+    Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/agents/structured-output).
 
     Change your `src/index.ts` to the following:
 
@@ -192,7 +192,7 @@ Depending on your requirements you can interact and get responses from the agent
   </StepItem>
 </Steps>
 
-## Running the Agent Server
+## Run the agent server
 
 Learn how to interact with your agent through Mastra's API.
 
@@ -204,7 +204,7 @@ Learn how to interact with your agent through Mastra's API.
     mastra dev
     ```
 
-    This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your agent through a UI.
+    This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/studio/overview) you can test your agent through a UI.
   </StepItem>
 
   <StepItem>
