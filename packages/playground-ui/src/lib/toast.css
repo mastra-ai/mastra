@@ -39,6 +39,13 @@ html.light {
   --info-text: var(--notice-info-fg);
   --info-border: var(--toast-info-border);
   --border-radius: var(--radius-xl);
+
+  /* Move the close button to the top-right corner. Sonner's defaults pin it to the LEFT in LTR;
+     we flip start/end and mirror the overhang transform so the chip sits in the same position
+     RTL would normally use. Keeps the icon and the close affordance from competing visually. */
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 0;
+  --toast-close-button-transform: translate(35%, -35%);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast] {
   box-shadow: var(--toast-shadow);
