@@ -93,6 +93,18 @@ describe('Mastra ID Generator', () => {
       expect(memory.storage).toBe(mastra.getStorage());
       expect(mastra.getMemory('coworker')).toBe(memory);
     });
+
+    it('does not replace memory-owned storage when memory is added dynamically', () => {
+      const mastra = new Mastra({ logger: false, storage: new InMemoryStore() });
+      const memory = new MockMemory({ storage: new InMemoryStore() });
+      const originalStorage = memory.storage;
+
+      mastra.addMemory(memory, 'coworker');
+
+      expect(memory.storage).toBe(originalStorage);
+      expect(memory.storage).not.toBe(mastra.getStorage());
+      expect(mastra.getMemory('coworker')).toBe(memory);
+    });
   });
 
   describe('Core ID Generator Functionality', () => {
