@@ -1,0 +1,81 @@
+# Synap Memory Integration for Mastra
+
+[Synap](https://maximem.ai) is a managed memory layer for AI agents. The Mastra
+integration provides `SynapMemory` — a Mastra-compatible memory backend — plus
+`synapSearchTool` and `synapStoreTool` for agents that need explicit memory access.
+
+**What makes Synap different from a standard storage adapter:**
+
+- **Five typed memory categories** — facts, preferences, episodes, emotions, temporal
+  events — automatically extracted from conversations; no schema to define
+- **Entity resolution** — "John", "Mr. Smith", "my manager" unified into one canonical
+  knowledge-graph node across all conversations
+- **Four-level memory scoping** — User → Customer → Client → World — strict multi-tenant
+  isolation for B2B applications where different customers must not share memory
+- **Fast mode** (~50–100 ms, vector similarity) and **Accurate mode** (~200–500 ms,
+  vector + graph traversal) — selectable per query
+- **Context compaction** — long conversations compress into structured summaries,
+  cutting token costs without losing critical context
+- **Async extraction** — never adds latency to the user's turn
+
+## Installation
+
+```bash
+npm install @maximem/synap-mastra
+```
+
+Get an API key at [synap.maximem.ai](https://synap.maximem.ai).
+
+## SynapMemory
+
+`SynapMemory` is a Mastra-compatible memory class. Attach it to any Mastra agent:
+
+```typescript
+import { Agent } from '@mastra/core';
+import { SynapMemory } from '@maximem/synap-mastra';
+
+const memory = new SynapMemory({
+  apiKey: process.env.SYNAP_API_KEY!,
+  userId: 'user_123',
+  customerId: 'acme_corp',
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'claude-sonnet-4-6',
+  memory,
+});
+```
+
+## Agent Tools
+
+For agents that should decide when to access memory explicitly:
+
+```typescript
+import { Agent } from '@mastra/core';
+import { synapSearchTool, synapStoreTool } from '@maximem/synap-mastra';
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'claude-sonnet-4-6',
+  tools: {
+    searchMemory: synapSearchTool({
+      apiKey: process.env.SYNAP_API_KEY!,
+      userId: 'user_123',
+      customerId: 'acme_corp',
+    }),
+    storeMemory: synapStoreTool({
+      apiKey: process.env.SYNAP_API_KEY!,
+      userId: 'user_123',
+      customerId: 'acme_corp',
+    }),
+  },
+});
+```
+
+## More Resources
+
+- [Synap Documentation](https://docs.maximem.ai)
+- [Mastra Integration Guide](https://docs.maximem.ai/integrations/mastra)
+- [Dashboard](https://synap.maximem.ai)
+- [npm: @maximem/synap-mastra](https://www.npmjs.com/package/@maximem/synap-mastra)
