@@ -12,8 +12,8 @@ import { coreAuthMiddleware } from '../auth/helpers';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
-  MASTRA_STUDIO_CLIENT_TYPE,
   isReservedRequestContextKey,
+  isStudioClientTypeHeader,
 } from '../constants';
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
@@ -28,6 +28,7 @@ export {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
   isReservedRequestContextKey,
+  isStudioClientTypeHeader,
 } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
@@ -367,7 +368,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     requestContext: RequestContext;
     getHeader: (name: string) => string | undefined;
   }): void {
-    if (getHeader(MASTRA_CLIENT_TYPE_HEADER)?.toLowerCase() === MASTRA_STUDIO_CLIENT_TYPE) {
+    if (isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER))) {
       requestContext.set(MASTRA_IS_STUDIO_KEY, true);
     }
   }

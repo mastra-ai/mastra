@@ -29,6 +29,10 @@ export function isReservedRequestContextKey(key: string): boolean {
   return RESERVED_CONTEXT_KEYS.has(key);
 }
 
+export function isStudioClientTypeHeader(value: string | undefined): boolean {
+  return value?.toLowerCase() === MASTRA_STUDIO_CLIENT_TYPE;
+}
+
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 
 export const WORKSPACE_TOOLS = {

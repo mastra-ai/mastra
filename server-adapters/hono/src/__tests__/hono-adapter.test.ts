@@ -965,5 +965,38 @@ describe('Hono Server Adapter', () => {
       const data = await response.json();
       expect(data.isStudio).toBe(true);
     });
+
+    it('should not set reserved Studio context when x-mastra-client-type is not studio', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      for (const headers of [{ 'x-mastra-client-type': 'playground' }, {}]) {
+        const response = await app.request(
+          new Request('http://localhost/test/context', {
+            method: 'GET',
+            headers,
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        const data = await response.json();
+        expect(data.isStudio).toBeNull();
+      }
+    });
   });
 });

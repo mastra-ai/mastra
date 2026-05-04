@@ -2,8 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
-  MASTRA_STUDIO_CLIENT_TYPE,
   isReservedRequestContextKey,
+  isStudioClientTypeHeader,
 } from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
@@ -125,7 +125,7 @@ export class RequestContextService {
   }
 
   private applyRequestMetadata(context: RequestContext): void {
-    if (this.request.get(MASTRA_CLIENT_TYPE_HEADER)?.toLowerCase() === MASTRA_STUDIO_CLIENT_TYPE) {
+    if (isStudioClientTypeHeader(this.request.get(MASTRA_CLIENT_TYPE_HEADER))) {
       context.set(MASTRA_IS_STUDIO_KEY, true);
     }
   }
