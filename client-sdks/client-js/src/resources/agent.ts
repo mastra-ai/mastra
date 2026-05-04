@@ -65,6 +65,8 @@ type ToolCallRespondFn<OUTPUT> = (
   },
 ) => Promise<FullOutput<OUTPUT>>;
 
+type ClientToolCallResult = { toolCall: ToolInvocation; result: any };
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -148,6 +150,121 @@ async function executeToolCallAndRespond<OUTPUT>({
 
   // If no client tool was executed, return the original response
   return response;
+}
+
+async function executeClientToolCalls({
+  message,
+  toolCalls,
+  clientTools,
+  requestContext,
+  agentId,
+  responseMessages,
+  threadId,
+  resourceId,
+}: {
+  message: UIMessage | undefined;
+  toolCalls: ToolInvocation[];
+  clientTools: Record<string, Tool> | undefined;
+  requestContext: RequestContext | undefined;
+  agentId: string;
+  responseMessages: CoreMessage[];
+  threadId: string | undefined;
+  resourceId: string | undefined;
+}): Promise<ClientToolCallResult[] | null> {
+  const pendingToolCalls = [
+    ...(message?.parts ?? [])
+      .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
+      .map(part => part.toolInvocation),
+    ...(message?.toolInvocations ?? []),
+  ].filter((inv): inv is ToolInvocation => inv != null && inv.state === 'call');
+
+  const uniquePendingToolCalls = Array.from(
+    new Map(pendingToolCalls.map(toolCall => [toolCall.toolCallId, toolCall])).values(),
+  );
+
+  toolCalls.length = 0;
+  toolCalls.push(...uniquePendingToolCalls);
+
+  const executableCalls = toolCalls.filter(tc => {
+    const ct = clientTools?.[tc.toolName] as Tool | undefined;
+    return ct?.execute != null;
+  });
+
+  if (executableCalls.length === 0) {
+    return null;
+  }
+
+  return Promise.all(
+    executableCalls.map(async toolCall => {
+      const clientTool = clientTools![toolCall.toolName] as Tool;
+      const result = await clientTool.execute!(toolCall.args, {
+        requestContext: requestContext as RequestContext,
+        tracingContext: { currentSpan: undefined },
+        agent: {
+          agentId,
+          messages: responseMessages,
+          toolCallId: toolCall.toolCallId,
+          suspend: async () => {},
+          threadId,
+          resourceId,
+        },
+      });
+
+      return { toolCall, result };
+    }),
+  );
+}
+
+function cloneMessageWithToolResults(messages: UIMessage[], results: ClientToolCallResult[]): UIMessage | undefined {
+  const lastMessageRaw = messages[messages.length - 1];
+  const lastMessage: UIMessage | undefined =
+    lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
+
+  if (lastMessage == null) {
+    return undefined;
+  }
+
+  applyToolResultsToMessage(lastMessage, results);
+
+  return lastMessage;
+}
+
+function applyToolResultsToMessage(lastMessage: UIMessage, results: ClientToolCallResult[]): void {
+  for (const { toolCall, result } of results) {
+    const toolInvocationPart = lastMessage.parts?.find(
+      part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+    ) as ToolInvocationUIPart | undefined;
+
+    if (toolInvocationPart) {
+      toolInvocationPart.toolInvocation = {
+        ...toolInvocationPart.toolInvocation,
+        state: 'result',
+        result,
+      };
+    }
+
+    const inv = lastMessage.toolInvocations?.find(ti => ti.toolCallId === toolCall.toolCallId) as
+      | ToolInvocation
+      | undefined;
+
+    if (inv) {
+      inv.state = 'result';
+      // @ts-expect-error - result property exists when state is 'result'
+      inv.result = result;
+    }
+  }
+}
+
+function buildUpdatedMessages(
+  messages: UIMessage[],
+  lastMessage: UIMessage | undefined,
+  originalMessages: any,
+  threadId: string | undefined,
+): UIMessage[] {
+  const newMessages =
+    lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+  return threadId ? newMessages : [...(Array.isArray(originalMessages) ? originalMessages : []), ...newMessages];
 }
 
 export class AgentVoice extends BaseResource {
@@ -1398,86 +1515,24 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const pendingToolCalls = (message?.parts ?? [])
-              .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
-              .map(part => part.toolInvocation)
-              .filter((inv): inv is ToolInvocation => inv != null && inv.state === 'call');
-
-            toolCalls.length = 0;
-            toolCalls.push(...pendingToolCalls);
-
-            // Batch execution: collect all executable client tool calls, execute
-            // them all, then clone the assistant message once with every result
-            // marked, and recurse exactly once. This ensures parallel tool calls
-            // from a single assistant step produce one continuation containing
-            // all tool results.
-            const executableCalls = toolCalls.filter(tc => {
-              const ct = processedParams.clientTools?.[tc.toolName] as Tool | undefined;
-              return ct?.execute != null;
+            const results = await executeClientToolCalls({
+              message,
+              toolCalls,
+              clientTools: processedParams.clientTools,
+              requestContext: processedParams.requestContext,
+              agentId: this.agentId,
+              responseMessages: (response as unknown as { messages: CoreMessage[] }).messages,
+              threadId,
+              resourceId,
             });
 
-            if (executableCalls.length > 0) {
-              // Execute all pending client tools concurrently
-              const results = await Promise.all(
-                executableCalls.map(async toolCall => {
-                  const clientTool = processedParams.clientTools![toolCall.toolName] as Tool;
-                  const result = await clientTool.execute!(toolCall.args, {
-                    requestContext: processedParams.requestContext as RequestContext,
-                    tracingContext: { currentSpan: undefined },
-                    agent: {
-                      agentId: this.agentId,
-                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                      toolCallId: toolCall.toolCallId,
-                      suspend: async () => {},
-                      threadId,
-                      resourceId,
-                    },
-                  });
-                  return { toolCall, result };
-                }),
-              );
-
-              // Clone the assistant message once so every result is accumulated
-              const lastMessageRaw = messages[messages.length - 1];
-              const lastMessage: UIMessage | undefined =
-                lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
-
-              // Mark every executed invocation as "result" in the cloned message
-              for (const { toolCall, result } of results) {
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                  };
-                }
-
-                const inv = lastMessage?.toolInvocations?.find(
-                  ti => ti.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (inv) {
-                  inv.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  inv.result = result;
-                }
-              }
-
-              // Build a single updated message list containing all tool results
-              const newMessages =
-                lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
-
-              const updatedMessages = threadId
-                ? newMessages
-                : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+            if (results != null) {
+              const lastMessage = cloneMessageWithToolResults(messages, results);
+              const updatedMessages = buildUpdatedMessages(messages, lastMessage, processedParams.messages, threadId);
 
               // Recurse exactly once with every tool result included.
-              // Forward `route` so stream-until-idle (and future non-default routes)
-              // stay on the same endpoint across client-tool continuations.
+              // Resume requests omit local messages for the initial endpoint, but
+              // client-tool continuations need to use the normal stream endpoint.
               try {
                 await this.processStreamResponse(
                   {
@@ -1485,7 +1540,7 @@ export class Agent extends BaseResource {
                     messages: updatedMessages,
                   },
                   controller,
-                  route,
+                  route === 'resume-stream' ? 'stream' : route,
                 );
               } catch (error) {
                 console.error('Error processing recursive stream response:', error);
@@ -2234,72 +2289,19 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const pendingToolCalls = (message?.parts ?? [])
-              .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
-              .map(part => part.toolInvocation)
-              .filter((inv): inv is ToolInvocation => inv != null && inv.state === 'call');
-
-            toolCalls.length = 0;
-            toolCalls.push(...pendingToolCalls);
-
-            // Batch execution: collect all executable client tool calls, execute
-            // them all, clone the message once with every result, write all
-            // result chunks, and recurse exactly once. This prevents multiple
-            // concurrent recursive streams writing to the same writable and
-            // ensures all tool results are in the continuation message.
-            const executableCalls = toolCalls.filter(tc => {
-              const ct = processedParams.clientTools?.[tc.toolName] as Tool | undefined;
-              return ct?.execute != null;
+            const results = await executeClientToolCalls({
+              message,
+              toolCalls,
+              clientTools: processedParams.clientTools,
+              requestContext: processedParams.requestContext,
+              agentId: this.agentId,
+              responseMessages: (response as unknown as { messages: CoreMessage[] }).messages,
+              threadId,
+              resourceId,
             });
 
-            if (executableCalls.length > 0) {
-              // Execute all pending client tools concurrently
-              const results = await Promise.all(
-                executableCalls.map(async toolCall => {
-                  const clientTool = processedParams.clientTools![toolCall.toolName] as Tool;
-                  const result = await clientTool.execute!(toolCall.args, {
-                    requestContext: processedParams.requestContext as RequestContext,
-                    tracingContext: { currentSpan: undefined },
-                    agent: {
-                      agentId: this.agentId,
-                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                      toolCallId: toolCall.toolCallId,
-                      suspend: async () => {},
-                      threadId,
-                      resourceId,
-                    },
-                  });
-                  return { toolCall, result };
-                }),
-              );
-
-              // Clone the assistant message once
-              const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
-
-              // Mark every executed invocation as "result"
-              for (const { toolCall, result } of results) {
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                  };
-                }
-
-                const inv = lastMessage?.toolInvocations?.find(
-                  ti => ti.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (inv) {
-                  inv.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  inv.result = result;
-                }
-              }
+            if (results != null) {
+              const lastMessage = cloneMessageWithToolResults(messages, results);
 
               // Write all tool result chunks to the stream
               const writer = writable.getWriter();
@@ -2320,11 +2322,7 @@ export class Agent extends BaseResource {
                 writer.releaseLock();
               }
 
-              // Build a single updated message list containing all results
-              const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
-              const updatedMessages = threadId
-                ? newMessages
-                : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+              const updatedMessages = buildUpdatedMessages(messages, lastMessage, processedParams.messages, threadId);
 
               // Recurse exactly once with the complete updated message
               this.processStreamResponseLegacy(
