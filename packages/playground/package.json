@@ -53,6 +53,7 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@lukeed/uuid": "^2.0.1",
+    "@mcp-ui/client": "^7.1.0",
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -91,6 +92,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/vite": "4.2.2",

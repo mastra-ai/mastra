@@ -1,10 +1,11 @@
-import { McpAppViewer, Skeleton, Txt, toast } from '@mastra/playground-ui';
+import { Skeleton, Txt, toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
+import { McpAppViewer } from './mcp-app-viewer';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';

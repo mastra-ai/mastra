@@ -1,8 +1,8 @@
-import { McpAppViewer } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import type { McpAppToolInfo } from '../hooks/use-mcp-app-tools';
+import { McpAppViewer } from './mcp-app-viewer';
 
 interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
