@@ -537,3 +537,69 @@ describe('AgentConfigurePanel config row chevron removal', () => {
     expect(button.querySelector('svg.lucide-chevron-right')).toBeNull();
   });
 });
+
+describe('AgentConfigurePanel divider placement', () => {
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const getRightPane = () => {
+    const nameField = screen.getByTestId('agent-configure-name');
+    const rightPane = nameField.closest('[class*="lg:w-[320px]"]');
+    if (!rightPane) throw new Error('right pane not found');
+    return rightPane as HTMLElement;
+  };
+
+  const getDetailPane = (container: HTMLElement) => {
+    const pane = container.querySelector('.agent-builder-detail-pane');
+    if (!pane) throw new Error('detail pane not found');
+    return pane as HTMLElement;
+  };
+
+  it('reserves a transparent left border on the right pane when no detail is active so width is stable', () => {
+    const { container } = render(
+      <FormWrapper>
+        <AgentConfigurePanel activeDetail={null} />
+      </FormWrapper>,
+    );
+
+    const rightPane = getRightPane();
+    // Left border width is always reserved to prevent layout shift.
+    expect(rightPane.className).toMatch(/lg:border-l\b/);
+    // Transparent color when collapsed — no visible divider.
+    expect(rightPane.className).toMatch(/border-l-transparent/);
+    expect(rightPane.className).not.toMatch(/border-l-border1/);
+
+    const detailPane = getDetailPane(container);
+    expect(detailPane.className).not.toMatch(/lg:border-r-/);
+  });
+
+  it('colors the right pane left border when a detail is active', () => {
+    const { container } = render(
+      <FormWrapper>
+        <AgentConfigurePanel activeDetail="instructions" />
+      </FormWrapper>,
+    );
+
+    const rightPane = getRightPane();
+    expect(rightPane.className).toMatch(/lg:border-l\b/);
+    // The left border becomes visible — divider appears at the static cell boundary.
+    expect(rightPane.className).toMatch(/border-l-border1/);
+    // Mutually exclusive with the collapsed-state class — no cascade conflict.
+    expect(rightPane.className).not.toMatch(/border-l-transparent/);
+
+    const detailPane = getDetailPane(container);
+    // Regression guard: divider must not move back onto the animated cell.
+    expect(detailPane.className).not.toMatch(/lg:border-r-/);
+  });
+});

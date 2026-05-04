@@ -12,7 +12,7 @@ const formatPlatformLabel = (platform: string | null): string => {
 };
 
 export const useChannelConnectToast = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const handledKeyRef = useRef<string | null>(null);
 
   const channelConnected = searchParams.get('channel_connected');
@@ -36,13 +36,5 @@ export const useChannelConnectToast = () => {
     } else if (channelError) {
       toast.error(`Failed to connect ${platformLabel}: ${channelError}`);
     }
-
-    const next = new URLSearchParams(searchParams);
-    next.delete('channel_connected');
-    next.delete('channel_error');
-    next.delete('platform');
-    next.delete('agent');
-    next.delete('team');
-    setSearchParams(next, { replace: true });
-  }, [channelConnected, channelError, platform, team, searchParams, setSearchParams]);
+  }, [channelConnected, channelError, platform, team]);
 };

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { cleanup, render } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useChannelConnectToast } from '../use-channel-connect-toast';
 
@@ -19,11 +19,8 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-let capturedLocation: ReturnType<typeof useLocation> | null = null;
-
 function Harness() {
   useChannelConnectToast();
-  capturedLocation = useLocation();
   return null;
 }
 
@@ -41,10 +38,9 @@ describe('useChannelConnectToast', () => {
     cleanup();
     successMock.mockReset();
     errorMock.mockReset();
-    capturedLocation = null;
   });
 
-  it('shows a success toast and strips params when channel_connected=true', () => {
+  it('shows a success toast when channel_connected=true', () => {
     renderAt('/?channel_connected=true&platform=slack&agent=agent-1&team=Acme');
 
     expect(successMock).toHaveBeenCalledTimes(1);
@@ -52,14 +48,9 @@ describe('useChannelConnectToast', () => {
     expect(message).toContain('Slack');
     expect(message).toContain('Acme');
     expect(errorMock).not.toHaveBeenCalled();
-
-    expect(capturedLocation?.search ?? '').not.toContain('channel_connected');
-    expect(capturedLocation?.search ?? '').not.toContain('platform=');
-    expect(capturedLocation?.search ?? '').not.toContain('agent=');
-    expect(capturedLocation?.search ?? '').not.toContain('team=');
   });
 
-  it('shows an error toast and strips params when channel_error is present', () => {
+  it('shows an error toast when channel_error is present', () => {
     renderAt('/?channel_error=denied&platform=slack&agent=agent-1');
 
     expect(errorMock).toHaveBeenCalledTimes(1);
@@ -67,9 +58,6 @@ describe('useChannelConnectToast', () => {
     expect(message).toContain('Slack');
     expect(message).toContain('denied');
     expect(successMock).not.toHaveBeenCalled();
-
-    expect(capturedLocation?.search ?? '').not.toContain('channel_error');
-    expect(capturedLocation?.search ?? '').not.toContain('platform=');
   });
 
   it('does not toast when no channel params are present', () => {

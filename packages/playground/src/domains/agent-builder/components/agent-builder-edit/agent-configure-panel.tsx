@@ -162,7 +162,7 @@ function ConfigurePanelContent({
           'lg:inset-y-0 lg:left-0 lg:right-[320px] lg:z-0 lg:bg-transparent',
           'lg:transition-[width,opacity] lg:duration-300',
           activeDetail
-            ? 'translate-y-0 lg:translate-y-0 lg:w-[calc(100%-320px)] lg:opacity-100 lg:border-r lg:border-border1'
+            ? 'translate-y-0 lg:translate-y-0 lg:w-[calc(100%-320px)] lg:opacity-100'
             : 'translate-y-full pointer-events-none lg:translate-y-0 lg:w-0 lg:opacity-0',
         )}
         aria-hidden={!activeDetail}
@@ -179,7 +179,13 @@ function ConfigurePanelContent({
         />
       </div>
 
-      <div className="ml-auto flex h-full min-w-0 flex-col w-full lg:w-[320px]">
+      <div
+        className={cn(
+          'ml-auto flex h-full min-w-0 flex-col w-full lg:w-[320px]',
+          'lg:border-l',
+          activeDetail ? 'border-l-border1' : 'border-l-transparent',
+        )}
+      >
         <div className="flex-1 flex flex-col py-6 overflow-y-auto">
           <div className="flex flex-col gap-2 px-6 pb-6 border-b border-border1">
             <div className="flex items-center justify-center">

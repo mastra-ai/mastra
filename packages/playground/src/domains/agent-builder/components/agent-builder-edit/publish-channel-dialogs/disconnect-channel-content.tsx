@@ -10,15 +10,17 @@ export interface DisconnectChannelContentProps {
 }
 
 export function DisconnectChannelContent({ platform, agentId, onCancel, onClose }: DisconnectChannelContentProps) {
-  const { mutate: disconnect, isPending } = useDisconnectChannel(platform.id);
+  const { mutateAsync: disconnect, isPending } = useDisconnectChannel(platform.id);
 
-  const handleConfirm = () => {
-    disconnect(agentId, {
-      onSuccess: () => onClose(),
-      onError: (err: Error & { body?: { error?: string } }) => {
-        toast.error(err.body?.error || err.message || 'Failed to disconnect channel');
-      },
-    });
+  const handleConfirm = async () => {
+    try {
+      await disconnect(agentId);
+      toast.success(`${platform.name} disconnected`);
+      onClose();
+    } catch (err) {
+      const e = err as Error & { body?: { error?: string } };
+      toast.error(e.body?.error || e.message || 'Failed to disconnect channel');
+    }
   };
 
   return (

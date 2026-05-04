@@ -165,8 +165,40 @@ describe('AgentBuilderMobileMenu', () => {
     expect(screen.queryByTestId('agent-builder-visibility-dialog')).toBeNull();
   });
 
-  it('opens the platform-specific publish dialog when a channel item is selected', async () => {
-    server.use(...slackOnlyHandlers());
+  it('triggers the Slack connect endpoint directly (skipping the dialog) when not yet connected', async () => {
+    let connectCalled = false;
+    server.use(
+      http.get('*/api/channels/platforms', () =>
+        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      ),
+      http.get('*/api/channels/:platform/installations', () => HttpResponse.json([])),
+      http.post('*/api/channels/slack/connect', () => {
+        connectCalled = true;
+        return HttpResponse.json({ type: 'oauth', authorizationUrl: 'https://slack.example/oauth' });
+      }),
+    );
+    render(
+      <FormHarness>
+        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility={false} showPublishToChannel />
+      </FormHarness>,
+    );
+
+    await openDropdown();
+    const slackItem = await screen.findByTestId('agent-builder-mobile-menu-publish-channel-slack');
+    fireEvent.click(slackItem);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(connectCalled).toBe(true);
+    expect(screen.queryByTestId('publish-channel-dialog-slack')).toBeNull();
+  });
+
+  it('opens the publish dialog when an unconfigured platform is selected', async () => {
+    server.use(
+      http.get('*/api/channels/platforms', () =>
+        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: false }]),
+      ),
+      http.get('*/api/channels/:platform/installations', () => HttpResponse.json([])),
+    );
     render(
       <FormHarness>
         <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility={false} showPublishToChannel />

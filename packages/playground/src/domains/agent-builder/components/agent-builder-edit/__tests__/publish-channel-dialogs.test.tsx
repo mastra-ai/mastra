@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +9,20 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ChannelDialog } from '../publish-channel-dialogs';
 import { server } from '@/test/msw-server';
+
+const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
+
+vi.mock('@mastra/playground-ui', async () => {
+  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
+  return {
+    ...actual,
+    toast: {
+      success: (...args: unknown[]) => toastSuccessMock(...args),
+      error: (...args: unknown[]) => toastErrorMock(...args),
+    },
+  };
+});
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -253,10 +268,11 @@ describe('ChannelDialog (disconnect view)', () => {
 
   afterEach(() => {
     cleanup();
-    vi.restoreAllMocks();
+    toastSuccessMock.mockClear();
+    toastErrorMock.mockClear();
   });
 
-  it('fires the disconnect API and closes on confirm', async () => {
+  it('fires the disconnect API, toasts success, and closes on confirm', async () => {
     let disconnectCalled = false;
     server.use(
       http.post('*/api/channels/discord/:agentId/disconnect', () => {
@@ -294,6 +310,7 @@ describe('ChannelDialog (disconnect view)', () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
+    expect(toastSuccessMock).toHaveBeenCalledWith('Discord disconnected');
   });
 
   it('shows a generic confirm title and a single platform-name mention in the body', () => {

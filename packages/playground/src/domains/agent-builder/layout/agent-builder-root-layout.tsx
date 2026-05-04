@@ -1,4 +1,4 @@
-import { EmptyState, Spinner, TooltipProvider } from '@mastra/playground-ui';
+import { EmptyState, Spinner, Toaster, TooltipProvider } from '@mastra/playground-ui';
 import { AlertTriangle, LockIcon, Settings } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
@@ -101,6 +101,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
     <TooltipProvider>
       <LinkComponentProvider Link={Link} navigate={navigate} paths={paths}>
         <Outlet />
+        <Toaster position="bottom-right" />
       </LinkComponentProvider>
     </TooltipProvider>
   );

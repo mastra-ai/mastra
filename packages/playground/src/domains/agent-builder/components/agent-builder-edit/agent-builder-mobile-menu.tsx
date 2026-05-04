@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DropdownMenu,
   StatusBadge,
+  toast,
 } from '@mastra/playground-ui';
 import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -21,11 +22,10 @@ import type { Visibility } from './visibility-select';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
 import {
   useChannelInstallations,
-  useChannelPlatforms
-  
-  
+  useChannelPlatforms,
+  useConnectChannel,
 } from '@/domains/agents/hooks/use-channels';
-import type {ChannelInstallationInfo, ChannelPlatformInfo} from '@/domains/agents/hooks/use-channels';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
 export interface AgentBuilderMobileMenuProps {
   /** Agent the publish actions apply to. */
@@ -166,16 +166,52 @@ interface MobileMenuChannelItemProps {
 
 function MobileMenuChannelItem({ platform, agentId, disabled, onSelect }: MobileMenuChannelItemProps) {
   const { data: installations = [] } = useChannelInstallations(platform.id, agentId);
-  const installation = installations.find(i => i.status === 'active') ?? installations[0];
+  const installation = installations.find(i => i.status === 'active');
+  const { mutate: connect, isPending: isConnecting } = useConnectChannel(platform.id);
+
+  // Slack-specific shortcut: when the platform is configured but not yet
+  // connected, the dialog adds nothing — the user's intent ("connect Slack")
+  // is unambiguous from the menu item itself, so kick off the OAuth flow
+  // directly instead of opening the dialog.
+  const shouldDirectConnect = platform.id === 'slack' && platform.isConfigured && !installation;
+
+  const handleSelect = (event: Event) => {
+    event.preventDefault();
+
+    if (!shouldDirectConnect) {
+      onSelect(installation);
+      return;
+    }
+
+    connect(
+      { agentId },
+      {
+        onSuccess: result => {
+          if (result.type === 'oauth') {
+            window.location.href = result.authorizationUrl;
+            return;
+          }
+          if (result.type === 'deep_link') {
+            const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
+            if (!popup) {
+              toast.error('Popup blocked — please allow popups and try again');
+            }
+          }
+          // 'immediate' → installation list will be invalidated by the hook;
+          // no further UI action needed.
+        },
+        onError: (err: Error & { body?: { error?: string } }) => {
+          toast.error(err.body?.error || err.message || 'Failed to connect channel');
+        },
+      },
+    );
+  };
 
   return (
     <DropdownMenu.Item
       data-testid={`agent-builder-mobile-menu-publish-channel-${platform.id}`}
-      disabled={disabled}
-      onSelect={event => {
-        event.preventDefault();
-        onSelect(installation);
-      }}
+      disabled={disabled || isConnecting}
+      onSelect={handleSelect}
     >
       <PlatformIcon platform={platform.id} className="h-4 w-4" />
       <span className="flex-1">{platform.name}</span>
