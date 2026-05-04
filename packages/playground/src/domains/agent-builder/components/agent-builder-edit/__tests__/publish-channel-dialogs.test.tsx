@@ -205,16 +205,19 @@ describe('DefaultChannelDialog', () => {
 
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-disconnect'));
 
-    // Confirmation dialog appears — disconnect should not have fired yet.
+    // The publish dialog closes and the confirm dialog opens — only one
+    // dialog is ever visible at a time.
     const confirmButton = await screen.findByTestId('publish-channel-dialog-discord-disconnect-confirm');
-    expect(disconnectCalled).toBe(false);
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
-
-    fireEvent.click(confirmButton);
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
-    expect(disconnectCalled).toBe(true);
+    // The disconnect API itself has not fired until the user confirms.
+    expect(disconnectCalled).toBe(false);
+
+    fireEvent.click(confirmButton);
+    await waitFor(() => {
+      expect(disconnectCalled).toBe(true);
+    });
   });
 
   it('cancels disconnect when the user dismisses the confirmation', async () => {
@@ -255,8 +258,10 @@ describe('DefaultChannelDialog', () => {
       expect(screen.queryByTestId('publish-channel-dialog-discord-disconnect-confirm')).toBeNull();
     });
 
+    // Cancel must not call disconnect. The publish dialog itself does close
+    // when the user clicks Disconnect (intentional — see openDisconnectConfirm),
+    // so onOpenChange(false) is expected; what matters is the API isn't hit.
     expect(disconnectCalled).toBe(false);
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
   it('shows a "Not configured" notice and no Connect button when the platform is not configured', () => {

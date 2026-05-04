@@ -51,11 +51,18 @@ export function DefaultChannelDialog({ platform, agentId, installation, open, on
     );
   };
 
+  const openDisconnectConfirm = () => {
+    // Close the publish dialog before opening the confirm dialog so only one
+    // dialog is ever visible at a time — matches the rest of the playground's
+    // destructive-confirm pattern (e.g. DeleteDatasetDialog).
+    onOpenChange(false);
+    setConfirmOpen(true);
+  };
+
   const handleDisconnect = () => {
     disconnect(agentId, {
       onSuccess: () => {
         setConfirmOpen(false);
-        onOpenChange(false);
       },
       onError: (err: Error & { body?: { error?: string } }) => {
         toast.error(err.body?.error || err.message || 'Failed to disconnect channel');
@@ -65,96 +72,96 @@ export function DefaultChannelDialog({ platform, agentId, installation, open, on
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid={`publish-channel-dialog-${platform.id}`}>
-        <DialogHeader>
-          <DialogTitle>Publish to {platform.name}</DialogTitle>
-          <DialogDescription>Connect this agent to {platform.name}.</DialogDescription>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent data-testid={`publish-channel-dialog-${platform.id}`}>
+          <DialogHeader>
+            <DialogTitle>Publish to {platform.name}</DialogTitle>
+            <DialogDescription>Connect this agent to {platform.name}.</DialogDescription>
+          </DialogHeader>
 
-        <DialogBody className="grid gap-3">
-          <div className="flex items-center gap-2">
-            <PlatformIcon platform={platform.id} className="h-5 w-5" />
-            <Txt variant="ui-md" className="font-medium">
-              {platform.name}
-            </Txt>
+          <DialogBody className="grid gap-3">
+            <div className="flex items-center gap-2">
+              <PlatformIcon platform={platform.id} className="h-5 w-5" />
+              <Txt variant="ui-md" className="font-medium">
+                {platform.name}
+              </Txt>
+              {!platform.isConfigured ? (
+                <StatusBadge variant="warning" size="sm">
+                  Not configured
+                </StatusBadge>
+              ) : installation ? (
+                <StatusBadge variant="success" size="sm">
+                  Connected
+                </StatusBadge>
+              ) : null}
+            </div>
+
             {!platform.isConfigured ? (
-              <StatusBadge variant="warning" size="sm">
-                Not configured
-              </StatusBadge>
+              <Txt variant="ui-sm" className="text-neutral3">
+                This platform is not configured on the server.
+              </Txt>
             ) : installation ? (
-              <StatusBadge variant="success" size="sm">
-                Connected
-              </StatusBadge>
-            ) : null}
-          </div>
+              <Txt variant="ui-sm" className="text-neutral3 truncate">
+                {installation.displayName || 'Workspace'}
+              </Txt>
+            ) : (
+              <Txt variant="ui-sm" className="text-neutral3">
+                Publish this agent to {platform.name}.
+              </Txt>
+            )}
+          </DialogBody>
 
-          {!platform.isConfigured ? (
-            <Txt variant="ui-sm" className="text-neutral3">
-              This platform is not configured on the server.
-            </Txt>
-          ) : installation ? (
-            <Txt variant="ui-sm" className="text-neutral3 truncate">
-              {installation.displayName || 'Workspace'}
-            </Txt>
-          ) : (
-            <Txt variant="ui-sm" className="text-neutral3">
-              Publish this agent to {platform.name}.
-            </Txt>
-          )}
-        </DialogBody>
+          <DialogFooter>
+            {platform.isConfigured && installation ? (
+              <Button
+                variant="default"
+                onClick={openDisconnectConfirm}
+                disabled={isDisconnecting}
+                data-testid={`publish-channel-dialog-${platform.id}-disconnect`}
+              >
+                {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+              </Button>
+            ) : platform.isConfigured ? (
+              <Button
+                variant="default"
+                onClick={handleConnect}
+                disabled={isConnecting}
+                data-testid={`publish-channel-dialog-${platform.id}-connect`}
+              >
+                {isConnecting ? 'Connecting…' : 'Connect'}
+              </Button>
+            ) : (
+              <Button variant="default" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <DialogFooter>
-          {platform.isConfigured && installation ? (
-            <Button
-              variant="default"
-              onClick={() => setConfirmOpen(true)}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Disconnect {platform.name}</AlertDialog.Title>
+            <AlertDialog.Description>
+              This will remove the connection between this agent and {platform.name}. You can reconnect later.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Action
+              onClick={event => {
+                event.preventDefault();
+                handleDisconnect();
+              }}
               disabled={isDisconnecting}
-              data-testid={`publish-channel-dialog-${platform.id}-disconnect`}
+              data-testid={`publish-channel-dialog-${platform.id}-disconnect-confirm`}
             >
               {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
-            </Button>
-          ) : platform.isConfigured ? (
-            <Button
-              variant="default"
-              onClick={handleConnect}
-              disabled={isConnecting}
-              data-testid={`publish-channel-dialog-${platform.id}-connect`}
-            >
-              {isConnecting ? 'Connecting…' : 'Connect'}
-            </Button>
-          ) : (
-            <Button variant="default" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-      <AlertDialog.Content>
-        <AlertDialog.Header>
-          <AlertDialog.Title>Disconnect from {platform.name}?</AlertDialog.Title>
-          <AlertDialog.Description>
-            This will remove the connection between this agent and {platform.name}. You can reconnect later.
-          </AlertDialog.Description>
-        </AlertDialog.Header>
-        <AlertDialog.Footer>
-          <AlertDialog.Action
-            onClick={event => {
-              event.preventDefault();
-              handleDisconnect();
-            }}
-            disabled={isDisconnecting}
-            data-testid={`publish-channel-dialog-${platform.id}-disconnect-confirm`}
-          >
-            {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
-          </AlertDialog.Action>
-          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        </AlertDialog.Footer>
-      </AlertDialog.Content>
-    </AlertDialog>
+            </AlertDialog.Action>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </>
   );
 }
