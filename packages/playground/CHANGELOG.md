@@ -1,5 +1,20 @@
 # @internal/playground
 
+## 1.8.0-alpha.4
+
+### Patch Changes
+
+- Fixed Studio Prompt Blocks edit page so picking an older version in the version dropdown correctly updates the editor and sidebar to that version's content. Previously the URL switched to `?versionId=…` and the "previous version" notice appeared, but the editor pane and description stayed stuck on the latest version because a spurious editor `onChange` dirtied the form on first render and gated the form-reset effect. ([#16188](https://github.com/mastra-ai/mastra/pull/16188))
+
+- Studio chat now reliably surfaces agent API errors (such as an invalid OpenAI key) as a red error notice in the conversation, instead of silently clearing the failure from the UI. ([#16189](https://github.com/mastra-ai/mastra/pull/16189))
+
+- Updated dependencies [[`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`1d64a76`](https://github.com/mastra-ai/mastra/commit/1d64a765861a0772ea187bab76e5ed37bf82d042), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`a0d9b6d`](https://github.com/mastra-ai/mastra/commit/a0d9b6d6b810aeaa9e177a0dcc99a4402e609634)]:
+  - @mastra/client-js@1.17.0-alpha.4
+  - @mastra/core@1.32.0-alpha.4
+  - @mastra/playground-ui@26.0.0-alpha.4
+  - @mastra/react@0.2.34-alpha.4
+  - @mastra/ai-sdk@1.4.1
+
 ## 1.8.0-alpha.3
 
 ### Patch Changes

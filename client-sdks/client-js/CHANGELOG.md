@@ -1,5 +1,44 @@
 # @mastra/client-js
 
+## 1.17.0-alpha.4
+
+### Minor Changes
+
+- Added `getMcpServerResources()` and `readMcpServerResource()` methods to `MastraClient` for listing and reading MCP server resources from the client SDK. These methods enable frontend applications to fetch app resource HTML for interactive MCP Apps rendering. ([#16004](https://github.com/mastra-ai/mastra/pull/16004))
+
+  ```ts
+  const client = new MastraClient();
+
+  // List resources on an MCP server
+  const resources = await client.getMcpServerResources('my-server');
+
+  // Read a specific app resource
+  const resource = await client.readMcpServerResource('my-server', 'ui://calculator/app');
+  ```
+
+### Patch Changes
+
+- Added MCP Apps extension support (SEP-1865). MCPServer now accepts an `appResources` config to register interactive `ui://` HTML resources. MCPClient preserves full tool `_meta` (including `ui.resourceUri`) when converting MCP tools to Mastra tools. Both advertise the `io.modelcontextprotocol/ui` extension capability. ([#16004](https://github.com/mastra-ai/mastra/pull/16004))
+
+  **Example — MCPServer with app resources:**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'my-server',
+    tools: { myTool },
+    appResources: {
+      dashboard: {
+        name: 'Dashboard',
+        description: 'Interactive dashboard UI',
+        html: '<html>...</html>',
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`1d64a76`](https://github.com/mastra-ai/mastra/commit/1d64a765861a0772ea187bab76e5ed37bf82d042), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`a0d9b6d`](https://github.com/mastra-ai/mastra/commit/a0d9b6d6b810aeaa9e177a0dcc99a4402e609634)]:
+  - @mastra/core@1.32.0-alpha.4
+
 ## 1.17.0-alpha.3
 
 ### Minor Changes
