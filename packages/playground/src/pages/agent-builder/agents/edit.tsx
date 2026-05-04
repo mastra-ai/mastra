@@ -216,6 +216,8 @@ const AgentBuilderAgentEditReady = ({
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
 
+  const canPublishToChannel = mode === 'edit' && isOwner && isPublishable;
+
   return (
     <ConversationPanelProvider
       initialUserMessage={initialUserMessage}
@@ -226,6 +228,7 @@ const AgentBuilderAgentEditReady = ({
       availableSkills={availableSkills}
       toolsReady
       agentId={id}
+      canPublishToChannel={canPublishToChannel}
     >
       <WorkspaceLayout
         isLoading={false}
@@ -238,17 +241,12 @@ const AgentBuilderAgentEditReady = ({
         backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            {mode === 'edit' && isOwner && isPublishable && <PublishToChannelButton agentId={id} />}
+            {canPublishToChannel && <PublishToChannelButton agentId={id} />}
             <VisibilitySelectConnected />
           </div>
         }
         primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} />}
-        mobileExtra={
-          <AgentBuilderMobileMenuConnected
-            agentId={id}
-            showPublishToChannel={mode === 'edit' && isOwner && isPublishable}
-          />
-        }
+        mobileExtra={<AgentBuilderMobileMenuConnected agentId={id} showPublishToChannel={canPublishToChannel} />}
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected

@@ -29,6 +29,12 @@ interface ConversationPanelProviderProps {
   availableSkills?: StoredSkillResponse[];
   toolsReady?: boolean;
   agentId: string;
+  /**
+   * Whether the connectChannel client tool should be wired into chat. Mirrors the
+   * gating of the "Publish to…" dropdown so the model can only trigger a connect
+   * flow when a manual publish is also possible.
+   */
+  canPublishToChannel?: boolean;
   children: ReactNode;
 }
 
@@ -44,6 +50,7 @@ export const ConversationPanelProvider = ({
   availableSkills = [],
   toolsReady = true,
   agentId,
+  canPublishToChannel = false,
   children,
 }: ConversationPanelProviderProps) => {
   const builderThreadId = getBuilderThreadId(agentId);
@@ -81,10 +88,10 @@ export const ConversationPanelProvider = ({
   const clientTools = useMemo(
     () => ({
       agentBuilderTool,
-      [CONNECT_CHANNEL_TOOL_NAME]: connectChannelTool,
+      ...(canPublishToChannel ? { [CONNECT_CHANNEL_TOOL_NAME]: connectChannelTool } : {}),
       ...(features.skills ? { [CREATE_SKILL_TOOL_NAME]: createSkillTool } : {}),
     }),
-    [agentBuilderTool, connectChannelTool, createSkillTool, features.skills],
+    [agentBuilderTool, canPublishToChannel, connectChannelTool, createSkillTool, features.skills],
   );
 
   const conversationContextValue = useMemo(
