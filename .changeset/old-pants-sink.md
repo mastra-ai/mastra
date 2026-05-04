@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Fixed score API routes to return individual observability scores by ID and keep scorer score filters consistent.
+Added an observability score lookup endpoint at `GET /observability/scores/:scoreId` backed by observability storage.
