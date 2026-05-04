@@ -6,12 +6,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { server } from '@/test/msw-server';
 import {
   DefaultChannelDialog,
+  DisconnectChannelConfirmDialog,
   getPublishChannelDialog,
   SlackChannelDialog,
 } from '../publish-channel-dialogs';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -175,16 +176,8 @@ describe('DefaultChannelDialog', () => {
     });
   });
 
-  it('shows a Disconnect action that asks for confirmation and closes on confirm', async () => {
-    let disconnectCalled = false;
-    server.use(
-      http.post('*/api/channels/discord/:agentId/disconnect', () => {
-        disconnectCalled = true;
-        return HttpResponse.json({ success: true });
-      }),
-    );
-
-    const onOpenChange = vi.fn();
+  it('calls onDisconnectRequest when the Disconnect action is clicked', () => {
+    const onDisconnectRequest = vi.fn();
     render(
       <Wrapper>
         <DefaultChannelDialog
@@ -198,70 +191,14 @@ describe('DefaultChannelDialog', () => {
             displayName: 'My Discord',
           }}
           open
-          onOpenChange={onOpenChange}
+          onOpenChange={() => {}}
+          onDisconnectRequest={onDisconnectRequest}
         />
       </Wrapper>,
     );
 
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-disconnect'));
-
-    // The publish dialog closes and the confirm dialog opens — only one
-    // dialog is ever visible at a time.
-    const confirmButton = await screen.findByTestId('publish-channel-dialog-discord-disconnect-confirm');
-    await waitFor(() => {
-      expect(onOpenChange).toHaveBeenCalledWith(false);
-    });
-    // The disconnect API itself has not fired until the user confirms.
-    expect(disconnectCalled).toBe(false);
-
-    fireEvent.click(confirmButton);
-    await waitFor(() => {
-      expect(disconnectCalled).toBe(true);
-    });
-  });
-
-  it('cancels disconnect when the user dismisses the confirmation', async () => {
-    let disconnectCalled = false;
-    server.use(
-      http.post('*/api/channels/discord/:agentId/disconnect', () => {
-        disconnectCalled = true;
-        return HttpResponse.json({ success: true });
-      }),
-    );
-
-    const onOpenChange = vi.fn();
-    render(
-      <Wrapper>
-        <DefaultChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          installation={{
-            id: 'inst-9',
-            platform: 'discord',
-            agentId: 'agent-1',
-            status: 'active',
-            displayName: 'My Discord',
-          }}
-          open
-          onOpenChange={onOpenChange}
-        />
-      </Wrapper>,
-    );
-
-    fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-disconnect'));
-
-    const cancelButton = await screen.findByRole('button', { name: /cancel/i });
-    fireEvent.click(cancelButton);
-
-    // Wait for the confirmation dialog to close before asserting nothing fired.
-    await waitFor(() => {
-      expect(screen.queryByTestId('publish-channel-dialog-discord-disconnect-confirm')).toBeNull();
-    });
-
-    // Cancel must not call disconnect. The publish dialog itself does close
-    // when the user clicks Disconnect (intentional — see openDisconnectConfirm),
-    // so onOpenChange(false) is expected; what matters is the API isn't hit.
-    expect(disconnectCalled).toBe(false);
+    expect(onDisconnectRequest).toHaveBeenCalledTimes(1);
   });
 
   it('shows a "Not configured" notice and no Connect button when the platform is not configured', () => {
@@ -276,7 +213,133 @@ describe('DefaultChannelDialog', () => {
       </Wrapper>,
     );
 
-    expect(screen.getByTestId('publish-channel-dialog-discord').textContent).toContain('Not configured');
+    expect(screen.getByTestId('publish-channel-dialog-discord').textContent).toContain(
+      'This platform is not configured on the server.',
+    );
     expect(screen.queryByTestId('publish-channel-dialog-discord-connect')).toBeNull();
+  });
+});
+
+describe('SlackChannelDialog', () => {
+  beforeAll(() => {
+    installRadixDomShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('treats a pending installation as not connected and shows the Continue with Slack action', () => {
+    render(
+      <Wrapper>
+        <SlackChannelDialog
+          platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
+          agentId="agent-1"
+          installation={{
+            id: 'inst-pending',
+            platform: 'slack',
+            agentId: 'agent-1',
+            status: 'pending',
+          }}
+          open
+          onOpenChange={() => {}}
+        />
+      </Wrapper>,
+    );
+
+    const dialog = screen.getByTestId('publish-channel-dialog-slack');
+    expect(dialog.textContent).toContain('You will be redirected to Slack');
+    expect(dialog.textContent).not.toContain('Connected to');
+
+    expect(screen.getByTestId('publish-channel-dialog-slack-connect')).toBeTruthy();
+    expect(screen.queryByTestId('publish-channel-dialog-slack-disconnect')).toBeNull();
+  });
+});
+
+describe('DisconnectChannelConfirmDialog', () => {
+  beforeAll(() => {
+    installRadixDomShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('fires the disconnect API and closes on confirm', async () => {
+    let disconnectCalled = false;
+    server.use(
+      http.post('*/api/channels/discord/:agentId/disconnect', () => {
+        disconnectCalled = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    const onOpenChange = vi.fn();
+    render(
+      <Wrapper>
+        <DisconnectChannelConfirmDialog
+          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          agentId="agent-1"
+          installation={{
+            id: 'inst-9',
+            platform: 'discord',
+            agentId: 'agent-1',
+            status: 'active',
+            displayName: 'My Discord',
+          }}
+          open
+          onOpenChange={onOpenChange}
+        />
+      </Wrapper>,
+    );
+
+    const confirmButton = screen.getByTestId('publish-channel-dialog-discord-disconnect-confirm');
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(disconnectCalled).toBe(true);
+    });
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+
+  it('does not fire the disconnect API when canceled', async () => {
+    let disconnectCalled = false;
+    server.use(
+      http.post('*/api/channels/discord/:agentId/disconnect', () => {
+        disconnectCalled = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    const onOpenChange = vi.fn();
+    render(
+      <Wrapper>
+        <DisconnectChannelConfirmDialog
+          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          agentId="agent-1"
+          installation={{
+            id: 'inst-9',
+            platform: 'discord',
+            agentId: 'agent-1',
+            status: 'active',
+            displayName: 'My Discord',
+          }}
+          open
+          onOpenChange={onOpenChange}
+        />
+      </Wrapper>,
+    );
+
+    const cancelButton = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(disconnectCalled).toBe(false);
   });
 });

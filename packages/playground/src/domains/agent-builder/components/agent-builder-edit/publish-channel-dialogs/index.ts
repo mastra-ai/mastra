@@ -6,6 +6,8 @@ import type { PublishChannelDialogProps } from './types';
 export type { PublishChannelDialogProps } from './types';
 export { DefaultChannelDialog } from './default-channel-dialog';
 export { SlackChannelDialog } from './slack-channel-dialog';
+export { DisconnectChannelConfirmDialog } from './disconnect-channel-confirm-dialog';
+export type { DisconnectChannelConfirmDialogProps } from './disconnect-channel-confirm-dialog';
 
 const REGISTRY: Record<string, ComponentType<PublishChannelDialogProps>> = {
   slack: SlackChannelDialog,

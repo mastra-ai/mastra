@@ -2,7 +2,7 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -129,10 +129,130 @@ describe('PublishToChannelButton', () => {
     expect(discordItem.textContent).toContain('Not configured');
   });
 
-  it('opens the platform-specific dialog when an item is selected', async () => {
+  it('triggers the Slack connect endpoint directly (skipping the dialog) when not yet connected', async () => {
+    let connectCalled = false;
+    const originalLocation = window.location;
+    const locationStub = { href: 'http://localhost/start' };
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: locationStub,
+    });
+
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
       installationsHandler({}),
+      http.post('*/api/channels/slack/connect', () => {
+        connectCalled = true;
+        return HttpResponse.json({ type: 'oauth', authorizationUrl: 'https://slack.example/oauth' });
+      }),
+    );
+
+    render(
+      <Wrapper>
+        <PublishToChannelButton agentId="agent-1" />
+      </Wrapper>,
+    );
+
+    await screen.findByTestId('agent-builder-publish-channel');
+    await openDropdown();
+
+    const slackItem = await screen.findByTestId('agent-builder-publish-channel-item-slack');
+    fireEvent.click(slackItem);
+
+    await waitFor(() => {
+      expect(connectCalled).toBe(true);
+    });
+    await waitFor(() => {
+      expect(locationStub.href).toBe('https://slack.example/oauth');
+    });
+    // The dialog must not appear — the direct connect flow replaces it.
+    expect(screen.queryByTestId('publish-channel-dialog-slack')).toBeNull();
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
+  });
+
+  it('treats a pending-only Slack installation as not connected and re-triggers the connect flow', async () => {
+    let connectCalled = false;
+    const originalLocation = window.location;
+    const locationStub = { href: 'http://localhost/start' };
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: locationStub,
+    });
+
+    server.use(
+      platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      installationsHandler({
+        slack: [
+          {
+            id: 'inst-pending',
+            platform: 'slack',
+            agentId: 'agent-1',
+            status: 'pending',
+          },
+        ],
+      }),
+      http.post('*/api/channels/slack/connect', () => {
+        connectCalled = true;
+        return HttpResponse.json({ type: 'oauth', authorizationUrl: 'https://slack.example/oauth' });
+      }),
+    );
+
+    render(
+      <Wrapper>
+        <PublishToChannelButton agentId="agent-1" />
+      </Wrapper>,
+    );
+
+    await screen.findByTestId('agent-builder-publish-channel');
+    await openDropdown();
+
+    const slackItem = await screen.findByTestId('agent-builder-publish-channel-item-slack');
+    expect(slackItem.textContent).not.toContain('Connected');
+
+    fireEvent.click(slackItem);
+
+    await waitFor(() => {
+      expect(connectCalled).toBe(true);
+    });
+    await waitFor(() => {
+      expect(locationStub.href).toBe('https://slack.example/oauth');
+    });
+    // The dialog must not appear — pending installations re-enter the direct connect flow.
+    expect(screen.queryByTestId('publish-channel-dialog-slack')).toBeNull();
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
+  });
+
+  it('opens the Slack dialog (and does not auto-connect) when the channel is already connected', async () => {
+    let connectCalled = false;
+    server.use(
+      platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      installationsHandler({
+        slack: [
+          {
+            id: 'inst-1',
+            platform: 'slack',
+            agentId: 'agent-1',
+            status: 'active',
+            displayName: 'Acme Corp',
+          },
+        ],
+      }),
+      http.post('*/api/channels/slack/connect', () => {
+        connectCalled = true;
+        return HttpResponse.json({ type: 'oauth', authorizationUrl: 'https://slack.example/oauth' });
+      }),
     );
 
     render(
@@ -148,9 +268,36 @@ describe('PublishToChannelButton', () => {
     fireEvent.click(slackItem);
 
     const dialog = await screen.findByTestId('publish-channel-dialog-slack');
-    expect(dialog.textContent).toContain('Slack');
-    // Slack-specific connect copy
-    expect(dialog.textContent).toContain('Continue with Slack');
+    expect(dialog.textContent).toContain('Acme Corp');
+    expect(connectCalled).toBe(false);
+  });
+
+  it('opens the Slack dialog (and does not auto-connect) when the platform is not configured', async () => {
+    let connectCalled = false;
+    server.use(
+      platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: false }]),
+      installationsHandler({}),
+      http.post('*/api/channels/slack/connect', () => {
+        connectCalled = true;
+        return HttpResponse.json({ type: 'oauth', authorizationUrl: 'https://slack.example/oauth' });
+      }),
+    );
+
+    render(
+      <Wrapper>
+        <PublishToChannelButton agentId="agent-1" />
+      </Wrapper>,
+    );
+
+    await screen.findByTestId('agent-builder-publish-channel');
+    await openDropdown();
+
+    const slackItem = await screen.findByTestId('agent-builder-publish-channel-item-slack');
+    fireEvent.click(slackItem);
+
+    const dialog = await screen.findByTestId('publish-channel-dialog-slack');
+    expect(dialog.textContent).toContain('Slack is not configured on the server.');
+    expect(connectCalled).toBe(false);
   });
 
   it('opens the default dialog for an unconfigured platform with the "Not configured" notice', async () => {
@@ -172,7 +319,7 @@ describe('PublishToChannelButton', () => {
     fireEvent.click(discordItem);
 
     const dialog = await screen.findByTestId('publish-channel-dialog-discord');
-    expect(dialog.textContent).toContain('Not configured');
+    expect(dialog.textContent).toContain('This platform is not configured on the server.');
     // No Connect button rendered when platform is not configured.
     expect(screen.queryByTestId('publish-channel-dialog-discord-connect')).toBeNull();
   });

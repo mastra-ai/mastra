@@ -6,4 +6,5 @@ export interface PublishChannelDialogProps {
   installation?: ChannelInstallationInfo;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDisconnectRequest?: () => void;
 }

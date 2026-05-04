@@ -15,16 +15,17 @@ import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import type { AgentBuilderEditFormValues } from '../../schemas';
+import { DisconnectChannelConfirmDialog, getPublishChannelDialog } from './publish-channel-dialogs';
+import type { Visibility } from './visibility-select';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
 import {
   useChannelInstallations,
-  useChannelPlatforms,
-  type ChannelInstallationInfo,
-  type ChannelPlatformInfo,
+  useChannelPlatforms
+  
+  
 } from '@/domains/agents/hooks/use-channels';
-import type { AgentBuilderEditFormValues } from '../../schemas';
-import { getPublishChannelDialog } from './publish-channel-dialogs';
-import type { Visibility } from './visibility-select';
+import type {ChannelInstallationInfo, ChannelPlatformInfo} from '@/domains/agents/hooks/use-channels';
 
 export interface AgentBuilderMobileMenuProps {
   /** Agent the publish actions apply to. */
@@ -47,6 +48,10 @@ export function AgentBuilderMobileMenu({
   const visibility = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeChannel, setActiveChannel] = useState<{
+    platform: ChannelPlatformInfo;
+    installation?: ChannelInstallationInfo;
+  } | null>(null);
+  const [disconnectTarget, setDisconnectTarget] = useState<{
     platform: ChannelPlatformInfo;
     installation?: ChannelInstallationInfo;
   } | null>(null);
@@ -151,6 +156,22 @@ export function AgentBuilderMobileMenu({
           open
           onOpenChange={open => {
             if (!open) setActiveChannel(null);
+          }}
+          onDisconnectRequest={() => {
+            setDisconnectTarget(activeChannel);
+            setActiveChannel(null);
+          }}
+        />
+      ) : null}
+
+      {disconnectTarget && agentId ? (
+        <DisconnectChannelConfirmDialog
+          platform={disconnectTarget.platform}
+          agentId={agentId}
+          installation={disconnectTarget.installation}
+          open
+          onOpenChange={open => {
+            if (!open) setDisconnectTarget(null);
           }}
         />
       ) : null}
