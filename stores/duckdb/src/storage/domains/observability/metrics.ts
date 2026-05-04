@@ -482,13 +482,11 @@ export async function getMetricBreakdown(
   const selectGroupBy = resolvedGroupBy.map(entry => entry.selectSql).join(', ');
   const groupByCols = resolvedGroupBy.map(entry => entry.groupSql).join(', ');
 
-  const orderBy = args.orderBy ?? 'value';
   const orderDirection = args.orderDirection === 'ASC' ? 'ASC' : 'DESC';
-  const orderExpr = orderBy === 'dimension' ? groupByCols : 'value';
   const limitClause = typeof args.limit === 'number' ? `LIMIT ?` : '';
   const limitParams = typeof args.limit === 'number' ? [args.limit] : [];
 
-  const sql = `SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY ${orderExpr} ${orderDirection} ${limitClause}`;
+  const sql = `SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY value ${orderDirection} ${limitClause}`;
   const rows = await db.query<Record<string, unknown>>(sql, [...allParams, ...limitParams]);
 
   const groups = rows.map(row => {

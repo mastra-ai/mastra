@@ -229,7 +229,6 @@ export const METRIC_DISTINCT_COLUMNS = [
   'environment',
   'executionSource',
   'serviceName',
-  'costUnit',
 ] as const;
 
 export type MetricDistinctColumn = (typeof METRIC_DISTINCT_COLUMNS)[number];
@@ -293,11 +292,9 @@ export const getMetricBreakdownArgsSchema = z
       .max(1000)
       .optional()
       .describe('Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy.'),
-    orderBy: z
-      .enum(['value', 'dimension'])
-      .default('value')
-      .describe("Order groups by aggregated 'value' (default) or group 'dimension' key"),
-    orderDirection: sortDirectionSchema.default('DESC').describe('Order direction for groups (defaults to DESC)'),
+    orderDirection: sortDirectionSchema
+      .default('DESC')
+      .describe('Sort direction for the aggregated value (defaults to DESC; pairs with limit for top/bottom-N)'),
   })
   .describe('Arguments for getting a metric breakdown');
 

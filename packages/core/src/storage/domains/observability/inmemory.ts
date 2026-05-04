@@ -845,17 +845,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       };
     });
 
-    const orderBy = args.orderBy ?? 'value';
-    const orderDirection = args.orderDirection ?? 'DESC';
-    const direction = orderDirection === 'ASC' ? 1 : -1;
-    groups.sort((a, b) => {
-      if (orderBy === 'dimension') {
-        const keyA = JSON.stringify(a.dimensions);
-        const keyB = JSON.stringify(b.dimensions);
-        return keyA < keyB ? -1 * direction : keyA > keyB ? 1 * direction : 0;
-      }
-      return (a.value - b.value) * direction;
-    });
+    const direction = args.orderDirection === 'ASC' ? 1 : -1;
+    groups.sort((a, b) => (a.value - b.value) * direction);
 
     const limited = typeof args.limit === 'number' ? groups.slice(0, args.limit) : groups;
     return { groups: limited };

@@ -405,9 +405,7 @@ export async function getMetricBreakdown(
   const allConditions = [...combined.conditions, ...labelExclusions];
   const fullWhereClause = allConditions.length ? `WHERE ${allConditions.join(' AND ')}` : '';
 
-  const orderBy = args.orderBy ?? 'value';
   const orderDirection = args.orderDirection === 'ASC' ? 'ASC' : 'DESC';
-  const orderExpr = orderBy === 'dimension' ? groupByCols : 'value';
   const limitClause = typeof args.limit === 'number' ? `LIMIT {breakdown_limit:UInt32}` : '';
   const extraParams: Record<string, unknown> = typeof args.limit === 'number' ? { breakdown_limit: args.limit } : {};
 
@@ -416,7 +414,7 @@ export async function getMetricBreakdown(
     FROM ${TABLE_METRIC_EVENTS}
     ${fullWhereClause}
     GROUP BY ${groupByCols}
-    ORDER BY ${orderExpr} ${orderDirection}
+    ORDER BY value ${orderDirection}
     ${limitClause}
   `;
   const rows = await queryJson<Record<string, unknown>>(client, sql, {

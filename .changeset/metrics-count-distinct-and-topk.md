@@ -10,7 +10,7 @@ Added `count_distinct` aggregation and server-side TopK to the metrics storage A
 
 `getMetricAggregate`, `getMetricBreakdown`, and `getMetricTimeSeries` accept `aggregation: 'count_distinct'` with a `distinctColumn`. Backends pick the most efficient native implementation — `uniq` on ClickHouse, `approx_count_distinct` on DuckDB.
 
-`distinctColumn` is restricted to a low/medium-cardinality categorical allowlist (`entityType`, `entityName`, `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName`, `name`, `provider`, `model`, `environment`, `executionSource`, `serviceName`, `costUnit`). ID columns are not allowed — distinct counts over near-unique values converge to the row count and are rarely useful.
+`distinctColumn` is restricted to a low/medium-cardinality categorical allowlist (`entityType`, `entityName`, `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName`, `name`, `provider`, `model`, `environment`, `executionSource`, `serviceName`). ID columns are not allowed — distinct counts over near-unique values converge to the row count and are rarely useful.
 
 ```ts
 await store.getMetricAggregate({
@@ -23,7 +23,7 @@ await store.getMetricAggregate({
 
 **Server-side TopK**
 
-`getMetricBreakdown` accepts `limit`, `orderBy` (`value` | `dimension`), and `orderDirection`, so breakdowns never return the full cardinality of a column from the database.
+`getMetricBreakdown` accepts `limit` and `orderDirection`, so breakdowns never return the full cardinality of a column from the database. Ordering is always by the aggregated `value`; `orderDirection` flips between top-N (`DESC`, default) and bottom-N (`ASC`).
 
 ```ts
 await store.getMetricBreakdown({
@@ -31,7 +31,6 @@ await store.getMetricBreakdown({
   aggregation: 'sum',
   groupBy: 'threadId',
   limit: 20,
-  orderBy: 'value',
   orderDirection: 'DESC',
 });
 ```
