@@ -1619,21 +1619,12 @@ export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'
 /**
  * Workspace capabilities
  */
-export interface WorkspaceCapabilities {
-  hasFilesystem: boolean;
-  hasSandbox: boolean;
-  canBM25: boolean;
-  canVector: boolean;
-  canHybrid: boolean;
-  hasSkills: boolean;
-}
+export type WorkspaceCapabilities = ListWorkspacesResponse['workspaces'][number]['capabilities'];
 
 /**
  * Workspace safety configuration
  */
-export interface WorkspaceSafety {
-  readOnly: boolean;
-}
+export type WorkspaceSafety = ListWorkspacesResponse['workspaces'][number]['safety'];
 
 /**
  * Response for getting workspace info
@@ -1643,16 +1634,7 @@ export type WorkspaceInfoResponse = GeneratedResponse<'GET /workspaces/:workspac
 /**
  * Workspace item in list response
  */
-export interface WorkspaceItem {
-  id: string;
-  name: string;
-  status: string;
-  source: 'mastra' | 'agent';
-  agentId?: string;
-  agentName?: string;
-  capabilities: WorkspaceCapabilities;
-  safety: WorkspaceSafety;
-}
+export type WorkspaceItem = ListWorkspacesResponse['workspaces'][number];
 
 /**
  * Response for listing all workspaces
@@ -2071,55 +2053,26 @@ export type ListEmbeddersResponse = GeneratedResponse<'GET /embedders'>;
 // Tool Provider Types
 // ============================================================================
 
-export interface ToolProviderInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
+export type ToolProviderInfo = GeneratedResponse<'GET /tool-providers'>['providers'][number];
 
-export interface ToolProviderToolkit {
-  slug: string;
-  name: string;
-  description?: string;
-  icon?: string;
-}
+export type ToolProviderToolkit = GeneratedResponse<'GET /tool-providers/:providerId/toolkits'>['data'][number];
 
-export interface ToolProviderToolInfo {
-  slug: string;
-  name: string;
-  description?: string;
-  toolkit?: string;
-}
+export type ToolProviderToolInfo = GeneratedResponse<'GET /tool-providers/:providerId/tools'>['data'][number];
 
-export interface ToolProviderPagination {
-  total?: number;
-  page?: number;
-  perPage?: number;
-  hasMore: boolean;
-}
+export type ToolProviderPagination = NonNullable<
+  GeneratedResponse<'GET /tool-providers/:providerId/toolkits'>['pagination']
+>;
 
-export interface ListToolProvidersResponse {
-  providers: ToolProviderInfo[];
-}
+export type ListToolProvidersResponse = GeneratedResponse<'GET /tool-providers'>;
 
-export interface ListToolProviderToolkitsResponse {
-  data: ToolProviderToolkit[];
-  pagination?: ToolProviderPagination;
-}
+export type ListToolProviderToolkitsResponse = GeneratedResponse<'GET /tool-providers/:providerId/toolkits'>;
 
-export interface ListToolProviderToolsParams {
-  toolkit?: string;
-  search?: string;
-  page?: number;
-  perPage?: number;
-}
+export type ListToolProviderToolsParams = GeneratedRequest<QueryParams<'GET /tool-providers/:providerId/tools'>>;
 
-export interface ListToolProviderToolsResponse {
-  data: ToolProviderToolInfo[];
-  pagination?: ToolProviderPagination;
-}
+export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-providers/:providerId/tools'>;
 
-export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
+export type GetToolProviderToolSchemaResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
 
 // ============================================================================
 // Processor Provider Types
