@@ -633,6 +633,7 @@ export function MastraRuntimeProvider({
     if (lastProgress) {
       handleProgressUpdate(lastProgress);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   const {
@@ -700,6 +701,12 @@ export function MastraRuntimeProvider({
     if (agentVersionId) {
       requestContextInstance.set('agentVersionId', agentVersionId);
     }
+
+    const effectiveMode: 'network' | 'generate' | 'stream' = chatWithNetwork
+      ? 'network'
+      : chatWithGenerate
+        ? 'generate'
+        : 'stream';
 
     try {
       if (isSupportedModel) {
@@ -1211,7 +1218,12 @@ export function MastraRuntimeProvider({
       if (isSupportedModel) {
         setMessages(currentConversation => [
           ...currentConversation,
-          { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
+          {
+            role: 'assistant',
+            id: `error-${Date.now()}`,
+            parts: [{ type: 'text', text: `${error}` }],
+            metadata: { status: 'error', mode: effectiveMode },
+          } as MastraUIMessage,
         ]);
       } else {
         setLegacyMessages(currentConversation => [

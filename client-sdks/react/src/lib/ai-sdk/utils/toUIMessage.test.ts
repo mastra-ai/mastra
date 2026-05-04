@@ -1978,7 +1978,7 @@ describe('toUIMessage', () => {
 
       expect(result[0].parts[0]).toMatchObject({
         type: 'text',
-        text: JSON.stringify({ message: 'API Error', code: 500 }),
+        text: 'API Error',
       });
     });
   });

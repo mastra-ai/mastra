@@ -789,19 +789,38 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     }
 
     case 'error': {
+      const rawError = chunk.payload.error;
+      const errorText =
+        typeof rawError === 'string'
+          ? rawError
+          : rawError instanceof Error
+            ? rawError.message
+            : typeof rawError === 'object' && rawError !== null && 'message' in rawError
+              ? String((rawError as { message?: unknown }).message ?? JSON.stringify(rawError))
+              : String(rawError);
+      const errorPart = { type: 'text' as const, text: errorText };
+      const errorMetadata = { ...metadata, status: 'error' as const };
+
+      // If the last message is an empty assistant message (e.g. from a 'start' chunk),
+      // update it with the error content instead of creating a separate message.
+      // This prevents the error from flashing when the runtime re-processes messages.
+      const lastMessage = result[result.length - 1];
+      if (lastMessage?.role === 'assistant' && lastMessage.parts.length === 0) {
+        return [
+          ...result.slice(0, -1),
+          {
+            ...lastMessage,
+            parts: [errorPart],
+            metadata: errorMetadata,
+          },
+        ];
+      }
+
       const newMessage: MastraUIMessage = {
         id: `error-${chunk.runId + Date.now()}`,
         role: 'assistant',
-        parts: [
-          {
-            type: 'text',
-            text: typeof chunk.payload.error === 'string' ? chunk.payload.error : JSON.stringify(chunk.payload.error),
-          },
-        ],
-        metadata: {
-          ...metadata,
-          status: 'error',
-        },
+        parts: [errorPart],
+        metadata: errorMetadata,
       };
 
       return [...result, newMessage];
