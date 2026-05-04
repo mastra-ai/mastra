@@ -374,20 +374,20 @@ export class ObservationalMemory {
     this.onIndexObservations = config.onIndexObservations;
     this.mastra = config.mastra;
 
-    // Resolve "default" to the default model.
-    const resolveModel = (m: typeof config.model) =>
-      m === 'default' ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model : m;
+    // Resolve "default" to the model default for the agent being configured.
+    const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
+      model === 'default' ? defaultModel : model;
 
     // Resolution order: top-level model → sub-config model → the other sub-config model → default.
     const observationModel =
-      resolveModel(config.model) ??
-      resolveModel(config.observation?.model) ??
-      resolveModel(config.reflection?.model) ??
+      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
     const reflectionModel =
-      resolveModel(config.model) ??
-      resolveModel(config.reflection?.model) ??
-      resolveModel(config.observation?.model) ??
+      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
     // Get base thresholds first (needed for shared budget calculation)
