@@ -1,8 +1,12 @@
-import { Button, StatusBadge, Txt, toast } from '@mastra/playground-ui';
+import { Button, StatusBadge, Txt } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useChannelInstallations, useChannelPlatforms, useConnectChannel } from '@/domains/agents/hooks/use-channels';
+import {
+  useChannelInstallations,
+  useChannelPlatforms,
+  useConnectChannelAction,
+} from '@/domains/agents/hooks/use-channels';
 
 export interface ConnectChannelMessageProps {
   platformId: string;
@@ -14,7 +18,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
   const platform = platforms.find(p => p.id === platformId);
   const { data: installations = [] } = useChannelInstallations(platformId, agentId ?? '');
   const installation = installations.find(i => i.status === 'active');
-  const { mutate: connect, isPending: isConnecting } = useConnectChannel(platformId);
+  const { connect, isConnecting } = useConnectChannelAction(platformId);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   if (!agentId || arePlatformsLoading || !platform) {
@@ -22,28 +26,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
   }
 
   const handleConnect = () => {
-    connect(
-      { agentId },
-      {
-        onSuccess: result => {
-          if (result.type === 'oauth') {
-            window.location.href = result.authorizationUrl;
-            return;
-          }
-          if (result.type === 'deep_link') {
-            const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
-            if (!popup) {
-              toast.error('Popup blocked — please allow popups and try again');
-            }
-          }
-          // 'immediate' → installation list will be invalidated by the hook;
-          // no further UI action needed.
-        },
-        onError: (err: Error & { body?: { error?: string } }) => {
-          toast.error(err.body?.error || err.message || 'Failed to connect channel');
-        },
-      },
-    );
+    connect(agentId);
   };
 
   return (
