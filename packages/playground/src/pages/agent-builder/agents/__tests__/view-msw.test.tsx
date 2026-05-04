@@ -127,30 +127,38 @@ describe('AgentBuilderAgentView MSW integration', () => {
     await waitFor(() => expect(sendRequestCount).toBe(0));
   });
 
-  it('shows an active Publish to Slack button for the owner', async () => {
+  it('shows the Publish to channel button for the owner', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
+      http.get(`${BASE_URL}/api/channels/platforms`, () =>
+        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      ),
+      http.get(`${BASE_URL}/api/channels/:platform/installations`, () => HttpResponse.json([])),
     );
 
     renderPage();
 
-    const publish = (await screen.findByTestId('agent-builder-publish-slack')) as HTMLButtonElement;
+    const publish = (await screen.findByTestId('agent-builder-publish-channel')) as HTMLButtonElement;
     expect(publish.disabled).toBe(false);
   });
 
-  it('hides the Edit and Publish to Slack buttons for non-owners', async () => {
+  it('hides the Edit and Publish to channel buttons for non-owners', async () => {
     const otherAgent = { ...storedAgent, authorId: 'someone-else' };
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(otherAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
+      http.get(`${BASE_URL}/api/channels/platforms`, () =>
+        HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      ),
+      http.get(`${BASE_URL}/api/channels/:platform/installations`, () => HttpResponse.json([])),
     );
 
     renderPage();
 
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
     expect(screen.queryByTestId('agent-builder-view-edit')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-publish-slack')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-publish-channel')).toBeNull();
   });
 
   it('shows Chat and Configuration tabs for the owner via real stored-agent data', async () => {

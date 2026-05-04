@@ -12,7 +12,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
-import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
+import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
@@ -144,6 +144,8 @@ const AgentBuilderAgentViewReady = ({
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
+  // Gate publishing on the *saved* visibility — never on unsaved form state.
+  const isPublishable = storedAgent?.visibility === 'public';
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
   const threadId = currentUser?.id ? `${currentUser.id}-${id}` : id;
 
@@ -182,7 +184,7 @@ const AgentBuilderAgentViewReady = ({
         showConfigure={isOwner}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            {isOwner && <PublishToSlackButton />}
+            {isOwner && isPublishable && <PublishToChannelButton agentId={id} />}
             <VisibilitySelectIfAuth />
           </div>
         }
@@ -191,7 +193,9 @@ const AgentBuilderAgentViewReady = ({
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
           ) : undefined
         }
-        mobileExtra={isOwner ? <AgentBuilderMobileMenu showPublishToSlack /> : undefined}
+        mobileExtra={
+          isOwner ? <AgentBuilderMobileMenu agentId={id} showPublishToChannel={isPublishable} /> : undefined
+        }
         chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
         configure={
           <ConfigurePanelConnected

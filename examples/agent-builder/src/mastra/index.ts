@@ -9,14 +9,22 @@ import { ComposioToolProvider } from '@mastra/editor/composio';
 import { weatherInfo } from './tools';
 import { weatherAgent } from './agents';
 import { greetWorkflow } from './workflows';
+import { SlackProvider } from '@mastra/slack';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
   url: 'file:./mastra.db',
 });
 
+const slack = new SlackProvider({
+  token: process.env.SLACK_APP_CONFIG_TOKEN,
+  refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+  baseUrl: process.env.SLACK_BASE_URL,
+});
+
 export const mastra = new Mastra({
   storage,
+  channels: { slack },
   agents: {
     builderAgent,
     weatherAgent,

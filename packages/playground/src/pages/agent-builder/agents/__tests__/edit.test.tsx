@@ -104,6 +104,19 @@ vi.mock('@/domains/builder', () => ({
   useBuilderModelPolicy: () => ({ active: false }),
 }));
 
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
+  PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
+    agentId ? (
+      <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
+        Publish to…
+      </button>
+    ) : null,
+}));
+
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu', () => ({
+  AgentBuilderMobileMenu: () => null,
+}));
+
 vi.mock('@mastra/react', async () => {
   const actual = await vi.importActual<typeof MastraReact>('@mastra/react');
   return {
@@ -156,10 +169,9 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
 
-    it('does not render the Publish to Slack button in create mode', () => {
+    it('does not render the Publish to channel button in create mode', () => {
       const { queryByTestId } = renderAt();
-      expect(queryByTestId('agent-builder-publish-slack')).toBeNull();
-      expect(queryByTestId('agent-builder-mobile-menu-publish-slack')).toBeNull();
+      expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
     });
 
     it('renders Chat and Configuration tabs in create mode', () => {
@@ -187,7 +199,7 @@ describe('AgentBuilderAgentEdit', () => {
       expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
     });
 
-    it('shows an active Publish to Slack button for the owner', () => {
+    it('shows the Publish to channel button for the owner when the agent is public', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -196,10 +208,26 @@ describe('AgentBuilderAgentEdit', () => {
         agents: [],
         workflows: [],
         authorId: 'current-user',
+        visibility: 'public',
       };
       const { getByTestId } = renderAt();
-      const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+      const button = getByTestId('agent-builder-publish-channel') as HTMLButtonElement;
       expect(button.disabled).toBe(false);
+    });
+
+    it('hides the Publish to channel button when the agent is private', () => {
+      storedAgent = {
+        id: 'agent-123',
+        name: 'Existing',
+        instructions: 'Do things',
+        tools: [],
+        agents: [],
+        workflows: [],
+        authorId: 'current-user',
+        visibility: 'private',
+      };
+      const { queryByTestId } = renderAt();
+      expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
     });
 
     it('back arrow navigates to the view page without saving', () => {

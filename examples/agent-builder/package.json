@@ -31,6 +31,7 @@
     "@mastra/editor": "beta",
     "@mastra/auth-workos": "beta",
     "@mastra/stagehand": "beta",
+    "@mastra/slack": "beta",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -52,7 +53,8 @@
       "@mastra/ai-sdk": "link:../../client-sdks/ai-sdk",
       "mastra": "link:../../packages/cli",
       "@mastra/editor": "link:../../packages/editor",
-      "@mastra/stagehand": "link:../../browser/stagehand"
+      "@mastra/stagehand": "link:../../browser/stagehand",
+      "@mastra/slack": "link:../../channels/slack"
     }
   },
   "keywords": [],

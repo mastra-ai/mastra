@@ -96,6 +96,19 @@ vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
 }));
 
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
+  PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
+    agentId ? (
+      <button type="button" data-testid="agent-builder-publish-channel" data-agent-id={agentId}>
+        Publish to…
+      </button>
+    ) : null,
+}));
+
+vi.mock('@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu', () => ({
+  AgentBuilderMobileMenu: () => null,
+}));
+
 import AgentBuilderAgentView from '../view';
 
 const renderAt = (path = '/agent-builder/agents/agent-123/view') =>
@@ -136,17 +149,23 @@ describe('AgentBuilderAgentView', () => {
     expect(button.getAttribute('aria-label')).toBe('Edit agent');
   });
 
-  it('shows an active Publish to Slack button for the owner', () => {
+  it('shows the Publish to channel button for the owner', () => {
     const { getByTestId } = renderAt();
-    const button = getByTestId('agent-builder-publish-slack') as HTMLButtonElement;
+    const button = getByTestId('agent-builder-publish-channel') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
   });
 
-  it('hides the Edit and Publish to Slack buttons for non-owners', () => {
+  it('hides the Edit and Publish to channel buttons for non-owners', () => {
     storedAgent = { ...storedAgent, authorId: 'someone-else' };
     const { queryByTestId } = renderAt();
     expect(queryByTestId('agent-builder-view-edit')).toBeNull();
-    expect(queryByTestId('agent-builder-publish-slack')).toBeNull();
+    expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
+  });
+
+  it('hides the Publish to channel button when the agent is private', () => {
+    storedAgent = { ...storedAgent, visibility: 'private' };
+    const { queryByTestId } = renderAt();
+    expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
   });
 
   it('shows the current visibility as disabled', () => {

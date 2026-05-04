@@ -19,6 +19,7 @@ overrides:
   mastra: link:../../packages/cli
   '@mastra/editor': link:../../packages/editor
   '@mastra/stagehand': link:../../browser/stagehand
+  '@mastra/slack': link:../../channels/slack
 
 importers:
 
@@ -66,6 +67,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/slack':
+        specifier: link:../../channels/slack
+        version: link:../../channels/slack
       '@mastra/stagehand':
         specifier: link:../../browser/stagehand
         version: link:../../browser/stagehand

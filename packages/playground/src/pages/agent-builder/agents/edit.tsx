@@ -14,7 +14,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
-import { PublishToSlackButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-slack-button';
+import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
@@ -137,6 +137,7 @@ const AgentBuilderAgentEditPage = ({
       <AgentBuilderAgentEditReady
         id={id!}
         mode={mode}
+        storedAgent={storedAgent}
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
         workflowsData={workflowsData ?? {}}
@@ -159,6 +160,7 @@ const AgentBuilderAgentEditSkeleton = () => (
 interface AgentBuilderAgentEditReadyProps {
   id: string;
   mode: 'create' | 'edit';
+  storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData;
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
@@ -172,6 +174,7 @@ interface AgentBuilderAgentEditReadyProps {
 const AgentBuilderAgentEditReady = ({
   id,
   mode,
+  storedAgent,
   toolsData,
   agentsData,
   workflowsData,
@@ -187,6 +190,9 @@ const AgentBuilderAgentEditReady = ({
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
   const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
+
+  // Gate publishing on the *saved* visibility — unsaved form edits should not unlock publishing.
+  const isPublishable = storedAgent?.visibility === 'public';
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
@@ -230,12 +236,17 @@ const AgentBuilderAgentEditReady = ({
         backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            {mode === 'edit' && isOwner && <PublishToSlackButton />}
+            {mode === 'edit' && isOwner && isPublishable && <PublishToChannelButton agentId={id} />}
             <VisibilitySelectConnected />
           </div>
         }
         primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} />}
-        mobileExtra={<AgentBuilderMobileMenuConnected showPublishToSlack={mode === 'edit' && isOwner} />}
+        mobileExtra={
+          <AgentBuilderMobileMenuConnected
+            agentId={id}
+            showPublishToChannel={mode === 'edit' && isOwner && isPublishable}
+          />
+        }
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected
@@ -258,14 +269,21 @@ const VisibilitySelectConnected = () => {
   return <VisibilitySelect disabled={isRunning} variant="ghost" />;
 };
 
-const AgentBuilderMobileMenuConnected = ({ showPublishToSlack }: { showPublishToSlack: boolean }) => {
+const AgentBuilderMobileMenuConnected = ({
+  agentId,
+  showPublishToChannel,
+}: {
+  agentId: string | undefined;
+  showPublishToChannel: boolean;
+}) => {
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
   const authEnabled = !!capabilities?.enabled;
   return (
     <AgentBuilderMobileMenu
+      agentId={agentId}
       showSetVisibility={authEnabled}
-      showPublishToSlack={showPublishToSlack}
+      showPublishToChannel={showPublishToChannel}
       disabled={isRunning}
     />
   );
