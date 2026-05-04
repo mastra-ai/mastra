@@ -6,7 +6,7 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
@@ -131,6 +131,45 @@ export class BraintrustExporter extends TrackingExporter<
     } catch (err) {
       this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err });
       this.setDisabled('Failed to initialize Braintrust logger');
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (this.isDisabled) return;
+
+    const { score } = event;
+    const rowId = score.spanId ?? score.traceId;
+    if (!rowId) {
+      this.logger.debug('Braintrust exporter: skipping score with no spanId or traceId', {
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    const logger = this.#useProvidedLogger ? this.#providedLogger : await this.getLocalLogger();
+    if (!logger) return;
+
+    const name = score.scorerName ?? score.scorerId;
+
+    try {
+      logger.logFeedback({
+        id: rowId,
+        scores: { [name]: score.score },
+        ...(score.reason ? { comment: score.reason } : {}),
+        metadata: {
+          scorerId: score.scorerId,
+          ...(score.scoreSource ? { scoreSource: score.scoreSource } : {}),
+          ...(score.metadata ?? {}),
+        },
+        source: 'external',
+      });
+    } catch (err) {
+      this.logger.error('Braintrust exporter: Failed to submit score', {
+        error: err,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
     }
   }
 

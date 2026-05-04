@@ -6,7 +6,7 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
@@ -91,6 +91,42 @@ export class LangSmithExporter extends TrackingExporter<
   protected override async _flush(): Promise<void> {
     if (this.#client) {
       await this.#client.awaitPendingTraceBatches();
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (!this.#client) return;
+
+    const { score } = event;
+    const runId = score.spanId ?? score.traceId;
+    if (!runId) {
+      this.logger.debug('LangSmith exporter: skipping score with no spanId or traceId', {
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    const key = score.scorerName ?? score.scorerId;
+
+    try {
+      await this.#client.createFeedback(runId, key, {
+        score: score.score,
+        ...(score.reason ? { comment: score.reason } : {}),
+        feedbackId: score.scoreId,
+        ...(score.scoreTraceId ? { sourceRunId: score.scoreTraceId } : {}),
+        sourceInfo: {
+          scorerId: score.scorerId,
+          ...(score.scoreSource ? { scoreSource: score.scoreSource } : {}),
+          ...(score.metadata ?? {}),
+        },
+      });
+    } catch (err) {
+      this.logger.error('LangSmith exporter: Failed to submit feedback', {
+        error: err,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
     }
   }
 

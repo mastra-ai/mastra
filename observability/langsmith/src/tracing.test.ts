@@ -1401,6 +1401,56 @@ describe('TestLangSmithExporter', () => {
       expect(call.metadata.langsmith).toBeUndefined();
     });
   });
+
+  describe('onScoreEvent', () => {
+    beforeEach(() => {
+      mockClient.createFeedback = vi.fn().mockResolvedValue({});
+    });
+
+    it('forwards to client.createFeedback keyed by spanId', async () => {
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-1',
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          scorerId: 'accuracy',
+          scorerName: 'Accuracy',
+          scoreSource: 'live',
+          score: 0.9,
+          reason: 'good',
+          metadata: { foo: 'bar' },
+        },
+      } as any);
+
+      expect(mockClient.createFeedback).toHaveBeenCalledTimes(1);
+      const [runId, key, opts] = mockClient.createFeedback.mock.calls[0];
+      expect(runId).toBe('span-1');
+      expect(key).toBe('Accuracy');
+      expect(opts).toMatchObject({
+        score: 0.9,
+        comment: 'good',
+        feedbackId: 'sc-1',
+      });
+      expect(opts.sourceInfo).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', foo: 'bar' });
+    });
+
+    it('falls back to traceId when spanId is missing', async () => {
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-2',
+          timestamp: new Date(),
+          traceId: 'trace-only',
+          scorerId: 'x',
+          score: 0.5,
+        },
+      } as any);
+
+      expect(mockClient.createFeedback).toHaveBeenCalledWith('trace-only', 'x', expect.any(Object));
+    });
+  });
 });
 
 // Helper function to create mock spans

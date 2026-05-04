@@ -1560,4 +1560,64 @@ describe('DatadogExporter', () => {
       expect((exporter as any).traceState.has('trace-reactivate')).toBe(false);
     });
   });
+
+  describe('onScoreEvent', () => {
+    let exporter: DatadogExporter;
+
+    beforeEach(() => {
+      exporter = new DatadogExporter({ mlApp: 'test-app', apiKey: 'test-key' });
+    });
+
+    afterEach(async () => {
+      await exporter.shutdown();
+    });
+
+    it('submits an evaluation for a span that was previously emitted', async () => {
+      const span = createMockSpan();
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-1',
+          timestamp: new Date('2024-01-01T00:01:00Z'),
+          traceId: span.traceId,
+          spanId: span.id,
+          scorerId: 'accuracy',
+          scorerName: 'Accuracy',
+          score: 0.92,
+          reason: 'good',
+          metadata: { foo: 'bar' },
+        },
+      } as any);
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledTimes(1);
+      const [ctx, opts] = mockSubmitEvaluation.mock.calls[0];
+      expect(ctx).toEqual({ traceId: 'dd-trace-id', spanId: expect.any(String) });
+      expect(opts).toMatchObject({
+        label: 'Accuracy',
+        value: 0.92,
+        metricType: 'score',
+        mlApp: 'test-app',
+        reasoning: 'good',
+        metadata: { foo: 'bar' },
+      });
+    });
+
+    it('drops scores for unknown spans', async () => {
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-1',
+          timestamp: new Date(),
+          traceId: 'unknown-trace',
+          spanId: 'unknown-span',
+          scorerId: 'x',
+          score: 1,
+        },
+      } as any);
+
+      expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+    });
+  });
 });

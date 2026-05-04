@@ -17,6 +17,7 @@ import type {
   AnyExportedSpan,
   ModelGenerationAttributes,
   ModelStepAttributes,
+  ScoreEvent,
 } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
@@ -405,6 +406,56 @@ export class DatadogExporter extends BaseExporter {
     }
 
     return annotations;
+  }
+
+  /**
+   * Submit an eval score to Datadog LLM Observability for the matching ddSpan.
+   * Resolved by Mastra `traceId` + `spanId`; if no matching span context is found
+   * (e.g. score arrives after the trace state has been cleaned up) the event is dropped.
+   */
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (this.isDisabled || !(tracer as any).llmobs?.submitEvaluation) return;
+
+    const { score } = event;
+    if (!score.traceId || !score.spanId) {
+      this.logger.debug('Datadog exporter: skipping score with no traceId/spanId', {
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    const ctx = this.traceState.get(score.traceId)?.contexts.get(score.spanId);
+    const exported = ctx?.exported;
+    if (!exported) {
+      this.logger.debug('Datadog exporter: no exported span context for score', {
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    try {
+      tracer.llmobs.submitEvaluation(
+        { traceId: exported.traceId, spanId: exported.spanId },
+        {
+          label: score.scorerName ?? score.scorerId,
+          value: score.score,
+          metricType: 'score',
+          mlApp: this.config.mlApp,
+          timestampMs: score.timestamp instanceof Date ? score.timestamp.getTime() : Date.now(),
+          ...(score.reason ? { reasoning: score.reason } : {}),
+          ...(score.metadata ? { metadata: score.metadata } : {}),
+        },
+      );
+    } catch (err) {
+      this.logger.error('Datadog exporter: Failed to submit evaluation', {
+        error: err,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
+    }
   }
 
   /**
