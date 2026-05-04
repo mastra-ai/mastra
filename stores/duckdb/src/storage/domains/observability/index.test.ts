@@ -690,6 +690,61 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(allBranches.branches).toHaveLength(5);
     });
 
+    it('listBranches applies scalar prefilter and tag post-filter correctly', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'br-scalar-a',
+            spanId: 'agent-a',
+            parentSpanId: 'root-a',
+            name: 'nested-agent',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-a',
+            entityName: 'agentA',
+            environment: 'production',
+            serviceName: 'svc-a',
+            tags: ['keep'],
+            startedAt: new Date('2026-04-03T00:00:00Z'),
+            endedAt: new Date('2026-04-03T00:00:02Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-scalar-b',
+            spanId: 'agent-b',
+            parentSpanId: 'root-b',
+            name: 'nested-agent',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-b',
+            entityName: 'agentB',
+            environment: 'staging',
+            serviceName: 'svc-b',
+            tags: ['skip'],
+            startedAt: new Date('2026-04-03T00:00:05Z'),
+            endedAt: new Date('2026-04-03T00:00:06Z'),
+          },
+        ],
+      });
+
+      // Fast path — scalar-only filter (no post-agg).
+      const byEnv = await storage.listBranches({
+        filters: { environment: 'production', startedAt: { start: new Date('2026-04-03T00:00:00Z') } },
+      });
+      const envSpanIds = byEnv.branches.map(b => b.spanId);
+      expect(envSpanIds).toContain('agent-a');
+      expect(envSpanIds).not.toContain('agent-b');
+
+      // Slow path — post-agg tag filter combined with scalar startedAt.
+      const byTag = await storage.listBranches({
+        filters: { tags: ['keep'], startedAt: { start: new Date('2026-04-03T00:00:00Z') } },
+      });
+      const tagSpanIds = byTag.branches.map(b => b.spanId);
+      expect(tagSpanIds).toContain('agent-a');
+      expect(tagSpanIds).not.toContain('agent-b');
+    });
+
     it('getSpans batch-fetches a subset of spans within a trace', async () => {
       await storage.batchCreateSpans({
         records: [

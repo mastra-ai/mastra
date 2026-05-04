@@ -194,14 +194,14 @@ function buildHasChildErrorClause(hasChildError: boolean | undefined, rootAlias:
 }
 
 // ============================================================================
-// listTraces filter classification
+// listTraces / listBranches filter classification
 // ============================================================================
 
 /**
  * Filter keys that can be evaluated directly against raw `span_events` start
  * rows. These are stable scalar columns whose value on the start row matches
- * the reconstructed root-span value, so pushing them down before
- * reconstruction is observation-equivalent to the old behavior.
+ * the reconstructed span value, so pushing them down before reconstruction is
+ * observation-equivalent to reconstructing first and filtering after.
  */
 const PREFILTER_KEYS = new Set([
   'traceId',
@@ -226,7 +226,16 @@ const PREFILTER_KEYS = new Set([
   'serviceName',
 ]);
 
-function partitionListTracesFilters(filters: Record<string, unknown>): {
+/**
+ * Split a span-anchor filter set into a `prefilter` half (pushed to raw
+ * `span_events` start rows) and a `postAgg` half (applied after the
+ * reconstruction GROUP BY). Used by both `listTraces` and `listBranches`.
+ *
+ * `hasChildError` is split out separately since it doesn't run via
+ * `buildWhereClause` — `listTraces` wires it up via EXISTS, `listBranches`
+ * never sees it (not in `branchesFilterSchema`).
+ */
+function partitionAnchorFilters(filters: Record<string, unknown>): {
   prefilter: Record<string, unknown>;
   postAgg: Record<string, unknown>;
   hasChildError: boolean | undefined;
@@ -552,7 +561,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   const perPage = Number(args.pagination?.perPage ?? 10);
   const orderBy = { field: args.orderBy?.field ?? 'startedAt', direction: args.orderBy?.direction ?? 'DESC' } as const;
 
-  const { prefilter, postAgg, hasChildError } = partitionListTracesFilters(filters as Record<string, unknown>);
+  const { prefilter, postAgg, hasChildError } = partitionAnchorFilters(filters as Record<string, unknown>);
 
   // Stage 1 — cheap prefilter against raw span_events (start-row only).
   const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
@@ -688,10 +697,20 @@ export async function getSpans(db: DuckDBConnection, args: GetSpansArgs): Promis
 
 /**
  * List branch anchor spans (named-entity invocations) across all traces with
- * filtering, ordering, and pagination. Pre-filters raw `span_events` by
- * `spanType IN (branch types)` before the reconstruct GROUP BY, so we don't
- * pay reconstruction cost for the high-volume sub-operation events
- * (MODEL_STEP, MODEL_CHUNK, etc.) that are never anchors.
+ * filtering, ordering, and pagination.
+ *
+ * Same two-stage strategy as `listTraces`:
+ *   1. Pick candidate anchor `(traceId, spanId)` tuples from raw `span_events`
+ *      by looking only at `eventType = 'start'` rows whose `spanType` is in
+ *      {@link BRANCH_SPAN_TYPES}. Scalar filters (entity*, *Id, environment,
+ *      serviceName, startedAt range, ...) run here, against raw columns. This
+ *      avoids paying reconstruction cost for the high-volume sub-operation
+ *      events (MODEL_STEP, MODEL_CHUNK, ...) that are never anchors.
+ *   2. Reconstruct full span data only for that narrowed set, then apply
+ *      post-aggregation filters (status / metadata / tags / endedAt range).
+ *
+ * When there are no post-aggregation filters, ordering + pagination happen
+ * inside the prefilter so reconstruction runs on at most `perPage` rows.
  */
 export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs): Promise<ListBranchesResponse> {
   const filters = args.filters ?? {};
@@ -699,51 +718,122 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   const perPage = Number(args.pagination?.perPage ?? 10);
   const orderBy = { field: args.orderBy?.field ?? 'startedAt', direction: args.orderBy?.direction ?? 'DESC' } as const;
 
-  // spanType is consumed by the prefilter; pass the rest of the filter set
-  // through buildWhereClause unchanged.
-  const { spanType, ...passthroughFilters } = filters as Record<string, unknown>;
-  const { clause: filterClause, params: filterParams } = buildWhereClause(passthroughFilters);
-  const orderByClause = buildOrderByClause(orderBy);
-  const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  // Caller-supplied spanType narrows further; if it's not a branch type, the
+  // intersection with BRANCH_SPAN_TYPES is empty and we short-circuit (instead
+  // of silently widening to all branches or leaking the non-branch type
+  // through).
+  const userSpanType = (filters as Record<string, unknown>).spanType;
+  if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
+    return {
+      pagination: { total: 0, page, perPage, hasMore: false },
+      branches: [],
+    };
+  }
 
-  // Prefilter raw events to branch-anchor types. Unlike the ClickHouse path
-  // which reads from an MV-filtered table, DuckDB queries raw span_events
-  // directly, so this guard is what enforces "listBranches only returns
-  // branches" here. Caller-supplied spanType narrows further; if it's not a
-  // branch type, the intersection is empty and we short-circuit to no rows
-  // (instead of silently widening to all branches or leaking the non-branch
-  // type through).
-  let prefilterClause: string;
-  let prefilterParams: unknown[];
-  if (typeof spanType === 'string') {
-    if (!(BRANCH_SPAN_TYPES as readonly string[]).includes(spanType)) {
-      // Caller asked for a non-branch span type; "branch anchors with that
-      // type" is an empty set by definition.
+  // `spanType` is consumed inline below (not via PREFILTER_KEYS) so we always
+  // emit the IN-list / equality form regardless of the caller's input.
+  const { spanType: _spanType, ...rest } = filters as Record<string, unknown>;
+  const { prefilter, postAgg, hasChildError: _hasChildError } = partitionAnchorFilters(rest);
+
+  // Stage 1 — cheap prefilter against raw span_events (start-row only).
+  //
+  // Unlike the ClickHouse path which reads from an MV-filtered table, DuckDB
+  // queries raw span_events directly, so this guard is what enforces
+  // "listBranches only returns branches" here.
+  const { clause: prefilterClause, params: prefilterFilterParams } = buildWhereClause(prefilter);
+  const prefilterParts = [`eventType = 'start'`];
+  let spanTypeParams: unknown[];
+  if (typeof userSpanType === 'string') {
+    prefilterParts.push(`spanType = ?`);
+    spanTypeParams = [userSpanType];
+  } else {
+    prefilterParts.push(`spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS})`);
+    spanTypeParams = [...BRANCH_SPAN_TYPES];
+  }
+  if (prefilterClause) prefilterParts.push(prefilterClause.replace(/^WHERE\s+/i, ''));
+  const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
+  const prefilterParams = [...spanTypeParams, ...prefilterFilterParams];
+
+  const outerAlias = 'outer_anchor';
+
+  // For ordering on the prefilter, `startedAt` maps to the start-row `timestamp`.
+  const orderByField = orderBy.field === 'startedAt' ? 'timestamp' : parseFieldKey(orderBy.field);
+  const orderDir = orderBy.direction.toUpperCase();
+  if (orderDir !== 'ASC' && orderDir !== 'DESC') {
+    throw new Error(`Invalid sort direction: ${orderBy.direction}`);
+  }
+  const prefilterOrderBy = `ORDER BY ${orderByField} ${orderDir}`;
+
+  // Same caveat as listTraces: ordering by `endedAt` requires reconstructed
+  // values (start rows always have NULL `endedAt`), so fall back to the slow
+  // path in that case.
+  const hasPostAggFilters = Object.keys(postAgg).length > 0 || orderBy.field === 'endedAt';
+
+  if (!hasPostAggFilters) {
+    // Fast path: order + paginate in the prefilter, reconstruct only the page.
+    const offset = page * perPage;
+
+    const countSql = `
+      SELECT COUNT(*) as total
+      FROM span_events AS ${outerAlias}
+      ${prefilterWhere}
+    `;
+    const countResult = await db.query<{ total: number }>(countSql, prefilterParams);
+    const total = Number(countResult[0]?.total ?? 0);
+
+    if (total === 0) {
       return {
         pagination: { total: 0, page, perPage, hasMore: false },
         branches: [],
       };
     }
-    prefilterClause = `WHERE spanType = ?`;
-    prefilterParams = [spanType];
-  } else {
-    prefilterClause = `WHERE spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS})`;
-    prefilterParams = [...BRANCH_SPAN_TYPES];
+
+    const pageSql = `
+      WITH page_anchors AS (
+        SELECT traceId, spanId
+        FROM span_events AS ${outerAlias}
+        ${prefilterWhere}
+        ${prefilterOrderBy}
+        LIMIT ? OFFSET ?
+      )
+      ${SPAN_RECONSTRUCT_SELECT}
+      WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM page_anchors)
+      GROUP BY traceId, spanId
+      ${buildOrderByClause(orderBy)}
+    `;
+    const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
+    const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+
+    return {
+      pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+      branches: toTraceSpans(spans),
+    };
   }
 
+  // Slow path: reconstruct the prefilter set, then apply post-agg filters.
+  const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
+  const postAggWhere = postAggClause ? postAggClause : '';
+  const orderByClause = buildOrderByClause(orderBy);
+  const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+
   const cteSql = `
-    WITH branch_anchors AS (
+    WITH candidate_anchors AS (
+      SELECT traceId, spanId
+      FROM span_events AS ${outerAlias}
+      ${prefilterWhere}
+    ),
+    branch_anchors AS (
       ${SPAN_RECONSTRUCT_SELECT}
-      ${prefilterClause}
+      WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_anchors)
       GROUP BY traceId, spanId
     )
   `;
 
   const countSql = `
     ${cteSql}
-    SELECT COUNT(*) as total FROM branch_anchors ${filterClause}
+    SELECT COUNT(*) as total FROM branch_anchors ${postAggWhere}
   `;
-  const countResult = await db.query<{ total: number }>(countSql, [...prefilterParams, ...filterParams]);
+  const countResult = await db.query<{ total: number }>(countSql, [...prefilterParams, ...postAggParams]);
   const total = Number(countResult[0]?.total ?? 0);
 
   if (total === 0) {
@@ -755,18 +845,13 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
 
   const dataSql = `
     ${cteSql}
-    SELECT * FROM branch_anchors ${filterClause} ${orderByClause} ${paginationClause}
+    SELECT * FROM branch_anchors ${postAggWhere} ${orderByClause} ${paginationClause}
   `;
-  const rows = await db.query(dataSql, [...prefilterParams, ...filterParams, ...paginationParams]);
+  const rows = await db.query(dataSql, [...prefilterParams, ...postAggParams, ...paginationParams]);
   const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
 
   return {
-    pagination: {
-      total,
-      page,
-      perPage,
-      hasMore: (page + 1) * perPage < total,
-    },
+    pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     branches: toTraceSpans(spans),
   };
 }
