@@ -1,5 +1,14 @@
 # @mastra/convex
 
+## 1.0.10-alpha.1
+
+### Patch Changes
+
+- Fixed `@mastra/convex` workflow snapshot persistence when snapshots contain `$`-prefixed JSON Schema keys (for example `$schema` and `$ref`). ([#16169](https://github.com/mastra-ai/mastra/pull/16169))
+  Snapshots are now stored safely, preventing Convex validation failures during workflow runs. Fixes `#16110`.
+- Updated dependencies [[`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0)]:
+  - @mastra/core@1.32.0-alpha.3
+
 ## 1.0.10-alpha.0
 
 ### Patch Changes

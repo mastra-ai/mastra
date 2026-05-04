@@ -1,5 +1,16 @@
 # @mastra/duckdb
 
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Improved performance of `listTraces` and `listBranches` on DuckDB. The Traces and Branches lists in the observability UI now load noticeably faster, especially on large span tables, because filtering and pagination happen up front and the store only assembles full span data for the rows on the page being viewed. ([#16165](https://github.com/mastra-ai/mastra/pull/16165))
+
+  No API or behavior changes — return shapes and filter semantics are unchanged, and no migration is required.
+
+- Updated dependencies [[`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0)]:
+  - @mastra/core@1.32.0-alpha.3
+
 ## 1.3.0-alpha.0
 
 ### Minor Changes

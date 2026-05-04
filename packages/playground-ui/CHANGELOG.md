@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 26.0.0-alpha.3
+
+### Patch Changes
+
+- Improved trace timeline span controls. Added tooltips with row counts to the expand-children, expand-all-descendants, and expand-at-this-level buttons. The expand-children button now collapses only the direct children rather than the entire subtree, and the descendants column gained a matching collapse-all-descendants action. Root spans show a single Expand all / Collapse all button using outward/inward double-chevrons. ([#16173](https://github.com/mastra-ai/mastra/pull/16173))
+
+- Updated dependencies [[`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0), [`39162cb`](https://github.com/mastra-ai/mastra/commit/39162cb952c0053fdd4ed7217ec7802a2027b19d)]:
+  - @mastra/core@1.32.0-alpha.3
+  - @mastra/client-js@1.17.0-alpha.3
+  - @mastra/react@0.2.34-alpha.3
+
 ## 26.0.0-alpha.2
 
 ### Minor Changes

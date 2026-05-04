@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.17.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`94dcd79`](https://github.com/mastra-ai/mastra/commit/94dcd79ff180c43b2d4527fe9f5aa6b88db36934), [`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0)]:
+  - @mastra/duckdb@1.3.0-alpha.1
+  - @mastra/core@1.32.0-alpha.3
+  - @mastra/libsql@1.10.0-alpha.1
+  - @mastra/pg@1.10.0-alpha.1
+
 ## 0.17.1-alpha.2
 
 ### Patch Changes
