@@ -39,10 +39,7 @@ async function rewritePathAliases(rootDir: string) {
 export default defineConfig(options => ({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
-  // In watch mode, keep dist between rebuilds so consumers (e.g. playground-ui's tsc, Vite)
-  // don't see missing/partial files mid-rebuild. One-shot builds still clean for a fresh slate.
-  // Caveat: stale files can linger if a source file is renamed/deleted while watching —
-  // restart the dev process (or `rm -rf dist`) to reset.
+  // Skip clean in watch so consumers don't see a missing dist mid-rebuild.
   clean: !options.watch,
   dts: false,
   splitting: true,
