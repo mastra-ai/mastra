@@ -241,6 +241,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
 
       const requestContext = server.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      server.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => ctx.get(name),
+      });
 
       // Set context in state object
       ctx.state.requestContext = requestContext;

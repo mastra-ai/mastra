@@ -12,6 +12,23 @@ export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 
+export const MASTRA_IS_STUDIO_KEY = 'mastra__isStudio';
+
+export const MASTRA_CLIENT_TYPE_HEADER = 'x-mastra-client-type';
+
+export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
+
+const RESERVED_CONTEXT_KEYS = new Set([
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_IS_STUDIO_KEY,
+]);
+
+export function isReservedRequestContextKey(key: string): boolean {
+  return RESERVED_CONTEXT_KEYS.has(key);
+}
+
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 
 export const WORKSPACE_TOOLS = {
