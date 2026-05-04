@@ -191,15 +191,39 @@ import { llmRecorderPlugin } from '@internal/llm-recorder/vite-plugin';
 
 ## Recording Storage
 
-Recordings are stored as human-readable JSON in `__recordings__/` (relative to `process.cwd()`):
+Recordings are stored as human-readable JSON in `__recordings__/` (relative to `process.cwd()`).
+
+When requests or responses contain binary payloads (for example audio), bytes are stored as sidecar files directly in `__recordings__/` using hash-based names, and the JSON recording references those paths.
 
 ```
 your-package/
 ├── __recordings__/
-│   └── my-agent-tests.json
+│   ├── my-agent-tests.json
+│   └── a1b2c3d4-response.wav
 └── src/
     └── tests/
 ```
+
+Binary metadata in JSON includes content type and size, while the raw bytes stay in artifact files.
+
+```json
+{
+  "response": {
+    "body": {
+      "__binary": true,
+      "contentType": "audio/wav",
+      "size": 8192
+    },
+    "binaryArtifact": {
+      "path": "a1b2c3d4-response.wav",
+      "contentType": "audio/wav",
+      "size": 8192
+    }
+  }
+}
+```
+
+This keeps recordings readable and prevents large binary payloads from bloating JSON fixtures.
 
 ## Request Matching
 

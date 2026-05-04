@@ -52,17 +52,12 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
       .join('\n');
 
     try {
-      // Note: __binaryRequest is required for proper NDJSON handling
-      await this.client.vectorize.indexes.upsert(
-        indexName,
-        {
-          account_id: this.accountId,
-          body: ndjson,
-        },
-        {
-          __binaryRequest: true,
-        },
-      );
+      const body = new File([ndjson], `${indexName}.ndjson`, { type: 'application/x-ndjson' });
+
+      await this.client.vectorize.indexes.upsert(indexName, {
+        account_id: this.accountId,
+        body,
+      });
 
       return generatedIds;
     } catch (error) {

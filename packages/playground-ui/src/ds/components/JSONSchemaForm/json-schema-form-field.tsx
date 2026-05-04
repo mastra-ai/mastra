@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { JSONSchemaFormFieldProvider } from './json-schema-form-field-context';
 import type { SchemaField } from './types';
+import { cn } from '@/lib/utils';
 
 export interface JSONSchemaFormFieldProps {
   field: SchemaField;

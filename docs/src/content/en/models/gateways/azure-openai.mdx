@@ -12,6 +12,30 @@ Azure OpenAI provides enterprise-grade access to OpenAI models through dedicated
 
 Unlike other providers that have fixed model names, Azure uses **deployment names** that you configure in the Azure Portal.
 
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.
+
 ## How Azure Deployments Work
 
 Azure model IDs follow this pattern: `azure-openai/your-deployment-name`
@@ -75,6 +99,41 @@ export const mastra = new Mastra({
 
 The Service Principal requires "Cognitive Services User" role. See [Azure documentation](https://learn.microsoft.com/en-us/entra/identity-platform/howto-create-service-principal-portal).
 
+### Microsoft Entra ID authentication
+
+Use Microsoft Entra ID authentication when API keys are disabled for your Azure OpenAI resource. Pass any Azure SDK-compatible credential, such as `DefaultAzureCredential` from `@azure/identity`.
+
+Install `@azure/identity` in your Mastra project if you use `DefaultAzureCredential`.
+
+```typescript
+import { DefaultAzureCredential } from "@azure/identity";
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      authentication: {
+        type: "entraId",
+        credential: new DefaultAzureCredential(),
+      },
+      deployments: ["gpt-4-prod", "gpt-35-turbo-dev"],
+    }),
+  ],
+});
+```
+
+The identity needs permission to call Azure OpenAI, such as the `Cognitive Services OpenAI User` role.
+
+For a specific managed identity, pass `ManagedIdentityCredential` instead.
+
+```typescript
+import { ManagedIdentityCredential } from "@azure/identity";
+
+const credential = new ManagedIdentityCredential("client-id");
+```
+
 ### Manual Deployment Names
 
 Provide resource name and API key only. Specify deployment names when creating agents. No IDE autocomplete.
@@ -98,7 +157,11 @@ export const mastra = new Mastra({
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `resourceName` | `string` | Yes | Azure OpenAI resource name |
-| `apiKey` | `string` | Yes | API key from "Keys and Endpoint" |
+| `apiKey` | `string` | Yes* | API key from "Keys and Endpoint" |
+| `authentication` | `object` | No | Microsoft Entra ID authentication |
+| `authentication.type` | `"entraId"` | Yes* | Authentication mode |
+| `authentication.credential` | `TokenCredential` | Yes* | Azure SDK-compatible credential for `entraId` authentication mode |
+| `authentication.scope` | `string` | No | Token scope (default: `https://cognitiveservices.azure.com/.default`) |
 | `apiVersion` | `string` | No | API version (default: `2024-04-01-preview`) |
 | `deployments` | `string[]` | No | Deployment names for static mode |
 | `management` | `object` | No | Management API credentials |
@@ -108,28 +171,4 @@ export const mastra = new Mastra({
 | `management.subscriptionId` | `string` | Yes* | Azure subscription ID |
 | `management.resourceGroup` | `string` | Yes* | Resource group name |
 
-\* Required if `management` is provided
-
-## Usage
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-
-const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
-});
-
-// Generate a response
-const response = await agent.generate("Hello!");
-
-// Stream a response
-const stream = await agent.stream("Tell me a story");
-for await (const chunk of stream) {
-  console.log(chunk);
-}
-```
-
-Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.
+\* Provide either `apiKey` or `authentication.type: "entraId"`. Management fields are required if `management` is provided.

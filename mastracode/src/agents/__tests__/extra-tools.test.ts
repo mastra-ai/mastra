@@ -144,6 +144,8 @@ describe('getToolCategory – extra tools', () => {
   it('should still categorize built-in tools correctly', () => {
     expect(getToolCategory(MC_TOOLS.VIEW)).toBe('read');
     expect(getToolCategory(MC_TOOLS.SEARCH_CONTENT)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.FIND_FILES)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.LSP_INSPECT)).toBe('read');
     expect(getToolCategory(MC_TOOLS.STRING_REPLACE_LSP)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });

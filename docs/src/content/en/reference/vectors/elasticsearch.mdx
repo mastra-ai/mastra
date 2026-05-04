@@ -1,13 +1,13 @@
 ---
-title: "Reference: ElasticSearch Vector Store | Vectors"
-description: Documentation for the ElasticSearchVector class in Mastra, which provides vector search using ElasticSearch.
+title: "Reference: Elasticsearch vector store | Vectors"
+description: Documentation for the ElasticSearchVector class in Mastra, which provides vector search using Elasticsearch.
 packages:
   - "@mastra/elasticsearch"
 ---
 
-# ElasticSearch Vector Store
+# Elasticsearch vector store
 
-The ElasticSearchVector class provides vector search using [ElasticSearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities.
+The `ElasticSearchVector` class provides vector search using [Elasticsearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities.
 It's part of the `@mastra/elasticsearch` package.
 
 ## Installation
@@ -53,7 +53,7 @@ const results = await store.query({
 });
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -65,14 +65,14 @@ const results = await store.query({
   {
     name: 'url',
     type: 'string',
-    description: "ElasticSearch connection URL (e.g., 'http://localhost:9200')",
+    description: "Elasticsearch connection URL (e.g., 'http://localhost:9200')",
   },
 ]}
 />
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new index with the specified configuration.
 
@@ -98,7 +98,7 @@ Creates a new index with the specified configuration.
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or updates vectors and their metadata in the index.
 
@@ -129,7 +129,7 @@ Adds or updates vectors and their metadata in the index.
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for similar vectors with optional metadata filtering.
 
@@ -168,7 +168,7 @@ Searches for similar vectors with optional metadata filtering.
 ]}
 />
 
-### describeIndex()
+### `describeIndex()`
 
 Gets information about an index.
 
@@ -192,7 +192,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes an index and all its data.
 
@@ -206,13 +206,13 @@ Deletes an index and all its data.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all vector indexes.
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -255,7 +255,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a single vector by its ID.
 
@@ -274,7 +274,7 @@ Deletes a single vector by its ID.
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -300,7 +300,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 

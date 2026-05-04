@@ -1,10 +1,13 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import { MastraFGAPermissions } from '../auth/ee';
+import type { MastraFGAPermissionInput } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
 import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
+import type { ObservabilityContext } from '../observability';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -32,6 +35,7 @@ import type {
   SharedMemoryConfig,
   StorageThreadType,
   MemoryConfig,
+  MemoryConfigInternal,
   MastraMessageV1,
   WorkingMemoryTemplate,
   MessageDeleteInput,
@@ -94,7 +98,9 @@ export const memoryDefaultOptions = {
 - **Projects**: 
 `,
   },
-} satisfies MemoryConfig;
+} satisfies MemoryConfigInternal;
+
+export { filterSystemReminderMessages, isSystemReminderMessage } from './system-reminders';
 
 /**
  * Abstract base class for implementing conversation memory systems.
@@ -118,7 +124,7 @@ export abstract class MastraMemory extends MastraBase {
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
-  protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
+  protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
@@ -190,6 +196,22 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
       if (config.embedderOptions) {
         this.embedderOptions = config.embedderOptions;
       }
+    } else {
+      // Even without semanticRecall, store vector/embedder if provided
+      // (used by retrieval search in observational memory)
+      if (config.vector) {
+        this.vector = config.vector;
+      }
+      if (config.embedder) {
+        if (typeof config.embedder === 'string') {
+          this.embedder = new ModelRouterEmbeddingModel(config.embedder);
+        } else {
+          this.embedder = config.embedder;
+        }
+      }
+      if (config.embedderOptions) {
+        this.embedderOptions = config.embedderOptions;
+      }
     }
   }
 
@@ -248,7 +270,7 @@ https://mastra.ai/en/docs/memory/overview`,
   public async getSystemMessage(_input: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     return null;
   }
@@ -306,7 +328,10 @@ https://mastra.ai/en/docs/memory/overview`,
     return isDefault ? `memory${separator}messages` : `memory${separator}messages${separator}${usedDimensions}`;
   }
 
-  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(
+    dimensions?: number,
+    config?: MemoryConfigInternal,
+  ): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const indexName = this.getEmbeddingIndexName(dimensions);
@@ -335,11 +360,15 @@ https://mastra.ai/en/docs/memory/overview`,
       if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
     }
 
+    // Request btree indexes on metadata fields used for filtering
+    // This avoids sequential scans on large tables when querying by thread_id or resource_id
+    createParams.metadataIndexes = ['thread_id', 'resource_id'];
+
     await this.vector.createIndex(createParams);
     return { indexName };
   }
 
-  public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
+  public getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
     if (config?.workingMemory && typeof config.workingMemory === 'object' && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
@@ -418,7 +447,7 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig,
   }: {
     thread: StorageThreadType;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
 
   /**
@@ -429,6 +458,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -441,8 +471,10 @@ https://mastra.ai/en/docs/memory/overview`,
    */
   abstract recall(
     args: StorageListMessagesInput & {
-      threadConfig?: MemoryConfig;
+      threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      includeSystemReminders?: boolean;
+      observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -471,7 +503,7 @@ https://mastra.ai/en/docs/memory/overview`,
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
@@ -513,7 +545,7 @@ https://mastra.ai/en/docs/memory/overview`,
   async addMessage(_params: {
     threadId: string;
     resourceId: string;
-    config?: MemoryConfig;
+    config?: MemoryConfigInternal;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
     type: 'text' | 'tool-call' | 'tool-result';
@@ -534,6 +566,45 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
+   * Static helper to check FGA authorization for thread access.
+   * Can be called from HTTP handlers and agent execution paths.
+   */
+  static async checkThreadFGA(options: {
+    mastra?: Mastra;
+    user: Record<string, unknown>;
+    threadId: string;
+    resourceId?: string;
+    requestContext?: RequestContext;
+    permission?: MastraFGAPermissionInput;
+  }): Promise<void> {
+    const {
+      mastra,
+      user,
+      threadId,
+      resourceId,
+      requestContext,
+      permission = MastraFGAPermissions.MEMORY_READ,
+    } = options;
+    const fgaProvider = mastra?.getServer()?.fga;
+    if (!fgaProvider) return;
+
+    const { checkFGA } = await import('../auth/ee/fga-check');
+    await checkFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'thread', id: threadId },
+      permission,
+      context:
+        resourceId || requestContext
+          ? {
+              resourceId,
+              requestContext,
+            }
+          : undefined,
+    });
+  }
+
+  /**
    * Retrieves working memory for a specific thread
    * @param threadId - The unique identifier of the thread
    * @param resourceId - The unique identifier of the resource
@@ -547,7 +618,7 @@ https://mastra.ai/en/docs/memory/overview`,
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null>;
 
   /**
@@ -559,7 +630,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract getWorkingMemoryTemplate({
     memoryConfig,
   }: {
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null>;
 
   abstract updateWorkingMemory({
@@ -567,11 +638,13 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId,
     workingMemory,
     memoryConfig,
+    observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
 
   /**
@@ -588,7 +661,7 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId?: string;
     workingMemory: string;
     searchString?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }>;
 
   /**
@@ -843,7 +916,10 @@ https://mastra.ai/en/docs/memory/overview`,
     return processors;
   }
 
-  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
+  abstract deleteMessages(
+    messageIds: MessageDeleteInput,
+    observabilityContext?: Partial<ObservabilityContext>,
+  ): Promise<void>;
 
   /**
    * Clones a thread with all its messages to a new thread
@@ -930,7 +1006,11 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const result: SerializedObservationalMemoryConfig = {
       scope: om.scope,
+      activateAfterIdle: om.activateAfterIdle,
+      activateOnProviderChange: om.activateOnProviderChange,
       shareTokenBudget: om.shareTokenBudget,
+      temporalMarkers: om.temporalMarkers,
+      retrieval: om.retrieval,
     };
 
     // Extract model ID string from the top-level model
@@ -950,6 +1030,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferTokens: obs.bufferTokens,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
+        previousObserverTokens: obs.previousObserverTokens,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {

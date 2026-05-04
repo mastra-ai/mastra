@@ -1,17 +1,21 @@
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
+import { cn } from '@/lib/utils';
 
 export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
   viewPortClassName?: string;
   maxHeight?: string;
   autoScroll?: boolean;
+  orientation?: 'vertical' | 'horizontal' | 'both';
 };
 
 const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.Root>, ScrollAreaProps>(
-  ({ className, children, viewPortClassName, maxHeight, autoScroll = false, ...props }, ref) => {
+  (
+    { className, children, viewPortClassName, maxHeight, autoScroll = false, orientation = 'vertical', ...props },
+    ref,
+  ) => {
     const areaRef = React.useRef<HTMLDivElement>(null);
     useAutoscroll(areaRef, { enabled: autoScroll });
 
@@ -19,13 +23,14 @@ const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.
       <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
         <ScrollAreaPrimitive.Viewport
           ref={areaRef}
-          className={cn('h-full w-full rounded-[inherit] [&>div]:!block', viewPortClassName)}
+          className={cn('h-full w-full rounded-[inherit] [&>div]:block!', viewPortClassName)}
           style={maxHeight ? { maxHeight } : undefined}
         >
           {children}
         </ScrollAreaPrimitive.Viewport>
-        <ScrollBar />
-        <ScrollAreaPrimitive.Corner />
+        {(orientation === 'vertical' || orientation === 'both') && <ScrollBar orientation="vertical" />}
+        {(orientation === 'horizontal' || orientation === 'both') && <ScrollBar orientation="horizontal" />}
+        {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
       </ScrollAreaPrimitive.Root>
     );
   },

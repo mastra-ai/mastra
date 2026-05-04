@@ -9,7 +9,7 @@ packages:
 
 The AzureVoice class in Mastra provides text-to-speech and speech-to-text capabilities using Microsoft Azure Cognitive Services.
 
-## Usage Example
+## Usage example
 
 This requires Azure Speech Services credentials that can be provided through environment variables or directly in the configuration:
 
@@ -42,7 +42,7 @@ const text = await voice.listen(audioStream)
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -137,7 +137,7 @@ const text = await voice.listen(audioStream)
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using Azure's neural text-to-speech service.
 
@@ -175,7 +175,7 @@ Converts text to speech using Azure's neural text-to-speech service.
 
 Returns: `Promise<NodeJS.ReadableStream>` - Audio stream in WAV format
 
-### listen()
+### `listen()`
 
 Transcribes audio using Azure's speech-to-text service.
 
@@ -194,7 +194,7 @@ Returns: `Promise<string>` - The recognized text from the audio
 
 **Note:** Language and recognition settings are configured in the `listeningModel` configuration during initialization, not passed as options to this method.
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options (200+ voices), where each node contains:
 
@@ -223,17 +223,17 @@ Returns an array of available voice options (200+ voices), where each node conta
 
 Returns: `Promise<Array<{ voiceId: string; language: string; region: string; }>>`
 
-## Important Notes
+## Important notes
 
 ### Azure Speech Services vs Azure OpenAI
 
 **⚠️ Critical:** This package uses **Azure Speech Services**, which is different from **Azure OpenAI Services**.
 
-- **DO NOT** use your `AZURE_OPENAI_API_KEY` for this package
+- **DON'T** use your `AZURE_OPENAI_API_KEY` for this package
 - **DO** use an Azure Speech Services subscription key (obtain from Azure Portal under "Speech Services")
 - These are separate Azure resources with different API keys and endpoints
 
-### Environment Variables
+### Environment variables
 
 API keys and regions can be provided via constructor options or environment variables:
 
@@ -248,7 +248,7 @@ API keys and regions can be provided via constructor options or environment vari
 - Audio output is in WAV format
 - Audio input for recognition must be in WAV format
 
-## Available Voices
+## Available voices
 
 Azure provides 200+ neural voices across many languages. Some popular English voices include:
 

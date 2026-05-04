@@ -82,6 +82,16 @@ interface PgCreateIndexParams extends Omit<CreateIndexParams, 'metric'> {
    * Use 'sparsevec' for BM25/TF-IDF and other sparse embeddings
    */
   vectorType?: VectorType;
+  /**
+   * Metadata fields to create btree indexes for.
+   * This improves query performance when filtering vectors by these metadata fields.
+   *
+   * Each entry creates a btree index on `metadata->>'field_name'`.
+   *
+   * Example: `['thread_id', 'resource_id']` creates indexes that speed up
+   * queries filtering by `thread_id` or `resource_id` in the metadata JSONB column.
+   */
+  metadataIndexes?: string[];
 }
 
 interface PgDefineIndexParams {
@@ -223,6 +233,32 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       this.logger.debug('Could not detect vector extension schema', { error });
       return null;
+    }
+  }
+
+  /**
+   * Sets search_path on the client connection so that vector operators (e.g. <=>, vector_cosine_ops)
+   * are resolvable when the pgvector extension is installed in a non-default schema.
+   *
+   * PostgreSQL's default search_path is ("$user", public). If the extension lives in a custom schema
+   * (e.g. "myapp"), operator classes and distance operators won't resolve without this.
+   */
+  private async ensureSearchPath(client: pg.PoolClient) {
+    // Lazily detect extension schema if not yet known
+    if (!this.vectorExtensionSchema) {
+      await this.detectVectorExtensionSchema(client);
+    }
+
+    if (
+      this.vectorExtensionSchema &&
+      this.vectorExtensionSchema !== 'public' &&
+      this.vectorExtensionSchema !== 'pg_catalog'
+    ) {
+      const schemas = new Set<string>();
+      schemas.add(this.vectorExtensionSchema);
+      if (this.schema) schemas.add(this.schema);
+      schemas.add('public');
+      await client.query(`SET search_path TO ${[...schemas].map(s => `"${s}"`).join(', ')}`);
     }
   }
 
@@ -477,6 +513,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Vector similarity query
     const client = await this.pool.connect();
     try {
+      // Set search path so vector operators (e.g. <=>) resolve correctly
+      await this.ensureSearchPath(client);
       await client.query('BEGIN');
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
@@ -511,7 +549,31 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      const query = `
+      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
+      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
+      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
+      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
+      // vectors in other clusters, returning fewer results than expected.
+      const hasFilter = filterQuery.trim().length > 0;
+      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
+
+      const query = useIndexedOrder
+        ? `
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            ${scoreExpr} as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ORDER BY ${distanceExpr}
+          LIMIT $2
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC`
+        : `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
@@ -570,6 +632,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Start a transaction
     const client = await this.pool.connect();
     try {
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       await client.query('BEGIN');
 
       // Step 1: If deleteFilter is provided, delete matching vectors first
@@ -675,8 +740,21 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metric,
     type,
     vectorType = 'vector',
-  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType }) {
-    const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType; // ivfflat is default
+    metadataIndexes,
+  }: Omit<CreateIndexParams, 'metric'> & {
+    metric?: PgMetric;
+    type: IndexType | undefined;
+    vectorType?: VectorType;
+    metadataIndexes?: string[];
+  }) {
+    const input = JSON.stringify([
+      indexName,
+      dimension,
+      metric,
+      type || 'ivfflat',
+      vectorType,
+      metadataIndexes?.toSorted() ?? [],
+    ]);
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
@@ -741,6 +819,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     indexConfig = {},
     buildIndex = true,
     vectorType = 'vector',
+    metadataIndexes,
   }: PgCreateIndexParams): Promise<void> {
     // Normalize metric for bit vectors: default to 'hamming' unless explicitly 'hamming' or 'jaccard'
     const metric: PgMetric =
@@ -794,6 +873,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       type: indexConfig.type,
       metric,
       vectorType,
+      metadataIndexes,
     });
     if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
@@ -870,16 +950,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             });
           }
 
-          // Set search path to include both schemas if needed
-          if (
-            this.schema &&
-            this.vectorExtensionSchema &&
-            this.schema !== this.vectorExtensionSchema &&
-            this.vectorExtensionSchema !== 'pg_catalog'
-          ) {
-            await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
-          }
-
           // Use the properly qualified vector type (vector or halfvec)
           const qualifiedVectorType = this.getVectorTypeName(vectorType);
 
@@ -896,6 +966,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
           if (buildIndex) {
             await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
+          }
+
+          if (metadataIndexes?.length) {
+            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1057,6 +1131,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         return;
       }
 
+      // Set search path so vector operator classes (e.g. vector_cosine_ops) resolve correctly
+      await this.ensureSearchPath(client);
+
       // Get the operator class based on vector type and metric
       // pgvector uses different operator classes for vector vs halfvec
       // Use the detected vectorType from existing table if available, otherwise use the parameter
@@ -1095,6 +1172,29 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       await client.query(indexSQL);
     });
+  }
+
+  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+    const hasher = await this.hasher;
+    for (const field of metadataFields) {
+      // Hash the field to produce a safe, fixed-length suffix for the index name.
+      // This avoids issues with fields containing characters invalid in SQL identifiers
+      // (e.g. "user-id") and keeps the total index name under PostgreSQL's 63-char limit.
+      const fieldHash = hasher.h32(field).toString(16);
+      const prefix = indexName.slice(0, 63 - '_md__idx'.length - fieldHash.length);
+      const metadataIdxName = `"${prefix}_md_${fieldHash}_idx"`;
+      // DDL statements don't support bind parameters, so we must interpolate
+      // the field name as a literal. Escape single quotes to prevent SQL injection.
+      const escapedField = field.replace(/'/g, "''");
+      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
+      // This must run outside a transaction, so we use pool.query() directly.
+      await this.pool.query(
+        `
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
+        ON ${tableName} ((metadata->>'${escapedField}'))
+      `,
+      );
+    }
   }
 
   private async installVectorExtension(client: pg.PoolClient) {
@@ -1468,6 +1568,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       client = await this.pool.connect();
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       const { tableName } = this.getTableName(indexName);
 
       // Get the properly qualified vector type for this index

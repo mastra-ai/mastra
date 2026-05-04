@@ -2,8 +2,6 @@
  * Event handlers for interactive prompt events:
  * ask_question, sandbox_access_request, plan_approval_required.
  */
-import { Spacer } from '@mariozechner/pi-tui';
-
 import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -45,73 +43,75 @@ export async function handleAskQuestion(
       const askUserComponent = state.lastAskUserComponent;
 
       const activate = () => {
-        // Inline mode: Add question component to chat
-        const questionComponent = new AskQuestionInlineComponent(
-          {
-            question,
-            options,
-            onSubmit: answer => {
-              state.activeInlineQuestion = undefined;
-              state.harness.respondToQuestion({ questionId, answer });
-              resolve();
-              processNextInlineQuestion(state);
-            },
-            onCancel: () => {
-              state.activeInlineQuestion = undefined;
-              state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
-              resolve();
-              processNextInlineQuestion(state);
-            },
-          },
-          state.ui,
-        );
+        try {
+          let questionComponent: AskQuestionInlineComponent;
 
-        // Store as active question
-        state.activeInlineQuestion = questionComponent;
-
-        // Insert the question right after the ask_user tool component
-        if (askUserComponent) {
-          // Find the position of the ask_user component
-          const children = [...state.chatContainer.children];
-          const askUserIndex = children.indexOf(askUserComponent as any);
-
-          if (askUserIndex >= 0) {
-            // Clear and rebuild with question in the right place
-            state.chatContainer.clear();
-            // Add all children up to and including the ask_user tool
-            for (let i = 0; i <= askUserIndex; i++) {
-              state.chatContainer.addChild(children[i]!);
-            }
-
-            // Add the question component with spacing
-            state.chatContainer.addChild(new Spacer(1));
-            state.chatContainer.addChild(questionComponent);
-            state.chatContainer.addChild(new Spacer(1));
-
-            // Add remaining children
-            for (let i = askUserIndex + 1; i < children.length; i++) {
-              state.chatContainer.addChild(children[i]!);
-            }
+          if (askUserComponent) {
+            // Activate the existing streaming component with interactive elements.
+            // ask_user is the agent's free-text channel — opt into multiline so users
+            // can paste logs / write paragraph-length replies.
+            askUserComponent.activate({
+              question,
+              options,
+              multiline: true,
+              tui: state.ui,
+              onSubmit: answer => {
+                state.activeInlineQuestion = undefined;
+                state.harness.respondToQuestion({ questionId, answer });
+                resolve();
+                processNextInlineQuestion(state);
+              },
+              onCancel: () => {
+                state.activeInlineQuestion = undefined;
+                state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+                resolve();
+                processNextInlineQuestion(state);
+              },
+            });
+            questionComponent = askUserComponent;
           } else {
-            // Fallback: add at the end
-            state.chatContainer.addChild(new Spacer(1));
+            // Fallback: create a new component if no streaming one exists.
+            // Multiline opt-in matches the streaming branch above.
+            questionComponent = new AskQuestionInlineComponent(
+              {
+                question,
+                options,
+                multiline: true,
+                onSubmit: answer => {
+                  state.activeInlineQuestion = undefined;
+                  state.harness.respondToQuestion({ questionId, answer });
+                  resolve();
+                  processNextInlineQuestion(state);
+                },
+                onCancel: () => {
+                  state.activeInlineQuestion = undefined;
+                  state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+                  resolve();
+                  processNextInlineQuestion(state);
+                },
+              },
+              state.ui,
+            );
             state.chatContainer.addChild(questionComponent);
-            state.chatContainer.addChild(new Spacer(1));
           }
-        } else {
-          // Fallback: add at the end if no ask_user component tracked
-          state.chatContainer.addChild(new Spacer(1));
-          state.chatContainer.addChild(questionComponent);
-          state.chatContainer.addChild(new Spacer(1));
+
+          // Store as active question
+          state.activeInlineQuestion = questionComponent;
+
+          state.ui.requestRender();
+
+          // Ensure the chat scrolls to show the question
+          state.chatContainer.invalidate();
+
+          // Focus the question component
+          questionComponent.focused = true;
+        } catch {
+          // Don't let ask_user errors crash the process — skip the question
+          state.activeInlineQuestion = undefined;
+          state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+          resolve();
+          processNextInlineQuestion(state);
         }
-
-        state.ui.requestRender();
-
-        // Ensure the chat scrolls to show the question
-        state.chatContainer.invalidate();
-
-        // Focus the question component
-        questionComponent.focused = true;
       };
 
       // If another inline question is already active, queue this one
@@ -121,10 +121,12 @@ export async function handleAskQuestion(
         activate();
       }
     } else {
-      // Dialog mode: Show overlay
+      // Dialog mode: Show overlay. Multiline opt-in matches the inline branch.
       const dialog = new AskQuestionDialogComponent({
         question,
         options,
+        multiline: true,
+        tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.harness.respondToQuestion({ questionId, answer });
@@ -192,9 +194,7 @@ export async function handleSandboxAccessRequest(
       state.activeInlineQuestion = questionComponent;
 
       // Add to chat
-      state.chatContainer.addChild(new Spacer(1));
       state.chatContainer.addChild(questionComponent);
-      state.chatContainer.addChild(new Spacer(1));
       questionComponent.focused = true;
       state.ui.requestRender();
       state.chatContainer.invalidate();
@@ -289,21 +289,15 @@ export async function handlePlanApproval(
         for (let i = 0; i <= submitPlanIndex; i++) {
           state.chatContainer.addChild(children[i]!);
         }
-        state.chatContainer.addChild(new Spacer(1));
         state.chatContainer.addChild(approvalComponent);
-        state.chatContainer.addChild(new Spacer(1));
         for (let i = submitPlanIndex + 1; i < children.length; i++) {
           state.chatContainer.addChild(children[i]!);
         }
       } else {
-        state.chatContainer.addChild(new Spacer(1));
         state.chatContainer.addChild(approvalComponent);
-        state.chatContainer.addChild(new Spacer(1));
       }
     } else {
-      state.chatContainer.addChild(new Spacer(1));
       state.chatContainer.addChild(approvalComponent);
-      state.chatContainer.addChild(new Spacer(1));
     }
     state.ui.requestRender();
     state.chatContainer.invalidate();

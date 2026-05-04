@@ -1,0 +1,216 @@
+name: 'Dane PR Commands'
+
+on:
+  issue_comment:
+    types: [created]
+
+# Only one command per PR at a time — cancel older pending runs
+concurrency:
+  group: dane-pr-command-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-permission:
+    name: Check permission & parse command
+    if: >-
+      github.event.issue.pull_request &&
+      (contains(github.event.comment.body, '@dane-ai-mastra') ||
+       contains(github.event.comment.body, '@daneatmastra'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    outputs:
+      authorized: ${{ steps.check.outputs.authorized }}
+      command: ${{ steps.check.outputs.command }}
+      pr_number: ${{ steps.check.outputs.pr_number }}
+    steps:
+      - name: Checkout (sparse — only .github/actions)
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Check org membership & parse command
+        id: check
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            const comment = context.payload.comment;
+            const username = comment.user.login;
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.issue.number;
+
+            // Check org membership FIRST — reject non-members before revealing anything
+            try {
+              await github.rest.orgs.checkMembershipForUser({
+                org: owner,
+                username,
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`User ${username} is not an org member — ignoring`);
+                core.setOutput('authorized', 'false');
+                return;
+              }
+              throw error;
+            }
+
+            // Parse the command from the comment body
+            const match = comment.body.match(/@(?:dane-ai-mastra|daneatmastra)\s+\/?(\S+)/);
+            if (!match) {
+              core.info('No command found after @dane-ai-mastra or @daneatmastra mention');
+              core.setOutput('authorized', 'false');
+              return;
+            }
+
+            const command = match[1];
+            const supportedCommands = ['fix-ci', 'fix-lint', 'pr-comments', 'merge-main'];
+
+            if (!supportedCommands.includes(command)) {
+              // Sanitize for safe display — only allow alphanumeric, hyphens, underscores
+              const safeCommand = command.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 50);
+              core.info(`Unknown command: ${safeCommand}`);
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: `Unknown command \`${safeCommand}\`. Available commands: ${supportedCommands.map(c => `\`${c}\``).join(', ')}`,
+              });
+              core.setOutput('authorized', 'false');
+              return;
+            }
+
+            // Authorized — react with 👀
+            await github.rest.reactions.createForIssueComment({
+              owner,
+              repo,
+              comment_id: comment.id,
+              content: 'eyes',
+            });
+
+            core.setOutput('authorized', 'true');
+            core.setOutput('command', command);
+            core.setOutput('pr_number', String(prNumber));
+            core.info(`Authorized: ${username} running "${command}" on PR #${prNumber}`);
+
+  run-command:
+    name: Run @dane-ai-mastra command
+    needs: check-permission
+    if: needs.check-permission.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      # ── Trusted code from the default branch ──────────────────────────
+      # We checkout the default branch first and build from it so that
+      # the runner script, command templates, and all dependencies come
+      # from trusted code — NOT from the PR branch (which could be from
+      # an external fork and contain malicious modifications).
+      - name: Checkout default branch (trusted code)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+
+      - name: Set up Dane App auth
+        id: app_token
+        uses: ./trusted/.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Set up pnpm & Node.js
+        uses: ./trusted/.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: 'false'
+          package-json-file: trusted/package.json
+          cache-dependency-path: trusted/pnpm-lock.yaml
+
+      - name: Install dependencies (trusted)
+        run: pnpm install --frozen-lockfile
+        working-directory: trusted
+
+      - name: Build packages (trusted)
+        run: pnpm build
+        working-directory: trusted
+        env:
+          TURBO_TELEMETRY_DISABLED: '1'
+
+      # ── PR branch checkout (untrusted) ────────────────────────────────
+      # Only the working tree is from the PR. The runner script and
+      # all mastracode imports still resolve from trusted/.
+      - name: Checkout PR branch
+        uses: actions/checkout@v5
+        with:
+          path: pr-workspace
+
+      - name: Switch PR workspace to PR branch
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          PR_NUMBER: ${{ needs.check-permission.outputs.pr_number }}
+        working-directory: pr-workspace
+        run: gh pr checkout "$PR_NUMBER"
+
+      # ── Run the command from trusted code against the PR workspace ────
+      # Run from trusted/mastracode because that workspace owns the tsx binary used to launch the trusted runner script.
+      - name: Run command
+        env:
+          COMMAND_NAME: ${{ needs.check-permission.outputs.command }}
+          PR_NUMBER: ${{ needs.check-permission.outputs.pr_number }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          PR_WORKSPACE: ${{ github.workspace }}/pr-workspace
+        working-directory: trusted/mastracode
+        run: pnpm exec tsx ../scripts/gh-dane-command/index.ts
+
+      - name: React on success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              ...context.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket',
+            });
+
+      - name: React on failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.check-permission.outputs.pr_number }}
+          COMMAND_NAME: ${{ needs.check-permission.outputs.command }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            await github.rest.reactions.createForIssueComment({
+              owner,
+              repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused',
+            });
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const command = process.env.COMMAND_NAME;
+            const runUrl = process.env.RUN_URL;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: `The \`${command}\` command failed. Check the [workflow run](${runUrl}) for details.`,
+            });

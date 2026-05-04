@@ -1,5 +1,6 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
+import { stampPart } from '../utils/stamp-part';
 
 /**
  * MessageMerger - Handles complex logic for merging assistant messages
@@ -55,6 +56,12 @@ export class MessageMerger {
       return false;
     }
 
+    const latestParts = latestMessage.content?.parts ?? [];
+    const latestOnlyHasDataParts = latestParts.length > 0 && latestParts.every(part => part.type.startsWith('data-'));
+    if (latestOnlyHasDataParts && latestMessage.id !== incomingMessage.id) {
+      return false;
+    }
+
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =
       latestMessage.role === 'assistant' &&
@@ -82,6 +89,13 @@ export class MessageMerger {
   static merge(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): void {
     // Update timestamp
     latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
+
+    if (incomingMessage.content.metadata) {
+      latestMessage.content.metadata = {
+        ...(latestMessage.content.metadata ?? {}),
+        ...incomingMessage.content.metadata,
+      };
+    }
 
     // Used for mapping indexes for incomingMessage parts to corresponding indexes in latestMessage
     const toolResultAnchorMap = new Map<number, number>();
@@ -123,9 +137,48 @@ export class MessageMerger {
               t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
             );
             if (toolInvocationIndex === -1) {
-              latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
+              latestMessage.content.toolInvocations.push(
+                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number],
+              );
             } else {
-              latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
+              latestMessage.content.toolInvocations[toolInvocationIndex] =
+                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number];
+            }
+          } else if (
+            part.toolInvocation.state === 'approval-requested' ||
+            part.toolInvocation.state === 'approval-responded' ||
+            part.toolInvocation.state === 'output-denied' ||
+            part.toolInvocation.state === 'output-error'
+          ) {
+            existingCallPart.toolInvocation = {
+              ...existingCallPart.toolInvocation,
+              state: part.toolInvocation.state,
+              approval: part.toolInvocation.approval,
+              errorText: part.toolInvocation.errorText,
+              rawInput: part.toolInvocation.rawInput,
+              args: {
+                ...existingCallPart.toolInvocation.args,
+                ...part.toolInvocation.args,
+              },
+            };
+
+            if (part.providerMetadata) {
+              existingCallPart.providerMetadata = {
+                ...existingCallPart.providerMetadata,
+                ...part.providerMetadata,
+              };
+            }
+
+            if ('providerExecuted' in part && part.providerExecuted !== undefined) {
+              existingCallPart.providerExecuted = part.providerExecuted;
+            }
+
+            if ('title' in part && part.title !== undefined) {
+              existingCallPart.title = part.title;
+            }
+
+            if ('preliminary' in part && part.preliminary !== undefined) {
+              existingCallPart.preliminary = part.preliminary;
             }
           }
           // Map the index of the tool call in incomingMessage to the index of the tool call in latestMessage
@@ -265,16 +318,24 @@ export class MessageMerger {
         latestMessage.content.parts.length > 0 &&
         latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
 
+      const previousStepStart = [...latestMessage.content.parts].reverse().find(p => p.type === 'step-start');
+      const stepStartPart = previousStepStart?.model
+        ? stampPart({
+            type: 'step-start' as const,
+            model: previousStepStart.model,
+          })
+        : ({ type: 'step-start' as const } as MastraMessageContentV2['parts'][number]);
+
       if (typeof insertAt === 'number') {
         if (needsStepStart) {
-          latestMessage.content.parts.splice(insertAt, 0, { type: 'step-start' });
+          latestMessage.content.parts.splice(insertAt, 0, stepStartPart);
           latestMessage.content.parts.splice(insertAt + 1, 0, part);
         } else {
           latestMessage.content.parts.splice(insertAt, 0, part);
         }
       } else {
         if (needsStepStart) {
-          latestMessage.content.parts.push({ type: 'step-start' });
+          latestMessage.content.parts.push(stepStartPart);
         }
         latestMessage.content.parts.push(part);
       }

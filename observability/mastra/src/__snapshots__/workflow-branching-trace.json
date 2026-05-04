@@ -26,7 +26,8 @@
           "resourceId": "test-resource-id",
           "runId": "<runId-1>",
           "id1": 123,
-          "id2": "tacos"
+          "id2": "tacos",
+          "environment": "test"
         },
         "input": {
           "value": 15
@@ -53,6 +54,13 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "resourceId": "test-resource-id",
+              "runId": "<runId-1>",
+              "id1": 123,
+              "id2": "tacos",
+              "environment": "test"
+            },
             "input": {
               "value": 15
             },
@@ -77,6 +85,13 @@
               "conditionCount": 2,
               "truthyIndexes": [0],
               "selectedSteps": ["process-high"]
+            },
+            "metadata": {
+              "resourceId": "test-resource-id",
+              "runId": "<runId-1>",
+              "id1": 123,
+              "id2": "tacos",
+              "environment": "test"
             },
             "input": {
               "branch": "high"
@@ -104,6 +119,13 @@
                   "conditionIndex": 0,
                   "result": true
                 },
+                "metadata": {
+                  "resourceId": "test-resource-id",
+                  "runId": "<runId-1>",
+                  "id1": 123,
+                  "id2": "tacos",
+                  "environment": "test"
+                },
                 "input": {
                   "branch": "high"
                 },
@@ -126,6 +148,13 @@
                   "conditionIndex": 1,
                   "result": false
                 },
+                "metadata": {
+                  "resourceId": "test-resource-id",
+                  "runId": "<runId-1>",
+                  "id1": 123,
+                  "id2": "tacos",
+                  "environment": "test"
+                },
                 "input": {
                   "branch": "high"
                 },
@@ -146,6 +175,13 @@
                 "entityId": "process-high",
                 "attributes": {
                   "status": "success"
+                },
+                "metadata": {
+                  "resourceId": "test-resource-id",
+                  "runId": "<runId-1>",
+                  "id1": 123,
+                  "id2": "tacos",
+                  "environment": "test"
                 },
                 "input": {
                   "branch": "high"

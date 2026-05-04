@@ -2,7 +2,7 @@ import { tool } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream as convertArrayToReadableStreamV2 } from '@internal/ai-sdk-v5/test';
 import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import {
   createTestModels,
@@ -13,6 +13,7 @@ import {
   modelWithSources,
   testUsage,
   createMessageListWithUserMessage,
+  stripMastraCreatedAt,
 } from './utils';
 import {
   createTestModelsV3,
@@ -299,7 +300,7 @@ export function resultObjectTests({
 
       await result.consumeStream();
 
-      expect(await result.response).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await result.response)).toMatchSnapshot();
     });
   });
 

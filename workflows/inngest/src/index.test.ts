@@ -95,8 +95,8 @@ describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
   beforeEach<LocalTestContext>(async ctx => {
-    ctx.inngestPort = 4000;
-    ctx.handlerPort = 4001;
+    ctx.inngestPort = 4100;
+    ctx.handlerPort = 4101;
 
     globServer?.close();
 
@@ -15461,9 +15461,10 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
-  // beforeAll is called AFTER registerWorkflows in the factory, so nothing to do here
   beforeAll: async () => {
     console.log('[beforeAll] Ready');
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
   },
 
   afterAll: async () => {

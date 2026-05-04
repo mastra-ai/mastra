@@ -89,6 +89,15 @@ export interface PersistStepUpdateParams {
   result?: Record<string, any>;
   error?: SerializedError;
   requestContext: RequestContext;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * When provided, this will be persisted to the snapshot for use on resume.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 export async function persistStepUpdate(
@@ -106,6 +115,7 @@ export async function persistStepUpdate(
     result,
     error,
     requestContext,
+    tracingContext,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`;
@@ -141,6 +151,8 @@ export async function persistStepUpdate(
         error,
         requestContext: requestContextObj,
         timestamp: Date.now(),
+        // Persist tracing context for span continuity on resume
+        tracingContext,
       },
     });
   });
@@ -280,6 +292,7 @@ export async function executeEntry(
     execResults = await engine.executeParallel({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       stepResults,
@@ -391,6 +404,7 @@ export async function executeEntry(
     execResults = await engine.executeConditional({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevOutput,
       stepResults,
@@ -411,6 +425,7 @@ export async function executeEntry(
     execResults = await engine.executeLoop({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       prevOutput,
@@ -432,6 +447,7 @@ export async function executeEntry(
     execResults = await engine.executeForeach({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       prevOutput,

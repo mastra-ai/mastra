@@ -6,19 +6,11 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import {
-  Box,
-  Container,
-  fuzzyFilter,
-  getEditorKeybindings,
-  Input,
-  SelectList,
-  SettingsList,
-  Spacer,
-  Text,
-} from '@mariozechner/pi-tui';
+import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@mariozechner/pi-tui';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { ModelSelectorComponent } from './model-selector.js';
+import type { ModelItem } from './model-selector.js';
 
 // =============================================================================
 // Types
@@ -32,16 +24,11 @@ export interface OMSettingsConfig {
 }
 
 export interface OMSettingsCallbacks {
-  onObserverModelChange: (modelId: string) => void;
-  onReflectorModelChange: (modelId: string) => void;
+  onObserverModelChange: (model: ModelItem) => void | Promise<void>;
+  onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onClose: () => void;
-}
-
-export interface ModelOption {
-  id: string;
-  label: string;
 }
 
 // =============================================================================
@@ -171,120 +158,6 @@ class ThresholdSubmenu extends Container {
 }
 
 // =============================================================================
-// Model Select Submenu
-// =============================================================================
-
-class ModelSelectSubmenu extends Container {
-  private searchInput: Input;
-  private listContainer: Container;
-  private allModels: ModelOption[];
-  private filteredModels: ModelOption[];
-  private selectedIndex = 0;
-  private currentModelId: string;
-  private onSelect: (modelId: string) => void;
-  private onCancel: () => void;
-  private tui: TUI;
-
-  constructor(
-    title: string,
-    models: ModelOption[],
-    currentModelId: string,
-    onSelect: (modelId: string) => void,
-    onCancel: () => void,
-    tui: TUI,
-  ) {
-    super();
-    this.allModels = models;
-    this.filteredModels = models;
-    this.currentModelId = currentModelId;
-    this.onSelect = onSelect;
-    this.onCancel = onCancel;
-    this.tui = tui;
-
-    this.addChild(new Text(theme.bold(theme.fg('accent', title)), 0, 0));
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('muted', 'Type to search · ↑↓ navigate · Enter select · Esc back'), 0, 0));
-    this.addChild(new Spacer(1));
-
-    this.searchInput = new Input();
-    this.addChild(this.searchInput);
-    this.addChild(new Spacer(1));
-
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
-
-    // Pre-select current model
-    const currentIndex = models.findIndex(m => m.id === currentModelId);
-    if (currentIndex !== -1) {
-      this.selectedIndex = currentIndex;
-    }
-
-    this.updateList();
-  }
-
-  private filterModels(query: string): void {
-    this.filteredModels = query ? fuzzyFilter(this.allModels, query, m => `${m.id} ${m.label}`) : this.allModels;
-
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
-    this.updateList();
-  }
-
-  private updateList(): void {
-    this.listContainer.clear();
-
-    const maxVisible = 10;
-    const total = this.filteredModels.length;
-    const startIndex = Math.max(0, Math.min(this.selectedIndex - Math.floor(maxVisible / 2), total - maxVisible));
-    const endIndex = Math.min(startIndex + maxVisible, total);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const item = this.filteredModels[i]!;
-      const isSelected = i === this.selectedIndex;
-      const isCurrent = item.id === this.currentModelId;
-      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-
-      const line = isSelected ? theme.fg('accent', `→ ${item.label}`) + checkmark : `  ${item.label}` + checkmark;
-
-      this.listContainer.addChild(new Text(line, 0, 0));
-    }
-
-    if (startIndex > 0 || endIndex < total) {
-      this.listContainer.addChild(new Text(theme.fg('muted', `(${this.selectedIndex + 1}/${total})`), 0, 0));
-    }
-
-    if (total === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
-    }
-  }
-
-  handleInput(data: string): void {
-    const kb = getEditorKeybindings();
-    const total = this.filteredModels.length;
-
-    if (kb.matches(data, 'selectUp')) {
-      if (total === 0) return;
-      this.selectedIndex = this.selectedIndex === 0 ? total - 1 : this.selectedIndex - 1;
-      this.updateList();
-      this.tui.requestRender();
-    } else if (kb.matches(data, 'selectDown')) {
-      if (total === 0) return;
-      this.selectedIndex = this.selectedIndex === total - 1 ? 0 : this.selectedIndex + 1;
-      this.updateList();
-      this.tui.requestRender();
-    } else if (kb.matches(data, 'selectConfirm')) {
-      const selected = this.filteredModels[this.selectedIndex];
-      if (selected) this.onSelect(selected.id);
-    } else if (kb.matches(data, 'selectCancel')) {
-      this.onCancel();
-    } else {
-      this.searchInput.handleInput(data);
-      this.filterModels(this.searchInput.getValue());
-      this.tui.requestRender();
-    }
-  }
-}
-
-// =============================================================================
 // OM Settings Component
 // =============================================================================
 
@@ -300,7 +173,7 @@ export class OMSettingsComponent extends Box implements Focusable {
     this._focused = value;
   }
 
-  constructor(config: OMSettingsConfig, callbacks: OMSettingsCallbacks, models: ModelOption[], tui: TUI) {
+  constructor(config: OMSettingsConfig, callbacks: OMSettingsCallbacks, models: ModelItem[], tui: TUI) {
     super(2, 1, (text: string) => theme.bg('overlayBg', text));
 
     // Title
@@ -315,18 +188,18 @@ export class OMSettingsComponent extends Box implements Focusable {
         description: 'Model used for observing and summarizing message history',
         currentValue: getShortModelName(config.observerModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectSubmenu(
-            'Observer Model',
-            models,
-            config.observerModelId,
-            modelId => {
-              config.observerModelId = modelId;
-              callbacks.onObserverModelChange(modelId);
-              done(getShortModelName(modelId));
-            },
-            () => done(),
+          new ModelSelectorComponent({
             tui,
-          ),
+            models,
+            currentModelId: config.observerModelId,
+            title: 'Observer Model',
+            onSelect: async model => {
+              await callbacks.onObserverModelChange(model);
+              config.observerModelId = model.id;
+              done(getShortModelName(model.id));
+            },
+            onCancel: () => done(),
+          }),
       },
       {
         id: 'reflector-model',
@@ -334,18 +207,18 @@ export class OMSettingsComponent extends Box implements Focusable {
         description: 'Model used for compressing observations when they grow too large',
         currentValue: getShortModelName(config.reflectorModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectSubmenu(
-            'Reflector Model',
-            models,
-            config.reflectorModelId,
-            modelId => {
-              config.reflectorModelId = modelId;
-              callbacks.onReflectorModelChange(modelId);
-              done(getShortModelName(modelId));
-            },
-            () => done(),
+          new ModelSelectorComponent({
             tui,
-          ),
+            models,
+            currentModelId: config.reflectorModelId,
+            title: 'Reflector Model',
+            onSelect: async model => {
+              await callbacks.onReflectorModelChange(model);
+              config.reflectorModelId = model.id;
+              done(getShortModelName(model.id));
+            },
+            onCancel: () => done(),
+          }),
       },
       {
         id: 'obs-threshold',

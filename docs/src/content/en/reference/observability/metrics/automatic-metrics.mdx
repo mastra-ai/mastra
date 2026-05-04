@@ -1,0 +1,139 @@
+---
+title: "Reference: Automatic Metrics | Observability"
+description: "Complete reference for the metrics Mastra emits automatically from traced execution."
+packages:
+  - "@mastra/observability"
+---
+
+# Automatic metrics reference
+
+Mastra automatically extracts performance and usage metrics from traced execution. This page is the complete reference for every metric name, label, and context field that Mastra emits.
+
+For setup instructions, see the [Metrics overview](/docs/observability/metrics/overview).
+
+## When Mastra emits automatic metrics
+
+Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and (for model generation spans) reads token usage data. No manual instrumentation is needed.
+
+Metrics are routed through an internal event bus to the `DefaultExporter`, which batches and flushes them to storage.
+
+### What affects whether a metric is available
+
+Two conditions must be true for a metric to reach storage:
+
+1. `DefaultExporter` is configured as an exporter.
+1. The storage backend supports metrics (ClickHouse or DuckDB).
+
+If metrics aren't appearing, see [troubleshooting](#troubleshooting).
+
+## Duration metrics
+
+Duration metrics record execution time in milliseconds, calculated from the span's start and end timestamps. Each duration metric includes a `status` label set to `ok` or `error`, derived from the span's status.
+
+| Metric name | Span type | Description |
+| - | - | - |
+| `mastra_agent_duration_ms` | `AGENT_RUN` | Execution time of an agent run |
+| `mastra_tool_duration_ms` | `TOOL_CALL`, `MCP_TOOL_CALL` | Execution time of a tool call, including MCP tool calls |
+| `mastra_workflow_duration_ms` | `WORKFLOW_RUN` | Execution time of a workflow run |
+| `mastra_model_duration_ms` | `MODEL_GENERATION` | Execution time of a model generation |
+| `mastra_processor_duration_ms` | `PROCESSOR_RUN` | Execution time of a processor run |
+
+## Token usage metrics
+
+Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage` data. If the provider doesn't report usage, no token metrics are emitted for that span.
+
+### Input token metrics
+
+| Metric name | Description |
+| - | - |
+| `mastra_model_total_input_tokens` | Total input tokens |
+| `mastra_model_input_text_tokens` | Text tokens in the input prompt |
+| `mastra_model_input_cache_read_tokens` | Tokens read from prompt cache (e.g. Anthropic) |
+| `mastra_model_input_cache_write_tokens` | Tokens written to prompt cache |
+| `mastra_model_input_audio_tokens` | Audio tokens in the input (multimodal models) |
+| `mastra_model_input_image_tokens` | Image tokens in the input (vision models) |
+
+### Output token metrics
+
+| Metric name | Description |
+| - | - |
+| `mastra_model_total_output_tokens` | Total output tokens |
+| `mastra_model_output_text_tokens` | Text tokens in the model's output |
+| `mastra_model_output_reasoning_tokens` | Reasoning / chain-of-thought tokens (e.g. OpenAI o-series) |
+| `mastra_model_output_audio_tokens` | Audio tokens in the model's output |
+| `mastra_model_output_image_tokens` | Output image tokens |
+
+### Provider-reported detailed token categories
+
+The detailed breakdown metrics (everything except `total_input` and `total_output`) are only emitted when the provider reports them. If a category has zero tokens, the metric is skipped for that span. Different providers report different levels of detail. For example, not all providers report cache or audio tokens.
+
+## Cost-related context
+
+### When cost context is attached
+
+Cost context is attached to token metrics when the embedded pricing registry has a matching entry for the provider and model. The registry ships with Mastra and covers common providers and models. If no match is found, token metrics are still emitted but without cost fields.
+
+### What cost fields may be included
+
+| Field | Description |
+| - | - |
+| `provider` | Provider name (e.g. `openai`, `anthropic`) |
+| `model` | Model identifier (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `estimatedCost` | Estimated cost for this metric, calculated from token count and pricing tier |
+| `costUnit` | Currency unit (e.g. `USD`) |
+| `costMetadata` | Additional pricing context (tier information, error details) |
+
+## Correlation with traces
+
+### How metrics relate to spans and trace context
+
+Each metric carries a `CorrelationContext` snapshot from the span that produced it. This context is stored alongside the metric value and lets you navigate from a metric to the exact span and trace.
+
+The correlation fields are grouped into four categories:
+
+**Trace correlation**
+
+- `traceId`: trace identifier
+- `spanId`: span identifier
+- `tags`: tags from the span
+
+**Entity hierarchy**
+
+- `entityType`, `entityId`, `entityName`: The entity that produced the metric (e.g. agent, workflow)
+- `parentEntityType`, `parentEntityId`, `parentEntityName`: The parent entity
+- `rootEntityType`, `rootEntityId`, `rootEntityName`: The root entity in the call chain
+
+**Identity**
+
+- `userId`, `organizationId`, `resourceId`: Identity context from the request
+- `runId`, `sessionId`, `threadId`, `requestId`: Correlation IDs
+
+**Deployment**
+
+- `environment`: Deployment environment (e.g. `production`, `staging`)
+- `source`: Source identifier
+- `serviceName`: Service name from the observability config
+- `experimentId`: Experiment identifier, if applicable
+
+### Why correlation helps with debugging
+
+When you spot a spike in latency or token usage on the Metrics dashboard, correlation context lets you drill directly into the trace that produced the metric. From there you can inspect the individual span to find the root cause: a slow tool call, a large prompt, or an unexpected error.
+
+## Troubleshooting
+
+### No metrics are appearing
+
+- **Observability is configured**: Verify that your `Mastra` instance has an `observability` config with at least one exporter.
+- **`DefaultExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't persist metrics to Mastra storage. `DefaultExporter` is required for the Studio dashboard.
+- **Storage supports metrics**: Metrics require an OLAP-capable store (ClickHouse or DuckDB). Row-oriented databases (PostgreSQL, LibSQL, MSSQL) and document stores (MongoDB) are not supported for metrics.
+- **Sampling isn't 0%**: If sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
+
+### Duration metrics are missing
+
+- **Span has timestamps**: Duration is calculated from `startTime` and `endTime`. If either is missing, the metric is skipped.
+- **Span type maps to a metric**: Only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
+
+### Token metrics are missing
+
+- **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
+- **Provider reports usage**: The model provider must include `usage` data in its response. If usage is absent, no token metrics are emitted.

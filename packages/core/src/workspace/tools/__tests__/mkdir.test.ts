@@ -21,12 +21,12 @@ describe('workspace_mkdir', () => {
 
   it('should create directory', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: '/newdir' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: 'newdir' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Created directory /newdir');
+    expect(result).toBe('Created directory newdir');
 
     const stat = await fs.stat(path.join(tempDir, 'newdir'));
     expect(stat.isDirectory()).toBe(true);
@@ -34,12 +34,12 @@ describe('workspace_mkdir', () => {
 
   it('should create nested directories', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: '/a/b/c' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: 'a/b/c' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Created directory /a/b/c');
+    expect(result).toBe('Created directory a/b/c');
 
     const stat = await fs.stat(path.join(tempDir, 'a', 'b', 'c'));
     expect(stat.isDirectory()).toBe(true);

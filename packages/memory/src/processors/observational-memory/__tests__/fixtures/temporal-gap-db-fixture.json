@@ -1,0 +1,29 @@
+[
+  {
+    "id": "newer-message",
+    "thread_id": "fixture-thread",
+    "content": "{\"format\":2,\"parts\":[{\"type\":\"text\",\"text\":\"Current message\",\"createdAt\":1776869315960}],\"metadata\":{\"mastra\":{\"sealed\":true}}}",
+    "role": "user",
+    "type": "v2",
+    "createdAt": "2026-04-22T14:48:35.960Z",
+    "resourceId": "fixture-resource"
+  },
+  {
+    "id": "__temporal_gap_fixture",
+    "thread_id": "fixture-thread",
+    "content": "{\"format\":2,\"parts\":[{\"type\":\"text\",\"text\":\"<system-reminder type=\\\"temporal-gap\\\" precedesMessageId=\\\"newer-message\\\">11 hours 13 minutes later — 04/22/2026, 7:48 AM PDT</system-reminder>\",\"createdAt\":1776869317984}],\"metadata\":{\"reminderType\":\"temporal-gap\",\"gapText\":\"11 hours 13 minutes later\",\"gapMs\":40433500,\"timestamp\":\"04/22/2026, 7:48 AM PDT\",\"timestampMs\":1745333315959,\"precedesMessageId\":\"newer-message\",\"systemReminder\":{\"type\":\"temporal-gap\",\"message\":\"11 hours 13 minutes later — 04/22/2026, 7:48 AM PDT\",\"gapText\":\"11 hours 13 minutes later\",\"gapMs\":40433500,\"timestamp\":\"04/22/2026, 7:48 AM PDT\",\"timestampMs\":1745333315959,\"precedesMessageId\":\"newer-message\"},\"mastra\":{\"sealed\":true}}}",
+    "role": "user",
+    "type": "v2",
+    "createdAt": "2026-04-22T14:48:35.959Z",
+    "resourceId": "fixture-resource"
+  },
+  {
+    "id": "previous-visible-message",
+    "thread_id": "fixture-thread",
+    "content": "{\"format\":2,\"parts\":[{\"type\":\"data-om-activation\",\"createdAt\":1776829401097},{\"type\":\"text\",\"text\":\"Previous visible message\",\"createdAt\":1776829431190}],\"metadata\":{\"provider\":\"fixture\"}}",
+    "role": "assistant",
+    "type": "v2",
+    "createdAt": "2026-04-22T03:43:23.981Z",
+    "resourceId": "fixture-resource"
+  }
+]
