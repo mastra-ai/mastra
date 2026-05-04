@@ -640,7 +640,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private aggregate(values: number[], type: AggregationType, timestamps?: number[]): number | null {
+  private aggregate(
+    values: number[],
+    type: AggregationType,
+    timestamps?: number[],
+    distinctValues?: Array<string | number | null | undefined>,
+  ): number | null {
+    if (type === 'count_distinct') {
+      if (!distinctValues) return 0;
+      const set = new Set<string | number>();
+      for (const v of distinctValues) {
+        if (v === null || v === undefined) continue;
+        set.add(v);
+      }
+      return set.size;
+    }
     if (values.length === 0) return null;
     switch (type) {
       case 'sum':
@@ -674,6 +688,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       default:
         return values.reduce((a, b) => a + b, 0);
     }
+  }
+
+  private extractDistinctValues(
+    records: MetricRecord[],
+    distinctColumn: string | undefined,
+  ): Array<string | number | null | undefined> | undefined {
+    if (!distinctColumn) return undefined;
+    return records.map(r => {
+      const raw = (r as unknown as Record<string, unknown>)[distinctColumn];
+      if (raw === null || raw === undefined) return null;
+      if (typeof raw === 'string' || typeof raw === 'number') return raw;
+      return String(raw);
+    });
   }
 
   private interpolatePercentile(sortedValues: number[], percentile: number): number {
@@ -716,6 +743,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const value = this.aggregate(
       filtered.map(m => m.value),
       args.aggregation,
+      undefined,
+      this.extractDistinctValues(filtered, args.distinctColumn),
     );
     const costSummary = this.summarizeCost(filtered);
 
@@ -748,6 +777,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         const previousValue = this.aggregate(
           prevFiltered.map(m => m.value),
           args.aggregation,
+          undefined,
+          this.extractDistinctValues(prevFiltered, args.distinctColumn),
         );
         const previousCostSummary = this.summarizeCost(prevFiltered);
 
@@ -806,14 +837,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           this.aggregate(
             records.map(record => record.value),
             args.aggregation,
+            undefined,
+            this.extractDistinctValues(records, args.distinctColumn),
           ) ?? 0,
         estimatedCost: costSummary.estimatedCost,
         costUnit: costSummary.costUnit,
       };
     });
-    groups.sort((a, b) => b.value - a.value);
 
-    return { groups };
+    const direction = args.orderDirection === 'ASC' ? 1 : -1;
+    groups.sort((a, b) => (a.value - b.value) * direction);
+
+    const limited = typeof args.limit === 'number' ? groups.slice(0, args.limit) : groups;
+    return { groups: limited };
   }
 
   async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
@@ -850,6 +886,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                   this.aggregate(
                     records.map(record => record.value),
                     args.aggregation,
+                    undefined,
+                    this.extractDistinctValues(records, args.distinctColumn),
                   ) ?? 0,
                 estimatedCost: this.summarizeCost(records).estimatedCost,
               })),
@@ -880,6 +918,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                 this.aggregate(
                   records.map(record => record.value),
                   args.aggregation,
+                  undefined,
+                  this.extractDistinctValues(records, args.distinctColumn),
                 ) ?? 0,
               estimatedCost: this.summarizeCost(records).estimatedCost,
             })),

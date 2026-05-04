@@ -36,6 +36,10 @@ export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 
+// Schedules tables
+export const TABLE_SCHEDULES = 'mastra_schedules';
+export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
+
 // Channel tables
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
@@ -70,6 +74,8 @@ export type TABLE_NAMES =
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_BACKGROUND_TASKS
+  | typeof TABLE_SCHEDULES
+  | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
   | typeof TABLE_CHANNEL_CONFIG;
 
@@ -567,6 +573,27 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     startedAt: { type: 'timestamp', nullable: true },
     completedAt: { type: 'timestamp', nullable: true },
+  },
+  [TABLE_SCHEDULES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    target: { type: 'jsonb', nullable: false },
+    cron: { type: 'text', nullable: false },
+    timezone: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    next_fire_at: { type: 'bigint', nullable: false },
+    last_fire_at: { type: 'bigint', nullable: true },
+    last_run_id: { type: 'text', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    metadata: { type: 'jsonb', nullable: true },
+  },
+  [TABLE_SCHEDULE_TRIGGERS]: {
+    schedule_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false, primaryKey: true },
+    scheduled_fire_at: { type: 'bigint', nullable: false },
+    actual_fire_at: { type: 'bigint', nullable: false },
+    status: { type: 'text', nullable: false },
+    error: { type: 'text', nullable: true },
   },
   [TABLE_CHANNEL_INSTALLATIONS]: {
     id: { type: 'text', nullable: false, primaryKey: true },

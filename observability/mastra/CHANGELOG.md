@@ -1,5 +1,51 @@
 # @mastra/observability
 
+## 1.11.1-alpha.1
+
+### Patch Changes
+
+- Reduced startup noise: CloudExporter missing-token message is now logged at debug level instead of warn, since being disabled is the expected state for local development ([#16070](https://github.com/mastra-ai/mastra/pull/16070))
+
+- Updated dependencies [[`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d)]:
+  - @mastra/core@1.32.0-alpha.1
+
+## 1.11.1-alpha.0
+
+### Patch Changes
+
+- Fixed model step traces to show the final prompt sent to the model, including memory-injected system messages. ([#16029](https://github.com/mastra-ai/mastra/pull/16029))
+
+- Added a new `DatadogBridge` integration for Mastra tracing so Datadog can keep auto-instrumented HTTP, database, and framework spans nested under the agent, workflow, model, and tool spans that triggered them. ([#15716](https://github.com/mastra-ai/mastra/pull/15716))
+
+  ```typescript
+  import tracer from 'dd-trace';
+
+  tracer.init({
+    service: process.env.DD_SERVICE || 'my-mastra-app',
+    env: process.env.DD_ENV || 'production',
+  });
+
+  import { Mastra } from '@mastra/core';
+  import { Observability } from '@mastra/observability';
+  import { DatadogBridge } from '@mastra/datadog';
+
+  const mastra = new Mastra({
+    observability: new Observability({
+      configs: {
+        default: {
+          serviceName: 'my-mastra-app',
+          bridge: new DatadogBridge({
+            mlApp: process.env.DD_LLMOBS_ML_APP!,
+          }),
+        },
+      },
+    }),
+  });
+  ```
+
+- Updated dependencies [[`6dcd65f`](https://github.com/mastra-ai/mastra/commit/6dcd65f2a34069e6dc43ba35f1d11119b9b40bef), [`1c2dda8`](https://github.com/mastra-ai/mastra/commit/1c2dda805fbfccc0abf55d4cb20cc34402dc3f0c)]:
+  - @mastra/core@1.31.1-alpha.0
+
 ## 1.11.0
 
 ### Minor Changes

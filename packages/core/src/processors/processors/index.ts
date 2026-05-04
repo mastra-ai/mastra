@@ -42,6 +42,16 @@ export {
 } from './system-prompt-scrubber';
 
 export {
+  CostGuardProcessor,
+  type CostGuardOptions,
+  type CostGuardUsage,
+  type CostGuardTripwireMetadata,
+  type CostGuardViolationDetail,
+  type CostScope,
+  type CostWindow,
+} from './cost-guard';
+
+export {
   RegexFilterProcessor,
   type RegexFilterOptions,
   type RegexRule,
@@ -49,7 +59,6 @@ export {
   type RegexPreset,
   type RegexFilterTripwireMetadata,
 } from './regex-filter';
-
 export { ToolCallFilter } from './tool-call-filter';
 
 export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
