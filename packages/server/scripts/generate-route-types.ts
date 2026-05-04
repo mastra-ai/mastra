@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import prettier from 'prettier';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 
@@ -240,7 +241,17 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
 `;
 }
 
-const fileContent = generateRouteTypesFileContent();
+async function formatGeneratedFileContent(fileContent: string): Promise<string> {
+  const prettierConfig = await prettier.resolveConfig(OUTPUT_PATH);
+
+  return prettier.format(fileContent, {
+    ...prettierConfig,
+    filepath: OUTPUT_PATH,
+  });
+}
+
+const rawFileContent = generateRouteTypesFileContent();
+const fileContent = await formatGeneratedFileContent(rawFileContent);
 const existingFileContent = fs.existsSync(OUTPUT_PATH) ? fs.readFileSync(OUTPUT_PATH, 'utf8') : null;
 
 if (existingFileContent !== fileContent) {
