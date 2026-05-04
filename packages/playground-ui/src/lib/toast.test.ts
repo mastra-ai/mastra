@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createElement } from 'react';
 import { render } from '@testing-library/react';
+import { createElement } from 'react';
 import type { ToasterProps } from 'sonner';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { sonnerMock, ToasterMock } = vi.hoisted(() => {
   const ToasterMock = vi.fn<(props: ToasterProps) => null>(() => null);
@@ -113,8 +113,12 @@ describe('mastra-toaster CSS theming', () => {
     ['--info-border', 'var(--toast-info-border)'],
   ];
 
+  // Full regex escape — `expected` is a known CSS literal (`var(--…)`) but using a complete escape
+  // keeps the helper safe if anyone widens the mapping list later.
+  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   it.each(expectedMappings)('maps %s to %s', (cssVar, expected) => {
-    expect(rule).toMatch(new RegExp(`${cssVar}:\\s*${expected.replace(/[()]/g, '\\$&')}`));
+    expect(rule).toMatch(new RegExp(`${escapeRegex(cssVar)}:\\s*${escapeRegex(expected)}`));
   });
 
   it('applies our toast shadow to each rendered toast', () => {

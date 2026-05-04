@@ -13,9 +13,6 @@ export const Shadows = {
 
   // Dialog/modal shadows
   dialog: '0 16px 48px rgba(0, 0, 0, 0.6)',
-
-  // Toast — theme-aware layered elevation
-  toast: 'var(--toast-shadow)',
 };
 
 // Glow effects for interactive elements (focus states, etc.)

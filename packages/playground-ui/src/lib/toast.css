@@ -1,3 +1,23 @@
+/* Toast tokens live here — only consumed by `.mastra-toaster` so they don't need to ship in
+   index.css for every component. The bg/border use color-mix on theme-scoped notice tokens,
+   so the single :root declaration computes correctly under `html.light` too. Only the shadow
+   needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
+:root {
+  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface1));
+  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface1));
+  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface1));
+  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface1));
+  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface1));
+  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface1));
+  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface1));
+  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface1));
+  --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
+}
+html.light {
+  --toast-shadow:
+    inset 0 1px 0 0 oklch(1 0 0 / 0.6), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -12px oklch(0 0 0 / 0.14);
+}
+
 /* Mastra toast theming — applied to sonner's Toaster wrapper via className.
    Sonner reads its per-type colors from --success-bg / --error-bg / etc. (richColors mode).
    The `[data-sonner-toaster][data-sonner-theme]` prefix matches sonner's own theme rules

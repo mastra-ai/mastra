@@ -7,25 +7,26 @@ import { cn } from '@/lib/utils';
 
 import './toast.css';
 
-// All theming lives in `.mastra-toaster` (see index.css) — sonner reads --success-bg / --error-bg / etc.
-// from richColors mode. We only set the marker class + behavior props here.
+// All theming lives in `.mastra-toaster` (see toast.css) — sonner reads --success-bg / --error-bg / etc.
+// from richColors mode. `rest` is spread first so callers can't override the closeButton / richColors
+// contract (sonner's per-type tinted colors only kick in with richColors, and the close button is the
+// only built-in dismiss affordance we expose).
 export const Toaster = ({ className, toastOptions, ...rest }: ToasterProps) => (
   <SonnerToaster
+    {...rest}
     closeButton
     richColors
     className={cn('mastra-toaster', className)}
     toastOptions={{ duration: 5000, ...toastOptions }}
-    {...rest}
   />
 );
 
-const forEachOrOnce = <M,>(message: M | M[], emit: (m: M) => void) => {
-  if (Array.isArray(message)) message.forEach(emit);
-  else emit(message);
-};
+// Forward sonner's return value so callers can update/dismiss by id later.
+const forEachOrOnce = <M, R>(message: M | M[], emit: (m: M) => R): R | R[] =>
+  Array.isArray(message) ? message.map(emit) : emit(message);
 
 export const toast = (message: string | string[] | ReactNode, options: ExternalToast = {}) => {
-  if (Array.isArray(message)) return message.forEach(m => sonnerToast(m, options));
+  if (Array.isArray(message)) return message.map(m => sonnerToast(m, options));
   if (React.isValidElement(message) || typeof message === 'string') return sonnerToast(message, options);
   throw new Error('Invalid message type');
 };
