@@ -13,6 +13,7 @@ import {
   ConversationPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
+import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
 import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
@@ -38,6 +39,7 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
+  useChannelConnectToast();
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;

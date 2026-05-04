@@ -1,16 +1,14 @@
 import { Button, DropdownMenu, StatusBadge, toast } from '@mastra/playground-ui';
 import { ChevronDownIcon } from 'lucide-react';
 import { useState } from 'react';
-import { DisconnectChannelConfirmDialog, getPublishChannelDialog } from './publish-channel-dialogs';
+import { ChannelDialog } from './publish-channel-dialogs';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
 import {
   useChannelInstallations,
   useChannelPlatforms,
-  useConnectChannel
-  
-  
+  useConnectChannel,
 } from '@/domains/agents/hooks/use-channels';
-import type {ChannelInstallationInfo, ChannelPlatformInfo} from '@/domains/agents/hooks/use-channels';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
 export interface PublishToChannelButtonProps {
   agentId: string | undefined;
@@ -22,24 +20,16 @@ type ChannelTarget = { platform: ChannelPlatformInfo; installation?: ChannelInst
 export function PublishToChannelButton({ agentId, disabled = false }: PublishToChannelButtonProps) {
   const { data: platforms = [], isLoading } = useChannelPlatforms();
   const [active, setActive] = useState<ChannelTarget | null>(null);
-  const [disconnectTarget, setDisconnectTarget] = useState<ChannelTarget | null>(null);
 
   if (!agentId || isLoading || platforms.length === 0) {
     return null;
   }
 
-  const ActiveDialog = active ? getPublishChannelDialog(active.platform.id) : null;
-
   return (
     <>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disabled}
-            data-testid="agent-builder-publish-channel"
-          >
+          <Button size="sm" variant="ghost" disabled={disabled} data-testid="agent-builder-publish-channel">
             Publish to…
             <ChevronDownIcon className="h-4 w-4" />
           </Button>
@@ -56,30 +46,14 @@ export function PublishToChannelButton({ agentId, disabled = false }: PublishToC
         </DropdownMenu.Content>
       </DropdownMenu>
 
-      {ActiveDialog && active ? (
-        <ActiveDialog
+      {active ? (
+        <ChannelDialog
           platform={active.platform}
           agentId={agentId}
           installation={active.installation}
           open
           onOpenChange={open => {
             if (!open) setActive(null);
-          }}
-          onDisconnectRequest={() => {
-            setDisconnectTarget(active);
-            setActive(null);
-          }}
-        />
-      ) : null}
-
-      {disconnectTarget ? (
-        <DisconnectChannelConfirmDialog
-          platform={disconnectTarget.platform}
-          agentId={agentId}
-          installation={disconnectTarget.installation}
-          open
-          onOpenChange={open => {
-            if (!open) setDisconnectTarget(null);
           }}
         />
       ) : null}

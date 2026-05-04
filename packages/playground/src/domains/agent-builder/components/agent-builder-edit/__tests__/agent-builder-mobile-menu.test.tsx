@@ -8,9 +8,9 @@ import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { server } from '@/test/msw-server';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderMobileMenu } from '../agent-builder-mobile-menu';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

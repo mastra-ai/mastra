@@ -12,6 +12,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
+import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
@@ -39,6 +40,7 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
+  useChannelConnectToast();
   const features = useBuilderAgentFeatures();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });

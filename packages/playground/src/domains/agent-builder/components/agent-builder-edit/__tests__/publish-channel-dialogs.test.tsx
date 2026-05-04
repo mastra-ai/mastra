@@ -6,12 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import {
-  DefaultChannelDialog,
-  DisconnectChannelConfirmDialog,
-  getPublishChannelDialog,
-  SlackChannelDialog,
-} from '../publish-channel-dialogs';
+import { ChannelDialog } from '../publish-channel-dialogs';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -43,17 +38,7 @@ const installRadixDomShims = () => {
   }
 };
 
-describe('getPublishChannelDialog', () => {
-  it('returns the Slack-specific dialog for "slack"', () => {
-    expect(getPublishChannelDialog('slack')).toBe(SlackChannelDialog);
-  });
-
-  it('returns the default dialog for unknown platforms', () => {
-    expect(getPublishChannelDialog('discord')).toBe(DefaultChannelDialog);
-  });
-});
-
-describe('DefaultChannelDialog', () => {
+describe('ChannelDialog (default platform)', () => {
   beforeAll(() => {
     installRadixDomShims();
   });
@@ -96,7 +81,7 @@ describe('DefaultChannelDialog', () => {
 
     render(
       <Wrapper>
-        <DefaultChannelDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
           agentId="agent-1"
           open
@@ -133,7 +118,7 @@ describe('DefaultChannelDialog', () => {
 
     render(
       <Wrapper>
-        <DefaultChannelDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
           agentId="agent-1"
           open
@@ -161,7 +146,7 @@ describe('DefaultChannelDialog', () => {
     const onOpenChange = vi.fn();
     render(
       <Wrapper>
-        <DefaultChannelDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
           agentId="agent-1"
           open
@@ -176,11 +161,10 @@ describe('DefaultChannelDialog', () => {
     });
   });
 
-  it('calls onDisconnectRequest when the Disconnect action is clicked', () => {
-    const onDisconnectRequest = vi.fn();
+  it('switches to the disconnect-confirm view in-place when the Disconnect action is clicked', () => {
     render(
       <Wrapper>
-        <DefaultChannelDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
           agentId="agent-1"
           installation={{
@@ -192,19 +176,24 @@ describe('DefaultChannelDialog', () => {
           }}
           open
           onOpenChange={() => {}}
-          onDisconnectRequest={onDisconnectRequest}
         />
       </Wrapper>,
     );
 
+    // Publish view shows Disconnect.
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-disconnect'));
-    expect(onDisconnectRequest).toHaveBeenCalledTimes(1);
+
+    // Same dialog node, swapped content — confirms the view changed without remounting the overlay.
+    const dialog = screen.getByTestId('publish-channel-dialog-discord');
+    expect(dialog.textContent).toContain('Are you sure?');
+    expect(dialog.textContent).toContain('Your agent will be removed from Discord');
+    expect(screen.getByTestId('publish-channel-dialog-discord-disconnect-confirm')).toBeTruthy();
   });
 
   it('shows a "Not configured" notice and no Connect button when the platform is not configured', () => {
     render(
       <Wrapper>
-        <DefaultChannelDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: false }}
           agentId="agent-1"
           open
@@ -220,7 +209,7 @@ describe('DefaultChannelDialog', () => {
   });
 });
 
-describe('SlackChannelDialog', () => {
+describe('ChannelDialog (slack platform)', () => {
   beforeAll(() => {
     installRadixDomShims();
   });
@@ -233,7 +222,7 @@ describe('SlackChannelDialog', () => {
   it('treats a pending installation as not connected and shows the Continue with Slack action', () => {
     render(
       <Wrapper>
-        <SlackChannelDialog
+        <ChannelDialog
           platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
           agentId="agent-1"
           installation={{
@@ -257,7 +246,7 @@ describe('SlackChannelDialog', () => {
   });
 });
 
-describe('DisconnectChannelConfirmDialog', () => {
+describe('ChannelDialog (disconnect view)', () => {
   beforeAll(() => {
     installRadixDomShims();
   });
@@ -279,7 +268,7 @@ describe('DisconnectChannelConfirmDialog', () => {
     const onOpenChange = vi.fn();
     render(
       <Wrapper>
-        <DisconnectChannelConfirmDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
           agentId="agent-1"
           installation={{
@@ -291,6 +280,7 @@ describe('DisconnectChannelConfirmDialog', () => {
           }}
           open
           onOpenChange={onOpenChange}
+          initialView="confirm-disconnect"
         />
       </Wrapper>,
     );
@@ -306,7 +296,40 @@ describe('DisconnectChannelConfirmDialog', () => {
     });
   });
 
-  it('does not fire the disconnect API when canceled', async () => {
+  it('shows a generic confirm title and a single platform-name mention in the body', () => {
+    render(
+      <Wrapper>
+        <ChannelDialog
+          platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
+          agentId="agent-1"
+          installation={{
+            id: 'inst-1',
+            platform: 'slack',
+            agentId: 'agent-1',
+            status: 'active',
+            displayName: 'Acme Workspace',
+          }}
+          open
+          onOpenChange={() => {}}
+          initialView="confirm-disconnect"
+        />
+      </Wrapper>,
+    );
+
+    const dialog = screen.getByTestId('publish-channel-dialog-slack');
+    expect(dialog.textContent).toContain('Are you sure?');
+    expect(dialog.textContent).toContain('Your agent will be removed from Slack');
+    // No card, so the workspace display name is not rendered.
+    expect(dialog.textContent).not.toContain('Acme Workspace');
+    // Platform name appears exactly once (in the body sentence).
+    const slackMatches = dialog.textContent?.match(/Slack/g) ?? [];
+    expect(slackMatches.length).toBe(1);
+    // Confirm/Cancel labels.
+    expect(screen.getByRole('button', { name: /confirm/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
+  });
+
+  it('returns to the publish view (without closing) when canceled', async () => {
     let disconnectCalled = false;
     server.use(
       http.post('*/api/channels/discord/:agentId/disconnect', () => {
@@ -318,7 +341,7 @@ describe('DisconnectChannelConfirmDialog', () => {
     const onOpenChange = vi.fn();
     render(
       <Wrapper>
-        <DisconnectChannelConfirmDialog
+        <ChannelDialog
           platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
           agentId="agent-1"
           installation={{
@@ -330,16 +353,18 @@ describe('DisconnectChannelConfirmDialog', () => {
           }}
           open
           onOpenChange={onOpenChange}
+          initialView="confirm-disconnect"
         />
       </Wrapper>,
     );
 
-    const cancelButton = screen.getByRole('button', { name: /cancel/i });
-    fireEvent.click(cancelButton);
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
-    await waitFor(() => {
-      expect(onOpenChange).toHaveBeenCalledWith(false);
-    });
+    // Same dialog, swapped back to publish view; dialog stays open.
+    const dialog = screen.getByTestId('publish-channel-dialog-discord');
+    expect(dialog.textContent).not.toContain('Are you sure?');
+    expect(screen.getByTestId('publish-channel-dialog-discord-disconnect')).toBeTruthy();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(disconnectCalled).toBe(false);
   });
 });

@@ -6,8 +6,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { server } from '@/test/msw-server';
 import { PublishToChannelButton } from '../publish-to-channel-button';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -268,7 +268,8 @@ describe('PublishToChannelButton', () => {
     fireEvent.click(slackItem);
 
     const dialog = await screen.findByTestId('publish-channel-dialog-slack');
-    expect(dialog.textContent).toContain('Acme Corp');
+    expect(dialog.textContent).toContain('Connected Slack to Mastra');
+    expect(screen.getByTestId('publish-channel-dialog-slack-disconnect')).toBeTruthy();
     expect(connectCalled).toBe(false);
   });
 
