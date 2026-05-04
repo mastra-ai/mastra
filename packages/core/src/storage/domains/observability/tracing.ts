@@ -287,6 +287,92 @@ export type GetTraceResponse = z.infer<typeof getTraceResponseSchema>;
 /** Alias for GetTraceResponse -- a trace with all its spans. */
 export type TraceRecord = GetTraceResponse;
 
+/**
+ * Schema for getBranch operation arguments.
+ *
+ * Returns the subtree rooted at `spanId`. When `depth` is omitted the full
+ * descendant subtree is returned; with a finite `depth` only that many levels
+ * below the anchor are returned (depth: 0 → only the anchor span; depth: 1 →
+ * anchor plus immediate children; etc).
+ */
+export const getBranchArgsSchema = z
+  .object({
+    traceId: traceIdField.min(1),
+    spanId: spanIdField.min(1),
+    depth: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe('Maximum descendant levels below the anchor span (omit for full subtree)'),
+  })
+  .describe('Arguments for getting a span branch (subtree rooted at a span)');
+
+/** Arguments for retrieving the subtree rooted at a span */
+export type GetBranchArgs = z.input<typeof getBranchArgsSchema>;
+
+/**
+ * Response schema for getBranch operation. Mirrors getTrace -- a flat list of
+ * spans, traversal-agnostic. The anchor span is included as the first matching
+ * span; callers reconstruct the tree via parentSpanId.
+ */
+export const getBranchResponseSchema = z.object({
+  traceId: traceIdField,
+  spans: z.array(spanRecordSchema),
+});
+
+/** Response containing the subtree rooted at a span */
+export type GetBranchResponse = z.infer<typeof getBranchResponseSchema>;
+
+/**
+ * Extracts the subtree rooted at `anchorSpanId` from a flat list of trace
+ * spans. The anchor itself is included; descendants are walked via
+ * `parentSpanId`. When `maxDepth` is provided, only that many levels of
+ * descendants are returned (anchor counts as depth 0).
+ *
+ * Returns spans sorted by `startedAt` ascending. Returns an empty array if
+ * the anchor isn't in the input.
+ */
+export function extractBranchSpans(spans: SpanRecord[], anchorSpanId: string, maxDepth?: number): SpanRecord[] {
+  const anchor = spans.find(s => s.spanId === anchorSpanId);
+  if (!anchor) return [];
+
+  // Build parentSpanId → children index for O(1) descent.
+  const childrenByParent = new Map<string, SpanRecord[]>();
+  for (const span of spans) {
+    if (span.parentSpanId == null) continue;
+    const bucket = childrenByParent.get(span.parentSpanId);
+    if (bucket) {
+      bucket.push(span);
+    } else {
+      childrenByParent.set(span.parentSpanId, [span]);
+    }
+  }
+
+  const result: SpanRecord[] = [anchor];
+  // BFS so depth bounding is straightforward.
+  let frontier: SpanRecord[] = [anchor];
+  let depth = 0;
+  while (frontier.length > 0) {
+    if (maxDepth != null && depth >= maxDepth) break;
+    const next: SpanRecord[] = [];
+    for (const span of frontier) {
+      const children = childrenByParent.get(span.spanId);
+      if (children) {
+        for (const child of children) {
+          result.push(child);
+          next.push(child);
+        }
+      }
+    }
+    frontier = next;
+    depth++;
+  }
+
+  result.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  return result;
+}
+
 // ============================================================================
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
@@ -326,16 +412,21 @@ export const lightSpanRecordSchema = z
 export type LightSpanRecord = z.infer<typeof lightSpanRecordSchema>;
 
 /**
- * Response schema for getTraceLight operation.
+ * Response schema for getStructure operation.
  * Returns a trace with lightweight spans (only fields needed for timeline).
  */
-export const getTraceLightResponseSchema = z.object({
+export const getStructureResponseSchema = z.object({
   traceId: traceIdField,
   spans: z.array(lightSpanRecordSchema),
 });
 
 /** Response containing a trace with lightweight spans for timeline rendering */
-export type GetTraceLightResponse = z.infer<typeof getTraceLightResponseSchema>;
+export type GetStructureResponse = z.infer<typeof getStructureResponseSchema>;
+
+/** @deprecated Use {@link getStructureResponseSchema} instead. */
+export const getTraceLightResponseSchema = getStructureResponseSchema;
+/** @deprecated Use {@link GetStructureResponse} instead. */
+export type GetTraceLightResponse = GetStructureResponse;
 
 /** Schema for filtering traces in list queries */
 export const tracesFilterSchema = z
@@ -402,6 +493,98 @@ export const listTracesResponseSchema = z.object({
 
 /** Response containing paginated root spans with computed status */
 export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
+
+// ============================================================================
+// Invocations (named entities surfaced as listable rows, including non-root)
+// ============================================================================
+
+/**
+ * Span types that represent a "named entity got invoked" -- the units a user
+ * thinks about when looking for a specific run, regardless of whether the
+ * entity ran as the root of its trace or nested under a parent.
+ *
+ * Excludes sub-operation spans (model_step, workflow_step, scorer_step,
+ * memory_operation, rag_*, etc.) which are internal to a containing
+ * invocation rather than separately listable.
+ */
+export const INVOCATION_SPAN_TYPES = [
+  SpanType.AGENT_RUN,
+  SpanType.WORKFLOW_RUN,
+  SpanType.PROCESSOR_RUN,
+  SpanType.SCORER_RUN,
+  SpanType.RAG_INGESTION,
+  SpanType.TOOL_CALL,
+  SpanType.MCP_TOOL_CALL,
+] as const satisfies readonly SpanType[];
+
+/** Set form of {@link INVOCATION_SPAN_TYPES} for fast membership checks. */
+export const INVOCATION_SPAN_TYPE_SET: ReadonlySet<SpanType> = new Set(INVOCATION_SPAN_TYPES);
+
+/** Schema for filtering invocations in list queries. */
+export const invocationsFilterSchema = z
+  .object({
+    // Date range filters apply to the invocation span itself
+    startedAt: dateRangeSchema.optional().describe('Filter by span start time range'),
+    endedAt: dateRangeSchema.optional().describe('Filter by span end time range'),
+
+    // Narrow within the invocation set; if omitted, all invocation span types match
+    spanType: spanTypeField.optional(),
+
+    // Identifier filters
+    traceId: traceIdField.optional().describe('Filter by parent trace ID'),
+
+    // Per-span context fields (apply to the invocation span, not the trace root)
+    ...sharedFields,
+
+    // Derived status filter (computed from this invocation's own error/endedAt)
+    status: traceStatusField.optional(),
+  })
+  .describe('Filters for querying invocations');
+
+export const invocationsOrderByFieldSchema = z
+  .enum(['startedAt', 'endedAt'])
+  .describe("Field to order by: 'startedAt' | 'endedAt'");
+
+export const invocationsOrderBySchema = z
+  .object({
+    field: invocationsOrderByFieldSchema.default('startedAt').describe('Field to order by'),
+    direction: sortDirectionSchema.default('DESC').describe('Sort direction'),
+  })
+  .describe('Order by configuration');
+
+/**
+ * Arguments for listing invocations.
+ *
+ * Listings span every named-entity invocation ({@link INVOCATION_SPAN_TYPES}),
+ * including those nested under a different root entity. Use this when you
+ * want every run of a given agent/processor/tool regardless of how it was
+ * triggered. Use {@link listTracesArgsSchema} when you want one row per trace.
+ */
+export const listInvocationsArgsSchema = z
+  .object({
+    filters: invocationsFilterSchema.optional().describe('Optional filters to apply'),
+    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
+    orderBy: invocationsOrderBySchema
+      .default({ field: 'startedAt', direction: 'DESC' })
+      .describe('Ordering configuration (defaults to startedAt desc)'),
+  })
+  .describe('Arguments for listing invocations');
+
+/** Arguments for listing invocations with optional filters, pagination, and ordering */
+export type ListInvocationsArgs = z.input<typeof listInvocationsArgsSchema>;
+
+/**
+ * Schema for listInvocations operation response. Each row is a single
+ * invocation span -- repeated invocations within the same parent trace
+ * surface as separate rows.
+ */
+export const listInvocationsResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  invocations: z.array(traceSpanSchema),
+});
+
+/** Response containing paginated invocation spans with computed status */
+export type ListInvocationsResponse = z.infer<typeof listInvocationsResponseSchema>;
 
 /**
  * Schema for updating a span (without db timestamps and span IDs)

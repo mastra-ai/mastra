@@ -65,17 +65,23 @@ import type {
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
   CreateSpanArgs,
+  GetBranchArgs,
+  GetBranchResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetStructureResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
+  ListInvocationsArgs,
+  ListInvocationsResponse,
   ListTracesArgs,
   ListTracesResponse,
   UpdateSpanArgs,
 } from './tracing';
+import { extractBranchSpans, getBranchArgsSchema } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
 /**
@@ -199,8 +205,22 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Retrieves a lightweight trace with only the fields needed for timeline rendering.
-   * Excludes heavy fields: input, output, attributes, metadata, tags, links.
+   * Retrieves the structural skeleton of a trace -- parent/child links, span
+   * type, timing, and status -- with heavy fields (input, output, attributes,
+   * metadata, tags, links) excluded. Intended for waterfall/timeline rendering
+   * where the full payload would be wasteful.
+   *
+   * Default implementation forwards to {@link getTraceLight} for backwards
+   * compatibility; backends should override either method (a single
+   * implementation is enough since the response shape is identical).
+   */
+  async getStructure(args: GetTraceArgs): Promise<GetStructureResponse | null> {
+    return this.getTraceLight(args);
+  }
+
+  /**
+   * @deprecated Use {@link getStructure} instead. Retained as the legacy
+   * override surface for storage providers that haven't yet migrated.
    */
   async getTraceLight(_args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
     throw new MastraError({
@@ -212,6 +232,21 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
+   * Retrieves the subtree of spans rooted at a given span, optionally bounded
+   * to `depth` levels of descendants. Default implementation fetches the full
+   * trace and walks the tree in memory; backends with a more efficient direct
+   * path can override.
+   */
+  async getBranch(args: GetBranchArgs): Promise<GetBranchResponse | null> {
+    const parsed = getBranchArgsSchema.parse(args);
+    const trace = await this.getTrace({ traceId: parsed.traceId });
+    if (!trace) return null;
+    const spans = extractBranchSpans(trace.spans, parsed.spanId, parsed.depth);
+    if (spans.length === 0) return null;
+    return { traceId: parsed.traceId, spans };
+  }
+
+  /**
    * Retrieves a list of traces with optional filtering.
    */
   async listTraces(_args: ListTracesArgs): Promise<ListTracesResponse> {
@@ -220,6 +255,21 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing traces',
+    });
+  }
+
+  /**
+   * Lists named-entity invocations across all traces. Unlike {@link listTraces}
+   * (which returns one row per root-rooted trace), each row here is a single
+   * invocation span, including ones nested under a different root entity --
+   * useful for "show me every run of agent X" regardless of caller.
+   */
+  async listInvocations(_args: ListInvocationsArgs): Promise<ListInvocationsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_INVOCATIONS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing invocations',
     });
   }
 

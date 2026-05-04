@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { EntityType, SpanType } from '../../../observability';
 import { InMemoryDB } from '../inmemory-db';
 import { ObservabilityInMemory } from './inmemory';
+import type { CreateSpanRecord } from './tracing';
 
 describe('ObservabilityInMemory', () => {
   let db: InMemoryDB;
@@ -661,5 +663,371 @@ describe('ObservabilityInMemory', () => {
         points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 4.5 }],
       },
     ]);
+  });
+
+  describe('listInvocations', () => {
+    function makeSpan(
+      overrides: Partial<CreateSpanRecord> & Pick<CreateSpanRecord, 'traceId' | 'spanId'>,
+    ): CreateSpanRecord {
+      const startedAt = overrides.startedAt ?? new Date('2026-01-02T12:00:00.000Z');
+      return {
+        traceId: overrides.traceId,
+        spanId: overrides.spanId,
+        parentSpanId: null,
+        name: overrides.name ?? 'span',
+        spanType: overrides.spanType ?? SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+        endedAt: overrides.endedAt ?? new Date(startedAt.getTime() + 1000),
+        ...overrides,
+      } as CreateSpanRecord;
+    }
+
+    it('returns invocation rows for both root and nested invocation spans, excluding sub-operations', async () => {
+      // Root: workflow_run. Children: agent_run (Observer, nested), tool_call,
+      // and a model_step (sub-operation, must be excluded).
+      await storage.batchCreateSpans({
+        records: [
+          makeSpan({
+            traceId: 't1',
+            spanId: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityName: 'orderWorkflow',
+          }),
+          makeSpan({
+            traceId: 't1',
+            spanId: 'observer',
+            parentSpanId: 'root',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityName: 'Observer',
+            startedAt: new Date('2026-01-02T12:00:01.000Z'),
+          }),
+          makeSpan({
+            traceId: 't1',
+            spanId: 'search',
+            parentSpanId: 'observer',
+            spanType: SpanType.TOOL_CALL,
+            entityType: EntityType.TOOL,
+            entityName: 'web_search',
+            startedAt: new Date('2026-01-02T12:00:02.000Z'),
+          }),
+          makeSpan({
+            traceId: 't1',
+            spanId: 'model-step',
+            parentSpanId: 'observer',
+            spanType: SpanType.MODEL_STEP,
+            entityName: 'gpt-4',
+            startedAt: new Date('2026-01-02T12:00:02.500Z'),
+          }),
+        ],
+      });
+
+      const result = await storage.listInvocations({});
+      const names = result.invocations.map(s => s.entityName).sort();
+      expect(names).toEqual(['Observer', 'orderWorkflow', 'web_search']);
+      expect(result.pagination.total).toBe(3);
+    });
+
+    it('finds nested-only entities that listTraces would miss', async () => {
+      // Observer only ever runs as a child of orderWorkflow. listTraces({entityName:'Observer'}) returns nothing.
+      await storage.batchCreateSpans({
+        records: [
+          makeSpan({
+            traceId: 't1',
+            spanId: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityName: 'orderWorkflow',
+          }),
+          makeSpan({
+            traceId: 't1',
+            spanId: 'observer-1',
+            parentSpanId: 'root',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityName: 'Observer',
+            startedAt: new Date('2026-01-02T12:00:01.000Z'),
+          }),
+          makeSpan({
+            traceId: 't1',
+            spanId: 'observer-2',
+            parentSpanId: 'root',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityName: 'Observer',
+            startedAt: new Date('2026-01-02T12:00:03.000Z'),
+          }),
+        ],
+      });
+
+      const traces = await storage.listTraces({ filters: { entityName: 'Observer' } });
+      expect(traces.spans).toHaveLength(0);
+
+      const invocations = await storage.listInvocations({ filters: { entityName: 'Observer' } });
+      // Two invocations of Observer in the same trace surface as two rows.
+      expect(invocations.invocations).toHaveLength(2);
+      expect(invocations.invocations.every(s => s.entityName === 'Observer')).toBe(true);
+    });
+
+    it('orders by startedAt DESC by default and supports pagination', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          makeSpan({
+            traceId: 't1',
+            spanId: 's1',
+            entityName: 'A',
+            startedAt: new Date('2026-01-02T12:00:01.000Z'),
+          }),
+          makeSpan({
+            traceId: 't2',
+            spanId: 's2',
+            entityName: 'B',
+            startedAt: new Date('2026-01-02T12:00:02.000Z'),
+          }),
+          makeSpan({
+            traceId: 't3',
+            spanId: 's3',
+            entityName: 'C',
+            startedAt: new Date('2026-01-02T12:00:03.000Z'),
+          }),
+        ],
+      });
+
+      const page0 = await storage.listInvocations({ pagination: { page: 0, perPage: 2 } });
+      expect(page0.invocations.map(s => s.entityName)).toEqual(['C', 'B']);
+      expect(page0.pagination).toEqual({ total: 3, page: 0, perPage: 2, hasMore: true });
+
+      const page1 = await storage.listInvocations({ pagination: { page: 1, perPage: 2 } });
+      expect(page1.invocations.map(s => s.entityName)).toEqual(['A']);
+      expect(page1.pagination.hasMore).toBe(false);
+    });
+
+    it('narrows by spanType when filter provided', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          makeSpan({
+            traceId: 't1',
+            spanId: 'agent',
+            spanType: SpanType.AGENT_RUN,
+            entityName: 'Agent',
+          }),
+          makeSpan({
+            traceId: 't1',
+            spanId: 'tool',
+            parentSpanId: 'agent',
+            spanType: SpanType.TOOL_CALL,
+            entityName: 'web_search',
+            startedAt: new Date('2026-01-02T12:00:01.000Z'),
+          }),
+        ],
+      });
+
+      const onlyTools = await storage.listInvocations({ filters: { spanType: SpanType.TOOL_CALL } });
+      expect(onlyTools.invocations).toHaveLength(1);
+      expect(onlyTools.invocations[0]!.entityName).toBe('web_search');
+
+      // Non-invocation span types yield no rows even when explicitly requested.
+      const noModelSteps = await storage.listInvocations({ filters: { spanType: SpanType.MODEL_STEP } });
+      expect(noModelSteps.invocations).toHaveLength(0);
+    });
+
+    it('filters by per-span context fields like threadId and tags', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          makeSpan({
+            traceId: 't1',
+            spanId: 'a',
+            entityName: 'A',
+            threadId: 'thread-1',
+            tags: ['prod'],
+          }),
+          makeSpan({
+            traceId: 't2',
+            spanId: 'b',
+            entityName: 'B',
+            threadId: 'thread-2',
+            tags: ['prod', 'beta'],
+            startedAt: new Date('2026-01-02T12:00:01.000Z'),
+          }),
+          makeSpan({
+            traceId: 't3',
+            spanId: 'c',
+            entityName: 'C',
+            threadId: 'thread-1',
+            tags: ['dev'],
+            startedAt: new Date('2026-01-02T12:00:02.000Z'),
+          }),
+        ],
+      });
+
+      const byThread = await storage.listInvocations({ filters: { threadId: 'thread-1' } });
+      expect(byThread.invocations.map(s => s.entityName).sort()).toEqual(['A', 'C']);
+
+      const byTags = await storage.listInvocations({ filters: { tags: ['prod', 'beta'] } });
+      expect(byTags.invocations.map(s => s.entityName)).toEqual(['B']);
+    });
+  });
+
+  describe('getBranch', () => {
+    beforeEach(async () => {
+      // root → A (1) → A1
+      //              → A2
+      //      → B (1) → B1 → B1a
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 't1',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:00.000Z'),
+            endedAt: new Date('2026-01-02T12:00:10.000Z'),
+          },
+          {
+            traceId: 't1',
+            spanId: 'A',
+            parentSpanId: 'root',
+            name: 'A',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:01.000Z'),
+            endedAt: new Date('2026-01-02T12:00:05.000Z'),
+          },
+          {
+            traceId: 't1',
+            spanId: 'A1',
+            parentSpanId: 'A',
+            name: 'A1',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:02.000Z'),
+            endedAt: new Date('2026-01-02T12:00:03.000Z'),
+          },
+          {
+            traceId: 't1',
+            spanId: 'A2',
+            parentSpanId: 'A',
+            name: 'A2',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:03.500Z'),
+            endedAt: new Date('2026-01-02T12:00:04.500Z'),
+          },
+          {
+            traceId: 't1',
+            spanId: 'B',
+            parentSpanId: 'root',
+            name: 'B',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:06.000Z'),
+            endedAt: new Date('2026-01-02T12:00:09.000Z'),
+          },
+          {
+            traceId: 't1',
+            spanId: 'B1',
+            parentSpanId: 'B',
+            name: 'B1',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:07.000Z'),
+            endedAt: new Date('2026-01-02T12:00:08.500Z'),
+          },
+          {
+            traceId: 't1',
+            spanId: 'B1a',
+            parentSpanId: 'B1',
+            name: 'B1a',
+            spanType: SpanType.MODEL_STEP,
+            isEvent: false,
+            startedAt: new Date('2026-01-02T12:00:07.500Z'),
+            endedAt: new Date('2026-01-02T12:00:08.000Z'),
+          },
+        ],
+      });
+    });
+
+    it('returns the full subtree when depth is omitted', async () => {
+      const branch = await storage.getBranch({ traceId: 't1', spanId: 'A' });
+      expect(branch).not.toBeNull();
+      expect(branch!.spans.map(s => s.spanId)).toEqual(['A', 'A1', 'A2']);
+    });
+
+    it('depth=0 returns just the anchor span', async () => {
+      const branch = await storage.getBranch({ traceId: 't1', spanId: 'A', depth: 0 });
+      expect(branch!.spans.map(s => s.spanId)).toEqual(['A']);
+    });
+
+    it('depth=1 returns anchor + immediate children only', async () => {
+      const branch = await storage.getBranch({ traceId: 't1', spanId: 'B', depth: 1 });
+      expect(branch!.spans.map(s => s.spanId)).toEqual(['B', 'B1']);
+    });
+
+    it('depth=2 returns anchor + two levels', async () => {
+      const branch = await storage.getBranch({ traceId: 't1', spanId: 'B', depth: 2 });
+      expect(branch!.spans.map(s => s.spanId)).toEqual(['B', 'B1', 'B1a']);
+    });
+
+    it('returns null for missing trace', async () => {
+      const branch = await storage.getBranch({ traceId: 'missing', spanId: 'A' });
+      expect(branch).toBeNull();
+    });
+
+    it('returns null when the anchor span is not in the trace', async () => {
+      const branch = await storage.getBranch({ traceId: 't1', spanId: 'nonexistent' });
+      expect(branch).toBeNull();
+    });
+
+    it('rooted at the trace root returns every span in the trace', async () => {
+      const branch = await storage.getBranch({ traceId: 't1', spanId: 'root' });
+      expect(branch!.spans).toHaveLength(7);
+    });
+  });
+
+  describe('getStructure / getTraceLight', () => {
+    beforeEach(async () => {
+      await storage.createSpan({
+        span: {
+          traceId: 't1',
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityName: 'agent',
+          startedAt: new Date('2026-01-02T12:00:00.000Z'),
+          endedAt: new Date('2026-01-02T12:00:01.000Z'),
+          // Heavy fields that getStructure must drop:
+          input: { prompt: 'hello' },
+          output: { answer: 'world' },
+          attributes: { model: 'gpt-4' },
+          metadata: { foo: 'bar' },
+          tags: ['prod'],
+        },
+      });
+    });
+
+    it('getStructure returns lightweight spans without heavy fields', async () => {
+      const result = await storage.getStructure({ traceId: 't1' });
+      expect(result).not.toBeNull();
+      expect(result!.spans).toHaveLength(1);
+      const span = result!.spans[0]!;
+      expect(span.spanId).toBe('root');
+      expect(span.entityName).toBe('agent');
+      // Heavy fields are not present on the lightweight schema.
+      expect((span as Record<string, unknown>).input).toBeUndefined();
+      expect((span as Record<string, unknown>).output).toBeUndefined();
+      expect((span as Record<string, unknown>).attributes).toBeUndefined();
+    });
+
+    it('getTraceLight forwards to getStructure (deprecated alias)', async () => {
+      const fromAlias = await storage.getTraceLight({ traceId: 't1' });
+      const fromCanonical = await storage.getStructure({ traceId: 't1' });
+      expect(fromAlias).toEqual(fromCanonical);
+    });
   });
 });

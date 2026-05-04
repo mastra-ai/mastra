@@ -97,6 +97,16 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () => storage.getTraceLight({ traceId: 'test' }),
       expectedMessage: 'does not support getting lightweight traces',
     },
+    {
+      name: 'getStructure (forwards to getTraceLight default)',
+      callThunk: () => storage.getStructure({ traceId: 'test' }),
+      expectedMessage: 'does not support getting lightweight traces',
+    },
+    {
+      name: 'listInvocations',
+      callThunk: () => storage.listInvocations({}),
+      expectedMessage: 'does not support listing invocations',
+    },
 
     // Scores
     {

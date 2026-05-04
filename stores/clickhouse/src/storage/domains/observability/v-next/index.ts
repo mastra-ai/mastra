@@ -22,6 +22,8 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
+  ListInvocationsArgs,
+  ListInvocationsResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateLogsArgs,
@@ -102,6 +104,7 @@ export type VNextObservabilityConfig = ClickhouseDomainConfig & {
 };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
+import * as invocationsOps from './invocations';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
 import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
@@ -390,6 +393,22 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async listInvocations(args: ListInvocationsArgs): Promise<ListInvocationsResponse> {
+    try {
+      return await invocationsOps.listInvocations(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_INVOCATIONS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

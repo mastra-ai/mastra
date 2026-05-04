@@ -258,6 +258,371 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   // ==========================================================================
+  // Invocations
+  // ==========================================================================
+
+  describe('invocations', () => {
+    /**
+     * Wait until the materialized view has populated `mastra_invocations` with
+     * the expected number of rows. The MV is incremental but ClickHouse is
+     * eventually-consistent w.r.t. parts merging; in practice rows appear
+     * within a single insert flush, but the retry loop guards against CI flakes.
+     */
+    async function waitForInvocations(expected: number, timeoutMs = 5000): Promise<number> {
+      const deadline = Date.now() + timeoutMs;
+      let last = -1;
+      while (Date.now() < deadline) {
+        const result = await storage.listInvocations({ pagination: { perPage: 100 } });
+        last = result.invocations.length;
+        if (last >= expected) return last;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      return last;
+    }
+
+    it('surfaces nested invocations that listTraces would miss', async () => {
+      // orderWorkflow → Observer (nested AGENT_RUN, twice) and a tool call.
+      // Plus a model_step which must NOT appear (sub-operation).
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'orderWorkflow',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-1',
+            entityName: 'orderWorkflow',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:00Z'),
+            endedAt: new Date('2026-04-01T12:00:10Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'observer-1',
+            parentSpanId: 'root',
+            name: 'Observer',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-observer',
+            entityName: 'Observer',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:01Z'),
+            endedAt: new Date('2026-04-01T12:00:03Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'observer-2',
+            parentSpanId: 'root',
+            name: 'Observer',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-observer',
+            entityName: 'Observer',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:05Z'),
+            endedAt: new Date('2026-04-01T12:00:07Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'search-1',
+            parentSpanId: 'observer-1',
+            name: 'web_search',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            entityType: EntityType.TOOL,
+            entityId: 'tool-web-search',
+            entityName: 'web_search',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:02Z'),
+            endedAt: new Date('2026-04-01T12:00:02.500Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'model-step-1',
+            parentSpanId: 'observer-1',
+            name: 'gpt-4-call',
+            spanType: SpanType.MODEL_STEP, // sub-operation: must NOT appear
+            isEvent: false,
+            entityType: null,
+            entityId: null,
+            entityName: 'gpt-4',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:02.250Z'),
+            endedAt: new Date('2026-04-01T12:00:02.400Z'),
+          },
+        ],
+      });
+
+      // Should populate: 1 workflow_run + 2 agent_run + 1 tool_call = 4.
+      // The model_step is excluded by the MV WHERE clause.
+      const populated = await waitForInvocations(4);
+      expect(populated).toBe(4);
+
+      // listTraces({ entityName: 'Observer' }) returns nothing since Observer
+      // is never the root span -- this is the gap listInvocations closes.
+      const traces = await storage.listTraces({ filters: { entityName: 'Observer' } });
+      expect(traces.spans).toHaveLength(0);
+
+      const observerInvocations = await storage.listInvocations({
+        filters: { entityName: 'Observer' },
+      });
+      expect(observerInvocations.invocations).toHaveLength(2);
+      expect(observerInvocations.invocations.every(i => i.entityName === 'Observer')).toBe(true);
+    });
+
+    it('narrows by spanType and respects pagination', async () => {
+      const baseStartedAt = new Date('2026-04-02T10:00:00Z');
+      const records = Array.from({ length: 5 }, (_, i) => ({
+        traceId: `pag-trace-${i}`,
+        spanId: `tool-${i}`,
+        parentSpanId: null,
+        name: `tool-${i}`,
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        entityType: EntityType.TOOL,
+        entityId: 'web_search',
+        entityName: 'web_search',
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: [],
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        startedAt: new Date(baseStartedAt.getTime() + i * 1000),
+        endedAt: new Date(baseStartedAt.getTime() + i * 1000 + 500),
+      }));
+      await storage.batchCreateSpans({ records });
+
+      await waitForInvocations(5);
+
+      const onlyTools = await storage.listInvocations({
+        filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
+        pagination: { page: 0, perPage: 2 },
+      });
+      expect(onlyTools.invocations).toHaveLength(2);
+      expect(onlyTools.pagination.total).toBe(5);
+      expect(onlyTools.pagination.hasMore).toBe(true);
+
+      const page2 = await storage.listInvocations({
+        filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
+        pagination: { page: 2, perPage: 2 },
+      });
+      expect(page2.invocations).toHaveLength(1);
+      expect(page2.pagination.hasMore).toBe(false);
+    });
+  });
+
+  // ==========================================================================
+  // getBranch (default base.ts implementation: getTrace + extractBranchSpans)
+  // ==========================================================================
+
+  describe('getBranch', () => {
+    beforeEach(async () => {
+      const baseSpan = {
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: [],
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+      } as const;
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            startedAt: new Date('2026-04-03T00:00:00Z'),
+            endedAt: new Date('2026-04-03T00:00:10Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'A',
+            parentSpanId: 'root',
+            name: 'A',
+            spanType: SpanType.AGENT_RUN,
+            startedAt: new Date('2026-04-03T00:00:01Z'),
+            endedAt: new Date('2026-04-03T00:00:05Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'A1',
+            parentSpanId: 'A',
+            name: 'A1',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-03T00:00:02Z'),
+            endedAt: new Date('2026-04-03T00:00:03Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'A1a',
+            parentSpanId: 'A1',
+            name: 'A1a',
+            spanType: SpanType.MODEL_STEP,
+            startedAt: new Date('2026-04-03T00:00:02.500Z'),
+            endedAt: new Date('2026-04-03T00:00:02.800Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'B',
+            parentSpanId: 'root',
+            name: 'B',
+            spanType: SpanType.AGENT_RUN,
+            startedAt: new Date('2026-04-03T00:00:06Z'),
+            endedAt: new Date('2026-04-03T00:00:09Z'),
+          },
+        ],
+      });
+    });
+
+    it('returns the full subtree by default', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A' });
+      expect(branch).not.toBeNull();
+      expect(branch!.spans.map(s => s.spanId).sort()).toEqual(['A', 'A1', 'A1a']);
+    });
+
+    it('depth=1 returns only the anchor and its immediate children', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A', depth: 1 });
+      expect(branch!.spans.map(s => s.spanId).sort()).toEqual(['A', 'A1']);
+    });
+
+    it('depth=0 returns just the anchor', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A', depth: 0 });
+      expect(branch!.spans.map(s => s.spanId)).toEqual(['A']);
+    });
+
+    it('returns null when the anchor span is not in the trace', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'missing' });
+      expect(branch).toBeNull();
+    });
+  });
+
+  // ==========================================================================
   // Logs
   // ==========================================================================
 
