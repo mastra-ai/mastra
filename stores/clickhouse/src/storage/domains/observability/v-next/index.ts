@@ -19,6 +19,8 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
@@ -328,6 +330,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId: args.traceId, spanId: args.spanId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    try {
+      return await tracingOps.getSpans(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId: args.traceId, count: args.spanIds.length },
         },
         error,
       );

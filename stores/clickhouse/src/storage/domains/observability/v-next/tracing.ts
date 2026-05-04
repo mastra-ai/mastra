@@ -12,6 +12,8 @@ import type {
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
@@ -53,6 +55,41 @@ export async function batchCreateSpans(client: ClickHouseClient, args: BatchCrea
 // ---------------------------------------------------------------------------
 // Read operations
 // ---------------------------------------------------------------------------
+
+/**
+ * Batch-fetch spans by spanId within a trace. Single SELECT keyed by
+ * `(traceId, spanId)`; the span_events ORDER BY `(traceId, endedAt, spanId, dedupeKey)`
+ * means traceId narrowing is index-prefixed and the spanId IN(...) filter is
+ * cheap to evaluate within that range.
+ *
+ * Returns spans in arbitrary order; caller is expected to sort. Spans not
+ * found are silently omitted (callers handle the empty/partial case).
+ */
+export async function getSpans(client: ClickHouseClient, args: GetSpansArgs): Promise<GetSpansResponse> {
+  if (args.spanIds.length === 0) {
+    return { traceId: args.traceId, spans: [] };
+  }
+
+  const result = await client.query({
+    query: `
+      SELECT * FROM (
+        SELECT *
+        FROM ${TABLE_SPAN_EVENTS}
+        WHERE traceId = {traceId:String}
+          AND spanId IN {spanIds:Array(String)}
+        ORDER BY dedupeKey, endedAt DESC
+        LIMIT 1 BY dedupeKey
+      )
+    `,
+    query_params: { traceId: args.traceId, spanIds: args.spanIds },
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_SETTINGS,
+  });
+
+  const rows = (await result.json()) as Record<string, any>[];
+  const spans: SpanRecord[] = rows.map(rowToSpanRecord);
+  return { traceId: args.traceId, spans };
+}
 
 /** Get a single span by (traceId, spanId). Uses ordinary LIMIT 1. */
 export async function getSpan(client: ClickHouseClient, args: GetSpanArgs): Promise<GetSpanResponse | null> {

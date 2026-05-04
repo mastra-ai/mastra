@@ -34,9 +34,9 @@ await store.listBranches({ filters: { entityName: 'Observer' } });
 
 Compared to making `listTraces` filters match nested spans (the alternative considered): this keeps `listTraces` semantics stable (one row per root-rooted trace, root-only filters), and lets each call surface the unit the caller actually wants — whole traces or individual branches.
 
-**`getBranch({ traceId, spanId, depth? })`**
+**`getBranch({ traceId, spanId, depth? })` and `getSpans({ traceId, spanIds })`**
 
-Returns the subtree of spans rooted at a given span, optionally bounded to `depth` levels of descendants. Pairs with `getStructure` (the new canonical name for `getTraceLight`, which is retained as a deprecated alias) for progressive trace exploration: render the lightweight skeleton up front, fetch full subtree data lazily as a user expands branches.
+`getBranch` returns the subtree of spans rooted at a given span, optionally bounded to `depth` levels of descendants. Pairs with `getStructure` (the new canonical name for `getTraceLight`, which is retained as a deprecated alias) for progressive trace exploration: render the lightweight skeleton up front, fetch full subtree data lazily as a user expands branches.
 
 ```ts
 const skeleton = await store.getStructure({ traceId });            // lightweight tree
@@ -49,7 +49,7 @@ const branch   = await store.getBranch({ traceId, spanId, depth: 1 }); // anchor
 - `1` → anchor + immediate children
 - `N` → anchor + N levels of descendants
 
-The default implementation (in `ObservabilityStorage` base) fetches the full trace and walks the parent/child chain in memory, so every backend that supports `getTrace` gets `getBranch` for free without a backend-specific code path.
+The default `getBranch` implementation in `ObservabilityStorage` base prefers a two-step path: walk the lightweight `getStructure` result to identify which spanIds belong to the branch, then `getSpans({ traceId, spanIds })` (a new batch-fetch method) to pull only those with full data. This avoids dragging an entire trace's heavy payload across the wire when the requested branch is a small slice of a large trace. Backends that don't yet implement `getSpans` fall back to the original `getTrace` + in-memory walk, so existing storage providers keep working unchanged.
 
 **ClickHouse**
 
@@ -57,4 +57,6 @@ Adds a new `mastra_branches` table (ReplacingMergeTree, ordered by `(spanType, s
 
 **Out of scope for this change**
 
-`listBranches` is implemented for the in-memory and ClickHouse v-next backends. Other storage backends (DuckDB, Postgres, LibSQL, MongoDB, MSSQL) currently throw "not implemented" for `listBranches`; follow-ups will add per-backend implementations. `getBranch` works against all backends via the default in-memory walk.
+`listBranches` is implemented for the in-memory and ClickHouse v-next backends. Other storage backends (DuckDB, Postgres, LibSQL, MongoDB, MSSQL) currently throw "not implemented" for `listBranches`; follow-ups will add per-backend implementations.
+
+`getSpans` (the optimized branch-fetch primitive) is implemented for ClickHouse v-next only. Other backends will use the `getTrace` + walk fallback for `getBranch` until they add their own `getSpans` implementations.

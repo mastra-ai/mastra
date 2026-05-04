@@ -240,6 +240,34 @@ export const getSpanResponseSchema = z.object({
 export type GetSpanResponse = z.infer<typeof getSpanResponseSchema>;
 
 /**
+ * Schema for getSpans (batch) operation arguments.
+ *
+ * Fetches multiple spans in a trace by spanId in one call. Used to power the
+ * progressive-disclosure path in {@link getBranchArgsSchema}: walk the
+ * lightweight {@link getStructureResponseSchema} to find which spanIds belong
+ * to a branch, then fetch only those with full data instead of pulling the
+ * entire trace.
+ */
+export const getSpansArgsSchema = z
+  .object({
+    traceId: traceIdField.min(1),
+    spanIds: z.array(spanIdField.min(1)).min(1).describe('Span IDs to fetch within the trace'),
+  })
+  .describe('Arguments for batch-fetching spans by spanId within a trace');
+
+/** Arguments for batch-fetching spans by spanId */
+export type GetSpansArgs = z.infer<typeof getSpansArgsSchema>;
+
+/** Response schema for getSpans operation */
+export const getSpansResponseSchema = z.object({
+  traceId: traceIdField,
+  spans: z.array(spanRecordSchema),
+});
+
+/** Response containing the requested spans (order is not guaranteed) */
+export type GetSpansResponse = z.infer<typeof getSpansResponseSchema>;
+
+/**
  * Schema for getRootSpan operation arguments
  */
 export const getRootSpanArgsSchema = z
@@ -332,13 +360,19 @@ export type GetBranchResponse = z.infer<typeof getBranchResponseSchema>;
  *
  * Returns spans sorted by `startedAt` ascending. Returns an empty array if
  * the anchor isn't in the input.
+ *
+ * Generic over the span shape so it works on both full {@link SpanRecord}
+ * lists (e.g. result of `getTrace`) and lightweight skeletons (result of
+ * `getStructure`).
  */
-export function extractBranchSpans(spans: SpanRecord[], anchorSpanId: string, maxDepth?: number): SpanRecord[] {
+export function extractBranchSpans<
+  T extends { spanId: string; parentSpanId?: string | null | undefined; startedAt: Date },
+>(spans: T[], anchorSpanId: string, maxDepth?: number): T[] {
   const anchor = spans.find(s => s.spanId === anchorSpanId);
   if (!anchor) return [];
 
   // Build parentSpanId → children index for O(1) descent.
-  const childrenByParent = new Map<string, SpanRecord[]>();
+  const childrenByParent = new Map<string, T[]>();
   for (const span of spans) {
     if (span.parentSpanId == null) continue;
     const bucket = childrenByParent.get(span.parentSpanId);
@@ -349,13 +383,13 @@ export function extractBranchSpans(spans: SpanRecord[], anchorSpanId: string, ma
     }
   }
 
-  const result: SpanRecord[] = [anchor];
+  const result: T[] = [anchor];
   // BFS so depth bounding is straightforward.
-  let frontier: SpanRecord[] = [anchor];
+  let frontier: T[] = [anchor];
   let depth = 0;
   while (frontier.length > 0) {
     if (maxDepth != null && depth >= maxDepth) break;
-    const next: SpanRecord[] = [];
+    const next: T[] = [];
     for (const span of frontier) {
       const children = childrenByParent.get(span.spanId);
       if (children) {

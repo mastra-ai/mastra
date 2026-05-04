@@ -71,6 +71,8 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetStructureResponse,
   GetTraceArgs,
   GetTraceResponse,
@@ -233,17 +235,58 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Retrieves the subtree of spans rooted at a given span, optionally bounded
-   * to `depth` levels of descendants. Default implementation fetches the full
-   * trace and walks the tree in memory; backends with a more efficient direct
-   * path can override.
+   * to `depth` levels of descendants.
+   *
+   * Default implementation prefers a two-step path: fetch the lightweight
+   * structure to determine which spans belong to the branch, then batch-fetch
+   * only those with full data. This avoids pulling the entire trace when the
+   * branch is a small slice of a large trace. Backends that don't yet
+   * implement {@link getStructure} or {@link getSpans} fall back to fetching
+   * the full trace and walking it in memory.
    */
   async getBranch(args: GetBranchArgs): Promise<GetBranchResponse | null> {
     const parsed = getBranchArgsSchema.parse(args);
+
+    // Optimized path: skeleton walk → batch fetch the branch's spans.
+    try {
+      const skeleton = await this.getStructure({ traceId: parsed.traceId });
+      if (!skeleton) return null;
+      const branchSpanIds = extractBranchSpans(skeleton.spans, parsed.spanId, parsed.depth).map(s => s.spanId);
+      if (branchSpanIds.length === 0) return null;
+      const { spans } = await this.getSpans({ traceId: parsed.traceId, spanIds: branchSpanIds });
+      if (spans.length === 0) return null;
+      spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+      return { traceId: parsed.traceId, spans };
+    } catch (error) {
+      const isFallbackTrigger =
+        error instanceof MastraError &&
+        (error.id === 'OBSERVABILITY_STORAGE_GET_STRUCTURE_NOT_IMPLEMENTED' ||
+          error.id === 'OBSERVABILITY_STORAGE_GET_TRACE_LIGHT_NOT_IMPLEMENTED' ||
+          error.id === 'OBSERVABILITY_STORAGE_GET_SPANS_NOT_IMPLEMENTED');
+      if (!isFallbackTrigger) throw error;
+    }
+
+    // Fallback: pull the whole trace, walk in memory.
     const trace = await this.getTrace({ traceId: parsed.traceId });
     if (!trace) return null;
     const spans = extractBranchSpans(trace.spans, parsed.spanId, parsed.depth);
     if (spans.length === 0) return null;
     return { traceId: parsed.traceId, spans };
+  }
+
+  /**
+   * Batch-fetches spans by spanId within a single trace. Used by the
+   * optimized {@link getBranch} path to fetch only the spans that belong to
+   * the requested branch (after walking the lightweight structure to identify
+   * them) instead of pulling the entire trace.
+   */
+  async getSpans(_args: GetSpansArgs): Promise<GetSpansResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support batch-fetching spans',
+    });
   }
 
   /**

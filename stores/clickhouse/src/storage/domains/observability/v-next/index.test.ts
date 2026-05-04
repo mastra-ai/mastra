@@ -515,7 +515,93 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   // ==========================================================================
-  // getBranch (default base.ts implementation: getTrace + extractBranchSpans)
+  // getSpans (batch by spanId)
+  // ==========================================================================
+
+  describe('getSpans', () => {
+    it('fetches a subset of spans within a trace by spanId', async () => {
+      const baseSpan = {
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: [],
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+      } as const;
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'gs-1',
+            spanId: 'a',
+            parentSpanId: null,
+            name: 'a',
+            spanType: SpanType.AGENT_RUN,
+            input: { prompt: 'hi' }, // verify heavy fields round-trip
+            startedAt: new Date('2026-04-04T00:00:00Z'),
+            endedAt: new Date('2026-04-04T00:00:01Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'gs-1',
+            spanId: 'b',
+            parentSpanId: 'a',
+            name: 'b',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-04T00:00:02Z'),
+            endedAt: new Date('2026-04-04T00:00:03Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'gs-1',
+            spanId: 'c',
+            parentSpanId: 'a',
+            name: 'c',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-04T00:00:04Z'),
+            endedAt: new Date('2026-04-04T00:00:05Z'),
+          },
+        ],
+      });
+
+      const result = await storage.getSpans({ traceId: 'gs-1', spanIds: ['a', 'c'] });
+      expect(result.traceId).toBe('gs-1');
+      const ids = result.spans.map(s => s.spanId).sort();
+      expect(ids).toEqual(['a', 'c']);
+
+      // Heavy fields are populated (this is the difference from getStructure).
+      const a = result.spans.find(s => s.spanId === 'a')!;
+      expect(a.input).toEqual({ prompt: 'hi' });
+    });
+
+    it('returns empty spans array when no spanIds match', async () => {
+      const result = await storage.getSpans({ traceId: 'no-such-trace', spanIds: ['x'] });
+      expect(result.spans).toEqual([]);
+    });
+  });
+
+  // ==========================================================================
+  // getBranch
+  //
+  // ClickHouse v-next implements both getStructure (via getTraceLight alias)
+  // and getSpans, so getBranch goes through the optimized two-step path in
+  // base.ts: structure walk → batch span fetch (no full-trace pull).
   // ==========================================================================
 
   describe('getBranch', () => {
