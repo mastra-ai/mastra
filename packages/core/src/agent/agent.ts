@@ -4248,14 +4248,9 @@ export class Agent<
           backgroundConfig: subAgentBackgroundConfig,
         };
 
-        // Mark the wrapper tool so tool-call-step picks up the background config
-        if (subAgentBackgroundConfig) {
-          (toolObj as any).backgroundConfig = subAgentBackgroundConfig;
-        }
-
-        // TODO; fix recursion type
+        // backgroundConfig is already passed via options — no mutation needed
         convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
-          toolObj as any,
+          toolObj,
           options,
           undefined,
           autoResumeSuspendedTools,
