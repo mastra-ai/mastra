@@ -32,9 +32,19 @@ export const Colors = {
 
   // Overlay colors
   overlay: 'var(--overlay)',
+
+  // Toast solid backgrounds (notice tint baked over surface1)
+  'toast-success-bg': 'var(--toast-success-bg)',
+  'toast-destructive-bg': 'var(--toast-destructive-bg)',
+  'toast-warning-bg': 'var(--toast-warning-bg)',
+  'toast-info-bg': 'var(--toast-info-bg)',
 };
 
 export const BorderColors = {
   border1: 'var(--border1)',
   border2: 'var(--border2)',
+  'toast-success-border': 'var(--toast-success-border)',
+  'toast-destructive-border': 'var(--toast-destructive-border)',
+  'toast-warning-border': 'var(--toast-warning-border)',
+  'toast-info-border': 'var(--toast-info-border)',
 };

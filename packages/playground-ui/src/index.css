@@ -73,6 +73,20 @@
   --notice-info-fg: oklch(0.97 0.013 224);
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
+
+  /* Toast solid bg/border — bg matches notice (~20%), border bumped to ~45% so the colored ring reads against its own bg */
+  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface1));
+  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface1));
+  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface1));
+  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface1));
+  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface1));
+  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface1));
+  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface1));
+  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface1));
+
+  /* Toast shadow — dark mode skips the gloss highlight (white insets read muddy on the tinted
+     dark surface) and keeps only the elevation: tight close shadow + soft long shadow. */
+  --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
 }
 
 html.light {
@@ -130,6 +144,21 @@ html.light {
   --notice-info-fg: oklch(0.36 0.13 225);
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
+
+  /* Toast solid bg/border — bg matches notice (~20%), border bumped to ~45% so the colored ring reads against its own bg */
+  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface1));
+  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface1));
+  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface1));
+  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface1));
+  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface1));
+  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface1));
+  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface1));
+  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface1));
+
+  /* Toast shadow — light theme uses a soft elevation, lighter than dialog so it floats without weight.
+     Inset top highlight instead of outer ring to avoid stacking with the explicit border. */
+  --toast-shadow:
+    inset 0 1px 0 0 oklch(1 0 0 / 0.6), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -12px oklch(0 0 0 / 0.14);
 }
 
 @utility container {
@@ -324,6 +353,15 @@ html.light {
   --color-notice-note: var(--notice-note);
   --color-notice-note-fg: var(--notice-note-fg);
 
+  --color-toast-success-bg: var(--toast-success-bg);
+  --color-toast-success-border: var(--toast-success-border);
+  --color-toast-destructive-bg: var(--toast-destructive-bg);
+  --color-toast-destructive-border: var(--toast-destructive-border);
+  --color-toast-warning-bg: var(--toast-warning-bg);
+  --color-toast-warning-border: var(--toast-warning-border);
+  --color-toast-info-bg: var(--toast-info-bg);
+  --color-toast-info-border: var(--toast-info-border);
+
   --font-serif: var(--tasa-explorer), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   --font-mono:
     var(--geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
@@ -345,6 +383,7 @@ html.light {
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
   --shadow-dialog:
     0 0 0 1px oklch(0 0 0 / 0.04), 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
+  --shadow-toast: var(--toast-shadow);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
