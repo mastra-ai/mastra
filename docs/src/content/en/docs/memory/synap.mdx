@@ -1,22 +1,8 @@
 # Synap Memory Integration for Mastra
 
 [Synap](https://maximem.ai) is a managed memory layer for AI agents. The Mastra
-integration provides `SynapMemory` — a Mastra-compatible memory backend — plus
+integration provides `SynapMemory` — a Mastra-compatible memory class — along with
 `synapSearchTool` and `synapStoreTool` for agents that need explicit memory access.
-
-**What makes Synap different from a standard storage adapter:**
-
-- **Five typed memory categories** — facts, preferences, episodes, emotions, temporal
-  events — automatically extracted from conversations; no schema to define
-- **Entity resolution** — "John", "Mr. Smith", "my manager" unified into one canonical
-  knowledge-graph node across all conversations
-- **Four-level memory scoping** — User → Customer → Client → World — strict multi-tenant
-  isolation for B2B applications where different customers must not share memory
-- **Fast mode** (~50–100 ms, vector similarity) and **Accurate mode** (~200–500 ms,
-  vector + graph traversal) — selectable per query
-- **Context compaction** — long conversations compress into structured summaries,
-  cutting token costs without losing critical context
-- **Async extraction** — never adds latency to the user's turn
 
 ## Installation
 
@@ -28,7 +14,7 @@ Get an API key at [synap.maximem.ai](https://synap.maximem.ai).
 
 ## SynapMemory
 
-`SynapMemory` is a Mastra-compatible memory class. Attach it to any Mastra agent:
+Attach `SynapMemory` to any Mastra agent to give it persistent, cross-session memory:
 
 ```typescript
 import { Agent } from '@mastra/core';
@@ -46,6 +32,9 @@ const agent = new Agent({
   memory,
 });
 ```
+
+Memory is scoped to the `userId` and `customerId` you provide, ensuring strict isolation
+in multi-tenant applications.
 
 ## Agent Tools
 
