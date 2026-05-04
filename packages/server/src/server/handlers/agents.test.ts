@@ -1024,6 +1024,96 @@ describe('Agent Routes Authorization', () => {
   });
 });
 
+// ============================================================================
+// Stored Agent Visibility / Ownership on execute routes
+// ============================================================================
+
+describe('GENERATE_AGENT_ROUTE stored-agent visibility', () => {
+  let storage: InMemoryStore;
+  let mockAgent: Agent;
+  let mastra: Mastra;
+
+  beforeEach(async () => {
+    storage = new InMemoryStore();
+
+    mockAgent = new Agent({
+      id: 'private-agent',
+      name: 'private-agent',
+      instructions: 'test',
+      model: {} as any,
+    });
+
+    mastra = new Mastra({
+      agents: { 'private-agent': mockAgent },
+      storage,
+      logger: false,
+    });
+
+    // Seed a stored record marking the agent as private and owned by user-a
+    const agentsStore = (await storage.getStore('agents')) as any;
+    await agentsStore.create({
+      agent: {
+        id: 'private-agent',
+        authorId: 'user-a',
+        visibility: 'private',
+      },
+    });
+
+    vi.spyOn(mockAgent, 'generate').mockResolvedValue({ text: 'ok' } as any);
+  });
+
+  it('should 404 when non-owner executes a private stored agent', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-b');
+
+    await expect(
+      GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'private-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'hi' }],
+      } as any),
+    ).rejects.toThrow(HTTPException);
+  });
+
+  it('should allow owner to execute a private stored agent', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
+
+    await expect(
+      GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'private-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'hi' }],
+      } as any),
+    ).resolves.toBeDefined();
+  });
+
+  it('should allow non-owner to execute a public stored agent', async () => {
+    const agentsStore = (await storage.getStore('agents')) as any;
+    await agentsStore.update({
+      id: 'private-agent',
+      visibility: 'public',
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-b');
+
+    await expect(
+      GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'private-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'hi' }],
+      } as any),
+    ).resolves.toBeDefined();
+  });
+});
+
 describe('extractVersionOptions', () => {
   it('should return undefined when no requestContext or bodyRequestContext', () => {
     expect(extractVersionOptions()).toBeUndefined();
