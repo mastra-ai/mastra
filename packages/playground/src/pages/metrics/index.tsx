@@ -1,7 +1,5 @@
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
+  Notice,
   Button,
   ButtonWithTooltip,
   DateRangeSelector,
@@ -148,13 +146,12 @@ function MetricsContent() {
       ) : (
         <div className="grid gap-8 content-start pb-10">
           {isInMemory && (
-            <Alert variant="info">
-              <AlertTitle>Metrics are not persisted</AlertTitle>
-              <AlertDescription as="p">
+            <Notice variant="info" title="Metrics are not persisted">
+              <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
                 persistent metrics, switch the observability storage to ClickHouse or DuckDB.
-              </AlertDescription>
-            </Alert>
+              </Notice.Message>
+            </Notice>
           )}
 
           <MetricsFlexGrid>

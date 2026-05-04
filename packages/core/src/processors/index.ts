@@ -316,6 +316,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   readonly id: TId;
   readonly name?: string;
   readonly description?: string;
+  /**
+   * Declares that this processor owns skill discovery and instruction loading.
+   * Agents use this to avoid adding eager skill context and overlapping skill tools.
+   */
+  readonly providesSkillDiscovery?: 'on-demand';
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 

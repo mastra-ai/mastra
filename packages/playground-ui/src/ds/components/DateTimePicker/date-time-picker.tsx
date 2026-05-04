@@ -268,7 +268,7 @@ type DefaultButtonProps = {
 export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonProps>(
   ({ value, placeholder, className, ...props }, ref) => {
     return (
-      <Button ref={ref} className={cn('justify-start', className)} variant="inputLike" {...props}>
+      <Button ref={ref} className={cn('justify-start', className)} {...props}>
         <CalendarIcon className="h-4 w-4" />
         {value ? (
           <span className="text-white">{format(value, 'PP p')}</span>

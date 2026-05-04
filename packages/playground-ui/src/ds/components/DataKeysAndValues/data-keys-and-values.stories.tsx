@@ -11,7 +11,6 @@ const meta: Meta<typeof DataKeysAndValues> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     numOfCol: {
       control: { type: 'inline-radio' },
