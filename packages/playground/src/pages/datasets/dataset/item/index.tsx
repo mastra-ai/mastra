@@ -1,34 +1,27 @@
 import {
-  MainContentLayout,
-  MainContentContent,
-  useDatasetItemVersions,
-  useDatasetMutations,
-  useLinkComponent,
-  DatasetItemContent,
-  DatasetItemVersionsPanel,
-  EditModeContent,
   AlertDialog,
-  Button,
-  Icon,
-  Header,
   Breadcrumb,
-  Crumb,
-  MainHeader,
+  Button,
   ButtonsGroup,
-  toast,
-  TextAndIcon,
-  useDataset,
-  CopyButton,
-  Columns,
   Column,
+  Columns,
+  CopyButton,
+  Crumb,
+  Header,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   Notice,
   PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
   is403ForbiddenError,
+  toast,
 } from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import {
-  AlertTriangleIcon,
   ArrowRightToLineIcon,
   Calendar1Icon,
   DatabaseIcon,
@@ -39,6 +32,12 @@ import {
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
+import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
+import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { useLinkComponent } from '@/lib/framework';
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -205,6 +204,16 @@ function DatasetItemPage() {
       }
     : null;
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (error && is403ForbiddenError(error)) {
     return (
       <MainContentLayout>
@@ -298,22 +307,23 @@ function DatasetItemPage() {
             <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
               <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Notice variant="destructive">
-                    <AlertTriangleIcon />
+                  <Notice variant="destructive" title="Item deleted">
                     <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
                   </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <>
-                    <Notice variant="warning">
-                      <AlertTriangleIcon />
-                      <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  <Notice
+                    variant="warning"
+                    title="Previous version"
+                    action={
                       <Notice.Button onClick={handleReturnToLatest}>
                         <ArrowRightToLineIcon /> Return to the latest version
                       </Notice.Button>
-                    </Notice>
-                  </>
+                    }
+                  >
+                    <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {isEditing ? (

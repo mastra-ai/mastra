@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
 import {
-  contextFields,
+  spanContextFields,
   dateRangeSchema,
   dbTimestamps,
   metadataField,
@@ -10,16 +10,11 @@ import {
   paginationInfoSchema,
   sortDirectionSchema,
   tagsField,
+  traceIdField,
+  spanIdField,
 } from '../shared';
-// ============================================================================
-// Shared Identifier Fields (also re-exported from types.ts)
-// ============================================================================
 
-/** Zod schema for trace ID field */
-export const traceIdField = z.string().describe('Unique trace identifier');
-
-/** Zod schema for span ID field */
-export const spanIdField = z.string().describe('Unique span identifier within a trace');
+export { traceIdField, spanIdField };
 
 // ============================================================================
 // Helper utilities for creating omit key objects from schema shapes
@@ -75,11 +70,11 @@ const hasChildErrorField = z
 
 /**
  * All optional fields shared between span records and trace filters.
- * Built from contextFields (shared across all signals) plus span-specific metadata/tags.
+ * Built from spanContextFields plus span-specific metadata/tags.
  * Note: When filtering traces, these fields are matched against the root span.
  */
 const sharedFields = {
-  ...contextFields,
+  ...spanContextFields,
   metadata: metadataField.nullish(),
   tags: tagsField.nullish(),
 } as const;
@@ -150,7 +145,7 @@ export type SpanRecord = z.infer<typeof spanRecordSchema>;
  * - RUNNING: if endedAt is null/undefined and no error
  * - SUCCESS: if endedAt is present and no error
  */
-export function computeTraceStatus(span: SpanRecord): TraceStatus {
+export function computeTraceStatus(span: { error?: unknown; endedAt?: Date | string | null }): TraceStatus {
   if (span.error != null) return TraceStatus.ERROR;
   if (span.endedAt == null) return TraceStatus.RUNNING;
   return TraceStatus.SUCCESS;
@@ -292,6 +287,56 @@ export type GetTraceResponse = z.infer<typeof getTraceResponseSchema>;
 /** Alias for GetTraceResponse -- a trace with all its spans. */
 export type TraceRecord = GetTraceResponse;
 
+// ============================================================================
+// Lightweight Span & Trace Schemas (for timeline rendering)
+// ============================================================================
+
+/**
+ * Lightweight span record containing only the fields needed for timeline rendering.
+ * Excludes heavy fields: input, output, attributes, metadata, tags, links.
+ * This reduces per-span payload from ~17KB to ~370 bytes (~97% reduction).
+ */
+export const lightSpanRecordSchema = z
+  .object({
+    // Required identifiers
+    ...spanIds,
+    name: spanNameField,
+    spanType: spanTypeField,
+    isEvent: isEventField,
+    startedAt: startedAtField,
+
+    // Nullish fields needed for timeline/status
+    parentSpanId: parentSpanIdField.nullish(),
+    endedAt: endedAtField.nullish(),
+    error: errorField.nullish(),
+
+    // Entity context (needed by TraceKeysAndValues on root span)
+    entityType: spanContextFields.entityType,
+    entityId: spanContextFields.entityId,
+    entityName: spanContextFields.entityName,
+
+    // Database timestamps
+    ...dbTimestamps,
+  })
+  .describe(
+    'Lightweight span record for timeline rendering (excludes input, output, attributes, metadata, tags, links)',
+  );
+
+/** Lightweight span record for timeline rendering */
+export type LightSpanRecord = z.infer<typeof lightSpanRecordSchema>;
+
+/**
+ * Response schema for getTraceLight operation.
+ * Returns a trace with lightweight spans (only fields needed for timeline).
+ */
+export const getTraceLightResponseSchema = z.object({
+  traceId: traceIdField,
+  spans: z.array(lightSpanRecordSchema),
+});
+
+/** Response containing a trace with lightweight spans for timeline rendering */
+export type GetTraceLightResponse = z.infer<typeof getTraceLightResponseSchema>;
+
 /** Schema for filtering traces in list queries */
 export const tracesFilterSchema = z
   .object({
@@ -301,6 +346,9 @@ export const tracesFilterSchema = z
 
     // Span type filter
     spanType: spanTypeField.optional(),
+
+    // Identifier filter (matches the root span's trace identifier)
+    traceId: traceIdField.optional().describe('Filter by trace ID (matches root span)'),
 
     // Shared fields
     ...sharedFields,

@@ -1736,4 +1736,454 @@ describe('Processor Tracing Tests', () => {
       testExporter.finalExpectations();
     });
   });
+
+  // ==========================================================================
+  // Processor Override Span Update Tests
+  // ==========================================================================
+
+  describe('Processor Override Span Updates', () => {
+    /**
+     * When a processInputStep overrides the model, the MODEL_GENERATION span
+     * should reflect the new model and provider, not the original.
+     *
+     * Expected span structure:
+     * - test-agent AGENT_RUN (root)
+     *   - MODEL_GENERATION (attributes should reflect overridden model)
+     *     - MODEL_STEP
+     *       - input step processor: model-router PROCESSOR_RUN
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides model', async () => {
+      const originalModel = new MockLanguageModelV2({
+        provider: 'original-provider',
+        modelId: 'original-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from overridden model' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const overriddenModel = new MockLanguageModelV2({
+        provider: 'overridden-provider',
+        modelId: 'overridden-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from overridden model' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Overridden' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      class ModelOverrideProcessor implements Processor {
+        readonly id = 'model-router';
+        readonly name = 'Model Router';
+
+        async processInputStep(_args: {
+          messages: MastraDBMessage[];
+          messageList: MessageList;
+        }): Promise<{ model: typeof overriddenModel }> {
+          return { model: overriddenModel };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: originalModel,
+        inputProcessors: [new ModelOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      // MODEL_GENERATION span should reflect the overridden model, not the original
+      expect(modelSpan?.name).toBe("llm: 'overridden-model'");
+      expect(modelSpan?.attributes?.model).toBe('overridden-model');
+      expect(modelSpan?.attributes?.provider).toBe('overridden-provider');
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep overrides modelSettings, the MODEL_GENERATION span
+     * should reflect the new parameters.
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides modelSettings', async () => {
+      const model = createMockModel();
+
+      class ModelSettingsOverrideProcessor implements Processor {
+        readonly id = 'settings-override';
+        readonly name = 'Settings Override';
+
+        async processInputStep(_args: {
+          messages: MastraDBMessage[];
+          messageList: MessageList;
+        }): Promise<{ modelSettings: { temperature: number; maxOutputTokens: number } }> {
+          return {
+            modelSettings: {
+              temperature: 0.9,
+              maxOutputTokens: 4096,
+            },
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModelSettingsOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      // MODEL_GENERATION span parameters should reflect the overridden settings
+      expect(modelSpan?.attributes?.parameters).toMatchObject({
+        temperature: 0.9,
+        maxOutputTokens: 4096,
+      });
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep overrides both model and modelSettings, both
+     * should be reflected on the MODEL_GENERATION span.
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides both model and modelSettings', async () => {
+      const originalModel = new MockLanguageModelV2({
+        provider: 'original-provider',
+        modelId: 'original-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const overriddenModel = new MockLanguageModelV2({
+        provider: 'smart-provider',
+        modelId: 'smart-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Smart response' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Smart' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75 } },
+          ]),
+        }),
+      });
+
+      class FullOverrideProcessor implements Processor {
+        readonly id = 'full-override';
+        readonly name = 'Full Override';
+
+        async processInputStep(): Promise<{
+          model: typeof overriddenModel;
+          modelSettings: { temperature: number };
+        }> {
+          return {
+            model: overriddenModel,
+            modelSettings: { temperature: 0.1 },
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: originalModel,
+        inputProcessors: [new FullOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      expect(modelSpan?.name).toBe("llm: 'smart-model'");
+      expect(modelSpan?.attributes?.model).toBe('smart-model');
+      expect(modelSpan?.attributes?.provider).toBe('smart-provider');
+      expect(modelSpan?.attributes?.parameters).toMatchObject({
+        temperature: 0.1,
+      });
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep overrides activeTools, the AGENT_RUN span
+     * should reflect the new available tools.
+     */
+    it('should update AGENT_RUN span when processInputStep overrides activeTools', async () => {
+      const model = createMockModel();
+
+      class ActiveToolsOverrideProcessor implements Processor {
+        readonly id = 'tool-filter';
+        readonly name = 'Tool Filter';
+
+        async processInputStep(): Promise<{ activeTools: string[] }> {
+          return {
+            activeTools: ['search', 'calculate'],
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ActiveToolsOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      expect(agentSpans.length).toBe(1);
+
+      const agentSpan = agentSpans[0];
+      // AGENT_RUN span should reflect the overridden active tools
+      expect(agentSpan?.attributes?.availableTools).toEqual(['search', 'calculate']);
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep does NOT override model or settings,
+     * the MODEL_GENERATION span should retain the original values.
+     */
+    it('should NOT update MODEL_GENERATION span when processInputStep does not override model', async () => {
+      const model = new MockLanguageModelV2({
+        provider: 'test-provider',
+        modelId: 'test-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      // This processor only modifies messages, not model
+      class MessageOnlyProcessor implements Processor {
+        readonly id = 'message-only';
+        readonly name = 'Message Only';
+
+        async processInputStep(args: { messages: MastraDBMessage[]; messageList: MessageList }): Promise<MessageList> {
+          return args.messageList;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new MessageOnlyProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      // Should retain original model info and name
+      expect(modelSpan?.name).toBe("llm: 'test-model'");
+      expect(modelSpan?.attributes?.model).toBe('test-model');
+      expect(modelSpan?.attributes?.provider).toBe('test-provider');
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When streaming with a processor that overrides the model,
+     * the MODEL_GENERATION span should reflect the overridden model.
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides model during stream()', async () => {
+      const originalModel = new MockLanguageModelV2({
+        provider: 'original-provider',
+        modelId: 'original-model',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Original' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const overriddenModel = new MockLanguageModelV2({
+        provider: 'stream-provider',
+        modelId: 'stream-model',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Streamed' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 8, totalTokens: 23 } },
+          ]),
+        }),
+      });
+
+      class StreamModelOverrideProcessor implements Processor {
+        readonly id = 'stream-model-router';
+        readonly name = 'Stream Model Router';
+
+        async processInputStep(): Promise<{ model: typeof overriddenModel }> {
+          return { model: overriddenModel };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: originalModel,
+        inputProcessors: [new StreamModelOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      const result = await registeredAgent.stream('Hello');
+      // Consume the stream to ensure all spans are completed
+      for await (const _chunk of result.textStream) {
+        // consume
+      }
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      expect(modelSpan?.name).toBe("llm: 'stream-model'");
+      expect(modelSpan?.attributes?.model).toBe('stream-model');
+      expect(modelSpan?.attributes?.provider).toBe('stream-provider');
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep explicitly returns an empty activeTools array,
+     * the AGENT_RUN span availableTools should be cleared to [].
+     */
+    it('should clear AGENT_RUN span availableTools when processInputStep returns activeTools: []', async () => {
+      const model = createMockModel();
+
+      class ActiveToolsClearProcessor implements Processor {
+        readonly id = 'tool-clear';
+        readonly name = 'Tool Clear';
+
+        async processInputStep(): Promise<{ activeTools: string[] }> {
+          return {
+            activeTools: [],
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ActiveToolsClearProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      expect(agentSpans.length).toBe(1);
+
+      const agentSpan = agentSpans[0];
+      // AGENT_RUN span availableTools should be cleared to an empty array
+      expect(agentSpan?.attributes?.availableTools).toEqual([]);
+
+      testExporter.finalExpectations();
+    });
+  });
 });

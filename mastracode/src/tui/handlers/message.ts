@@ -4,10 +4,14 @@
  *
  * Also includes pure helper functions for content partitioning.
  */
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { SystemReminderComponent } from '../components/system-reminder.js';
+import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import { UserMessageComponent } from '../components/user-message.js';
+import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -20,7 +24,7 @@ function getTrailingContentParts(message: HarnessMessage): HarnessMessage['conte
   let lastToolIndex = -1;
   for (let i = message.content.length - 1; i >= 0; i--) {
     const c = message.content[i]!;
-    if (c.type === 'tool_call' || c.type === 'tool_result') {
+    if (isInlineBoundary(c)) {
       lastToolIndex = i;
       break;
     }
@@ -36,6 +40,87 @@ function getTrailingContentParts(message: HarnessMessage): HarnessMessage['conte
 /**
  * Get content parts between the last processed tool call and this one (text/thinking only).
  */
+type StreamedSystemReminderPart = {
+  type: 'system_reminder';
+  message?: string;
+  reminderType?: string;
+  path?: string;
+  precedesMessageId?: string;
+  gapText?: string;
+};
+
+function isInlineBoundary(part: HarnessMessageContent): boolean {
+  return (
+    part.type === 'tool_call' || part.type === 'tool_result' || (part as { type?: string }).type === 'system_reminder'
+  );
+}
+
+function isSystemReminderPart(part: HarnessMessageContent): boolean {
+  return (part as { type?: string }).type === 'system_reminder';
+}
+
+function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSystemReminderPart | undefined {
+  if (!isSystemReminderPart(part)) return undefined;
+  const reminder = part as unknown as Partial<StreamedSystemReminderPart>;
+
+  return {
+    type: 'system_reminder',
+    message: typeof reminder.message === 'string' ? reminder.message : undefined,
+    reminderType: reminder.reminderType,
+    path: reminder.path,
+    precedesMessageId: typeof reminder.precedesMessageId === 'string' ? reminder.precedesMessageId : undefined,
+    gapText: typeof reminder.gapText === 'string' ? reminder.gapText : undefined,
+  };
+}
+
+function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
+  if (reminder.reminderType === 'temporal-gap') {
+    return new TemporalGapComponent({
+      message: reminder.message,
+      gapText: reminder.gapText,
+    });
+  }
+
+  return new SystemReminderComponent({
+    message: reminder.message,
+    reminderType: reminder.reminderType,
+    path: reminder.path,
+  });
+}
+
+function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
+  const { state } = ctx;
+  const component = createReminderComponent(reminder);
+  component.setExpanded(state.toolOutputExpanded);
+  state.allSystemReminderComponents.push(component);
+
+  if (reminder.precedesMessageId && !state.messageComponentsById.has(reminder.precedesMessageId)) {
+    const latestUserComponent = [...state.chatContainer.children]
+      .reverse()
+      .find(child => child instanceof UserMessageComponent);
+
+    if (latestUserComponent) {
+      const idx = state.chatContainer.children.indexOf(latestUserComponent as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, component);
+        state.chatContainer.invalidate();
+        return;
+      }
+    }
+  }
+
+  if (state.streamingComponent && !reminder.precedesMessageId) {
+    const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
+    if (idx >= 0) {
+      (state.chatContainer.children as unknown[]).splice(idx, 0, component);
+      state.chatContainer.invalidate();
+      return;
+    }
+  }
+
+  addChildBeforeMessageOrFollowUps(state, component, reminder.precedesMessageId);
+}
+
 function getContentBeforeToolCall(
   message: HarnessMessage,
   toolCallId: string,
@@ -83,7 +168,26 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
 
 export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMessage): void {
   const { state } = ctx;
-  if (!state.streamingComponent || message.role !== 'assistant') return;
+  if (message.role !== 'assistant') return;
+
+  const systemReminderParts = message.content
+    .map(toStreamedSystemReminderPart)
+    .filter((part): part is StreamedSystemReminderPart => part !== undefined);
+
+  for (const reminder of systemReminderParts) {
+    const reminderKey = `${message.id}:${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
+    if (!state.currentRunSystemReminderKeys.has(reminderKey)) {
+      state.currentRunSystemReminderKeys.add(reminderKey);
+      addInlineReminder(ctx, reminder);
+    }
+  }
+
+  if (!state.streamingComponent) {
+    if (systemReminderParts.length > 0) {
+      state.ui.requestRender();
+    }
+    return;
+  }
 
   state.streamingMessage = message;
   // Check for new tool calls
@@ -188,6 +292,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
     state.streamingMessage = undefined;
     state.seenToolCallIds.clear();
     state.subagentToolCallIds.clear();
+    state.currentRunSystemReminderKeys.clear();
   }
   state.ui.requestRender();
 }

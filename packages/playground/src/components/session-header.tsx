@@ -1,18 +1,18 @@
 import {
-  AuthStatus,
   Header,
-  HeaderTitle,
   HeaderAction,
+  HeaderTitle,
   LogoWithoutText,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  usePlaygroundStore,
-  useRequestContextPresets,
 } from '@mastra/playground-ui';
 import { useMemo } from 'react';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 const CUSTOM_PRESET_KEY = '__custom__';
 

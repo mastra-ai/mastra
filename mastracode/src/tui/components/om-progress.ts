@@ -169,7 +169,7 @@ export function formatObservationStatus(
   // Status is now shown in the mode badge, so just show the metrics
   const percent = Math.round(state.thresholdPercent);
   const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.bold.hex(mastra.specialGray)(s);
+  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
   const styleLabel = labelStyler ?? defaultStyler;
   if (compact === 'percentOnly') {
     return styleLabel('msg ') + pct;
@@ -203,7 +203,7 @@ export function formatReflectionStatus(
   // Status is now shown in the mode badge, so just show the metrics
   const percent = Math.round(state.reflectionThresholdPercent);
   const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.bold.hex(mastra.specialGray)(s);
+  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
   const styleLabel = labelStyler ?? defaultStyler;
   const label = styleLabel(compact === 'full' ? 'memory' : 'mem') + ' ';
   if (compact === 'percentOnly') {
@@ -212,7 +212,7 @@ export function formatReflectionStatus(
   const fraction = `${formatTokensValue(state.observationTokens)}/${formatTokensThreshold(state.reflectionThreshold)}`;
   const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
   const buffered =
-    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete'
+    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete' && savings > 0
       ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`))
       : '';
   return label + colorByPercent(fraction, percent) + buffered;

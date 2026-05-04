@@ -24,6 +24,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -496,6 +497,51 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      const spans = await collection
+        .find(
+          { traceId },
+          {
+            projection: {
+              input: 0,
+              output: 0,
+              attributes: 0,
+              metadata: 0,
+              tags: 0,
+              links: 0,
+            },
+          },
+        )
+        .sort({ startedAt: 1 })
+        .toArray();
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map((span: any) => this.transformSpanFromMongo(span)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

@@ -15,6 +15,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, WorkspaceReadOnlyError } from '../errors';
 import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 // =============================================================================
 // Types
@@ -316,7 +317,10 @@ export function removeImport(content: string, root: SgNode, targetName: string):
 
   for (const imp of imports) {
     const text = imp.text();
-    if (text.includes(`'${targetName}'`) || text.includes(`"${targetName}"`)) {
+    const moduleMatch = text.match(/from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/);
+    const moduleName = moduleMatch?.[1] ?? moduleMatch?.[2];
+
+    if (moduleName === targetName || moduleName?.startsWith(`${targetName}/`)) {
       const range = imp.range();
       const start = range.start.index;
       let end = range.end.index;
@@ -431,100 +435,128 @@ Pattern replace (for everything else):
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
 
-    if (filesystem.readOnly) {
-      throw new WorkspaceReadOnlyError('ast_edit');
-    }
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'astEdit',
+      input: { path, transform, pattern },
+      attributes: { filesystemProvider: filesystem.provider },
+    });
 
-    // Load ast-grep (cached after first call)
-    const astGrep = await loadAstGrep();
-    if (!astGrep) {
-      return '@ast-grep/napi is not available. Install it to use AST editing.';
-    }
-    const { parse, Lang } = astGrep;
-
-    // Read current content
-    let content: string | Buffer;
     try {
-      content = await filesystem.readFile(path, { encoding: 'utf-8' });
-    } catch (error) {
-      if (error instanceof FileNotFoundError) {
-        return `File not found: ${path}. Use the write file tool to create it first.`;
+      if (filesystem.readOnly) {
+        throw new WorkspaceReadOnlyError('ast_edit');
       }
-      throw error;
-    }
 
-    if (typeof content !== 'string') {
-      return `Cannot perform AST edits on binary files. Use the write file tool instead.`;
-    }
-
-    // Parse AST
-    const lang = getLanguageFromPath(path, Lang);
-    if (!lang) {
-      return `Unsupported file type for AST editing: ${path}`;
-    }
-    const ast = parse(lang, content);
-    const root = ast.root();
-
-    let modifiedContent = content;
-    const changes: string[] = [];
-
-    if (transform) {
-      switch (transform) {
-        case 'add-import': {
-          if (!importSpec) {
-            return 'Error: importSpec is required for add-import transform';
-          }
-          modifiedContent = addImport(content, root, importSpec);
-          changes.push(`Added import from '${importSpec.module}'`);
-          break;
-        }
-
-        case 'remove-import': {
-          if (!targetName) {
-            return 'Error: targetName is required for remove-import transform';
-          }
-          modifiedContent = removeImport(content, root, targetName);
-          changes.push(`Removed import '${targetName}'`);
-          break;
-        }
-
-        case 'rename': {
-          if (!targetName || !newName) {
-            return 'Error: targetName and newName are required for rename transform';
-          }
-          const renameResult = renameIdentifiers(content, root, targetName, newName);
-          modifiedContent = renameResult.content;
-          changes.push(`Renamed '${targetName}' to '${newName}' (${renameResult.count} occurrences)`);
-          break;
-        }
+      // Load ast-grep (cached after first call)
+      const astGrep = await loadAstGrep();
+      if (!astGrep) {
+        span.end({ success: false });
+        return '@ast-grep/napi is not available. Install it to use AST editing.';
       }
-    } else if (pattern && replacement !== undefined) {
-      const result = patternReplace(content, root, pattern, replacement);
-      if (result.error) {
-        return `Error: AST pattern matching failed: ${result.error}`;
+      const { parse, Lang } = astGrep;
+
+      // Read current content
+      let content: string | Buffer;
+      try {
+        content = await filesystem.readFile(path, { encoding: 'utf-8' });
+      } catch (error) {
+        if (error instanceof FileNotFoundError) {
+          span.end({ success: false });
+          return `File not found: ${path}. Use the write file tool to create it first.`;
+        }
+        throw error;
       }
-      modifiedContent = result.content;
-      changes.push(`Replaced ${result.count} occurrences of pattern`);
-    } else if (pattern && replacement === undefined) {
-      return 'Error: replacement is required when pattern is provided';
-    } else if (!pattern && replacement !== undefined) {
-      return 'Error: pattern is required when replacement is provided';
-    } else {
-      return 'Error: Must provide either transform or pattern/replacement';
-    }
 
-    // Write back if modified
-    const wasModified = modifiedContent !== content;
-    if (wasModified) {
-      await filesystem.writeFile(path, modifiedContent, { overwrite: true });
-    }
+      if (typeof content !== 'string') {
+        span.end({ success: false });
+        return `Cannot perform AST edits on binary files. Use the write file tool instead.`;
+      }
 
-    if (!wasModified) {
-      return `No changes made to ${path} (${changes.join('; ')})`;
-    }
+      // Parse AST
+      const lang = getLanguageFromPath(path, Lang);
+      if (!lang) {
+        span.end({ success: false });
+        return `Unsupported file type for AST editing: ${path}`;
+      }
+      const ast = parse(lang, content);
+      const root = ast.root();
 
-    let output = `${path}: ${changes.join('; ')}`;
-    output += await getEditDiagnosticsText(workspace, path, modifiedContent);
-    return output;
+      let modifiedContent = content;
+      const changes: string[] = [];
+
+      if (transform) {
+        switch (transform) {
+          case 'add-import': {
+            if (!importSpec) {
+              span.end({ success: false });
+              return 'Error: importSpec is required for add-import transform';
+            }
+            modifiedContent = addImport(content, root, importSpec);
+            changes.push(`Added import from '${importSpec.module}'`);
+            break;
+          }
+
+          case 'remove-import': {
+            if (!targetName) {
+              span.end({ success: false });
+              return 'Error: targetName is required for remove-import transform';
+            }
+            modifiedContent = removeImport(content, root, targetName);
+            changes.push(`Removed import '${targetName}'`);
+            break;
+          }
+
+          case 'rename': {
+            if (!targetName || !newName) {
+              span.end({ success: false });
+              return 'Error: targetName and newName are required for rename transform';
+            }
+            const renameResult = renameIdentifiers(content, root, targetName, newName);
+            modifiedContent = renameResult.content;
+            changes.push(`Renamed '${targetName}' to '${newName}' (${renameResult.count} occurrences)`);
+            break;
+          }
+        }
+      } else if (pattern && replacement !== undefined) {
+        const result = patternReplace(content, root, pattern, replacement);
+        if (result.error) {
+          span.end({ success: false });
+          return `Error: AST pattern matching failed: ${result.error}`;
+        }
+        modifiedContent = result.content;
+        changes.push(`Replaced ${result.count} occurrences of pattern`);
+      } else if (pattern && replacement === undefined) {
+        span.end({ success: false });
+        return 'Error: replacement is required when pattern is provided';
+      } else if (!pattern && replacement !== undefined) {
+        span.end({ success: false });
+        return 'Error: pattern is required when replacement is provided';
+      } else {
+        span.end({ success: false });
+        return 'Error: Must provide either transform or pattern/replacement';
+      }
+
+      // Write back if modified
+      const wasModified = modifiedContent !== content;
+      if (wasModified) {
+        await filesystem.writeFile(path, modifiedContent, {
+          overwrite: true,
+          expectedMtime: (context as any)?.__expectedMtime,
+        });
+      }
+
+      if (!wasModified) {
+        span.end({ success: true });
+        return `No changes made to ${path} (${changes.join('; ')})`;
+      }
+
+      let output = `${path}: ${changes.join('; ')}`;
+      output += await getEditDiagnosticsText(workspace, path, modifiedContent);
+      span.end({ success: true }, { bytesTransferred: Buffer.byteLength(modifiedContent, 'utf-8') });
+      return output;
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });

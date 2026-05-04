@@ -10,6 +10,38 @@
 // =============================================================================
 
 /**
+ * User-provided definition for a custom language server.
+ *
+ * Unlike `LSPServerDef`, `command` is a plain string. Mastra wraps it internally.
+ */
+export interface CustomLSPServer {
+  /** Unique identifier for this server (e.g. 'phpactor', 'intelephense'). */
+  id: string;
+
+  /** Human-readable name shown in logs and error messages. */
+  name: string;
+
+  /** LSP language identifiers this server handles (e.g. ['php']). */
+  languageIds: string[];
+
+  /**
+   * File extensions (including the dot) that map to this server's language IDs.
+   * Registered into the extension → language ID map so `getLanguageId()` recognizes them.
+   * The first `languageIds` entry is used for each extension.
+   */
+  extensions: string[];
+
+  /** File/directory markers that identify the project root for this server (e.g. ['composer.json']). */
+  markers: string[];
+
+  /** Full command string to start the server (e.g. 'phpactor language-server'). */
+  command: string;
+
+  /** Optional initialization options sent to the server during the LSP handshake. */
+  initializationOptions?: Record<string, unknown>;
+}
+
+/**
  * Configuration for LSP diagnostics in a workspace.
  */
 export interface LSPConfig {
@@ -53,6 +85,34 @@ export interface LSPConfig {
    * - `'bunx'` — no extra flags needed
    */
   packageRunner?: string;
+
+  /**
+   * Custom language server definitions for languages not built in.
+   *
+   * Values define the server, its supported extensions, and its command.
+   * The record key is for readability only — the server's `id` field is used internally.
+   * Custom servers are merged with built-in servers — custom definitions take precedence
+   * when IDs collide, allowing you to replace a built-in server entirely.
+   *
+   * @example
+   * ```typescript
+   * const workspace = new Workspace({
+   *   lsp: {
+   *     servers: {
+   *       phpactor: {
+   *         id: 'phpactor',
+   *         name: 'Phpactor Language Server',
+   *         languageIds: ['php'],
+   *         extensions: ['.php'],
+   *         markers: ['composer.json'],
+   *         command: 'phpactor language-server',
+   *       },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  servers?: Record<string, CustomLSPServer>;
 }
 
 // =============================================================================

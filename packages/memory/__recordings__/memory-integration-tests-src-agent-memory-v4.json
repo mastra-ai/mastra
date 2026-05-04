@@ -1,0 +1,4524 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-agent-memory-v4",
+    "testFile": "src/agent-memory.test.ts",
+    "testName": "V4",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-04-02T11:19:27.634Z",
+    "updatedAt": "2026-04-22T16:28:42.647Z"
+  },
+  "recordings": [
+    {
+      "hash": "e5c68c9eb77050c2",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "user",
+              "content": "Tell me about cats"
+            }
+          ]
+        },
+        "timestamp": 1773176160060
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ff437a0158f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:27:51 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "10554",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c6f9965effa24533a598b990d5eff319"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiKxQAGRkL1jtj7yVIAiIepwVhw",
+          "object": "chat.completion",
+          "created": 1776875260,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Cats, scientifically known as Felis catus, are small, domesticated mammals that belong to the family Felidae. They are one of the most popular pets worldwide, known for their companionship, playful behavior, and independent nature. Here are some key points about cats:\n\n### Physical Characteristics\n- **Size**: Domestic cats typically weigh between 5 to 20 pounds, with an average length of about 9 to 10 inches at the shoulder.\n- **Fur**: Cats come in a variety of colors and patterns, including solid, tabby, calico, and more. Their fur can be short, medium, or long, depending on the breed.\n- **Eyes**: Cats have excellent night vision and can see in low light. Their eyes come in various colors, including green, blue, yellow, and amber.\n\n### Behavior\n- **Social Structure**: While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n- **Playfulness**: Cats are playful creatures, often engaging in activities that mimic hunting behaviors, such as stalking and pouncing on toys.\n- **Grooming**: Cats are known for their grooming habits, spending a significant amount of time cleaning themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients found in animal tissues, such as taurine, arachidonic acid, and vitamin A.\n- **Feeding**: Commercial cat food is available in dry, wet, and raw forms, and it's important to provide a balanced diet to ensure their health.\n\n### Health\n- **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n- **Common Health Issues**: Cats can be prone to various health issues, including dental disease, obesity, kidney disease, and diabetes. Regular veterinary check-ups are essential for maintaining their health.\n\n### Breeds\nThere are numerous cat breeds, each with unique characteristics. Some popular breeds include:\n- **Siamese**: Known for their striking blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest domesticated breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures throughout history. In ancient Egypt, they were considered sacred and were often associated with the goddess Bastet. Today, cats are celebrated in literature, art, and internet culture, often depicted as symbols of independence and mystery.\n\n### Conclusion\nCats are fascinating creatures that bring joy and companionship to millions of people around the world. Their unique behaviors, diverse breeds, and independent nature make them beloved pets for many households.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 628,
+            "total_tokens": 648,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_0542ea89f6"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "75c1dd1b3b8b255e",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Tell me about catsMessage from previous conversation at 8:56 PM: Assistant: Cats, scientifically known as Felis catus, are small, domesticated mammals that belong to the family Felidae. They are one of the most popular pets worldwide, known for their companionship, playful behavior, and independent nature. Here are some key points about cats:\n\n### Physical Characteristics\n- **Size**: Domestic cats typically weigh between 5 to 20 pounds, with an average length of about 9 to 10 inches at the shoulder.\n- **Fur**: Cats come in a variety of colors and patterns, including solid, tabby, calico, and more. Their fur can be short, medium, or long, depending on the breed.\n- **Eyes**: Cats have excellent night vision and can see in low light. Their eyes come in various colors, including green, blue, yellow, and amber.\n\n### Behavior\n- **Social Structure**: While cats are often seen as solitary animals, they can form strong bonds with humans and other pets. They communicate through vocalizations (meows, purrs, hisses), body language, and scent marking.\n- **Playfulness**: Cats are playful creatures, often engaging in activities that mimic hunting behaviors, such as stalking and pouncing on toys.\n- **Grooming**: Cats are known for their grooming habits, spending a significant amount of time cleaning themselves to maintain their fur and skin health.\n\n### Diet\n- **Carnivorous**: Cats are obligate carnivores, meaning they require a diet primarily composed of meat. They need specific nutrients found in animal tissues, such as taurine, arachidonic acid, and vitamin A.\n- **Feeding**: Commercial cat food is available in dry, wet, and raw forms, and it's important to provide a balanced diet to ensure their health.\n\n### Health\n- **Lifespan**: The average lifespan of a domestic cat is around 12 to 15 years, but many can live into their 20s with proper care.\n- **Common Health Issues**: Cats can be prone to various health issues, including dental disease, obesity, kidney disease, and diabetes. Regular veterinary check-ups are essential for maintaining their health.\n\n### Breeds\nThere are numerous cat breeds, each with unique characteristics. Some popular breeds include:\n- **Siamese**: Known for their striking blue eyes and vocal nature.\n- **Persian**: Recognized for their long fur and flat faces.\n- **Maine Coon**: One of the largest domesticated breeds, known for their friendly disposition.\n- **Bengal**: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures throughout history. In ancient Egypt, they were considered sacred and were often associated with the goddess Bastet. Today, cats are celebrated in literature, art, and internet culture, often depicted as symbols of independence and mystery.\n\n### Conclusion\nCats are fascinating creatures that bring joy and companionship to millions of people around the world. Their unique behaviors, diverse breeds, and independent nature make them beloved pets for many households.\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": "What did we discuss about cats?"
+            }
+          ]
+        },
+        "timestamp": 1773176171380
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ff8e1cbf58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:27:56 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "5254",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999165",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_4e28076d11234d72b95f948741781848"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiVkN3YDrIxyKbx1xZIRqAkFSzo",
+          "object": "chat.completion",
+          "created": 1776875271,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "We discussed various aspects of cats, including their physical characteristics, behavior, diet, health, breeds, and cultural significance. Here are the key points:\n\n### Physical Characteristics\n- Size: Domestic cats typically weigh between 5 to 20 pounds and are about 9 to 10 inches tall at the shoulder.\n- Fur: They come in various colors and patterns, with different fur lengths depending on the breed.\n- Eyes: Cats have excellent night vision and their eyes can be green, blue, yellow, or amber.\n\n### Behavior\n- Social Structure: Cats can form strong bonds with humans and other pets, communicating through vocalizations and body language.\n- Playfulness: They engage in playful activities that mimic hunting behaviors.\n- Grooming: Cats spend a lot of time grooming themselves to maintain their fur and skin health.\n\n### Diet\n- Carnivorous: Cats are obligate carnivores, requiring a diet primarily composed of meat.\n- Feeding: It's important to provide a balanced diet through commercial cat food available in various forms.\n\n### Health\n- Lifespan: The average lifespan is around 12 to 15 years, with many living into their 20s with proper care.\n- Common Health Issues: They can face health issues like dental disease, obesity, and kidney disease, making regular veterinary check-ups essential.\n\n### Breeds\nSome popular breeds include:\n- Siamese: Known for their blue eyes and vocal nature.\n- Persian: Recognized for their long fur and flat faces.\n- Maine Coon: One of the largest breeds, known for their friendly disposition.\n- Bengal: Known for their wild appearance and energetic personality.\n\n### Cultural Significance\nCats have been revered in various cultures, especially in ancient Egypt, where they were considered sacred. Today, they are celebrated in literature, art, and internet culture.\n\nOverall, cats are fascinating creatures that bring joy and companionship to many people.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 727,
+            "completion_tokens": 383,
+            "total_tokens": 1110,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_0b42d8f1f6"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "599ed2d65fd75447",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "user",
+              "content": "First message"
+            },
+            {
+              "role": "user",
+              "content": "Second message"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160060
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffb30ab758f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:27:58 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1016",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999957",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f5f55b618bb84708bd0959a17e6f9766"
+        },
+        "body": {
+          "id": "chatcmpl-DXUibCSwvm6Zi3FvZAxSt5SsP4hpX",
+          "object": "chat.completion",
+          "created": 1776875277,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "It seems like you might be trying to communicate something specific. How can I assist you today? If you have a question about the weather in a particular city, feel free to ask!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 123,
+            "completion_tokens": 38,
+            "total_tokens": 161,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_aac876239c"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8cfb82180d844d77",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "user",
+              "content": "What is 2+2?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffbc6f2b58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:27:59 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "374",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999962",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_72e5f6d51880456981c82cc112f006a5"
+        },
+        "body": {
+          "id": "chatcmpl-DXUide1fvwtdnMmNXGOaFPIX3Ueri",
+          "object": "chat.completion",
+          "created": 1776875279,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "2 + 2 equals 4.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 122,
+            "completion_tokens": 9,
+            "total_tokens": 131,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_aac876239c"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "11bf45242ea4fb65",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "user",
+              "content": "What is 2+2?"
+            },
+            {
+              "role": "assistant",
+              "content": "2 + 2 equals 4."
+            },
+            {
+              "role": "user",
+              "content": "Give me JSON"
+            }
+          ],
+          "tool_choice": {
+            "type": "function",
+            "function": {
+              "name": "json"
+            }
+          },
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "json",
+                "description": "Respond with a JSON object.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["result"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ]
+        },
+        "timestamp": 1773176160940
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffc2ca1258f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:00 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "520",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999952",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_4623bf61a7a744e985796b463eaa7065"
+        },
+        "body": {
+          "id": "chatcmpl-DXUid5zWqhXwcuz3PHnLajQIuVKx6",
+          "object": "chat.completion",
+          "created": 1776875279,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_3t4MxgPCOnrp9a05IbD0Zj3M",
+                    "type": "function",
+                    "function": {
+                      "name": "json",
+                      "arguments": "{\"result\":\"{\\\"2 + 2\\\": 4}\"}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 104,
+            "completion_tokens": 13,
+            "total_tokens": 117,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_0b42d8f1f6"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ab9166b675a27c69",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "system",
+              "content": "This is the first context message."
+            },
+            {
+              "role": "user",
+              "content": "This is the second context message."
+            },
+            {
+              "role": "user",
+              "content": "This is a user message."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffc85a1658f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:01 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "646",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999940",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_667d7d1c73e39195b8dcd7861afc3549"
+        },
+        "body": {
+          "id": "chatcmpl-DXUie2HWWZyGipbJoIxuJm8NaEUwY",
+          "object": "chat.completion",
+          "created": 1776875280,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "How can I assist you today? If you need information about the weather in a specific city, just let me know!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 143,
+            "completion_tokens": 25,
+            "total_tokens": 168,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_aac876239c"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "a8ed7d11b7d3d26d",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
+            },
+            {
+              "role": "user",
+              "content": "Hello with metadata"
+            },
+            {
+              "role": "user",
+              "content": "Another message with different metadata"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffcecd4758f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:02 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "730",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999950",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c6657859d7d24f16baaf68d96cb9e924"
+        },
+        "body": {
+          "id": "chatcmpl-DXUifxkBR5Z9Ck55vPtq2TFUckap1",
+          "object": "chat.completion",
+          "created": 1776875281,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "It seems like you're testing different messages. How can I assist you today? If you have any questions about the weather or anything else, feel free to ask!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 127,
+            "completion_tokens": 33,
+            "total_tokens": 160,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_aac876239c"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8da5c8710671c508",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Test agent with generateTitle on."
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160080
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffd71c2e58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:03 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "462",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_379d2c42f91a47e0913f63898e65c817"
+        },
+        "body": {
+          "id": "chatcmpl-DXUihlUgX1UYGujRJ2EXn7TMVE8zN",
+          "object": "chat.completion",
+          "created": 1776875283,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello! How can I assist you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 98,
+            "completion_tokens": 10,
+            "total_tokens": 108,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_f1791ef38a"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "75686791d02556a7",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": "[{\"type\":\"text\",\"text\":\"Hello, world!\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+            }
+          ]
+        },
+        "timestamp": 1773176160680
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffdb6ff558f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:04 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "444",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999895",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_28264ed96d234287980e22d4619ea12e"
+        },
+        "body": {
+          "id": "chatcmpl-DXUihAqr1hwzVApNqMugIkZVn05Qh",
+          "object": "chat.completion",
+          "created": 1776875283,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Greeting the world with a hello message",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 110,
+            "completion_tokens": 7,
+            "total_tokens": 117,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_23d0326066"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "718cf70e01c699d0",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Test agent with generateTitle on."
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            },
+            {
+              "role": "assistant",
+              "content": "Hello! How can I assist you today?"
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176161320
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffdf198a58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:05 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1266",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999972",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_742ddeee9bc144589a70fc5d44955692"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiiDENg159hIMs781L3hZqNiIQY",
+          "object": "chat.completion",
+          "created": 1776875284,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello again! What would you like to talk about or do today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 119,
+            "completion_tokens": 15,
+            "total_tokens": 134,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_998d5473a0"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "323052a48e499319",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Test agent with generateTitle on."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Hello, world!Message from previous conversation at 8:56 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 8:56 PM: User: Hello, world!Message from previous conversation at 8:56 PM: Assistant: Hello again! What would you like to talk about or do today?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffe88ad058f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:06 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "529",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999850",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_1afa0a68151c4d46b923423bfbbca660"
+        },
+        "body": {
+          "id": "chatcmpl-DXUijHNIteTKWr1gzCFltabO8iD6H",
+          "object": "chat.completion",
+          "created": 1776875285,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello! How can I assist you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 227,
+            "completion_tokens": 10,
+            "total_tokens": 237,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_998d5473a0"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0c6ab3f14dc6259f",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Test agent with generateTitle off."
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160040
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05fff20b0e58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:08 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "544",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f05bd8012743492bb0f97bf589b486a8"
+        },
+        "body": {
+          "id": "chatcmpl-DXUilLuOIY7QNsqDeAdMAWchVf2nz",
+          "object": "chat.completion",
+          "created": 1776875287,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello! How can I assist you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 98,
+            "completion_tokens": 10,
+            "total_tokens": 108,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_706e12e8ed"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "e2c403fb6c5fa9fe",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Test agent with generateTitle off."
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            },
+            {
+              "role": "assistant",
+              "content": "Hello! How can I assist you today?"
+            },
+            {
+              "role": "user",
+              "content": "Hello, world!"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160780
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05fff64dcf58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:08 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "520",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999970",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_7ce68094eb7e421692d3713328c30fc9"
+        },
+        "body": {
+          "id": "chatcmpl-DXUim1V3JIa0GwOZ9MgQqa5HpAQRL",
+          "object": "chat.completion",
+          "created": 1776875288,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello again! What would you like to talk about or do today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 119,
+            "completion_tokens": 15,
+            "total_tokens": 134,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_706e12e8ed"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "dc6f94e52179b2c0",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a test agent that uses a memory processor to filter out tool call messages."
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in London?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160080
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05fffbdd5258f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:09 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "783",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999967",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_467b9fac34d7431a955a7a5cf5845743"
+        },
+        "body": {
+          "id": "chatcmpl-DXUinZIjtNoRIelXx7ARhbVXdUTwq",
+          "object": "chat.completion",
+          "created": 1776875289,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_ceJkupkfVNMwj5dh0BMgFP9c",
+                    "type": "function",
+                    "function": {
+                      "name": "get_weather_city",
+                      "arguments": "{\"city\":\"London\"}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 111,
+            "completion_tokens": 15,
+            "total_tokens": 126,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_38babba494"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "91f187934105b9c1",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a test agent that uses a memory processor to filter out tool call messages."
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in London?"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "call_ceJkupkfVNMwj5dh0BMgFP9c",
+                  "type": "function",
+                  "function": {
+                    "name": "get_weather_city",
+                    "arguments": "{\"city\":\"London\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_ceJkupkfVNMwj5dh0BMgFP9c",
+              "content": "\"The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees.\""
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160960
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600018bd558f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:10 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "681",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999945",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_1d22d3cb76a14068ad89d4b007f4f0cd"
+        },
+        "body": {
+          "id": "chatcmpl-DXUinPS2TfLvyO4h02mG4AOVyUY7V",
+          "object": "chat.completion",
+          "created": 1776875289,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "The weather in London is sunny, with a temperature of 70 degrees, and it feels like 65 degrees.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 155,
+            "completion_tokens": 24,
+            "total_tokens": 179,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_38babba494"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8f3ff4c97ea191f1",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": "[{\"type\":\"text\",\"text\":\"What is the weather in London?\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+            }
+          ]
+        },
+        "timestamp": 1773176161780
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600074c7e58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:11 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "314",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999890",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8a58a61584a4468da174a3a0d6c87353"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiojcpNWfhN0i07UnhwarivxGLl",
+          "object": "chat.completion",
+          "created": 1776875290,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Current Weather Inquiry for London",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 113,
+            "completion_tokens": 5,
+            "total_tokens": 118,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_4181e24c46"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "2e3484ab4d35023a",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a test agent that uses a memory processor to filter out tool call messages."
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in London?"
+            },
+            {
+              "role": "assistant",
+              "content": "The weather in London is sunny, with a temperature of 70 degrees, and it feels like 65 degrees."
+            },
+            {
+              "role": "user",
+              "content": "What was the tool you just used?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176162320
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06000aae0958f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:12 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "462",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999935",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_238aea4474844a17b156c91d14f868fb"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiqDchSmkcXuaKOXXB0czhdPfSC",
+          "object": "chat.completion",
+          "created": 1776875292,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "I used the tool to get the weather for a given location.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 150,
+            "completion_tokens": 14,
+            "total_tokens": 164,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_a7190374f3"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f4f9fcb6cd98471e",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\n# User Information\nName: John Doe\nFavorite color: Blue\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": "What is my favorite color?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "updateWorkingMemory",
+                "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "properties": {
+                    "memory": {
+                      "type": "string",
+                      "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                    }
+                  },
+                  "required": ["memory"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06001539fd58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:13 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "343",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999445",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_90acd7c18c4441f1a936a8c3d3476bee"
+        },
+        "body": {
+          "id": "chatcmpl-DXUirv4hAjiNaeu0i06r2LjMlhKCC",
+          "object": "chat.completion",
+          "created": 1776875293,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Your favorite color is blue.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 554,
+            "completion_tokens": 7,
+            "total_tokens": 561,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_4181e24c46"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "14ed92327690ee9a",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": "What's the weather in Tokyo?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600197d2658f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:18 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "4345",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999962",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8fd8e91674134c70bd219c99f61a0b80"
+        },
+        "body": {
+          "id": "chatcmpl-DXUirGKm0KPAiG9OBKA5iKLwErjxq",
+          "object": "chat.completion",
+          "created": 1776875293,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_4bmRWYfgKXabTTvHAP8vHPTD",
+                    "type": "function",
+                    "function": {
+                      "name": "get_weather_city",
+                      "arguments": "{\"city\":\"Tokyo\"}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 117,
+            "completion_tokens": 15,
+            "total_tokens": 132,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fe7a5277a8"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "b179ce86ab85c60e",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": "What's the weather in Tokyo?"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "call_4bmRWYfgKXabTTvHAP8vHPTD",
+                  "type": "function",
+                  "function": {
+                    "name": "get_weather_city",
+                    "arguments": "{\"city\":\"Tokyo\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_4bmRWYfgKXabTTvHAP8vHPTD",
+              "content": "\"The weather in Tokyo is sunny. It is currently 70 degrees and feels like 65 degrees.\""
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176164260
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600354edb58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:18 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "695",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999937",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c69b4e7faae948b7a892e928fe6ceeab"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiwTsUURKtQTMPFmbkphKLaRir4",
+          "object": "chat.completion",
+          "created": 1776875298,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, feeling like 65 degrees.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 161,
+            "completion_tokens": 23,
+            "total_tokens": 184,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_95c773cefe"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "769fd4d60e43dd87",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": "What's the weather in Tokyo?"
+            },
+            {
+              "role": "assistant",
+              "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, feeling like 65 degrees."
+            },
+            {
+              "role": "user",
+              "content": "What's the weather in London?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176166040
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06003a785658f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:19 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "509",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999930",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_72557cf494b342c385ab357f519c64db"
+        },
+        "body": {
+          "id": "chatcmpl-DXUixLl4WxYwiWsqlY1vief2IvBPl",
+          "object": "chat.completion",
+          "created": 1776875299,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_g98FrJhns6IloVoKTdabUgeb",
+                    "type": "function",
+                    "function": {
+                      "name": "get_weather_city",
+                      "arguments": "{\"city\":\"London\"}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 153,
+            "completion_tokens": 15,
+            "total_tokens": 168,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_95c773cefe"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ee1f94e67d91b25b",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name."
+            },
+            {
+              "role": "user",
+              "content": "What's the weather in Tokyo?"
+            },
+            {
+              "role": "assistant",
+              "content": "The weather in Tokyo is sunny, with a current temperature of 70 degrees, feeling like 65 degrees."
+            },
+            {
+              "role": "user",
+              "content": "What's the weather in London?"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "call_g98FrJhns6IloVoKTdabUgeb",
+                  "type": "function",
+                  "function": {
+                    "name": "get_weather_city",
+                    "arguments": "{\"city\":\"London\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_g98FrJhns6IloVoKTdabUgeb",
+              "content": "\"The weather in London is sunny. It is currently 70 degrees and feels like 65 degrees.\""
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176166660
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06003e7c1658f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:20 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1096",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999907",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_65579df3ab414c1fbfb7c5991da8e5e3"
+        },
+        "body": {
+          "id": "chatcmpl-DXUixDw8BcJjXz4dO9NG9peSFdlSR",
+          "object": "chat.completion",
+          "created": 1776875299,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "The weather in London is sunny, with a current temperature of 70 degrees, feeling like 65 degrees.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 197,
+            "completion_tokens": 23,
+            "total_tokens": 220,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_95c773cefe"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f303864aa8ee5543",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "user",
+              "content": "My name is Alice"
+            }
+          ]
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f060046191158f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:21 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "601",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999987",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b9a5dd89603147d9b0bab9035bb17054"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiyYSgN1SXLJxHffVgM87YZAMq4",
+          "object": "chat.completion",
+          "created": 1776875300,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello, Alice! How can I assist you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 11,
+            "total_tokens": 31,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_0542ea89f6"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "c603b8fd27db05a3",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "user",
+              "content": "My name is Alice"
+            },
+            {
+              "role": "assistant",
+              "content": "Hello, Alice! How can I assist you today?"
+            },
+            {
+              "role": "user",
+              "content": "What is my name?"
+            }
+          ]
+        },
+        "timestamp": 1773176160800
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06004abd8958f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:22 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "630",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999970",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_238e89eec7f3433d8fa8f4d8052a648e"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiznYBIXcBxwUsU5qdWcEGKi4Qq",
+          "object": "chat.completion",
+          "created": 1776875301,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Your name is Alice. How can I help you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 44,
+            "completion_tokens": 12,
+            "total_tokens": 56,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_df1291c4ff"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f0ad40a67ffa81f0",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant"
+            },
+            {
+              "role": "user",
+              "content": "Hello, save this message!"
+            }
+          ]
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06004f7a8a58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:23 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "722",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999985",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_fb9113569e3641d8b6358bdc4c49eb5c"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj0BtHv1YZAWYlc5ZcWvgi1hquH",
+          "object": "chat.completion",
+          "created": 1776875302,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "I'm sorry, but I can't save messages or store information. However, I can help you with any questions or information you need! What would you like to discuss?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 22,
+            "completion_tokens": 33,
+            "total_tokens": 55,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_48d0a22f61"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f3a69f06d2010f3d",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Hello, my name is Alice!"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160060
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06005c4eb958f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:25 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "572",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999977",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b3f01f8f8f74471986a1d00c02987264"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj2Yy7rBmo7T4in6odaLGqIiqZS",
+          "object": "chat.completion",
+          "created": 1776875304,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello Alice! How can I assist you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 104,
+            "completion_tokens": 11,
+            "total_tokens": 115,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0d4bf9c15bf95fa8",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Hello, my name is Alice!"
+            },
+            {
+              "role": "assistant",
+              "content": "Hello Alice! How can I assist you today?"
+            },
+            {
+              "role": "user",
+              "content": "I live in New York."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160920
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600623f7258f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:26 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1127",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999960",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_2d6cca638f1f4f0fa16cad5a6cd83d40"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj3mKVcn30CS31uALFGIKECqkxW",
+          "object": "chat.completion",
+          "created": 1776875305,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "That's great! New York is a vibrant city with so much to offer. Is there something specific you would like to know or do related to New York? For example, would you like to know the weather there?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 128,
+            "completion_tokens": 44,
+            "total_tokens": 172,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "d86cb91de7d15e39",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Test message for cloning"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06006e6aea58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:27 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "451",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999977",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_55e4f8ec3fd24a69946ccafed0f4d564"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj5Svj9BnZILuDg2gnx6VlfV13E",
+          "object": "chat.completion",
+          "created": 1776875307,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "This is a test message for cloning.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 101,
+            "completion_tokens": 9,
+            "total_tokens": 110,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "a1c2e2123e560af8",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Message number 1"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f060074cb0958f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:28 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "533",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999980",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_961e8b62832a4fc9b6521eb3aa77acaf"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj6TiFLnjafNtdWeL8IZh1O8cZh",
+          "object": "chat.completion",
+          "created": 1776875308,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "It seems like you're referencing a message. How can I assist you with it?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 101,
+            "completion_tokens": 17,
+            "total_tokens": 118,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "dd9fc86347ce6c88",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Message number 1"
+            },
+            {
+              "role": "assistant",
+              "content": "It seems like you're referencing a message. How can I assist you with it?"
+            },
+            {
+              "role": "user",
+              "content": "Message number 2"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176161700
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06007a78f758f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:29 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "590",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999955",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_ba2f011b7f5f49a3a92e7200a1526e83"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj7sj6zTWDE2Cf7CaSHhVdaQgoc",
+          "object": "chat.completion",
+          "created": 1776875309,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "It looks like you're sending a sequence of messages. How can I assist you with these messages?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 129,
+            "completion_tokens": 20,
+            "total_tokens": 149,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "89a69414c4a8d57d",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Message number 1"
+            },
+            {
+              "role": "assistant",
+              "content": "It seems like you're referencing a message. How can I assist you with it?"
+            },
+            {
+              "role": "user",
+              "content": "Message number 2"
+            },
+            {
+              "role": "assistant",
+              "content": "It looks like you're sending a sequence of messages. How can I assist you with these messages?"
+            },
+            {
+              "role": "user",
+              "content": "Message number 3"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176163440
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06008078c258f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:31 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "797",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999925",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8a617f2dd0f44db8b678f5f6e2f6d196"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj8hU14BXex1R9WURmaXzxee5Q0",
+          "object": "chat.completion",
+          "created": 1776875310,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "I see you're continuing with the messages. Please let me know how I can help you with them!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 160,
+            "completion_tokens": 21,
+            "total_tokens": 181,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "e1b548be3cf55ab3",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "My favorite color is blue."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160040
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06008998e758f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:32 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "877",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999975",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_b5f8d65360ce458bbc8adff17bc270ef"
+        },
+        "body": {
+          "id": "chatcmpl-DXUj9RZ9H8cnjPEnEVbEIQftvt1wO",
+          "object": "chat.completion",
+          "created": 1776875311,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like, or do you enjoy all shades?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 103,
+            "completion_tokens": 40,
+            "total_tokens": 143,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "249b297e38076573",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: My favorite color is blue.Message from previous conversation at 8:56 PM: Assistant: That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like, or do you enjoy all shades?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": "My favorite color is blue."
+            },
+            {
+              "role": "assistant",
+              "content": "That's great! Blue is a calming and serene color, often associated with the sky and the ocean. Do you have a specific shade of blue that you like, or do you enjoy all shades?"
+            },
+            {
+              "role": "user",
+              "content": "Actually, my favorite color is red."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176161200
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f06009278ea58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:33 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "750",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999795",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_e1778602561a4972a46e53adecf3de3a"
+        },
+        "body": {
+          "id": "chatcmpl-DXUjBVK708FPBeCuI5v7FLKICD2rQ",
+          "object": "chat.completion",
+          "created": 1776875313,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Red is a vibrant and energetic color, often associated with passion, love, and excitement. What do you like most about the color red?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 274,
+            "completion_tokens": 29,
+            "total_tokens": 303,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "b824ead5b1a7cb7b",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Test message"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600997bce58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:34 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "446",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999980",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f1224899bc5c4628b6de4967f1788460"
+        },
+        "body": {
+          "id": "chatcmpl-DXUjCei4GFrdWCJRs5OTga03fbppy",
+          "object": "chat.completion",
+          "created": 1776875314,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Test message received! How can I assist you today?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 99,
+            "completion_tokens": 12,
+            "total_tokens": 111,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "7fdca81ace425d51",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "Original message"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600a92fdd58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:37 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "759",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999977",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_f95ff5f665454f0aa638e85d92cc5319"
+        },
+        "body": {
+          "id": "chatcmpl-DXUjE8XW3zYlPZeBsMmoANrHpzJAb",
+          "object": "chat.completion",
+          "created": 1776875316,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "It seems like you might want to share or refer to an original message, but I don't have that information. Could you please provide more details or clarify what you need?",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 99,
+            "completion_tokens": 35,
+            "total_tokens": 134,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "94ea4cf7bb1e4a41",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant for testing thread cloning."
+            },
+            {
+              "role": "user",
+              "content": "The ancient library of Alexandria contained countless scrolls of knowledge."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather_city",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773176160020
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600b1897c58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:41 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "3161",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999962",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_62df33320e504ca6a1c7a12978ce797c"
+        },
+        "body": {
+          "id": "chatcmpl-DXUjGjuD2cuc6cM0DW2KQ4QIWPCez",
+          "object": "chat.completion",
+          "created": 1776875318,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "The ancient Library of Alexandria, located in Egypt, was one of the most significant libraries of the ancient world. It was established in the 3rd century BCE and aimed to collect all the knowledge of the world. Scholars from various cultures and backgrounds came to study there, contributing to advancements in various fields such as mathematics, astronomy, medicine, and philosophy.\n\nThe library is often associated with the figure of Euclid, who made significant contributions to geometry, and other notable scholars like Archimedes and Eratosthenes. Unfortunately, the library suffered several incidents of destruction over the centuries, leading to the loss of many scrolls and texts, which has left a significant gap in our understanding of ancient knowledge.\n\nThe legacy of the Library of Alexandria continues to inspire modern libraries and institutions dedicated to the preservation and dissemination of knowledge.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 109,
+            "completion_tokens": 166,
+            "total_tokens": 275,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_fb9b28ef06"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

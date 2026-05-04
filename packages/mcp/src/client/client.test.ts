@@ -106,6 +106,48 @@ async function setupTestServer(withSessionManagement: boolean) {
   return { httpServer, mcpServer, serverTransport: undefined as any, baseUrl };
 }
 
+describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
+  it('should forward jsonSchemaValidator to the underlying SDK Client', () => {
+    const customValidator = {
+      getValidator: vi.fn(() => (input: unknown) => ({
+        valid: true as const,
+        data: input,
+        errorMessage: undefined,
+      })),
+    };
+
+    const client = new InternalMastraMCPClient({
+      name: 'validator-pass-through-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+
+    // @ts-expect-error - accessing internal SDK property for testing
+    const sdkClient = client.client as Client;
+
+    // @ts-expect-error - accessing internal SDK property for testing
+    expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
+  });
+
+  it('should leave the SDK Client default validator in place when omitted', () => {
+    const client = new InternalMastraMCPClient({
+      name: 'default-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+      },
+    });
+
+    // @ts-expect-error - accessing internal SDK property for testing
+    const sdkClient = client.client as Client;
+
+    // SDK falls back to its built-in default (AJV) when nothing is forwarded
+    // @ts-expect-error - accessing internal SDK property for testing
+    expect(sdkClient._jsonSchemaValidator).not.toBeUndefined();
+  });
+});
+
 describe('MastraMCPClient with Streamable HTTP', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -143,7 +185,10 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     it('should call a tool', async () => {
       const tools = await client.tools();
       const result = await tools.greet?.execute?.({ name: 'Stateless' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
+      // Returns the full CallToolResult envelope
+      expect(result).toEqual({
+        content: [{ type: 'text', text: 'Hello, Stateless!' }],
+      });
     });
 
     it('should list resources', async () => {
@@ -215,20 +260,20 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     it('should call a tool', async () => {
       const tools = await client.tools();
       const result = await tools.greet?.execute?.({ name: 'Stateful' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
+      // Returns the full CallToolResult envelope
+      expect(result).toEqual({
+        content: [{ type: 'text', text: 'Hello, Stateful!' }],
+      });
     });
   });
 });
 
 describe('MastraMCPClient - outputSchema without structuredContent', () => {
-  // Reproduces the bug where MCP servers (e.g. FastMCP) define outputSchema on
-  // a tool but don't return structuredContent in the response. The raw
-  // CallToolResult envelope gets validated against the outputSchema and Zod
-  // strips all unrecognised keys, producing {}.
-  //
-  // We use a real server connection but spy on the SDK Client's methods to
-  // simulate a non-SDK MCP server (like FastMCP) that advertises outputSchema
-  // on tool listings but only populates the content array in tool call responses.
+  // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
+  // return structuredContent in the response, the full CallToolResult envelope
+  // should be returned as-is. We don't pass outputSchema to createTool, so
+  // Zod won't strip unrecognised keys. The MCP SDK validates structuredContent
+  // against outputSchema internally via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -253,10 +298,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     testServer?.httpServer.close();
   });
 
-  it('should return the parsed result, not {} when structuredContent is absent', async () => {
-    // Spy on the SDK Client to simulate a FastMCP-style server:
-    // - listTools returns a tool with outputSchema
-    // - callTool returns content[] without structuredContent
+  it('should return the full CallToolResult envelope when structuredContent is absent', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -279,10 +321,12 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       ],
     });
 
-    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+    const callToolResult = {
       content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
       isError: false,
-    });
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
 
     const tools = await client.tools();
     const calculateTool = tools['calculate'];
@@ -290,24 +334,68 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
 
     const result = await calculateTool.execute?.({ expression: '1 + 1' });
 
-    // Before the fix this would be {} because the raw CallToolResult envelope
-    // ({ content: [...], isError: false }) was validated against the outputSchema
-    // and Zod stripped all unrecognised keys.
-    expect(result).toEqual({ result: 2, expression: '1 + 1' });
+    // The full CallToolResult envelope is returned — no extraction, no Zod stripping
+    expect(result).toEqual(callToolResult);
+  });
+
+  it('should preserve recursive $ref input schemas when creating tools', async () => {
+    const sdkClient = (client as any).client as Client;
+    const recursiveInputSchema = {
+      type: 'object' as const,
+      properties: {
+        root: { $ref: '#/$defs/node' },
+      },
+      required: ['root'],
+      $defs: {
+        node: {
+          type: 'object' as const,
+          properties: {
+            name: { type: 'string' as const },
+            children: {
+              type: 'array' as const,
+              items: { $ref: '#/$defs/node' },
+            },
+          },
+          required: ['name'],
+        },
+      },
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'recursive_tool',
+          description: 'Returns a recursive schema',
+          inputSchema: recursiveInputSchema,
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const recursiveTool = tools['recursive_tool'];
+    expect(recursiveTool).toBeDefined();
+
+    const storedSchema = recursiveTool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' }) as {
+      properties?: { root?: { $ref?: string } };
+      $defs?: {
+        node?: {
+          properties?: {
+            children?: {
+              items?: { $ref?: string };
+            };
+          };
+        };
+      };
+    };
+
+    expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
+    expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
   });
 });
 
-describe('MastraMCPClient - outputSchema Zod stripping', () => {
-  // Reproduces the bug where the Zod output schema converted from the MCP tool's
-  // JSON Schema strips unknown keys from the result. This happens because Zod's
-  // default mode is "strip" which silently removes unknown keys.
-  //
-  // Example: FastMCP server returns structuredContent with fields like
-  // { success, events, count, message, tool } but the outputSchema only defines
-  // { events, count } — Zod strips success, message, and tool.
-  //
-  // Worse case: outputSchema is { type: "object" } with no properties, which
-  // produces z.object({}) and strips ALL keys, returning {}.
+describe('MastraMCPClient - no outputSchema', () => {
+  // MCP tools that do NOT declare an outputSchema return the full
+  // CallToolResult envelope. We don't extract or transform the result.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -319,7 +407,7 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
   beforeEach(async () => {
     testServer = await setupTestServer(false);
     client = new InternalMastraMCPClient({
-      name: 'zod-stripping-test-client',
+      name: 'no-output-schema-test-client',
       server: { url: testServer.baseUrl },
     });
     await client.connect();
@@ -332,11 +420,72 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
     testServer?.httpServer.close();
   });
 
-  it('should not strip extra fields from structuredContent when outputSchema has fewer properties', async () => {
+  it('should return the full CallToolResult envelope when no outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
-    // outputSchema only defines "count" and "events", but the server returns
-    // additional fields like "success", "message", and "tool"
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_patient',
+          description: 'Get patient information',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { patientId: { type: 'string' } },
+          },
+          // No outputSchema defined
+        },
+      ],
+    });
+
+    const callToolResult = {
+      content: [{ type: 'text', text: JSON.stringify({ success: true, patient: { id: '123' } }) }],
+      isError: false,
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+
+    const tools = await client.tools();
+    const getTool = tools['get_patient'];
+    expect(getTool).toBeDefined();
+
+    const result = await getTool.execute?.({ patientId: '123' });
+
+    // Returns the full CallToolResult envelope — no content extraction
+    expect(result).toEqual(callToolResult);
+  });
+});
+
+describe('MastraMCPClient - outputSchema with structuredContent', () => {
+  // When a tool has an outputSchema and returns structuredContent, the
+  // structuredContent is returned directly. We don't pass outputSchema to
+  // createTool so there's no Zod stripping — the MCP SDK validates via AJV.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'structured-content-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return structuredContent directly, preserving all fields', async () => {
+    const sdkClient = (client as any).client as Client;
+
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [
         {
@@ -381,15 +530,13 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
       enddate: '2026-02-27T23:59:59Z',
     });
 
-    // All fields should be preserved, including those not in the outputSchema
+    // structuredContent is returned directly — all fields preserved
     expect(result).toEqual(fullResult);
   });
 
-  it('should not return {} when outputSchema is a generic object with no properties', async () => {
+  it('should return structuredContent even with generic object outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
-    // outputSchema is just { type: "object" } with no properties defined
-    // This converts to z.object({}) which strips ALL keys by default
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [
         {
@@ -418,8 +565,66 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
     const tool = tools['generic_tool'];
     const result = await tool.execute?.({ query: 'test' });
 
-    // Should return the full result, not {}
     expect(result).toEqual(fullResult);
+  });
+});
+
+describe('MastraMCPClient - tools without outputSchema preserve envelope', () => {
+  // MCP tools without outputSchema return the full CallToolResult envelope.
+  // We don't extract or transform content — callers get the standard MCP shape.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'no-output-schema-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return the full CallToolResult envelope', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'simple_tool',
+          description: 'A tool without outputSchema',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+        },
+      ],
+    });
+
+    const callToolResult = {
+      content: [{ type: 'text', text: 'Hello, world!' }],
+      isError: false,
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+
+    const tools = await client.tools();
+    const tool = tools['simple_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    // Returns the full CallToolResult envelope
+    expect(result).toEqual(callToolResult);
   });
 });
 
@@ -629,12 +834,10 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     console.log('result', result);
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('accept');
-    expect(elicitationResult.content).toEqual({
+    // Result is the full CallToolResult envelope
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.action).toBe('accept');
+    expect(parsed.content).toEqual({
       name: 'John Doe',
       email: 'john@example.com',
     });
@@ -664,11 +867,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const result = await collectSensitiveInfoTool?.execute?.({ message: 'Please provide sensitive information' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('decline');
+    // Result is the full CallToolResult envelope
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.action).toBe('decline');
   });
 
   it('should handle elicitation request with cancel response', async () => {
@@ -694,11 +895,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const result = await collectOptionalInfoTool?.execute?.({ message: 'Optional information request' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('cancel');
+    // Result is the full CallToolResult envelope
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.action).toBe('cancel');
   });
 
   it('should return an error when elicitation handler throws error', async () => {
@@ -900,6 +1099,122 @@ describe('MastraMCPClient - Progress Tests', () => {
 
     // Should not receive any progress notifications when disabled
     expect(mockHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('MastraMCPClient - Custom _meta', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+
+    testServer.mcpServer.tool('echo', 'Echoes input', { msg: z.string() }, async ({ msg }) => {
+      return { content: [{ type: 'text' as const, text: msg }] };
+    });
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should forward custom _meta to callTool', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: false },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.({ msg: 'hi' }, { _meta: { traceId: 'trace-1', tenantId: 'org-5' } });
+
+    expect(callToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'echo',
+        _meta: { traceId: 'trace-1', tenantId: 'org-5' },
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-progress-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: true },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.({ msg: 'hi' }, { runId: 'run-42', _meta: { traceId: 'trace-1' } });
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta.traceId).toBe('trace-1');
+    expect(callArgs._meta.progressToken).toBe('run-42');
+  });
+
+  it('should give managed progressToken precedence over user-supplied progressToken in _meta', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'meta-precedence-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: true },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.(
+      { msg: 'hi' },
+      { runId: 'run-42', _meta: { progressToken: 'user-token', traceId: 'trace-1' } },
+    );
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta.progressToken).toBe('run-42');
+    expect(callArgs._meta.traceId).toBe('trace-1');
+  });
+
+  it('should not include _meta when neither custom _meta nor progress tracking is provided', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'no-meta-client',
+      server: { url: testServer.baseUrl, enableProgressTracking: false },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    await tools['echo']?.execute?.({ msg: 'hi' });
+
+    const callArgs = callToolSpy.mock.calls[0]![0] as any;
+    expect(callArgs._meta).toBeUndefined();
   });
 });
 
@@ -1204,6 +1519,71 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 
+  it('should not accumulate SIGHUP listeners across multiple connect/disconnect cycles', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    for (let i = 0; i < 15; i++) {
+      const client = new InternalMastraMCPClient({
+        name: `sighup-cleanup-test-client-${i}`,
+        server: {
+          url: testServer.baseUrl,
+        },
+      });
+
+      await client.connect();
+      await client.disconnect();
+    }
+
+    const finalListenerCount = process.listenerCount('SIGHUP');
+
+    expect(finalListenerCount).toBeLessThanOrEqual(initialListenerCount + 1);
+  });
+
+  it('should clean up SIGHUP listeners on disconnect', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'sighup-single-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+
+    const afterConnectCount = process.listenerCount('SIGHUP');
+    expect(afterConnectCount).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGHUP');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  it('should not add duplicate SIGHUP listeners when connect is called multiple times on the same client', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'sighup-duplicate-connect-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+    await client.connect();
+    await client.connect();
+
+    const afterMultipleConnects = process.listenerCount('SIGHUP');
+
+    expect(afterMultipleConnects).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGHUP');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
   it('should not create duplicate connections when connect is called concurrently', async () => {
     const client = new InternalMastraMCPClient({
       name: 'concurrent-connect-test-client',
@@ -1307,6 +1687,58 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     expect(capabilities).toMatchObject({
       roots: { listChanged: true },
       elicitation: {},
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('should preserve custom elicitation capability fields', async () => {
+    const customElicitationCapabilities = {
+      supportedContentTypes: ['text/uri-list', 'application/vnd.mastra.form+json'],
+    } as any;
+
+    const client = new InternalMastraMCPClient({
+      name: 'elicitation-capability-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+      capabilities: {
+        elicitation: customElicitationCapabilities,
+      } as any,
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      elicitation: customElicitationCapabilities,
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('should preserve custom elicitation fields while auto-enabling roots capability', async () => {
+    const customElicitationCapabilities = {
+      supportedContentTypes: ['text/uri-list'],
+    } as any;
+
+    const client = new InternalMastraMCPClient({
+      name: 'elicitation-with-roots-test-client',
+      server: {
+        url: testServer.baseUrl,
+        roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
+      },
+      capabilities: {
+        elicitation: customElicitationCapabilities,
+      } as any,
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      roots: { listChanged: true },
+      elicitation: customElicitationCapabilities,
     });
 
     await client.disconnect().catch(() => {});
@@ -1609,13 +2041,19 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const stderrChunks: string[] = [];
+      let settled = false;
+      let ready = false;
 
       const proc = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       proc.stderr.on('data', data => {
-        stderrChunks.push(data.toString());
+        const chunk = data.toString();
+        stderrChunks.push(chunk);
+        if (chunk.includes('Secure MCP Filesystem Server running on stdio')) {
+          ready = true;
+        }
       });
 
       let responseBuffer = '';
@@ -1654,6 +2092,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
                 // Wait for server to process roots and log
                 setTimeout(() => {
+                  settled = true;
                   proc.kill();
                   resolve(stderrChunks.join(''));
                 }, 1000);
@@ -1667,10 +2106,17 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
         // If no roots capability, kill after initialized
         if (!clientCapabilities.roots && initializedSent) {
-          setTimeout(() => {
+          const finish = () => {
+            settled = true;
+            clearTimeout(timeout);
             proc.kill();
             resolve(stderrChunks.join(''));
-          }, 1000);
+          };
+          if (ready) {
+            setTimeout(finish, 1000);
+          } else {
+            setTimeout(finish, 3000);
+          }
         }
       });
 
@@ -1693,9 +2139,16 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       }, 500);
 
       proc.on('error', reject);
+      proc.on('exit', () => {
+        if (!settled) {
+          clearTimeout(timeout);
+          resolve(stderrChunks.join(''));
+        }
+      });
 
       // Timeout after 25 seconds
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
+        settled = true;
         proc.kill();
         resolve(stderrChunks.join(''));
       }, 25000);
@@ -1847,9 +2300,38 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
     expect(greetTool.mcpMetadata).toBeDefined();
     expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
   });
+
+  it('should preserve strict mode from MCP tool metadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'strict_tool',
+          description: 'A strict MCP tool',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+            additionalProperties: false,
+          },
+          _meta: {
+            mastra: {
+              strict: true,
+            },
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    expect(tools.strict_tool).toBeDefined();
+    expect(tools.strict_tool.strict).toBe(true);
+  });
 });
 
 describe('MastraMCPClient fetch with requestContext', () => {
+  const datadogTracerTestSymbol = Symbol.for('mastra.mcp.dd-trace-test-tracer');
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -1863,6 +2345,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
     await testServer?.mcpServer.close().catch(() => {});
     await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
+    delete (globalThis as Record<PropertyKey, unknown>)[datadogTracerTestSymbol];
   });
 
   it('should pass requestContext to the custom fetch function during tool execution', async () => {
@@ -1987,6 +2470,45 @@ describe('MastraMCPClient fetch with requestContext', () => {
     const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
     expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
   }, 15000);
+
+  it('should detach streamable transport GET requests from the active Datadog span', async () => {
+    testServer = await setupTestServer(true);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+    const activateSpy = vi.fn((_span: unknown, callback: () => unknown) => callback());
+
+    (globalThis as Record<PropertyKey, unknown>)[datadogTracerTestSymbol] = {
+      scope: () => ({
+        activate: activateSpy,
+      }),
+    };
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-datadog-stream-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+
+    const streamFetchCalls = fetchSpy.mock.calls.filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'GET');
+
+    expect(streamFetchCalls.length).toBeGreaterThan(0);
+    expect(activateSpy).toHaveBeenCalledTimes(streamFetchCalls.length);
+    expect(activateSpy).toHaveBeenNthCalledWith(1, null, expect.any(Function));
+
+    activateSpy.mockClear();
+    fetchSpy.mockClear();
+
+    await client.tools();
+
+    const postFetchCalls = fetchSpy.mock.calls.filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST');
+    expect(postFetchCalls.length).toBeGreaterThan(0);
+    expect(activateSpy).not.toHaveBeenCalled();
+  }, 15000);
 });
 
 describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
@@ -2039,9 +2561,142 @@ describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
     expect(getCwdTool).toBeDefined();
 
     // Execute the tool and verify the child process cwd matches
-    const result = (await getCwdTool!.execute({}, {})) as { content: Array<{ type: string; text: string }> };
-    expect(result.content[0]!.text).toBe(targetDir);
+    const result = await getCwdTool!.execute({}, {});
+    expect(result).toEqual({ content: [{ type: 'text', text: targetDir }] });
 
     await client.disconnect();
   }, 30000);
+});
+
+describe('MastraMCPClient - requireToolApproval', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should set requireApproval=true on all tools when requireToolApproval is true', async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-bool-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: true,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(true);
+    // No needsApprovalFn when boolean
+    expect((greetTool as any).needsApprovalFn).toBeUndefined();
+  });
+
+  it('should not set requireApproval when requireToolApproval is false', async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-false-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: false,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(false);
+    expect((greetTool as any).needsApprovalFn).toBeUndefined();
+  });
+
+  it('should not set requireApproval when requireToolApproval is omitted', async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-omitted-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(false);
+    expect((greetTool as any).needsApprovalFn).toBeUndefined();
+  });
+
+  it('should set requireApproval=true and needsApprovalFn when requireToolApproval is a function', async () => {
+    testServer = await setupTestServer(false);
+    const approvalFn = vi.fn().mockReturnValue(true);
+    client = new InternalMastraMCPClient({
+      name: 'approval-fn-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(true);
+    expect((greetTool as any).needsApprovalFn).toBeTypeOf('function');
+  });
+
+  it('should pass toolName and args to the wrapped needsApprovalFn', async () => {
+    testServer = await setupTestServer(false);
+    const approvalFn = vi.fn().mockReturnValue(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-fn-args-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+
+    // Call the wrapped needsApprovalFn directly
+    const testArgs = { name: 'test' };
+    const testCtx = { requestContext: { userId: '123' } };
+    const result = await (greetTool as any).needsApprovalFn(testArgs, testCtx);
+
+    expect(result).toBe(false);
+    expect(approvalFn).toHaveBeenCalledWith({
+      toolName: 'greet',
+      args: testArgs,
+      requestContext: { userId: '123' },
+    });
+  });
+
+  it('should support async approval functions', async () => {
+    testServer = await setupTestServer(false);
+    const approvalFn = vi.fn().mockImplementation(async ({ toolName }) => {
+      return toolName === 'greet';
+    });
+    client = new InternalMastraMCPClient({
+      name: 'approval-async-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+
+    const result = await (greetTool as any).needsApprovalFn({ name: 'test' }, {});
+    expect(result).toBe(true);
+  });
 });

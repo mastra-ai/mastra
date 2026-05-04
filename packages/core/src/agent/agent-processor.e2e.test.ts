@@ -3,7 +3,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from './index';
 
 const mock = createGatewayMock();
@@ -28,7 +28,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
         const agent = new Agent({
           id: 'color-expert',
           name: 'Color Expert',
-          instructions: `You are an expert on colors. 
+          instructions: `You are an expert on colors.
               Analyze colors and describe their properties, psychological effects, and technical details.
               Always give a hex code for the color.
               `,
@@ -97,11 +97,11 @@ describe('StructuredOutputProcessor Integration Tests', () => {
         });
 
         const articleText = `
-          Machine learning has revolutionized how we approach data analysis. 
-          At its core, machine learning involves training algorithms to recognize patterns in data. 
-          There are three main types: supervised learning (with labeled data), unsupervised learning (finding hidden patterns), 
-          and reinforcement learning (learning through trial and error). 
-          Popular applications include recommendation systems, image recognition, and natural language processing. 
+          Machine learning has revolutionized how we approach data analysis.
+          At its core, machine learning involves training algorithms to recognize patterns in data.
+          There are three main types: supervised learning (with labeled data), unsupervised learning (finding hidden patterns),
+          and reinforcement learning (learning through trial and error).
+          Popular applications include recommendation systems, image recognition, and natural language processing.
           For beginners, starting with simple algorithms like linear regression or decision trees is recommended.
         `;
 
@@ -258,7 +258,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
       const result = await agent.stream(
         `
-              Come up with an innovative solution for reducing food waste in restaurants. 
+              Come up with an innovative solution for reducing food waste in restaurants.
               Make sure to include an idea, category, feasibility, and resources.
             `,
         {
@@ -306,7 +306,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
       const result = await agent.stream(
         `
-              Come up with an innovative solution for reducing food waste in restaurants. 
+              Come up with an innovative solution for reducing food waste in restaurants.
               Make sure to include an idea, category, feasibility, and resources.
             `,
         {

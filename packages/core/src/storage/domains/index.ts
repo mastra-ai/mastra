@@ -1,6 +1,7 @@
 export * from './base';
 export * from './versioned';
 export * from './agents';
+export * from './channels';
 export * from './prompt-blocks';
 export * from './scorer-definitions';
 export * from './mcp-clients';
@@ -17,3 +18,6 @@ export * from './inmemory-db';
 export * from './shared';
 export * from './datasets';
 export * from './experiments';
+export * from './background-tasks';
+export * from './schedules';
+export * from './schedules';

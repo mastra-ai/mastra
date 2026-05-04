@@ -23,10 +23,12 @@
         "entityType": "agent",
         "entityId": "multi-step-agent",
         "attributes": {
-          "instructions": "You are a helpful calculator assistant that announces what you will do before doing it."
+          "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
+          "availableTools": ["calculator"]
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "What is 5 + 3?",
         "output": {
@@ -51,20 +53,25 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
-                "outputTokens": 25
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 30
+                },
+                "outputDetails": {
+                  "text": 25
+                }
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -109,7 +116,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 10,
-                    "outputTokens": 15
+                    "outputTokens": 15,
+                    "inputDetails": {
+                      "text": 10
+                    },
+                    "outputDetails": {
+                      "text": 15
+                    }
                   },
                   "isContinued": true,
                   "finishReason": "tool-calls"
@@ -120,9 +133,19 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                  },
+                  {
+                    "role": "user",
+                    "content": "What is 5 + 3?"
+                  }
+                ],
                 "output": {
                   "text": "Let me calculate that for you. ",
                   "toolCalls": [
@@ -156,7 +179,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Let me calculate that for you. "
@@ -180,7 +204,8 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -211,7 +236,8 @@
                       "success": true
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "input": {
                       "operation": "add",
@@ -242,10 +268,8 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "toolCallId": "call-calc-1",
-                      "toolName": "calculator"
-                    },
-                    "output": {
-                      "result": 8
+                      "toolName": "calculator",
+                      "environment": "test"
                     }
                   }
                 }
@@ -268,7 +292,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 20,
-                    "outputTokens": 10
+                    "outputTokens": 10,
+                    "inputDetails": {
+                      "text": 20
+                    },
+                    "outputDetails": {
+                      "text": 10
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
@@ -279,9 +309,31 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                  },
+                  {
+                    "role": "user",
+                    "content": "What is 5 + 3?"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "[tool: calculator]"
+                  },
+                  {
+                    "role": "tool",
+                    "content": "[tool: calculator]"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "Let me calculate that for you. "
+                  }
+                ],
                 "output": {
                   "text": "The result of 5 + 3 is 8.",
                   "toolCalls": []
@@ -305,7 +357,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "The result of 5 + 3 is 8."

@@ -44,7 +44,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    this.logger.debug(`WorkflowsInMemory: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
@@ -232,7 +231,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 

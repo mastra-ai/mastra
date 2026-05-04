@@ -1,0 +1,433 @@
+---
+title: "Reference: AWS Nova Sonic voice | Voice"
+description: "Documentation for the NovaSonicVoice class, providing real-time speech-to-speech capabilities via AWS Bedrock Nova 2 Sonic."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-aws-nova-sonic"
+---
+
+# AWS Nova Sonic voice
+
+The `NovaSonicVoice` class provides real-time speech-to-speech capabilities backed by [AWS Bedrock Nova 2 Sonic](https://docs.aws.amazon.com/nova/latest/userguide/speech.html). It opens a bidirectional stream to the model and emits events for assistant audio, transcribed text, tool calls, turn boundaries, and interruptions.
+
+## Usage example
+
+```typescript title="src/mastra/voice.ts"
+import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+
+// Initialize using the default AWS credential provider chain
+const voice = new NovaSonicVoice({
+  region: 'us-east-1',
+  speaker: 'matthew',
+})
+
+// Or pass explicit credentials
+const voiceWithCredentials = new NovaSonicVoice({
+  region: 'us-east-1',
+  speaker: 'tiffany',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+})
+
+// Establish the bidirectional stream
+await voice.connect()
+
+// Listen for assistant audio (Int16Array PCM)
+voice.on('speaking', ({ audioData }) => {
+  if (audioData) playAudio(audioData)
+})
+
+// Listen for transcribed text from the user and assistant
+voice.on('writing', ({ text, role, generationStage }) => {
+  console.log(`${role} (${generationStage ?? 'FINAL'}): ${text}`)
+})
+
+// Stream microphone audio in real time
+const microphoneStream = getMicrophoneStream()
+await voice.send(microphoneStream)
+
+// Disconnect when done
+voice.close()
+```
+
+## Authentication
+
+`NovaSonicVoice` uses the AWS SDK credential resolution chain when no `credentials` option is passed. Mastra calls `defaultProvider()` from `@aws-sdk/credential-provider-node`, which checks (in order) environment variables, shared credentials files, IAM role for EC2, ECS, EKS, and other standard sources.
+
+To use static credentials, pass them on the constructor:
+
+```typescript
+new NovaSonicVoice({
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    sessionToken: process.env.AWS_SESSION_TOKEN,
+  },
+})
+```
+
+The voice provider never logs credential values.
+
+## Configuration
+
+### Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'region',
+    type: "'us-east-1' | 'us-west-2' | 'ap-northeast-1'",
+    description: 'AWS region that hosts the Nova Sonic model.',
+    isOptional: true,
+    defaultValue: "'us-east-1'",
+  },
+  {
+    name: 'model',
+    type: 'string',
+    description: 'Bedrock model ID for the bidirectional stream.',
+    isOptional: true,
+    defaultValue: "'amazon.nova-2-sonic-v1:0'",
+  },
+  {
+    name: 'credentials',
+    type: 'AwsCredentialIdentity',
+    description: 'Static AWS credentials. When omitted the default AWS credential provider chain is used.',
+    isOptional: true,
+  },
+  {
+    name: 'speaker',
+    type: 'string | NovaSonicVoiceConfigDetails',
+    description:
+      "Default voice for the assistant. Pass a voice ID string such as 'matthew' or an object that includes a language code and gender.",
+    isOptional: true,
+    defaultValue: "'matthew'",
+  },
+  {
+    name: 'languageCode',
+    type: 'NovaSonicLanguageCode',
+    description: 'Language code used for the session. Polyglot voices support all listed languages.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'System prompt sent at session start. Equivalent to calling addInstructions() before connect().',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'NovaSonicToolConfig[]',
+    description:
+      "Tools exposed to the model. When the voice instance is attached to an Agent, the Agent's tools are added automatically.",
+    isOptional: true,
+  },
+  {
+    name: 'sessionConfig',
+    type: 'NovaSonicSessionConfig',
+    description: 'Inference, turn-detection, and tool-choice configuration. See Session configuration below.',
+    isOptional: true,
+  },
+  {
+    name: 'debug',
+    type: 'boolean',
+    description: 'Enable verbose logging for stream events. Sensitive fields are masked.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+### Session configuration
+
+`sessionConfig` controls inference parameters and turn-taking behavior. All fields are optional.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'inferenceConfiguration',
+    type: 'object',
+    description: 'Sampling and decoding parameters.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          { name: 'maxTokens', type: 'number', description: 'Maximum tokens generated per turn.', isOptional: true },
+          { name: 'temperature', type: 'number', description: 'Sampling temperature.', isOptional: true },
+          { name: 'topP', type: 'number', description: 'Nucleus sampling probability.', isOptional: true },
+          { name: 'topK', type: 'number', description: 'Top-k sampling.', isOptional: true },
+          { name: 'stopSequences', type: 'string[]', description: 'Sequences that end generation.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'turnDetectionConfiguration',
+    type: 'object',
+    description: 'Endpointing sensitivity for turn detection.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'endpointingSensitivity',
+            type: "'HIGH' | 'MEDIUM' | 'LOW'",
+            description:
+              'Pause duration before the model considers a turn complete. HIGH ends turns fastest (about 1.5s pause), MEDIUM is balanced (about 1.75s), LOW waits longest (about 2s).',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'toolChoice',
+    type: "'auto' | 'any' | { tool: { name: string } }",
+    description: 'How the model decides whether to call a tool.',
+    isOptional: true,
+  },
+  {
+    name: 'enableKnowledgeGrounding',
+    type: 'boolean',
+    description: 'Enable retrieval-augmented grounding against a Bedrock knowledge base.',
+    isOptional: true,
+  },
+  {
+    name: 'knowledgeBaseConfig',
+    type: '{ knowledgeBaseId?: string; dataSourceId?: string }',
+    description: 'Knowledge base used when knowledge grounding is enabled.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Methods
+
+### `connect()`
+
+Opens the bidirectional stream to AWS Bedrock and sends the initial session, prompt, and system events. Call this before `speak`, `listen`, or `send`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    description: 'Optional request context propagated to tool calls made during the session.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `Promise<void>`
+
+### `speak()`
+
+Synthesizes speech for a text prompt and emits `speaking` events as audio is produced.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text or text stream to synthesize.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'NovaSonicVoiceOptions',
+    description: 'Per-call overrides such as the speaker or language code.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `Promise<void>`
+
+### `send()`
+
+Streams microphone audio (or any PCM source) to the model. Use this for live, continuous conversation.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'audioData',
+    type: 'NodeJS.ReadableStream | Int16Array',
+    description: '16-bit PCM audio to forward to the model.',
+    isOptional: false,
+  },
+]}
+/>
+
+Returns: `Promise<void>`
+
+### `listen()`
+
+Convenience wrapper that delegates to `send()`. Use it when you want a single transcription pass over a finite audio stream.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'audioData',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe.',
+    isOptional: false,
+  },
+]}
+/>
+
+Returns: `Promise<void>`
+
+### `endAudioInput()`
+
+Signals the end of the current audio turn so the model can finalize its response. Call this when the user stops speaking and the provider is not configured for server-side turn detection.
+
+Returns: `Promise<void>`
+
+### `addInstructions()`
+
+Updates the system prompt for the active session.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'System prompt to apply to the session.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `void`
+
+### `addTools()`
+
+Registers tools with the voice instance. When `NovaSonicVoice` is attached to an Agent, the Agent's tools are added automatically.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tools',
+    type: 'ToolsInput',
+    description: 'Tools exposed to the model.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `void`
+
+### `getSpeakers()`
+
+Returns the list of voices supported by Nova 2 Sonic.
+
+Returns: `Promise<Array<{ voiceId: string; name: string; language: string; locale: string; gender: 'masculine' | 'feminine'; polyglot: boolean }>>`
+
+### `getListener()`
+
+Returns whether the voice instance currently holds an open stream.
+
+Returns: `Promise<{ enabled: boolean }>`
+
+### `close()`
+
+Closes the bidirectional stream and destroys the underlying Bedrock client. Call this when the conversation ends.
+
+Returns: `void`
+
+### `on()` / `off()`
+
+Registers and removes event listeners. See [Voice events](./voice.events) for the shared event API.
+
+## Events
+
+`NovaSonicVoice` emits the following events:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'speaking',
+    type: 'event',
+    description: 'Assistant audio chunk. Callback receives { audioData: Int16Array, sampleRate?: number }.',
+  },
+  {
+    name: 'writing',
+    type: 'event',
+    description:
+      "Transcribed text from the user or assistant. Callback receives { text: string, role: 'assistant' | 'user', generationStage?: 'SPECULATIVE' | 'FINAL' }.",
+  },
+  {
+    name: 'toolCall',
+    type: 'event',
+    description:
+      'Model requested a tool call. Callback receives { name: string, args: Record<string, any>, id: string }.',
+  },
+  {
+    name: 'interrupt',
+    type: 'event',
+    description:
+      "User or model interrupted the current turn. Callback receives { type: 'user' | 'model', timestamp: number }.",
+  },
+  {
+    name: 'turnComplete',
+    type: 'event',
+    description: 'Model finished its turn. Callback receives { timestamp: number }.',
+  },
+  {
+    name: 'session',
+    type: 'event',
+    description:
+      "Session state transition. Callback receives { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' }.",
+  },
+  {
+    name: 'usage',
+    type: 'event',
+    description:
+      'Token usage for the turn. Callback receives { inputTokens: number, outputTokens: number, totalTokens: number }.',
+  },
+  {
+    name: 'error',
+    type: 'event',
+    description: 'Stream or provider error. Callback receives { message: string, code?: string, details?: unknown }.',
+  },
+]}
+/>
+
+`generationStage` distinguishes provisional transcripts (`'SPECULATIVE'`) from finalized ones (`'FINAL'`). Use `'FINAL'` text for persistent storage and `'SPECULATIVE'` text for live captions.
+
+## Available voices
+
+Nova 2 Sonic ships voices in ten locales. Tiffany and Matthew are polyglot and can speak any supported language.
+
+| Voice ID | Name | Language | Locale | Gender | Polyglot |
+| - | - | - | - | - | - |
+| `tiffany` | Tiffany | English | en-US | feminine | yes |
+| `matthew` | Matthew | English | en-US | masculine | yes |
+| `amy` | Amy | English | en-GB | feminine | no |
+| `olivia` | Olivia | English | en-AU | feminine | no |
+| `kiara` | Kiara | English | en-IN | feminine | no |
+| `arjun` | Arjun | English | en-IN | masculine | no |
+| `ambre` | Ambre | French | fr-FR | feminine | no |
+| `florian` | Florian | French | fr-FR | masculine | no |
+| `beatrice` | Beatrice | Italian | it-IT | feminine | no |
+| `lorenzo` | Lorenzo | Italian | it-IT | masculine | no |
+| `tina` | Tina | German | de-DE | feminine | no |
+| `lennart` | Lennart | German | de-DE | masculine | no |
+| `lupe` | Lupe | Spanish | es-US | feminine | no |
+| `carlos` | Carlos | Spanish | es-US | masculine | no |
+| `carolina` | Carolina | Portuguese | pt-BR | feminine | no |
+| `leo` | Leo | Portuguese | pt-BR | masculine | no |
+| `kiara` | Kiara | Hindi | hi-IN | feminine | no |
+| `arjun` | Arjun | Hindi | hi-IN | masculine | no |
+
+## Notes
+
+- Audio is streamed as 16-bit PCM. Assistant audio is emitted as `Int16Array` on the `speaking` event.
+- The voice instance must call `connect()` before any other streaming method.
+- `close()` destroys the underlying `BedrockRuntimeClient` to release the HTTP/2 session.
+- Nova 2 Sonic is available in `us-east-1`, `us-west-2`, and `ap-northeast-1`. Other regions throw a configuration error during construction.

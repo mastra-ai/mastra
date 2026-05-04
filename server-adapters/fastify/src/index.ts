@@ -12,6 +12,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -59,7 +61,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     mastra: Mastra;
     requestContext: RequestContext;
-    tools: ToolsInput;
+    registeredTools: ToolsInput;
     abortSignal: AbortSignal;
     taskStore: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
@@ -113,7 +115,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Set context in request object
       request.requestContext = requestContext;
       request.mastra = this.mastra;
-      request.tools = this.tools || {};
+      request.registeredTools = this.tools || {};
       if (this.taskStore) {
         request.taskStore = this.taskStore;
       }
@@ -256,25 +258,29 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
       });
 
-      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
-        const chunks: Buffer[] = [];
-        let limitExceeded = false;
+      busboy.on(
+        'file',
+        (fieldname: string, file: NodeJS.ReadableStream, _filename: string, _encoding: string, _mimetype: string) => {
+          const chunks: Buffer[] = [];
+          let limitExceeded = false;
 
-        file.on('data', (chunk: Buffer) => {
-          chunks.push(chunk);
-        });
+          file.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
 
-        file.on('limit', () => {
-          limitExceeded = true;
-          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
-        });
+          file.on('limit', () => {
+            limitExceeded = true;
+            file.resume();
+            reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+          });
 
-        file.on('end', () => {
-          if (!limitExceeded) {
-            result[fieldname] = Buffer.concat(chunks);
-          }
-        });
-      });
+          file.on('end', () => {
+            if (!limitExceeded) {
+              result[fieldname] = Buffer.concat(chunks);
+            }
+          });
+        },
+      );
 
       busboy.on('field', (fieldname: string, value: string) => {
         // Try to parse JSON strings (like 'options')
@@ -307,6 +313,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   ): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        reply.header(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       await reply.send(result);
     } else if (route.responseType === 'stream') {
@@ -318,13 +333,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       reply.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        reply.raw.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             reply.raw.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          reply.raw.off('error', onResError);
           reply.raw.end();
         }
       } else {
@@ -441,7 +470,17 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       });
 
       if (authError) {
-        return reply.status(authError.status).send({ error: authError.error });
+        // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+        if (authError.headers) {
+          for (const [key, value] of Object.entries(authError.headers)) {
+            void reply.header(key, value);
+          }
+        }
+
+        // If this is an auth error (not just a success-with-headers), return error response
+        if (authError.error) {
+          return reply.status(authError.status).send({ error: authError.error });
+        }
       }
 
       const params = await this.getParams(route, request);
@@ -515,7 +554,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
         requestContext: request.requestContext,
         mastra: this.mastra,
-        tools: request.tools,
+        registeredTools: request.registeredTools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,
@@ -636,7 +675,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         });
 
         if (authError) {
-          return reply.status(authError.status).send({ error: authError.error });
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              void reply.header(key, value);
+            }
+          }
+          if (authError.error) {
+            return reply.status(authError.status).send({ error: authError.error });
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;

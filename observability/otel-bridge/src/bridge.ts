@@ -23,7 +23,7 @@ import type {
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import { SpanConverter, getSpanKind } from '@mastra/otel-exporter';
-import { trace as otelTrace, context as otelContext } from '@opentelemetry/api';
+import { trace as otelTrace, context as otelContext, isSpanContextValid } from '@opentelemetry/api';
 import type { Span as OtelSpan, Context as OtelContext } from '@opentelemetry/api';
 
 /**
@@ -129,6 +129,18 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Get OTEL span identifiers
       const otelSpanContext = otelSpan.spanContext();
+
+      // If no OTEL SDK is registered, the global tracer returns a non-recording
+      // span with an invalid span context (all-zero span/trace IDs). Returning
+      // those IDs would collide across every Mastra span and break downstream
+      // exporters. Bail out so DefaultSpan falls through to its own ID generator.
+      if (!isSpanContextValid(otelSpanContext)) {
+        // End the span we just started so its lifecycle stays clean on
+        // providers that do track non-recording spans.
+        otelSpan.end();
+        return undefined;
+      }
+
       const spanId = otelSpanContext.spanId;
       const traceId = otelSpanContext.traceId;
 
@@ -137,7 +149,9 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Get parentSpanId from parent context if available
       const parentSpan = otelTrace.getSpan(parentOtelContext);
-      const parentSpanId = parentSpan?.spanContext().spanId;
+      const parentSpanContext = parentSpan?.spanContext();
+      const parentSpanId =
+        parentSpanContext && isSpanContextValid(parentSpanContext) ? parentSpanContext.spanId : undefined;
 
       this.logger.debug(
         `[OtelBridge.createSpan] Created span [spanId=${spanId}] [traceId=${traceId}] ` +

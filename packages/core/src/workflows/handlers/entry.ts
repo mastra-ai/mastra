@@ -304,6 +304,7 @@ export async function executeEntry(
     execResults = await engine.executeParallel({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       stepResults,
@@ -415,6 +416,7 @@ export async function executeEntry(
     execResults = await engine.executeConditional({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevOutput,
       stepResults,
@@ -435,6 +437,7 @@ export async function executeEntry(
     execResults = await engine.executeLoop({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       prevOutput,
@@ -456,6 +459,7 @@ export async function executeEntry(
     execResults = await engine.executeForeach({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       prevOutput,

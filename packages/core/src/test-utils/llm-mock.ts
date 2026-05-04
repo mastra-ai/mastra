@@ -2,6 +2,7 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 
+import type { StreamObjectResult, StreamReturn } from '../llm/model/base.types';
 import { MastraLLMV1 } from '../llm/model/model';
 import { MastraLanguageModelV2Mock } from '../loop/test-utils/MastraLanguageModelV2Mock';
 

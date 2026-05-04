@@ -1,3 +1,5 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
+
 /**
  * Date/time utility functions for Observational Memory.
  * Pure functions for formatting relative timestamps and annotating observations.
@@ -241,4 +243,85 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
   result += withInlineDates.slice(lastIndex);
 
   return result;
+}
+
+export const MIN_TEMPORAL_GAP_MS = 10 * 60 * 1000;
+
+export function formatTemporalGap(diffMs: number): string | null {
+  if (diffMs < MIN_TEMPORAL_GAP_MS) return null;
+
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+  const month = 30 * day;
+  const year = 365 * day;
+
+  const formatUnit = (value: number, unit: string) => `${value} ${unit}${value === 1 ? '' : 's'}`;
+
+  if (diffMs < hour) {
+    const minutes = Math.max(1, Math.round(diffMs / minute));
+    return `${formatUnit(minutes, 'minute')} later`;
+  }
+
+  const formatTwoUnits = (primaryMs: number, primaryUnit: string, secondaryMs: number, secondaryUnit: string) => {
+    const primary = Math.floor(diffMs / primaryMs);
+    const remainder = diffMs - primary * primaryMs;
+    const secondary = Math.floor(remainder / secondaryMs);
+    const parts = [formatUnit(primary, primaryUnit)];
+
+    if (secondary > 0) {
+      parts.push(formatUnit(secondary, secondaryUnit));
+    }
+
+    return `${parts.join(' ')} later`;
+  };
+
+  if (diffMs < day) {
+    return formatTwoUnits(hour, 'hour', minute, 'minute');
+  }
+
+  if (diffMs < week) {
+    return formatTwoUnits(day, 'day', hour, 'hour');
+  }
+
+  if (diffMs < month) {
+    return formatTwoUnits(week, 'week', day, 'day');
+  }
+
+  if (diffMs < year) {
+    return formatTwoUnits(month, 'month', week, 'week');
+  }
+
+  return formatTwoUnits(year, 'year', month, 'month');
+}
+
+export function formatTemporalTimestamp(date: Date): string {
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  });
+}
+
+export function getMessagePartTimestamp(msg: MastraDBMessage, position: 'first' | 'last'): number {
+  const timestamps = msg.content?.parts
+    ?.map(part => ('createdAt' in part ? part.createdAt : undefined))
+    .filter((timestamp): timestamp is number => typeof timestamp === 'number');
+
+  if (timestamps && timestamps.length > 0) {
+    const index = position === 'first' ? 0 : timestamps.length - 1;
+    const timestamp = timestamps[index];
+    if (timestamp !== undefined) return timestamp;
+  }
+
+  return new Date(msg.createdAt).getTime();
+}
+
+export function isTemporalGapMarker(msg: MastraDBMessage): boolean {
+  return msg.id.startsWith('__temporal_');
 }

@@ -343,7 +343,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Add system instruction about the meta-tools
     messageList.addSystem(
       'To discover available tools, call search_tools with a keyword query. ' +
-        'To add a tool to the conversation, call load_tool with the tool name. ' +
+        'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
         'Tools must be loaded before they can be used.',
     );
 
@@ -381,7 +381,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         return {
           results,
-          message: `Found ${results.length} tool(s). Use load_tool with the exact tool name to make it available.`,
+          message: `Found ${results.length} tool(s). Use load_tool with an exact toolName or a toolNames array to make them available.`,
         };
       },
     });
@@ -390,64 +390,119 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const loadTool = createTool({
       id: 'load_tool',
       description:
-        'Load a specific tool into your context. ' +
-        'Call this after finding a tool with search_tools. ' +
-        'Once loaded, the tool will be available for use. ' +
-        'Args: toolName - The exact name of the tool to load (from search results).',
+        'Load one or more tools into your context. ' +
+        'Call this after finding tools with search_tools. ' +
+        'Once loaded, tools will be available for use. ' +
+        'Pass a single toolName or an array of toolNames to load multiple tools at once.',
       inputSchema: z.object({
-        toolName: z.string().describe('The exact name of the tool to load (from search results)'),
+        toolName: z.string().optional().describe('The exact name of a tool to load (from search results)'),
+        toolNames: z
+          .array(z.string())
+          .optional()
+          .describe('Array of exact tool names to load in one call (from search results)'),
       }),
       outputSchema: z.object({
         success: z.boolean(),
         message: z.string(),
+        loadedCount: z.number().optional(),
         toolName: z.string().optional(),
+        loaded: z.array(z.string()).optional(),
+        notFound: z.array(z.string()).optional(),
+        alreadyLoaded: z.array(z.string()).optional(),
       }),
-      execute: async ({ toolName }) => {
-        // Check if tool exists
-        const matchingTool = this.allTools[toolName] ?? Object.values(this.allTools).find(tool => tool.id === toolName);
-
-        if (!matchingTool) {
-          // Generate suggestions for similar tool names
-          const availableToolNames = Object.keys(this.allTools).concat(
-            Object.values(this.allTools)
-              .map(t => t.id)
-              .filter(id => !this.allTools[id]),
-          );
-          const suggestions = availableToolNames.filter(
-            name =>
-              name.toLowerCase().includes(toolName.toLowerCase()) ||
-              toolName.toLowerCase().includes(name.toLowerCase()),
-          );
-
-          let message = `Tool "${toolName}" not found.`;
-          if (suggestions.length > 0) {
-            message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
-          } else {
-            message += ' Use search_tools to find available tools.';
-          }
-
+      execute: async ({ toolName, toolNames }) => {
+        // Determine which tools to load
+        let toLoad: string[];
+        const toolNamesProvided = toolNames !== undefined;
+        if (toolNamesProvided && toolNames!.length === 0 && !toolName) {
           return {
             success: false,
-            message,
+            message: 'toolNames array must not be empty.',
+          };
+        }
+        if (toolNamesProvided && toolNames!.length > 0) {
+          // Merge toolName into toolNames if both provided, then dedupe
+          const base: string[] = [...toolNames!];
+          if (toolName) base.push(toolName);
+          toLoad = Array.from(new Set(base));
+        } else if (toolName) {
+          toLoad = [toolName];
+        } else {
+          return {
+            success: false,
+            message: 'You must provide either toolName (string) or toolNames (array) to load.',
           };
         }
 
-        // Check if already loaded (thread-scoped)
-        if (loadedToolNames.has(toolName)) {
+        const notFound: string[] = [];
+        const alreadyLoaded: string[] = [];
+        const loaded: string[] = [];
+
+        for (const name of toLoad) {
+          // Check if tool exists
+          const matchingTool = this.allTools[name] ?? Object.values(this.allTools).find(tool => tool.id === name);
+
+          if (!matchingTool) {
+            notFound.push(name);
+            continue;
+          }
+
+          // Check if already loaded (thread-scoped)
+          if (loadedToolNames.has(name)) {
+            alreadyLoaded.push(name);
+            continue;
+          }
+
+          // Load the tool (thread-scoped)
+          loadedToolNames.add(name);
+          loaded.push(name);
+        }
+
+        // Build response based on how many tools were requested
+        // Only use single-tool backward-compatible shape when using the legacy toolName param
+        if (toLoad.length === 1 && !toolNamesProvided) {
+          // Single-tool response (backward compatible shape)
+          if (notFound.length > 0) {
+            const name = toLoad[0]!;
+            const availableToolNames = Object.keys(this.allTools);
+            const suggestions = availableToolNames.filter(
+              n => n.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(n.toLowerCase()),
+            );
+            let message = `Tool "${name}" not found.`;
+            if (suggestions.length > 0) {
+              message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
+            } else {
+              message += ' Use search_tools to find available tools.';
+            }
+            return { success: false, message, toolName: name };
+          }
+          if (alreadyLoaded.length > 0) {
+            return {
+              success: true,
+              message: `Tool "${alreadyLoaded[0]}" is already loaded and available.`,
+              toolName: alreadyLoaded[0],
+            };
+          }
           return {
             success: true,
-            message: `Tool "${toolName}" is already loaded and available.`,
-            toolName,
+            message: `Tool "${loaded[0]}" loaded successfully. It will be available on your next turn.`,
+            toolName: loaded[0],
           };
         }
 
-        // Load the tool (thread-scoped)
-        loadedToolNames.add(toolName);
+        // Multi-tool response
+        const parts: string[] = [];
+        if (loaded.length > 0) parts.push(`Loaded: ${loaded.join(', ')} — available on your next turn`);
+        if (alreadyLoaded.length > 0) parts.push(`Already loaded: ${alreadyLoaded.join(', ')}`);
+        if (notFound.length > 0) parts.push(`Not found: ${notFound.join(', ')}`);
 
         return {
-          success: true,
-          message: `Tool "${toolName}" loaded successfully. It will be available on your next turn.`,
-          toolName,
+          success: notFound.length === 0,
+          message: parts.join(' | '),
+          loadedCount: loaded.length,
+          loaded: loaded.length > 0 ? loaded : undefined,
+          notFound: notFound.length > 0 ? notFound : undefined,
+          alreadyLoaded: alreadyLoaded.length > 0 ? alreadyLoaded : undefined,
         };
       },
     });

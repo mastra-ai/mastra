@@ -234,7 +234,7 @@ function DocSidebarItemCategoryCollapsible({
           {...props}
         >
           <span title={label} className={styles.categoryLinkLabel}>
-            {label} {badgeType && <SidebarBadge type={badgeType as 'new' | 'beta' | 'advanced'} />}
+            {label} {badgeType && <SidebarBadge type={badgeType} />}
           </span>
         </Link>
         {href && collapsible && (

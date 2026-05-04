@@ -15,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -24,6 +25,7 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -1526,14 +1528,32 @@ export class MemoryLibSQL extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const result = await this.#client.execute({
-        // Use generationCount DESC for reliable ordering (incremented for each new record)
-        sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT ?`,
-        args: [lookupKey, limit],
-      });
+
+      const conditions = [`"lookupKey" = ?`];
+      const args: InValue[] = [lookupKey];
+
+      if (options?.from) {
+        conditions.push(`"createdAt" >= ?`);
+        args.push(options.from.toISOString());
+      }
+      if (options?.to) {
+        conditions.push(`"createdAt" <= ?`);
+        args.push(options.to.toISOString());
+      }
+
+      args.push(limit);
+      let sql = `SELECT * FROM "${OM_TABLE}" WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT ?`;
+
+      if (options?.offset != null) {
+        args.push(options.offset);
+        sql += ` OFFSET ?`;
+      }
+
+      const result = await this.#client.execute({ sql, args });
       if (!result.rows) return [];
       return result.rows.map(row => this.parseOMRow(row));
     } catch (error) {
@@ -2020,6 +2040,48 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      // Read current config
+      const selectResult = await this.#client.execute({
+        sql: `SELECT config FROM "${OM_TABLE}" WHERE id = ?`,
+        args: [input.id],
+      });
+
+      if (selectResult.rows.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = selectResult.rows[0] as any;
+      const existing: Record<string, unknown> = row.config ? JSON.parse(row.config) : {};
+      const merged = this.deepMergeConfig(existing, input.config);
+
+      await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET config = ?, "updatedAt" = ? WHERE id = ?`,
+        args: [JSON.stringify(merged), new Date().toISOString(), input.id],
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Async Buffering Methods
   // ============================================
@@ -2070,6 +2132,7 @@ export class MemoryLibSQL extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       const newChunks = [...existingChunks, newChunk];
@@ -2242,7 +2305,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const existingTokenCount = Number(row.observationTokenCount || 0);
 
       // Calculate new values
-      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+      const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
       const newTokenCount = existingTokenCount + activatedTokens;
       // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
       // Buffered chunks represent observations of messages as they were at buffering time.
@@ -2253,7 +2317,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const existingPending = Number(row.pendingMessageTokens || 0);
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await this.#client.execute({
+      // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
+      const updateResult = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "activeObservations" = ?,
           "observationTokenCount" = ?,
@@ -2261,7 +2326,9 @@ export class MemoryLibSQL extends MemoryStorage {
           "bufferedObservationChunks" = ?,
           "lastObservedAt" = ?,
           "updatedAt" = ?
-        WHERE id = ?`,
+        WHERE id = ?
+          AND "bufferedObservationChunks" IS NOT NULL
+          AND "bufferedObservationChunks" != '[]'`,
         args: [
           newActive,
           newTokenCount,
@@ -2272,6 +2339,17 @@ export class MemoryLibSQL extends MemoryStorage {
           input.id,
         ],
       });
+
+      if (updateResult.rowsAffected === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

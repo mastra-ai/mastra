@@ -31,7 +31,13 @@ async function listScorersFromSystem({
 
   const scorersMap = new Map<
     string,
-    MastraScorerEntry & { agentIds: string[]; agentNames: string[]; workflowIds: string[]; isRegistered: boolean }
+    MastraScorerEntry & {
+      agentIds: string[];
+      agentNames: string[];
+      workflowIds: string[];
+      isRegistered: boolean;
+      source: 'code' | 'stored';
+    }
   >();
 
   // Helper function to process an agent's scorers
@@ -58,6 +64,7 @@ async function listScorersFromSystem({
             agentNames: [agent.name],
             agentIds: [agent.id],
             isRegistered: false,
+            source: scorer.scorer.source ?? 'code',
           });
         }
       }
@@ -124,6 +131,7 @@ async function listScorersFromSystem({
             ...scorer,
             workflowIds: [workflowId],
             isRegistered: false,
+            source: scorer.scorer.source ?? 'code',
           });
         }
       }
@@ -142,6 +150,7 @@ async function listScorersFromSystem({
         agentNames: [],
         workflowIds: [],
         isRegistered: true,
+        source: scorer.source ?? 'code',
       });
     }
   }

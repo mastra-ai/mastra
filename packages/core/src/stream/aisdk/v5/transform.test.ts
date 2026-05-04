@@ -548,6 +548,7 @@ describe('convertFullStreamChunkToMastra', () => {
           inputTokens: 10,
           outputTokens: 20,
           totalTokens: 30,
+          cacheCreationInputTokens: 7,
         },
         providerMetadata: {},
         messages: {
@@ -562,6 +563,82 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(result?.type).toBe('finish');
       if (result?.type === 'finish') {
         expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(7);
+        expect(result.payload.providerMetadata).toEqual({});
+        expect(result.payload.metadata.providerMetadata).toEqual({});
+      }
+    });
+
+    it('should preserve providerMetadata for AI SDK v6 finish chunks', () => {
+      const providerMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 94,
+          cacheCreationInputTokens: 6,
+        },
+      };
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'end_turn' },
+        usage: {
+          inputTokens: { total: 100, noCache: 6, cacheRead: 94, cacheWrite: 6 },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+        },
+        providerMetadata,
+        messages: {
+          all: [],
+          user: [],
+          nonUser: [],
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cachedInputTokens).toBe(94);
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
+        expect(result.payload.providerMetadata).toEqual(providerMetadata);
+        expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
+      }
+    });
+
+    it('should preserve Google/Gemini providerMetadata for finish chunks', () => {
+      const providerMetadata = {
+        google: {
+          usageMetadata: {
+            cachedContentTokenCount: 150,
+            thoughtsTokenCount: 250,
+          },
+          groundingMetadata: {
+            webSearchQueries: ['mastra ai'],
+          },
+        },
+      };
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 200, noCache: 50, cacheRead: 150 },
+          outputTokens: { total: 400, text: 150, reasoning: 250 },
+        },
+        providerMetadata,
+        messages: {
+          all: [],
+          user: [],
+          nonUser: [],
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cachedInputTokens).toBe(150);
+        expect(result.payload.output.usage.reasoningTokens).toBe(250);
+        expect(result.payload.providerMetadata).toEqual(providerMetadata);
+        expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }
     });
   });

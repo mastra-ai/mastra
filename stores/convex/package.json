@@ -1,6 +1,6 @@
 {
   "name": "@mastra/convex",
-  "version": "1.0.6",
+  "version": "1.0.9",
   "description": "Convex provider for Mastra - includes both storage and vector adapters plus Convex server helpers",
   "type": "module",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

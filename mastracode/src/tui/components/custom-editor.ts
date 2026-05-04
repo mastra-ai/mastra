@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
 import { mastra, theme } from '../theme.js';
+import type { GradientAnimator } from './obi-loader.js';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -47,6 +48,42 @@ function parseHex(hex: string): [number, number, number] {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
+const DEFAULT_PROMPT_ICON = '•';
+const PROMPT_ICON_CHOICES = [
+  '☯',
+  '✺',
+  '☻',
+  '✿',
+  '◒',
+  '◓',
+  '♞',
+  '☘',
+  '☸',
+  '❂',
+  '❁',
+  '✽',
+  '❉',
+  '✹',
+  '❨',
+  '❩',
+  '✚',
+  '⚉',
+  '❣',
+  '❥',
+  '♫',
+  '❤',
+] as const;
+
+function getRandomPromptIcon(currentIcon: string): string {
+  if (Math.random() < 0.99) {
+    return DEFAULT_PROMPT_ICON;
+  }
+
+  const nextChoices = PROMPT_ICON_CHOICES.filter(icon => icon !== currentIcon);
+  const choices = nextChoices.length > 0 ? nextChoices : PROMPT_ICON_CHOICES;
+  return choices[Math.floor(Math.random() * choices.length)]!;
+}
+
 export class CustomEditor extends Editor {
   private actionHandlers: Map<AppAction, () => unknown> = new Map();
 
@@ -54,10 +91,13 @@ export class CustomEditor extends Editor {
   public escapeEnabled = true;
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
+  public getPromptAnimator?: () => GradientAnimator | undefined;
   private pendingBracketedPaste: string | null = null;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
+  private promptIcon = DEFAULT_PROMPT_ICON;
+  private lastPromptWasInvisible = false;
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
@@ -97,7 +137,62 @@ export class CustomEditor extends Editor {
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
     const color = this.getModeColor?.() || mastra.green;
-    const promptChar = isSlash ? '/' : isAt ? '@' : '›';
+    const promptAnimator = this.getPromptAnimator?.();
+    const shouldAnimatePrompt = !isSlash && !isAt;
+    const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
+    const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
+    const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
+    const isTransitioningOut = isPromptAnimated && promptAnimator!.isFadingOut();
+    const promptOffset = isPromptAnimated ? promptAnimator!.getOffset() : 0;
+    const pulseWave = isPromptAnimated ? (Math.sin(promptOffset * Math.PI * 2) + 1) / 2 : 0;
+    const transitionPhase = isTransitioningIn || isTransitioningOut ? 1 - fadeProgress : 1;
+    const chevronBrightness = isPromptAnimated
+      ? isTransitioningIn
+        ? transitionPhase < 0.5
+          ? Math.max(0, 1 - transitionPhase * 2)
+          : 0
+        : isTransitioningOut
+          ? transitionPhase <= 0.5
+            ? Math.max(0, 1 - transitionPhase * 2)
+            : 0
+          : 0
+      : 1;
+    const dotBrightness = isPromptAnimated
+      ? isTransitioningIn
+        ? transitionPhase <= 0.5
+          ? 0
+          : Math.max(0, (transitionPhase - 0.5) * 2)
+        : isTransitioningOut
+          ? transitionPhase < 0.5
+            ? 0
+            : Math.max(0, (transitionPhase - 0.5) * 2)
+          : pulseWave
+      : 0;
+
+    const isSteadyPulse = isPromptAnimated && !isTransitioningIn && !isTransitioningOut;
+    if (!isPromptAnimated) {
+      this.promptIcon = DEFAULT_PROMPT_ICON;
+      this.lastPromptWasInvisible = false;
+    } else if (!isSteadyPulse) {
+      this.lastPromptWasInvisible = false;
+    }
+
+    const promptIsInvisible = isSteadyPulse && dotBrightness <= 0.05;
+    if (promptIsInvisible && !this.lastPromptWasInvisible) {
+      this.promptIcon = getRandomPromptIcon(this.promptIcon);
+    }
+    this.lastPromptWasInvisible = promptIsInvisible;
+
+    const promptChar = isSlash
+      ? '/'
+      : isAt
+        ? '@'
+        : chevronBrightness > 0.05
+          ? '›'
+          : dotBrightness > 0.05
+            ? this.promptIcon
+            : ' ';
+    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
 
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {
@@ -106,8 +201,12 @@ export class CustomEditor extends Editor {
     }
     const colorFn = this._cachedColorFn!;
     const b = colorFn;
-    // Prompt changes with slash/at mode, so rebuild each time (cheap)
-    const prompt = chalk.bold.hex(color)(promptChar);
+    const [r, g, bValue] = parseHex(color);
+    const prompt = chalk.bold.rgb(
+      Math.round(r * promptBrightness),
+      Math.round(g * promptBrightness),
+      Math.round(bValue * promptBrightness),
+    )(promptChar);
 
     // Box structure: "│ > content │" or "│   content │"
     // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total

@@ -1,9 +1,10 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { type InputProps, Input } from '../../Input';
+import { Input } from '../../Input';
+import type { InputProps } from '../../Input';
 import { FieldBlock } from '../block/field-block';
-import type { FieldBlockLabelProps } from '../block/field-block-label';
 import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
+import type { FieldBlockLabelProps } from '../block/field-block-label';
 import type { FieldBlockLayoutProps } from '../block/field-block-layout';
 
 export type TextFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelColumnWidth'> &

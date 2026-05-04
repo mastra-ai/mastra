@@ -8,10 +8,18 @@ import {
 } from '@internal/ai-sdk-v5/test';
 import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
 import { describe, expect, it, vi } from 'vitest';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
-import { createMessageListWithUserMessage, defaultSettings, mockDate, testUsage, testUsage2 } from './utils';
+import {
+  createMessageListWithUserMessage,
+  defaultSettings,
+  expectPromptWithoutMastraCreatedAt,
+  mockDate,
+  stripMastraCreatedAt,
+  testUsage,
+  testUsage2,
+} from './utils';
 import { testUsageV3, testUsageV3_2 } from './utils-v3';
 import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
 import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
@@ -83,7 +91,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -129,7 +137,7 @@ export function fullStreamTests({
       });
 
       const data = await convertAsyncIterableToArray(result.fullStream);
-      expect(data).toMatchSnapshot();
+      expect(stripMastraCreatedAt(data)).toMatchSnapshot();
     });
 
     it('should send text deltas', async () => {
@@ -144,7 +152,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -183,7 +191,7 @@ export function fullStreamTests({
       });
 
       const data = await convertAsyncIterableToArray(result.fullStream);
-      expect(data).toMatchSnapshot();
+      expect(stripMastraCreatedAt(data)).toMatchSnapshot();
     });
 
     it('should send reasoning deltas', async () => {
@@ -263,7 +271,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     // https://github.com/mastra-ai/mastra/issues/9005
@@ -316,6 +324,86 @@ export function fullStreamTests({
       expect(reasoningPart?.providerMetadata).toEqual({ openai: { itemId: 'rs_test123' } });
     });
 
+    // Regression: the old eager-flush code would create two reasoning parts with the same
+    // rs_* ID when a non-reasoning chunk (like text-start) interrupted a reasoning span,
+    // triggering an early flush. When this message was later sent as prompt history to
+    // OpenAI, it caused "Duplicate item found with id rs_*" errors.
+    it('should produce exactly one reasoning part per ID even when interleaved with text', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const model = new MockModel({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'reasoning-start',
+              id: 'rs_abc123',
+              providerMetadata: { openai: { itemId: 'rs_abc123' } },
+            },
+            {
+              type: 'reasoning-delta',
+              id: 'rs_abc123',
+              delta: 'Let me think',
+              providerMetadata: { openai: { itemId: 'rs_abc123' } },
+            },
+            // Text span starts while reasoning is still open — this caused the old code
+            // to flush reasoning early, then flush again at reasoning-end
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Here is ' },
+            {
+              type: 'reasoning-delta',
+              id: 'rs_abc123',
+              delta: ' about this...',
+              providerMetadata: { openai: { itemId: 'rs_abc123' } },
+            },
+            { type: 'text-delta', id: 'text-1', delta: 'my answer.' },
+            {
+              type: 'reasoning-end',
+              id: 'rs_abc123',
+              providerMetadata: { openai: { itemId: 'rs_abc123', signature: 'sig_final' } },
+            },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
+        }),
+      } as any);
+
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        models: [{ maxRetries: 0, id: 'test-model', model }],
+        messageList,
+        ...defaultSettings(),
+      });
+
+      await convertAsyncIterableToArray(result.fullStream);
+
+      const responseMessages = messageList.get.response.db();
+      const assistantMsg = responseMessages.find(msg => msg.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // Count reasoning parts — there must be exactly one for rs_abc123
+      const reasoningParts = assistantMsg!.content.parts!.filter(p => p.type === 'reasoning');
+      expect(reasoningParts).toHaveLength(1);
+
+      // The single reasoning part should have the complete text from both deltas
+      expect((reasoningParts[0] as any).details[0].text).toBe('Let me think about this...');
+
+      // It should use the final providerMetadata (from reasoning-end)
+      expect(reasoningParts[0]!.providerMetadata).toEqual({
+        openai: { itemId: 'rs_abc123', signature: 'sig_final' },
+      });
+
+      // Text should also be correctly assembled
+      const textParts = assistantMsg!.content.parts!.filter(p => p.type === 'text');
+      expect(textParts).toHaveLength(1);
+      expect((textParts[0] as any).text).toBe('Here is my answer.');
+    });
+
     it('should send sources', async () => {
       const messageList = createMessageListWithUserMessage();
       const modelWithSourcesLocal = new MockModel({
@@ -359,7 +447,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send files', async () => {
@@ -393,7 +481,7 @@ export function fullStreamTests({
 
       const converted = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(converted).toMatchSnapshot();
+      expect(stripMastraCreatedAt(converted)).toMatchSnapshot();
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
@@ -410,7 +498,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -442,7 +530,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send tool calls', async () => {
@@ -485,7 +573,7 @@ export function fullStreamTests({
 
                 expect(toolChoice).toStrictEqual({ type: 'required' });
 
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -534,7 +622,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send tool call deltas', async () => {
@@ -631,7 +719,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it('should send tool results', async () => {
@@ -701,7 +789,7 @@ export function fullStreamTests({
               // console.info('TOOL 1', inputData, options);
 
               expect(inputData).toStrictEqual({ value: 'value' });
-              expect(options.messages).toStrictEqual([
+              expectPromptWithoutMastraCreatedAt(options.messages, [
                 { role: 'user', content: [{ type: 'text', text: 'test-input' }] },
               ]);
               return `${inputData.value}-result`;
@@ -716,7 +804,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it('should send delayed asynchronous tool results', async () => {
@@ -797,7 +885,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
       vi.useFakeTimers();
       vi.setSystemTime(mockDate);
     });
@@ -849,7 +937,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
   });
 }

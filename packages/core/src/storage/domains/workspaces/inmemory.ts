@@ -38,14 +38,12 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageWorkspaceType | null> {
-    this.logger.debug(`InMemoryWorkspacesStorage: getById called for ${id}`);
     const config = this.db.workspaces.get(id);
     return config ? this.deepCopyConfig(config) : null;
   }
 
   async create(input: { workspace: StorageCreateWorkspaceInput }): Promise<StorageWorkspaceType> {
     const { workspace } = input;
-    this.logger.debug(`InMemoryWorkspacesStorage: create called for ${workspace.id}`);
 
     if (this.db.workspaces.has(workspace.id)) {
       throw new Error(`Workspace with id ${workspace.id} already exists`);
@@ -84,7 +82,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
 
   async update(input: StorageUpdateWorkspaceInput): Promise<StorageWorkspaceType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemoryWorkspacesStorage: update called for ${id}`);
 
     const existingConfig = this.db.workspaces.get(id);
     if (!existingConfig) {
@@ -183,7 +180,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemoryWorkspacesStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.workspaces.delete(id);
     // Also delete all versions for this workspace
@@ -193,8 +189,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   async list(args?: StorageListWorkspacesInput): Promise<StorageListWorkspacesOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryWorkspacesStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -247,8 +241,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   // ==========================================================================
 
   async createVersion(input: CreateWorkspaceVersionInput): Promise<WorkspaceVersion> {
-    this.logger.debug(`InMemoryWorkspacesStorage: createVersion called for workspace ${input.workspaceId}`);
-
     // Check if version with this ID already exists
     if (this.db.workspaceVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -272,16 +264,11 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   }
 
   async getVersion(id: string): Promise<WorkspaceVersion | null> {
-    this.logger.debug(`InMemoryWorkspacesStorage: getVersion called for ${id}`);
     const version = this.db.workspaceVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(workspaceId: string, versionNumber: number): Promise<WorkspaceVersion | null> {
-    this.logger.debug(
-      `InMemoryWorkspacesStorage: getVersionByNumber called for workspace ${workspaceId}, v${versionNumber}`,
-    );
-
     for (const version of this.db.workspaceVersions.values()) {
       if (version.workspaceId === workspaceId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -291,8 +278,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   }
 
   async getLatestVersion(workspaceId: string): Promise<WorkspaceVersion | null> {
-    this.logger.debug(`InMemoryWorkspacesStorage: getLatestVersion called for workspace ${workspaceId}`);
-
     let latest: WorkspaceVersion | null = null;
     for (const version of this.db.workspaceVersions.values()) {
       if (version.workspaceId === workspaceId) {
@@ -307,8 +292,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   async listVersions(input: ListWorkspaceVersionsInput): Promise<ListWorkspaceVersionsOutput> {
     const { workspaceId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryWorkspacesStorage: listVersions called for workspace ${workspaceId}`);
 
     // Normalize perPage (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -345,13 +328,10 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemoryWorkspacesStorage: deleteVersion called for ${id}`);
     this.db.workspaceVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemoryWorkspacesStorage: deleteVersionsByParentId called for workspace ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.workspaceVersions.entries()) {
       if (version.workspaceId === entityId) {
@@ -365,8 +345,6 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
   }
 
   async countVersions(workspaceId: string): Promise<number> {
-    this.logger.debug(`InMemoryWorkspacesStorage: countVersions called for workspace ${workspaceId}`);
-
     let count = 0;
     for (const version of this.db.workspaceVersions.values()) {
       if (version.workspaceId === workspaceId) {

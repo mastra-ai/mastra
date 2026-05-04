@@ -1,42 +1,51 @@
 ---
-title: "Observability overview | Observability"
-description: Monitor and debug applications with Mastra's Observability features.
+title: "Observability overview"
+description: "Understand how Mastra's tracing, metrics, and logging work together to help you monitor, debug, and optimize AI applications."
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/loggers"
   - "@mastra/observability"
 ---
 
 # Observability overview
 
-Mastra provides observability features for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with tools that understand AI-specific patterns.
+Mastra's observability system gives you visibility into every agent run, workflow step, tool call, and model interaction. It captures three complementary signals that work together to help you understand what your application is doing and why.
 
-## Key features
+- [**Tracing**](/docs/observability/tracing/overview): Records every operation as a hierarchical timeline of spans, capturing inputs, outputs, token usage, and timing.
+- [**Logging**](/docs/observability/logging): Forwards structured log entries from your application and Mastra internals to observability storage, correlated to traces automatically.
+- [**Metrics**](/docs/observability/metrics/overview): Extracts duration, token usage, and cost data from traces automatically, with no additional instrumentation required.
 
-### Tracing
+## When to use observability
 
-Specialized tracing for AI operations that captures:
+- Debug unexpected agent behavior by inspecting the full decision path, tool calls, and model responses.
+- Monitor latency across agents, workflows, and tools to identify bottlenecks.
+- Track token consumption and estimated cost over time to control spending.
+- Diagnose workflow failures by tracing execution through each step.
+- Compare agent performance before and after prompt or model changes.
 
-- **Model interactions**: Token usage, latency, prompts, and completions
-- **Agent execution**: Decision paths, tool calls, and memory operations
-- **Workflow steps**: Branching logic, parallel execution, and step outputs
-- **Automatic instrumentation**: Tracing with decorators
+## How the pieces fit together
 
-## Storage requirements
+Tracing is the foundation. When observability is configured, every agent run, workflow execution, tool call, and model interaction produces a [span](https://opentelemetry.io/docs/concepts/signals/traces/#spans). Spans are organized into traces that show the full request lifecycle as a hierarchical timeline.
 
-The `DefaultExporter` persists traces to your configured storage backend. Not all storage providers support observability—for the full list, see [Storage Provider Support](/docs/observability/tracing/exporters/default#storage-provider-support).
+Metrics are derived from traces automatically. When a span ends, Mastra extracts duration, token counts, and cost estimates without any extra code. These metrics power the dashboards in [Studio](/docs/studio/observability).
 
-For production environments with high traffic, we recommend using **ClickHouse** for the observability domain via [composite storage](/reference/storage/composite). See [Production Recommendations](/docs/observability/tracing/exporters/default#production-recommendations) for details.
+Logs are correlated to traces automatically. Every `logger.info()`, `logger.warn()`, or `logger.error()` call within a traced context is tagged with the current trace and span IDs. You can navigate from a log entry directly to the trace that produced it.
 
-## Quick start
+All three signals share correlation IDs (trace ID, span ID, entity type, entity name), so you can jump between a metric spike, the traces behind it, and the logs within those traces.
 
-Configure Observability in your Mastra instance:
+## Get started
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { PinoLogger } from '@mastra/loggers'
+Install `@mastra/observability` and a storage backend:
+
+```bash npm2yarn
+npm install @mastra/observability @mastra/libsql @mastra/duckdb
+```
+
+Then configure observability in your Mastra instance. The following example uses composite storage to route observability data to DuckDB (which supports metrics aggregation) while keeping everything else in LibSQL:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
 import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { MastraCompositeStore } from '@mastra/core/storage'
 import {
   Observability,
   DefaultExporter,
@@ -45,10 +54,15 @@ import {
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  logger: new PinoLogger(),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db', // Storage is required for tracing
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
   }),
   observability: new Observability({
     configs: {
@@ -56,7 +70,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -67,16 +81,18 @@ export const mastra = new Mastra({
 })
 ```
 
-:::note[Serverless environments]
-The `file:./mastra.db` storage URL uses the local filesystem, which doesn't work in serverless environments like Vercel, AWS Lambda, or Cloudflare Workers. For serverless deployments, use external storage. See the [Vercel deployment guide](/guides/deployment/vercel#observability) for a complete example.
-:::
+This enables tracing, log forwarding, and metrics. Mastra also supports external tracing providers like Langfuse, Datadog, and any OpenTelemetry-compatible platform. See [Tracing](/docs/observability/tracing/overview) for configuration details.
 
-With this basic setup, you will see Traces and Logs in both Studio and in Mastra Cloud.
+## Storage
 
-We also support various external tracing providers like MLflow, Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [Tracing](/docs/observability/tracing/overview) documentation.
+Not all storage backends support every signal. Traces and logs work with most backends, but metrics require an OLAP-capable store like DuckDB (development) or ClickHouse (production). For the full compatibility list, see [storage provider support](/docs/observability/tracing/exporters/default#storage-provider-support).
 
-## What's next?
+For production environments with high traffic, use composite storage to route the observability domain to a dedicated backend. See [production recommendations](/docs/observability/tracing/exporters/default#production-recommendations) for details.
 
-- **[Set up Tracing](/docs/observability/tracing/overview)**: Configure tracing for your application
-- **[Configure Logging](/docs/observability/logging)**: Add structured logging
-- **[API Reference](/reference/observability/tracing/instances)**: Detailed configuration options
+## Next steps
+
+- [Tracing](/docs/observability/tracing/overview)
+- [Logging](/docs/observability/logging)
+- [Metrics](/docs/observability/metrics/overview)
+- [Mastra Studio](/docs/studio/observability)
+- [Automatic metrics reference](/reference/observability/metrics/automatic-metrics)

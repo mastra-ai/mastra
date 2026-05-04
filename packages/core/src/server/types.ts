@@ -1,7 +1,7 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
-import type { ZodError } from 'zod';
+import type { ZodError } from 'zod/v4';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -17,6 +17,8 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     }
   | {
       path: string;
@@ -25,6 +27,8 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
@@ -52,6 +56,13 @@ export type MastraAuthConfig<TUser = unknown> = {
    * Public paths for the server
    */
   authenticateToken?: (token: string, request: HonoRequest) => Promise<TUser>;
+
+  /**
+   * Maps the authenticated user to a resource ID for memory/thread scoping.
+   * When provided, the returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context
+   * after successful authentication, enabling per-user memory isolation.
+   */
+  mapUserToResourceId?(user: TUser): string | undefined | null;
 
   /**
    * Authorization function for the server
@@ -137,6 +148,25 @@ export type ServerConfig = {
    */
   host?: string;
   /**
+   * Host for Studio API URL. Use this when the server bind address
+   * differs from the public domain (e.g., binding to '0.0.0.0' but accessible at 'my-app.run.app').
+   * When not set, falls back to `host`.
+   */
+  studioHost?: string;
+  /**
+   * Protocol for Studio API URL ('http' or 'https').
+   * Use this when the public protocol differs from the server's local protocol
+   * (e.g., behind a TLS-terminating reverse proxy).
+   * When not set, falls back to auto-detected protocol based on HTTPS config.
+   */
+  studioProtocol?: 'http' | 'https';
+  /**
+   * Port for Studio API URL. Use this when the external port differs
+   * from the server's local port (e.g., server listens on 8080 but is exposed on 443).
+   * When not set, falls back to `port`.
+   */
+  studioPort?: number;
+  /**
    * Base path for Mastra Studio UI
    * @default '/'
    * @example '/my-mastra-studio'
@@ -203,6 +233,23 @@ export type ServerConfig = {
    * @default 4_718_592 bytes (4.5 MB)
    */
   bodySizeLimit?: number;
+
+  /**
+   * MCP transport options applied to all MCP HTTP and SSE routes.
+   * Use this to enable stateless mode for serverless environments
+   * (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.).
+   */
+  mcpOptions?: {
+    /**
+     * Run MCP in stateless mode without session management
+     * @default false
+     */
+    serverless?: boolean;
+    /**
+     * Custom session ID generator function
+     */
+    sessionIdGenerator?: () => string;
+  };
 
   /**
    * Authentication configuration for the server.
