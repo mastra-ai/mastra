@@ -20,7 +20,7 @@ export type { MastraLanguageModel };
 export type MastraMessageV1 = {
   id: string;
   content: string | UserContent | AssistantContent | ToolContent;
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;

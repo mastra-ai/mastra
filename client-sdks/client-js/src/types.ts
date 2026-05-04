@@ -7,6 +7,7 @@ import type {
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
+  AgentSignal,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
@@ -108,6 +109,19 @@ export interface ClientOptions {
 }
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+
+export interface SendAgentSignalParams<OUTPUT = unknown> {
+  signal: AgentSignal;
+  runId?: string;
+  resourceId?: string;
+  threadId?: string;
+  streamOptions?: Omit<AgentExecutionOptions<OUTPUT>, 'messages'>;
+}
+
+export interface SubscribeAgentThreadParams {
+  resourceId?: string;
+  threadId: string;
+}
 
 export interface RequestOptions {
   method?: string;

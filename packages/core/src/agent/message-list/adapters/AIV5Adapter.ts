@@ -25,6 +25,41 @@ function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
   });
 }
 
+function getSignalType(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const type = (signal as Record<string, unknown>).type;
+    return typeof type === 'string' ? type : message.type;
+  }
+
+  return message.type;
+}
+
+function getTextContent(message: MastraDBMessage): string {
+  return typeof message.content.content === 'string'
+    ? message.content.content
+    : (message.content.parts.find(part => part.type === 'text')?.text ?? '');
+}
+
+function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
+  const metadata = { ...(message.content.metadata ?? {}) };
+  const signal =
+    metadata.signal && typeof metadata.signal === 'object' ? (metadata.signal as Record<string, unknown>) : {};
+  delete metadata.signal;
+
+  const type = getSignalType(message) ?? 'signal';
+  return {
+    type: `data-${type}`,
+    data: {
+      id: typeof signal.id === 'string' ? signal.id : message.id,
+      type,
+      contents: getTextContent(message),
+      createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    },
+  } as AIV5Type.DataUIPart<AIV5.UIDataTypes>;
+}
+
 /**
  * Extract tool name from AI SDK v5 tool type string
  *
@@ -98,8 +133,14 @@ export class AIV5Adapter {
    * Direct conversion from MastraDBMessage to AIV5 UIMessage
    */
   static toUIMessage(dbMsg: MastraDBMessage): AIV5Type.UIMessage {
+    const signalType = dbMsg.role === 'signal' ? getSignalType(dbMsg) : undefined;
+    const isUserMessageSignal = signalType === 'user-message';
     const parts: AIV5Type.UIMessage['parts'] = [];
     const metadata: Record<string, unknown> = { ...(dbMsg.content.metadata || {}) };
+
+    if (dbMsg.role === 'signal' && !isUserMessageSignal) {
+      parts.push(toSignalDataPart(dbMsg));
+    }
 
     // Add Mastra-specific metadata
     if (dbMsg.createdAt) metadata.createdAt = dbMsg.createdAt;
@@ -109,6 +150,15 @@ export class AIV5Adapter {
     // Preserve message-level providerMetadata in metadata so it survives UI → Model conversion
     if (dbMsg.content.providerMetadata) {
       metadata.providerMetadata = dbMsg.content.providerMetadata;
+    }
+
+    if (dbMsg.role === 'signal' && !isUserMessageSignal) {
+      return {
+        id: dbMsg.id,
+        role: 'system',
+        metadata,
+        parts,
+      };
     }
 
     // 1. Handle tool invocations (only if not already in parts array)
@@ -373,7 +423,7 @@ export class AIV5Adapter {
 
     return {
       id: dbMsg.id,
-      role: dbMsg.role,
+      role: dbMsg.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : dbMsg.role,
       metadata,
       parts,
     };

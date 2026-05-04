@@ -49,6 +49,8 @@ import {
   declineNetworkToolCallBodySchema,
   observeAgentBodySchema,
   observeAgentResponseSchema,
+  sendAgentSignalBodySchema,
+  subscribeAgentThreadBodySchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
@@ -1554,6 +1556,148 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
+    }
+  },
+});
+
+export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/signals',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: sendAgentSignalBodySchema,
+  responseSchema: z.object({ accepted: z.literal(true), runId: z.string() }),
+  summary: 'Send agent signal',
+  description: 'Sends a signal to an active agent run or starts a memory thread run when the thread is idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({
+    mastra,
+    agentId,
+    requestContext: serverRequestContext,
+    signal,
+    runId,
+    resourceId,
+    threadId,
+    streamOptions,
+  }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+      const streamOptionsWithContext: { streamOptions?: any } = streamOptions
+        ? { streamOptions: { ...streamOptions, requestContext: serverRequestContext } }
+        : {};
+
+      if (effectiveThreadId && effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      if (runId) {
+        return agent.sendSignal(signal, {
+          runId,
+          ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
+          ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
+          ...streamOptionsWithContext,
+        });
+      }
+
+      if (!effectiveResourceId || !effectiveThreadId) {
+        throw new Error('resourceId and threadId are required when runId is not provided');
+      }
+
+      return agent.sendSignal(signal, {
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+        ...streamOptionsWithContext,
+      });
+    } catch (error) {
+      return handleError(error, 'error sending agent signal');
+    }
+  },
+});
+
+export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/threads/subscribe',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: subscribeAgentThreadBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Subscribe to agent thread runs',
+  description: 'Subscribes to future and active stream runs for a memory thread',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+
+      if (!effectiveThreadId) {
+        throw new Error('threadId is required');
+      }
+
+      if (effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      const subscription = await agent.subscribeToThread({
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+      });
+
+      return new ReadableStream({
+        async start(controller) {
+          const cleanup = () => {
+            subscription.cleanup();
+            try {
+              controller.close();
+            } catch {}
+          };
+
+          abortSignal?.addEventListener('abort', cleanup, { once: true });
+
+          try {
+            for await (const run of subscription.runs) {
+              controller.enqueue({
+                type: 'run-started',
+                runId: run.runId,
+                threadId: run.threadId,
+                resourceId: run.resourceId,
+              });
+              const reader = run.fullStream.getReader();
+              try {
+                while (true) {
+                  const { value, done } = await reader.read();
+                  if (done) break;
+                  controller.enqueue(value);
+                }
+              } finally {
+                reader.releaseLock();
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+        cancel() {
+          subscription.cleanup();
+        },
+      });
+    } catch (error) {
+      return handleError(error, 'error subscribing to agent thread');
     }
   },
 });

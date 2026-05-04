@@ -99,6 +99,7 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import { AgentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -111,8 +112,12 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   AgentMethodType,
-  StructuredOutputOptions,
+  AgentSignal,
+  AgentSubscribeToThreadOptions,
+  AgentThreadSubscription,
   PublicStructuredOutputOptions,
+  SendAgentSignalOptions,
+  StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
@@ -272,6 +277,14 @@ export class Agent<
    * close if they're still the active one.
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
+  /**
+   * Local fallback for standalone Agents that are not registered on a Mastra
+   * instance. Agents registered on the same Mastra instance coordinate through
+   * `mastra.agentThreadStreamRuntime` instead, so cross-agent thread locks and
+   * subscriptions are scoped to that Mastra runtime rather than process-global
+   * Agent state.
+   */
+  #threadStreamRuntime = new AgentThreadStreamRuntime();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -5907,6 +5920,23 @@ export class Agent<
     return fullOutput;
   }
 
+  #getThreadStreamRuntime() {
+    return this.#mastra?.agentThreadStreamRuntime ?? this.#threadStreamRuntime;
+  }
+
+  async subscribeToThread<OUTPUT = TOutput>(
+    options: AgentSubscribeToThreadOptions,
+  ): Promise<AgentThreadSubscription<OUTPUT>> {
+    return this.#getThreadStreamRuntime().subscribeToThread<OUTPUT>(this as Agent<any, any, any, any>, options);
+  }
+
+  sendSignal<OUTPUT = TOutput>(
+    signal: AgentSignal,
+    target: SendAgentSignalOptions<OUTPUT>,
+  ): { accepted: true; runId: string } {
+    return this.#getThreadStreamRuntime().sendSignal(this as Agent<any, any, any, any>, signal, target);
+  }
+
   async stream<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -5990,6 +6020,8 @@ export class Agent<
       });
     }
 
+    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(this as Agent<any, any, any, any>, mergedOptions);
+
     const executeOptions = {
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
@@ -6027,6 +6059,12 @@ export class Agent<
         text: 'An unknown error occurred while streaming',
       });
     }
+
+    this.#getThreadStreamRuntime().registerRun(
+      this as Agent<any, any, any, any>,
+      result.result,
+      mergedOptions as AgentExecutionOptions<OUTPUT>,
+    );
 
     return result.result;
   }

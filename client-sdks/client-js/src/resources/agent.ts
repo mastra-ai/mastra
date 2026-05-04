@@ -38,6 +38,8 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -271,6 +273,21 @@ export class Agent extends BaseResource {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
+    });
+  }
+
+  sendSignal<OUTPUT = unknown>(params: SendAgentSignalParams<OUTPUT>): Promise<{ accepted: true; runId: string }> {
+    return this.request(`/agents/${this.agentId}/signals`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  subscribeToThread(params: SubscribeAgentThreadParams): Promise<Response> {
+    return this.request(`/agents/${this.agentId}/threads/subscribe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
     });
   }
 

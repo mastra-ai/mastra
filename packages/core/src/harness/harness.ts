@@ -1619,7 +1619,7 @@ export class Harness<TState = {}> {
 
   private convertToHarnessMessage(msg: {
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'signal';
     createdAt: Date;
     content: {
       parts: Array<{
@@ -1682,7 +1682,7 @@ export class Harness<TState = {}> {
 
       return {
         id: msg.id,
-        role: msg.role,
+        role: msg.role === 'signal' ? 'user' : msg.role,
         content,
         createdAt: msg.createdAt,
       };
@@ -1829,7 +1829,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    return { id: msg.id, role: msg.role, content, createdAt: msg.createdAt };
+    return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
   }
 
   /**

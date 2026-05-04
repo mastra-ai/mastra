@@ -45,6 +45,34 @@ function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
   });
 }
 
+function getSignalType(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const type = (signal as Record<string, unknown>).type;
+    return typeof type === 'string' ? type : message.type;
+  }
+
+  return message.type;
+}
+
+function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
+  const metadata = { ...(message.content.metadata ?? {}) };
+  const signal =
+    metadata.signal && typeof metadata.signal === 'object' ? (metadata.signal as Record<string, unknown>) : {};
+  delete metadata.signal;
+
+  return {
+    type: `data-${getSignalType(message) ?? 'signal'}`,
+    data: {
+      id: typeof signal.id === 'string' ? signal.id : message.id,
+      type: getSignalType(message) ?? 'signal',
+      contents,
+      createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    },
+  } as MastraMessagePart;
+}
+
 // Re-export for backward compatibility
 export type { UIMessageWithMetadata };
 
@@ -157,7 +185,11 @@ export class AIV4Adapter {
       parts.push({ type: 'text', text: '' });
     }
 
-    const v4Parts = preserveExtendedParts(parts);
+    const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
+    const isUserMessageSignal = signalType === 'user-message';
+    const v4Parts = preserveExtendedParts(
+      m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
+    );
 
     if (m.role === `user`) {
       const uiMessage: UIMessageWithMetadata = {
@@ -196,8 +228,8 @@ export class AIV4Adapter {
 
     const uiMessage: UIMessageWithMetadata = {
       id: m.id,
-      role: m.role,
-      content: m.content.content || contentString,
+      role: m.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : m.role,
+      content: m.role === 'signal' && !isUserMessageSignal ? '' : m.content.content || contentString,
       createdAt: m.createdAt,
       parts: v4Parts,
       experimental_attachments: experimentalAttachments,

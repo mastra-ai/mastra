@@ -514,6 +514,25 @@ export const observeAgentBodySchema = z.object({
   offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });
 
+export const sendAgentSignalBodySchema = z.object({
+  signal: z.object({
+    id: z.string().optional(),
+    type: z.string(),
+    contents: z.string(),
+    createdAt: z.union([z.string(), z.date()]).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  }),
+  runId: z.string().optional(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+  streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+});
+
+export const subscribeAgentThreadBodySchema = z.object({
+  resourceId: z.string().optional(),
+  threadId: z.string(),
+});
+
 /**
  * Response schema for observe endpoint (streaming response)
  */

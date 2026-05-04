@@ -16,6 +16,8 @@ import {
   GENERATE_AGENT_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  SEND_AGENT_SIGNAL_ROUTE,
+  SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
 } from './agents';
@@ -1020,6 +1022,145 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toBe(expectedStream);
+    });
+  });
+
+  describe('SIGNAL_ROUTES', () => {
+    it('should send a signal using context resource and thread values', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Signal Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      });
+      let capturedSignal: any;
+      let capturedTarget: any;
+
+      vi.spyOn(mockAgent, 'sendSignal').mockImplementation((signal, target) => {
+        capturedSignal = signal;
+        capturedTarget = target;
+        return { accepted: true, runId: 'signal-run-id' };
+      });
+
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-b',
+        threadId: 'client-thread',
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(capturedSignal).toEqual({ type: 'user-message', contents: 'hello' });
+      expect(capturedTarget).toMatchObject({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      });
+    });
+
+    it('should reject sending a signal to a thread owned by a different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should subscribe to a thread and stream future run chunks', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Subscribe Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-from-context',
+      });
+      let capturedTarget: any;
+      const cleanup = vi.fn();
+      const chunk = { type: 'text-delta', id: 'text-1', delta: 'hello' };
+
+      vi.spyOn(mockAgent, 'subscribeToThread').mockImplementation(async target => {
+        capturedTarget = target;
+        return {
+          cleanup,
+          runs: (async function* () {
+            yield {
+              runId: 'subscribed-run-id',
+              threadId: target.threadId,
+              resourceId: target.resourceId,
+              fullStream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue(chunk);
+                  controller.close();
+                },
+              }),
+              output: {} as any,
+              cleanup: vi.fn(),
+            };
+          })(),
+        } as any;
+      });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-b',
+        threadId: 'client-thread',
+      } as any)) as ReadableStream;
+
+      expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
+      const reader = stream.getReader();
+      await expect(reader.read()).resolves.toEqual({
+        value: {
+          type: 'run-started',
+          runId: 'subscribed-run-id',
+          threadId: 'subscribe-thread-from-context',
+          resourceId: 'user-a',
+        },
+        done: false,
+      });
+      await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
+      await reader.cancel();
+      expect(cleanup).toHaveBeenCalled();
+    });
+
+    it('should reject subscribing to a thread owned by a different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'subscribe-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
   });
 });

@@ -40,6 +40,7 @@ import type {
 } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { MastraModelOutput } from '../stream/base/output';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -75,6 +76,31 @@ export type ToolsInput = Record<
 >;
 
 export type AgentInstructions = SystemMessage;
+
+export type { AgentSignalInput as AgentSignal, AgentSignalType, AgentSignalDataPart } from './signals';
+
+export type SendAgentSignalOptions<OUTPUT = unknown> =
+  | { runId: string; resourceId?: string; threadId?: string; streamOptions?: AgentExecutionOptions<OUTPUT> }
+  | { runId?: string; resourceId: string; threadId: string; streamOptions?: AgentExecutionOptions<OUTPUT> };
+
+export interface AgentThreadRun<OUTPUT = unknown> {
+  output: MastraModelOutput<OUTPUT>;
+  readonly fullStream: ReadableStream<any>;
+  runId: string;
+  threadId: string;
+  resourceId?: string;
+  cleanup: () => void;
+}
+
+export interface AgentSubscribeToThreadOptions {
+  resourceId?: string;
+  threadId: string;
+}
+
+export interface AgentThreadSubscription<OUTPUT = unknown> {
+  runs: AsyncIterable<AgentThreadRun<OUTPUT>>;
+  cleanup: () => void;
+}
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
