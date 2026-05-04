@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MainSidebar, MainSidebarProvider } from './main-sidebar';
-import type { MainSidebarProviderProps } from './main-sidebar';
-import { TooltipProvider } from '../Tooltip';
 import { Home, Bot, Workflow, Settings, Database, FileText, Users, Bell, LifeBuoy, BookOpen } from 'lucide-react';
 import { useState, forwardRef } from 'react';
+import { TooltipProvider } from '../Tooltip';
+import { MainSidebar, MainSidebarProvider } from './main-sidebar';
+import type { MainSidebarProviderProps } from './main-sidebar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 

@@ -4,8 +4,8 @@ import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import type { NavLink } from './main-sidebar-nav-link';
 import { MainSidebarNavList } from './main-sidebar-nav-list';
 import { MainSidebarNavSection } from './main-sidebar-nav-section';
-import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 import type { NavSection } from './main-sidebar-nav-section';
+import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 
 export type MainSidebarSectionsProps = {
   sections: NavSection[];

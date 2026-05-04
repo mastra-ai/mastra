@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { useCallback, useEffect, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { cn } from '@/lib/utils';
 
