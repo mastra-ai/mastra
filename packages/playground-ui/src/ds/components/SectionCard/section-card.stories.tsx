@@ -14,10 +14,7 @@ type Story = StoryObj<typeof SectionCard>;
 
 export const Default: Story = {
   render: () => (
-    <SectionCard
-      title="Activity Over Time"
-      description="Track request volume, cost, and latency over time"
-    >
+    <SectionCard title="Activity Over Time" description="Track request volume, cost, and latency over time">
       <p className="text-neutral3">Body content goes here.</p>
     </SectionCard>
   ),
