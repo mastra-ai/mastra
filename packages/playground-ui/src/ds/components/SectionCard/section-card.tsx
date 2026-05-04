@@ -46,7 +46,7 @@ export function SectionCard({
         <div className="min-w-0">
           <CardHeading title={title} description={description} tone={danger ? 'danger' : 'default'} />
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        {action != null ? <div className="shrink-0">{action}</div> : null}
       </div>
       <div
         className={cn(
