@@ -3,6 +3,9 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
+import type { IMastraLogger } from '../../logger';
+import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -1541,6 +1544,130 @@ saveAndErrorTests('v2');
  * original message.
  */
 describe('savePerStep should persist messages during step execution (issue #13984)', () => {
+  it('should persist raw tool results separately from providerMetadata.mastra.modelOutput during savePerStep', async () => {
+    let doStreamCallCount = 0;
+
+    const toolCallModel = new MockLanguageModelV2({
+      doStream: async () => {
+        doStreamCallCount++;
+        if (doStreamCallCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'echo-tool',
+                input: '{"input": "hello"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response after tool' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const mockMemory = new MockMemory();
+    const persistedSnapshots: MastraDBMessage[][] = [];
+    mockMemory.saveMessages = async function (...args) {
+      persistedSnapshots.push(structuredClone(args[0].messages));
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    const rawResult = {
+      output: 'hello',
+      nested: { raw: true },
+      rows: [{ id: 1, value: 'x' }],
+    };
+    const modelOutput = [{ type: 'text', text: 'Echoed hello' }];
+
+    const echoTool = createTool({
+      id: 'echo-tool',
+      description: 'Echoes the input',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({
+        output: z.string(),
+        nested: z.object({ raw: z.boolean() }),
+        rows: z.array(z.object({ id: z.number(), value: z.string() })),
+      }),
+      execute: async () => rawResult,
+      toModelOutput: () => modelOutput,
+    });
+
+    const agent = new Agent({
+      id: 'save-per-step-model-output-agent',
+      name: 'Save Per Step Model Output Test',
+      instructions: 'Call the echo-tool, then summarize the result.',
+      model: toolCallModel,
+      memory: mockMemory,
+      tools: { 'echo-tool': echoTool },
+    });
+
+    const result = await agent.stream('test message', {
+      memory: {
+        thread: 'thread-save-per-step-model-output',
+        resource: 'resource-save-per-step-model-output',
+      },
+      savePerStep: true,
+    });
+
+    await result.consumeStream();
+
+    expect(persistedSnapshots.length).toBeGreaterThan(0);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-save-per-step-model-output',
+      resourceId: 'resource-save-per-step-model-output',
+    });
+
+    const assistantMessages = recalled.messages.filter(m => m.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    const toolResultPart = assistantMessages
+      .flatMap(message => message.content.parts ?? [])
+      .find(
+        part =>
+          part.type === 'tool-invocation' &&
+          (part as any).toolInvocation?.toolCallId === 'call-1' &&
+          (part as any).toolInvocation?.state === 'result',
+      ) as any;
+
+    const persistedAssistantText = assistantMessages
+      .flatMap(message => message.content.parts ?? [])
+      .filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('');
+
+    expect(toolResultPart).toBeDefined();
+    expect(toolResultPart.toolInvocation.result).toEqual(rawResult);
+    expect(toolResultPart.providerMetadata?.mastra?.modelOutput).toEqual(modelOutput);
+    expect(persistedAssistantText).toContain('Response after tool');
+  });
+
   it('should persist messages from completed steps when stream is aborted', async () => {
     let doStreamCallCount = 0;
 
@@ -1659,5 +1786,298 @@ describe('savePerStep should persist messages during step execution (issue #1398
     });
     expect(recalled.messages.length).toBeGreaterThan(0);
     expect(recalled.messages.some(m => m.role === 'user')).toBe(true);
+  });
+});
+
+/**
+ * Regression test for orphaned AGENT_RUN spans.
+ *
+ * When an LLM call throws (e.g. AI_APICallError), the `onFinish` callback
+ * in map-results-step returns early for `finishReason === 'error'`, which
+ * used to skip `executeOnFinish` — the only place `agentSpan.end()` is called.
+ *
+ * The result: the AGENT_RUN span was never ended, so exporters (like
+ * Datadog) that wait for the root span to end never emitted the trace.
+ */
+describe('AGENT_RUN span must be ended on LLM errors', () => {
+  function createMockModelSpanTracker() {
+    return {
+      getTracingContext: vi.fn(() => ({})),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+    };
+  }
+
+  function createMockSpan(name: string, parentSpan?: any) {
+    const span: Record<string, any> = {
+      id: `mock-${name}-id`,
+      traceId: 'mock-trace-id',
+      name,
+      type: name,
+      startTime: new Date(),
+      isInternal: false,
+      isEvent: false,
+      isValid: true,
+      isRootSpan: !parentSpan,
+      parent: parentSpan,
+
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+      exportSpan: vi.fn(),
+      getParentSpanId: vi.fn(() => parentSpan?.id),
+      findParent: vi.fn(),
+      executeInContext: vi.fn(async (fn: () => Promise<any>) => fn()),
+      executeInContextSync: vi.fn((fn: () => any) => fn()),
+      get externalTraceId() {
+        return 'mock-trace-id';
+      },
+
+      createTracker: vi.fn(() => createMockModelSpanTracker()),
+      createChildSpan: vi.fn((_opts: any) => createMockSpan(_opts?.type ?? 'child', span)),
+      createEventSpan: vi.fn((_opts: any) => createMockSpan(_opts?.type ?? 'event', span)),
+      getCorrelationContext: vi.fn(),
+      observabilityInstance: {} as any,
+    };
+
+    return span;
+  }
+
+  async function mockGetOrCreateSpan() {
+    let agentRunSpan: any;
+
+    const mod = await import('../../observability/utils');
+    const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
+      const span = createMockSpan(opts.type ?? opts.name ?? 'unknown');
+      if (opts.type === 'agent_run') {
+        agentRunSpan = span;
+      }
+      return span as any;
+    });
+
+    return { spy, getAgentRunSpan: () => agentRunSpan };
+  }
+
+  it('should end the AGENT_RUN span when the model throws during doStream', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const errorModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw new Error('LLM API call failed');
+        },
+        doStream: async () => {
+          throw new Error('LLM API call failed');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span',
+        name: 'Test Orphaned Span',
+        model: errorModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalled();
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should synthesize a MastraError when the stream finishes with finishReason error but no error payload', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn().mockReturnValue(new Map()),
+        listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+        listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+      } satisfies IMastraLogger;
+      const mastra = new Mastra({ logger });
+
+      const errorFinishModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [],
+          finishReason: 'error',
+          usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'gemini-2.5-flash',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'finish',
+              finishReason: 'error',
+              usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-finish-reason-error-without-payload',
+        name: 'Test Finish Reason Error Without Payload',
+        model: errorFinishModel,
+        instructions: 'You are a helpful assistant.',
+        mastra,
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      await output.consumeStream();
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalled();
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0].error).toBeInstanceOf(MastraError);
+      expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe(
+        'Agent stream finished with finishReason "error" but no error payload was provided',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Error in agent stream',
+        expect.objectContaining({
+          error: expect.any(MastraError),
+          modelId: 'mock-model-id',
+          provider: 'mock-provider',
+          runId: expect.any(String),
+        }),
+      );
+      const loggedError = (logger.error as ReturnType<typeof vi.fn>).mock.calls[0][1]?.error;
+      expect(loggedError).toBeInstanceOf(MastraError);
+      expect(loggedError).not.toBeUndefined();
+      expect(loggedError.message).toBe(
+        'Agent stream finished with finishReason "error" but no error payload was provided',
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should end the AGENT_RUN span when the model stream emits an error chunk mid-stream', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const streamError = new Error('LLM mid-stream error');
+      const errorMidStreamModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw streamError;
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'partial ' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'error' as const, error: streamError },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span-midstream',
+        name: 'Test Orphaned Span MidStream',
+        model: errorMidStreamModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalled();
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should end the AGENT_RUN span on successful stream (control test)', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const successModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Hello!' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-span-success',
+        name: 'Test Span Success',
+        model: successModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.error).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

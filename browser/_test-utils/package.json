@@ -1,0 +1,22 @@
+{
+  "name": "@internal/browser-test-utils",
+  "version": "0.0.9",
+  "description": "Test utilities for browser providers (Stagehand, AgentBrowser)",
+  "type": "module",
+  "main": "src/index.ts",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@mastra/core": "*",
+    "vitest": "*"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "vitest": "catalog:"
+  }
+}

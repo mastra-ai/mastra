@@ -2,7 +2,7 @@
 export * from './types';
 
 // Factory + config
-export { createWorkspaceTools, resolveToolConfig } from './tools';
+export { createWorkspaceTools, resolveToolConfig, type ResolvedToolConfig } from './tools';
 
 // Individual standalone tools
 export { readFileTool } from './read-file';
@@ -35,6 +35,10 @@ export {
   DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_TAIL_LINES,
 } from './output-helpers';
+
+// Tracing
+export { startWorkspaceSpan } from './tracing';
+export type { WorkspaceSpanOptions, WorkspaceSpanHandle } from './tracing';
 
 // Tree formatter
 export * from './tree-formatter';

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CopyButton } from './copy-button';
 import { TooltipProvider } from '../Tooltip';
+import { CopyButton } from './copy-button';
 
 const meta: Meta<typeof CopyButton> = {
   title: 'Composite/CopyButton',
@@ -15,7 +15,6 @@ const meta: Meta<typeof CopyButton> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -66,7 +65,7 @@ export const InContext: Story = {
 
 export const CodeBlock: Story = {
   render: () => (
-    <div className="relative p-4 bg-surface4 rounded-md w-[300px]">
+    <div className="relative p-4 bg-surface4 rounded-md w-dropdown-max-height">
       <CopyButton content="const agent = new Agent()" className="absolute top-2 right-2" />
       <pre className="text-sm font-mono text-neutral5">const agent = new Agent()</pre>
     </div>

@@ -211,6 +211,12 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    */
   getMountConfig?(): FilesystemMountConfig;
 
+  /**
+   * Resolve a path to its canonical form.
+   * Filesystems without symlink or alias semantics can return the input path unchanged.
+   */
+  realpath?(path: string): Promise<string>;
+
   // ---------------------------------------------------------------------------
   // File Operations
   // ---------------------------------------------------------------------------

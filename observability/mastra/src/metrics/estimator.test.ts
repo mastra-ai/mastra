@@ -263,4 +263,109 @@ describe('estimateCosts', () => {
       },
     });
   });
+
+  it('falls back to base model pricing when model name has date suffix', () => {
+    // Model names like "gpt-4o-mini-2024-07-18" should match "gpt-4o-mini" pricing
+    const costs = estimateCosts(
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini-2024-07-18',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    // The cost context reflects the matched pricing model's name (base model)
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      estimatedCost: 0.00015,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+      },
+    });
+  });
+
+  it('falls back to base model pricing when model name has dots and date suffix', () => {
+    // Model names like "gpt-5.4-mini-2026-03-17" should match "gpt-5-4-mini" pricing
+    // (dots converted to dashes, then date suffix stripped)
+    const costs = estimateCosts(
+      {
+        provider: 'openai',
+        model: 'gpt-4o.mini-2024-07-18',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    // gpt-4o.mini-2024-07-18 -> gpt-4o-mini (dots to dashes, strip date)
+    // Cost context reflects the matched pricing model
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      estimatedCost: 0.00015,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+      },
+    });
+  });
+
+  it('strips Anthropic-style date suffix (YYYYMMDD format)', () => {
+    // Anthropic uses YYYYMMDD format: claude-sonnet-4-5-20250929
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-5-20250929',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      estimatedCost: 0.003,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'anthropic-claude-sonnet-4-5',
+        tier_index: 0,
+      },
+    });
+  });
+
+  it('strips Anthropic-style date suffix with trailing suffix (e.g., -thinking)', () => {
+    // Anthropic sometimes has suffixes after the date: claude-sonnet-4-5-20250929-thinking
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-5-20250929-thinking',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    // Should strip date but keep -thinking suffix for lookup
+    // Falls back to claude-sonnet-4-5 since claude-sonnet-4-5-thinking isn't in fixture
+    // But the stripping produces claude-sonnet-4-5-thinking, which won't match
+    // So it should fail to find the model
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+      error: 'no_matching_model',
+    });
+  });
 });

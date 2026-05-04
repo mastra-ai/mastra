@@ -1,6 +1,5 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-
 import { formatCompact } from '../components/metrics-utils';
 import { useMetricsFilters } from './use-metrics-filters';
 
@@ -10,6 +9,8 @@ export interface ModelUsageRow {
   output: string;
   cacheRead: string;
   cacheWrite: string;
+  cost: number | null;
+  costUnit: string | null;
 }
 
 export function useModelUsageCostMetrics() {
@@ -37,30 +38,54 @@ export function useModelUsageCostMetrics() {
         ),
       );
 
-      const modelMap = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number }>();
+      type ModelEntry = {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheWrite: number;
+        cost: number | null;
+        costUnit: string | null;
+      };
 
-      const ensureModel = (model: string) => {
+      const modelMap = new Map<string, ModelEntry>();
+
+      const ensureModel = (model: string): ModelEntry => {
         if (!modelMap.has(model)) {
-          modelMap.set(model, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+          modelMap.set(model, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: null, costUnit: null });
         }
         return modelMap.get(model)!;
       };
 
+      const addCost = (entry: ModelEntry, group: { estimatedCost?: number | null; costUnit?: string | null }) => {
+        if (group.estimatedCost != null) {
+          entry.cost = (entry.cost ?? 0) + group.estimatedCost;
+          if (group.costUnit) entry.costUnit = group.costUnit;
+        }
+      };
+
       for (const group of inputRes.groups) {
         const m = group.dimensions.model ?? 'unknown';
-        ensureModel(m).input = group.value;
+        const entry = ensureModel(m);
+        entry.input = group.value;
+        addCost(entry, group);
       }
       for (const group of outputRes.groups) {
         const m = group.dimensions.model ?? 'unknown';
-        ensureModel(m).output = group.value;
+        const entry = ensureModel(m);
+        entry.output = group.value;
+        addCost(entry, group);
       }
       for (const group of cacheReadRes.groups) {
         const m = group.dimensions.model ?? 'unknown';
-        ensureModel(m).cacheRead = group.value;
+        const entry = ensureModel(m);
+        entry.cacheRead = group.value;
+        addCost(entry, group);
       }
       for (const group of cacheWriteRes.groups) {
         const m = group.dimensions.model ?? 'unknown';
-        ensureModel(m).cacheWrite = group.value;
+        const entry = ensureModel(m);
+        entry.cacheWrite = group.value;
+        addCost(entry, group);
       }
 
       return Array.from(modelMap.entries())
@@ -70,6 +95,8 @@ export function useModelUsageCostMetrics() {
           output: formatCompact(vals.output),
           cacheRead: formatCompact(vals.cacheRead),
           cacheWrite: formatCompact(vals.cacheWrite),
+          cost: vals.cost,
+          costUnit: vals.costUnit,
         }))
         .sort((a, b) => a.model.localeCompare(b.model));
     },

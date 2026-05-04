@@ -19,6 +19,29 @@ export const mastraClient = new MastraClient({
 })
 ```
 
+## `RequestContext`
+
+When you use `RequestContext` with the client SDK, import it from `@mastra/client-js`.
+
+```typescript
+import { MastraClient, RequestContext } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'http://localhost:4111/',
+})
+
+const requestContext = new RequestContext()
+requestContext.set('userId', 'user-123')
+
+const agent = client.getAgent('support-agent')
+
+const response = await agent.generate('Summarize this ticket', {
+  requestContext,
+})
+```
+
+You can also pass `requestContext` as a `Record<string, any>`.
+
 ## Parameters
 
 <PropertiesTable
@@ -82,7 +105,7 @@ export const mastraClient = new MastraClient({
     description: 'Retrieves a specific agent instance by ID.',
   },
   {
-    name: 'getMemoryThreads(params)',
+    name: 'listMemoryThreads(params)',
     type: 'Promise<StorageThreadType[]>',
     description:
       'Retrieves memory threads for the specified resource and agent. Requires a `resourceId` and an `agentId`.',
@@ -126,6 +149,17 @@ export const mastraClient = new MastraClient({
     name: 'getWorkflow(workflowId)',
     type: 'Workflow',
     description: 'Retrieves a specific workflow instance by ID.',
+  },
+  {
+    name: 'responses',
+    type: 'Responses',
+    description:
+      'Provides OpenAI-style Responses API helpers with `create()`, `retrieve()`, `stream()`, and `delete()`.',
+  },
+  {
+    name: 'conversations',
+    type: 'Conversations',
+    description: 'Provides conversation helpers with `create()`, `retrieve()`, `delete()`, and `items.list()`.',
   },
   {
     name: 'getVector(vectorName)',

@@ -62,7 +62,7 @@ export function HorizontalBars({
                             <div
                               key={seg.label}
                               className={cn(
-                                'absolute inset-y-0',
+                                'absolute inset-y-0 opacity-40 dark:opacity-100',
                                 si === 0 && 'rounded-l',
                                 isLastWithValue && 'rounded-r',
                               )}
@@ -78,7 +78,7 @@ export function HorizontalBars({
                         return (
                           <div
                             key={seg.label}
-                            className="absolute inset-y-0 left-0 rounded"
+                            className="absolute inset-y-0 left-0 rounded opacity-40 dark:opacity-100"
                             style={{ width: `${pct}%`, backgroundColor: seg.color }}
                           />
                         );

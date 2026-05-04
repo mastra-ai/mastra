@@ -213,7 +213,9 @@ export function generateOpenAPIDocument(
   routes: readonly ServerRoute[],
   info: { title: string; version: string; description?: string },
 ): any {
-  const paths: Record<string, any> = {};
+  // Use a null-prototype map so that route paths like "__proto__" cannot
+  // pollute Object.prototype via the assignment below.
+  const paths: Record<string, any> = Object.create(null);
 
   // Build paths object from routes
   // Convert Express-style :param to OpenAPI-style {param}
@@ -222,7 +224,7 @@ export function generateOpenAPIDocument(
 
     const openapiPath = route.path.replace(/:(\w+)/g, '{$1}');
     if (!paths[openapiPath]) {
-      paths[openapiPath] = {};
+      paths[openapiPath] = Object.create(null);
     }
 
     // Convert Zod schemas to JSON Schema

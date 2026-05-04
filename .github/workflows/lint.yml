@@ -93,6 +93,9 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+      - name: Validate generated files are committed
+        run: bash .github/scripts/check-clean-worktree.bash
+
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm install --ignore-workspace
@@ -121,10 +124,31 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
-        run: pnpm add -w --no-lockfile globby
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile globby
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
+
+  agents-md-check:
+    name: Validate AGENTS.md files
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == 'mastra-ai/mastra'
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          package-manager-cache: false
+
+      - name: Run AGENTS.md validator
+        run: node .github/scripts/validate-agents-md.mjs
 
   peerdeps-check:
     name: Validate peer dependencies
@@ -150,7 +174,7 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
-        run: pnpm add -w --no-lockfile semver
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile semver
 
       - name: bump versions
         run: npx changeset version

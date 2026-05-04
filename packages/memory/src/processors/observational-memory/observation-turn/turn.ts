@@ -1,13 +1,15 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import type { ObservationModelContext } from '../types';
 
 import { ObservationStep } from './step';
-import type { TurnContext, TurnResult } from './types';
+import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
 /**
  * Represents a single turn in the agent conversation — one user message → agent response cycle.
@@ -51,12 +53,35 @@ export class ObservationTurn {
   /** Optional request context for observation calls. */
   requestContext?: RequestContext;
 
-  constructor(
-    readonly om: ObservationalMemory,
-    readonly threadId: string,
-    readonly resourceId: string | undefined,
-    readonly messageList: MessageList,
-  ) {}
+  /** Optional observability context for nested OM spans. */
+  observabilityContext?: ObservabilityContext;
+
+  /** Current actor model for this step. Updated by the processor before prepare(). */
+  actorModelContext?: ObservationModelContext;
+
+  /** Processor-provided hooks for turn/step lifecycle integration. */
+  readonly hooks: ObservationTurnHooks;
+
+  constructor(opts: {
+    om: ObservationalMemory;
+    threadId: string;
+    resourceId?: string;
+    messageList: MessageList;
+    observabilityContext?: ObservabilityContext;
+    hooks?: ObservationTurnHooks;
+  }) {
+    this.om = opts.om;
+    this.threadId = opts.threadId;
+    this.resourceId = opts.resourceId;
+    this.messageList = opts.messageList;
+    this.observabilityContext = opts.observabilityContext;
+    this.hooks = opts.hooks ?? {};
+  }
+
+  readonly om: ObservationalMemory;
+  readonly threadId: string;
+  readonly resourceId: string | undefined;
+  readonly messageList: MessageList;
 
   /** The current cached record. Refreshed after mutations (activate/observe/reflect). */
   get record(): ObservationalMemoryRecord {
@@ -73,6 +98,11 @@ export class ObservationTurn {
   /** The current step, if one exists. */
   get currentStep(): ObservationStep | undefined {
     return this._currentStep;
+  }
+
+  addHooks(hooks?: ObservationTurnHooks): void {
+    if (!hooks) return;
+    Object.assign(this.hooks, hooks);
   }
 
   /**
@@ -132,7 +162,7 @@ export class ObservationTurn {
   }
 
   /**
-   * Finalize the turn: save any remaining messages, await in-flight buffering, return final state.
+   * Finalize the turn: save any remaining messages and return the latest record state.
    */
   async end(): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
@@ -145,30 +175,6 @@ export class ObservationTurn {
     if (unsavedMessages.length > 0) {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
     }
-
-    // Await any in-flight async buffering
-    await this.om.waitForBuffering(this.threadId, this.resourceId);
-
-    // Trigger observation if threshold is exceeded but no step > 0 ran.
-    // This handles the agent.generate() path where processInputStep is only called
-    // for step 0 (which doesn't observe), and step 1+ never gets processInputStep.
-    const status = await this.om.getStatus({
-      threadId: this.threadId,
-      resourceId: this.resourceId,
-      messages: this.messageList.get.all.db(),
-    });
-    if (status.shouldObserve) {
-      await this.om.observe({
-        threadId: this.threadId,
-        resourceId: this.resourceId,
-        messages: this.messageList.get.all.db(),
-        requestContext: this.requestContext,
-        writer: this.writer,
-      });
-    }
-
-    // Fetch final record state
-    await this.refreshRecord();
 
     return { record: this._record! };
   }

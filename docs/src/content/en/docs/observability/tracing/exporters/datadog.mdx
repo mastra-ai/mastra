@@ -2,13 +2,18 @@
 title: "Datadog exporter | Tracing | Observability"
 description: "Send traces to Datadog for LLM observability and analytics"
 packages:
-  - "@mastra/core"
   - "@mastra/observability"
 ---
 
 # Datadog exporter
 
 [Datadog](https://datadoghq.com/) is a comprehensive monitoring platform with dedicated LLM Observability features. The Datadog exporter sends your traces to Datadog's LLM Observability product, providing insights into model performance, token usage, and conversation flows.
+
+:::info Also using `dd-trace` APM?
+
+If you also use `dd-trace` APM auto-instrumentation, consider the [Datadog Bridge](/docs/observability/tracing/bridges/datadog) instead. The bridge creates `dd-trace` spans in real time so HTTP and database calls inside tools and processors are correctly nested under their parent Mastra span. The exporter on its own sends LLM Observability data after execution completes, which means auto-instrumented APM spans fall back to the request handler.
+
+:::
 
 ## Installation
 
@@ -118,7 +123,7 @@ Note: When using agent mode, the API key is read from the local agent's configur
 
 ## Span type mapping
 
-Mastra span types are automatically mapped to Datadog LLMObs span kinds:
+Mastra span types are automatically mapped to Datadog LLM Observability span kinds:
 
 | Mastra SpanType | Datadog Kind |
 | - | - |

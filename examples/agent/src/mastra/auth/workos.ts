@@ -6,7 +6,7 @@
 import type { AuthResult } from './types';
 
 export async function initWorkOS(): Promise<AuthResult> {
-  const { MastraAuthWorkos, MastraRBACWorkos } = await import('@mastra/auth-workos');
+  const { MastraAuthWorkos, MastraRBACWorkos, MastraFGAWorkos } = await import('@mastra/auth-workos');
 
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
@@ -28,6 +28,28 @@ export async function initWorkOS(): Promise<AuthResult> {
     },
   });
 
+  const organizationId = process.env.WORKOS_ORGANIZATION_ID;
+  if (!organizationId) {
+    throw new Error('WORKOS_ORGANIZATION_ID is required to enable WorkOS FGA');
+  }
+
+  const fgaProvider = new MastraFGAWorkos({
+    organizationId,
+    resourceMapping: {
+      // Per-resource filtering: agent ID maps directly to WorkOS resource external ID
+      agent: { fgaResourceType: 'agent' },
+      workflow: { fgaResourceType: 'workflow' },
+      tool: { fgaResourceType: 'tool' },
+      // Thread access scoped to user
+      memory: { fgaResourceType: 'user', deriveId: ctx => ctx.user.userId },
+    },
+    // Permission slugs in WorkOS match Mastra permission strings exactly
+    // (e.g., 'agents:read' → 'agents:read'), so no mapping needed.
+    // The provider falls through to the original permission string
+    // when no mapping is found.
+    permissionMapping: {},
+  });
+
   console.log('[Auth] Using WorkOS authentication');
-  return { mastraAuth, rbacProvider };
+  return { mastraAuth, rbacProvider, fgaProvider };
 }

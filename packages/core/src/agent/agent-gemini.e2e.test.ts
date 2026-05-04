@@ -174,6 +174,52 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(Array.isArray(result.object.benefits)).toBe(true);
     });
 
+    it('should strip workflow tools when toolChoice is none with structured output', async () => {
+      const summarizeStep = createStep({
+        id: 'summarize-topic-step',
+        description: 'Summarize a topic',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        execute: async ({ inputData }) => ({
+          summary: `Summary for ${inputData.topic}`,
+        }),
+      });
+
+      const summarizeWorkflow = createWorkflow({
+        id: 'summarize-topic-workflow',
+        description: 'Workflow for summarizing topics',
+        steps: [],
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(summarizeStep)
+        .commit();
+
+      const agent = new Agent({
+        id: 'structured-gemini-workflow-none',
+        name: 'Structured Gemini Workflow None Agent',
+        instructions: 'You answer directly when asked for structured output.',
+        model: MODEL,
+        workflows: { summarizeWorkflow },
+      });
+
+      const result = await agent.generate('Return a short structured summary about exercise.', {
+        structuredOutput: {
+          schema: z.object({
+            summary: z.string(),
+          }),
+        },
+        prepareStep: () => ({
+          toolChoice: 'none',
+        }),
+      });
+
+      expect(result.object).toBeDefined();
+      expect(typeof result.object.summary).toBe('string');
+      expect((result.request.body as any).tools).toBeUndefined();
+    });
+
     it('should throw error for empty user message', async () => {
       const agent = new Agent({
         id: 'system-context-agent',

@@ -5,14 +5,13 @@ import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import prettier from 'prettier';
 
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
 import { interactivePrompt } from '../init/utils.js';
 import type { LLMProvider } from '../init/utils.js';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, isGitInitialized } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -94,7 +93,7 @@ Start the development server:
 ${packageManager} run dev
 \`\`\`
 
-Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/getting-started/studio). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/studio/overview). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
 
 You can start editing files inside the \`src/mastra\` directory. The development server will automatically reload whenever you make changes.
 
@@ -102,25 +101,23 @@ You can start editing files inside the \`src/mastra\` directory. The development
 
 To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
 
-If you're new to AI agents, check out our [course](https://mastra.ai/course) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
-## Deploy on Mastra Cloud
+## Deploy to the Mastra platform
 
-[Mastra Cloud](https://cloud.mastra.ai/) gives you a serverless agent environment with atomic deployments. Access your agents from anywhere and monitor performance. Make sure they don't go off the rails with evals and tracing.
+The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework:
 
-Check out the [deployment guide](https://mastra.ai/docs/deployment/overview) for more details.`;
+- **Studio**: A hosted visual environment for testing agents, running workflows, and inspecting traces
+- **Server**: A production deployment target that runs your Mastra application as an API server
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
+Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).`;
 
-  await fs.writeFile(readmePath, formattedContent);
+  await fs.writeFile(readmePath, content);
 };
 
-async function installMastraDependency(
+async function installMastraDependencies(
   pm: PackageManager,
-  dependency: string,
+  dependencies: string[],
   versionTag: string,
   isDev: boolean,
   timeout?: number,
@@ -135,19 +132,23 @@ async function installMastraDependency(
     installCommand = `${installCommand} -D`;
   }
 
+  const dependenciesWithVersion = dependencies.map(dependency => `${dependency}${versionTag}`).join(' ');
+
   try {
-    await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
+    await execWithTimeout(`${pm} ${installCommand} ${dependenciesWithVersion}`, timeout);
   } catch (err) {
     if (versionTag === '@latest') {
       throw new Error(
-        `Failed to install ${dependency}@latest: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `Failed to install ${dependenciesWithVersion}: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
     }
+
+    const latestDependencies = dependencies.map(dependency => `${dependency}@latest`).join(' ');
     try {
-      await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+      await execWithTimeout(`${pm} ${installCommand} ${latestDependencies}`, timeout);
     } catch (fallbackErr) {
       throw new Error(
-        `Failed to install ${dependency} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
+        `Failed to install ${dependencies.join(', ')} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
       );
     }
   }
@@ -195,6 +196,8 @@ export const createMastraProject = async ({
   let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
+    const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
+
     result = await interactivePrompt({
       options: { showBanner: false },
       skip: {
@@ -203,6 +206,7 @@ export const createMastraProject = async ({
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
         directory: true,
+        gitInit: skipGitInit,
       },
     });
   }
@@ -279,7 +283,7 @@ export const createMastraProject = async ({
     const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
 
     try {
-      await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
+      await installMastraDependencies(pm, ['mastra'], versionTag, true, timeout);
     } catch (error) {
       throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -287,9 +291,13 @@ export const createMastraProject = async ({
 
     s.start('Installing Mastra dependencies');
     try {
-      await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
-      await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
-      await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+      await installMastraDependencies(
+        pm,
+        ['@mastra/core', '@mastra/libsql', '@mastra/memory'],
+        versionTag,
+        false,
+        timeout,
+      );
     } catch (error) {
       throw new Error(
         `Failed to install Mastra dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,

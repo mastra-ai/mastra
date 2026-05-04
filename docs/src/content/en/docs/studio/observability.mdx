@@ -1,0 +1,104 @@
+---
+title: "Observability | Studio"
+description: Use the metrics dashboard, traces view, and logs browser in Studio to monitor agent, workflow, and tool performance.
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+import { VideoPlayer } from "@site/src/components/video-player";
+
+# Studio observability
+
+Studio includes these observability views:
+
+- **Metrics** for aggregate performance data
+- **Traces** for individual request inspection
+- **Logs** for browsing internal and application logs
+
+All require an [observability storage backend](#quickstart) to be configured.
+
+## Metrics
+
+A dashboard that summarizes agent, workflow, and tool performance over a configurable time range (last 24 hours to 30 days). The top row shows total agent runs, model cost, token consumption, and average scorer performance. Below that, detailed cards break down model usage and cost per model, token usage per agent, trace volume with completed and error counts, latency percentiles (p50 and p95), and scorer trends over time.
+
+Visit the [metrics overview](/docs/observability/metrics/overview) for more details.
+
+:::note
+
+Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
+
+:::
+
+## Traces
+
+When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
+
+Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [tracing overview](/docs/observability/tracing/overview) for more details.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668518/observability_qmwbao.mp4" />
+
+## Logs
+
+Browse internal Mastra logs forwarded to your observability storage. Logs provide full-text search (across message content, entity names, and trace IDs), date presets (last 24 hours to 30 days), and multi-select filters for level, entity type, and entity name. Selecting a log opens a detail panel showing the full message, structured data, and metadata. If the log is correlated with a trace, you can navigate directly to the trace and span timeline.
+
+Log forwarding is enabled by default when you configure observability. See [logging](/docs/observability/logging) for level configuration, query examples, and customization details.
+
+## Quickstart
+
+For detailed instructions, follow the [observability instructions](/docs/observability/overview). To get up and running quickly, add the `@mastra/observability` package to your project and configure it with [LibSQL](/reference/storage/libsql) and [DuckDB](/reference/vectors/duckdb) for a local development setup that supports both traces and metrics.
+
+```bash npm2yarn
+npm install @mastra/observability @mastra/libsql @mastra/duckdb
+```
+
+Then add the following to your `src/mastra/index.ts`:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability'
+
+export const mastra = new Mastra({
+  // highlight-start
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+  }),
+  // highlight-end
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
+    },
+  }),
+})
+```
+
+## Related
+
+- [Observability overview](/docs/observability/overview)
+- [Metrics overview](/docs/observability/metrics/overview)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Logging](/docs/observability/logging)

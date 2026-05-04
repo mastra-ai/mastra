@@ -1,6 +1,6 @@
 {
   "name": "@mastra/braintrust",
-  "version": "1.0.10-alpha.0",
+  "version": "1.0.23-alpha.1",
   "description": "Braintrust observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

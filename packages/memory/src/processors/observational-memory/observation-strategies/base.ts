@@ -5,7 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
-import { wrapInObservationGroup } from '../observation-groups';
+import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
 import { getMaxThreshold } from '../thresholds';
@@ -17,7 +17,7 @@ import type {
   ResolvedReflectionConfig,
 } from '../types';
 
-import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
+import type { ObservationRunOpts, ObservationRunResult, ObserverOutput, ProcessedObservation } from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
 const hasherPromise = xxhash();
@@ -38,6 +38,14 @@ export interface StrategyDeps {
   reflector: ReflectorRunner;
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
+  onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
 
@@ -73,8 +81,12 @@ export abstract class ObservationStrategy {
     this.retrieval = deps.retrieval;
   }
 
-  /** Run the full observation lifecycle. */
-  async run(): Promise<void> {
+  /**
+   * Run the full observation lifecycle.
+   * @returns Result with `observed` flag and optional `usage` from the observer LLM call.
+   * @throws On sync/resource-scoped observer failure after failed markers (same as pre–Option-A contract).
+   */
+  async run(): Promise<ObservationRunResult> {
     const { record, threadId, abortSignal, writer, reflectionHooks, requestContext } = this.opts;
     const cycleId = this.generateCycleId();
 
@@ -82,7 +94,7 @@ export abstract class ObservationStrategy {
       if (this.needsLock) {
         const fresh = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
         if (fresh?.lastObservedAt && record.lastObservedAt && fresh.lastObservedAt > record.lastObservedAt) {
-          return;
+          return { observed: false };
         }
       }
 
@@ -102,25 +114,35 @@ export abstract class ObservationStrategy {
           abortSignal,
           reflectionHooks,
           requestContext,
+          observabilityContext: this.opts.observabilityContext,
         });
       }
+
+      return { observed: true, usage: output.usage };
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
-      // Persist the failed marker to storage so it survives page reloads
-      const failedMarkerForStorage = {
-        type: 'data-om-observation-failed',
-        data: {
-          cycleId,
-          operationType: 'observation',
-          startedAt: new Date().toISOString(),
-          error: error instanceof Error ? error.message : String(error),
-          recordId: record.id,
-          threadId,
-        },
-      };
-      await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
-      if (abortSignal?.aborted) throw error;
+
+      if (!this.rethrowOnFailure) {
+        const failedMarkerForStorage = {
+          type: 'data-om-observation-failed',
+          data: {
+            cycleId,
+            operationType: 'observation',
+            startedAt: new Date().toISOString(),
+            error: error instanceof Error ? error.message : String(error),
+            recordId: record.id,
+            threadId,
+          },
+        };
+        await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
+        if (abortSignal?.aborted) throw error;
+        omError('[OM] Observation failed', error);
+        return { observed: false };
+      }
+
+      // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.
       omError('[OM] Observation failed', error);
+      throw error;
     }
   }
 
@@ -132,8 +154,12 @@ export abstract class ObservationStrategy {
 
   protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
     if (this.opts.writer) {
-      await this.opts.writer.custom(marker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      await this.opts.writer.custom({ ...marker, transient: true }).catch(() => {});
     }
+
+    const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
+    await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
   }
 
   protected getObservationMarkerConfig(): ObservationMarkerConfig {
@@ -268,6 +294,35 @@ export abstract class ObservationStrategy {
     return `${existingObservations}${boundary}${newThreadSection}`;
   }
 
+  protected async indexObservationGroups(
+    observations: string,
+    threadId: string,
+    resourceId?: string,
+    observedAt?: Date,
+  ): Promise<void> {
+    if (!resourceId || !this.deps.onIndexObservations) {
+      return;
+    }
+
+    const groups = parseObservationGroups(observations);
+    if (groups.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      groups.map(group =>
+        this.deps.onIndexObservations!({
+          text: group.content,
+          groupId: group.id,
+          range: group.range,
+          threadId,
+          resourceId,
+          observedAt,
+        }),
+      ),
+    );
+  }
+
   // ── Marker persistence ──────────────────────────────────────
 
   /**
@@ -349,6 +404,7 @@ export abstract class ObservationStrategy {
 
   abstract get needsLock(): boolean;
   abstract get needsReflection(): boolean;
+  abstract get rethrowOnFailure(): boolean;
   abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
   abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;

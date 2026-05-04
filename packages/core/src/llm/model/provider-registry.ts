@@ -8,6 +8,9 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
+import { MastraGateway } from './gateways/mastra.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
 import staticRegistry from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
@@ -18,6 +21,42 @@ interface RegistryData {
   providers: Record<string, ProviderConfig>;
   models: Record<string, string[]>;
   version: string;
+}
+
+/**
+ * Check if running in offline/air-gapped mode.
+ * When MASTRA_OFFLINE is set to 'true' or '1', all network fetches for provider data are skipped.
+ */
+export function isOfflineMode(): boolean {
+  const value = process.env.MASTRA_OFFLINE;
+  return value === 'true' || value === '1';
+}
+
+function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {
+  const enabledGatewayIds = new Set<string>();
+
+  for (const gateway of gateways) {
+    const enabled = gateway.shouldEnable();
+    if (enabled) {
+      enabledGatewayIds.add(gateway.id);
+    }
+  }
+
+  return enabledGatewayIds;
+}
+
+function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: Set<string>): RegistryData {
+  const providers = Object.fromEntries(
+    Object.entries(data.providers).filter(([, config]) => enabledGatewayIds.has(config.gateway)),
+  );
+
+  const models = Object.fromEntries(Object.entries(data.models).filter(([providerId]) => providerId in providers));
+
+  return {
+    ...data,
+    providers,
+    models,
+  };
 }
 
 // In-memory cache for dynamic loading mode
@@ -195,10 +234,17 @@ function getPackageRoot(): string {
   }
 }
 
-function loadRegistry(useDynamicLoading: boolean): RegistryData {
+function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGateway[] = []): RegistryData {
+  const enabledGatewayIds = getEnabledGatewayIds([
+    new ModelsDevGateway({}),
+    new NetlifyGateway(),
+    new MastraGateway(),
+    ...customGateways,
+  ]);
+
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
-    return staticRegistry;
+    return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   }
 
   // Dynamic loading mode: sync global cache to local before loading
@@ -226,7 +272,8 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
   for (const jsonPath of possiblePaths) {
     try {
       const content = fs.readFileSync(jsonPath, 'utf-8');
-      registryData = JSON.parse(content);
+      const parsed = JSON.parse(content) as RegistryData;
+      registryData = sanitizeRegistryDataForRuntime(parsed, enabledGatewayIds);
       return registryData!;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -248,7 +295,7 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
           // Ignore deletion errors
         }
         // Fall back to static registry (bundled at build time)
-        registryData = staticRegistry;
+        registryData = sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
         return registryData;
       }
 
@@ -262,7 +309,7 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
     `[GatewayRegistry] Could not load provider registry from any path. Falling back to static registry.\n` +
       `Tried paths:\n${errors.join('\n')}`,
   );
-  registryData = staticRegistry;
+  registryData = sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   return registryData;
 }
 
@@ -420,7 +467,13 @@ export class GatewayRegistry {
   static getInstance(options?: GatewayRegistryOptions): GatewayRegistry {
     if (!GatewayRegistry.instance) {
       GatewayRegistry.instance = new GatewayRegistry(options);
+      return GatewayRegistry.instance;
     }
+
+    if (options?.useDynamicLoading === true) {
+      GatewayRegistry.instance.useDynamicLoading = true;
+    }
+
     return GatewayRegistry.instance;
   }
 
@@ -452,6 +505,11 @@ export class GatewayRegistry {
       return;
     }
 
+    // Skip all network fetches when running in offline/air-gapped mode
+    if (isOfflineMode()) {
+      return;
+    }
+
     if (this.isRefreshing && !forceRefresh) {
       // console.debug('[GatewayRegistry] Sync already in progress, skipping...');
       return;
@@ -465,10 +523,15 @@ export class GatewayRegistry {
       // Import gateway classes and generation functions
       const { ModelsDevGateway } = await import('./gateways/models-dev.js');
       const { NetlifyGateway } = await import('./gateways/netlify.js');
+      const { MastraGateway } = await import('./gateways/mastra.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
-      // Initialize default gateways
-      const defaultGateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+      // Initialize default gateways. Mastra Gateway is dynamic-only and should not be written into checked-in static artifacts.
+      const defaultGateways = [
+        new ModelsDevGateway({}),
+        new NetlifyGateway(),
+        ...(writeToSrc ? [] : [new MastraGateway()]),
+      ];
 
       // Combine default and custom gateways
       const gateways = [...defaultGateways, ...this.customGateways];
@@ -542,6 +605,11 @@ export class GatewayRegistry {
       return;
     }
 
+    // Skip auto-refresh when running in offline/air-gapped mode
+    if (isOfflineMode()) {
+      return;
+    }
+
     if (this.refreshInterval) {
       // console.debug('[GatewayRegistry] Auto-refresh already running');
       return;
@@ -598,7 +666,7 @@ export class GatewayRegistry {
    * Get provider configuration by ID
    */
   getProviderConfig(providerId: string): ProviderConfig | undefined {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return data.providers[providerId];
   }
 
@@ -606,7 +674,7 @@ export class GatewayRegistry {
    * Check if a provider is registered
    */
   isProviderRegistered(providerId: string): boolean {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return providerId in data.providers;
   }
 
@@ -614,7 +682,7 @@ export class GatewayRegistry {
    * Get all registered providers
    */
   getProviders(): Record<string, ProviderConfig> {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return data.providers;
   }
 
@@ -622,16 +690,18 @@ export class GatewayRegistry {
    * Get all models
    */
   getModels(): Record<string, string[]> {
-    return loadRegistry(this.useDynamicLoading).models;
+    return loadRegistry(this.useDynamicLoading, this.customGateways).models;
   }
 }
 
 // Auto-start refresh if enabled
 // Defaults to enabled when MASTRA_DEV=true (which enables dynamic loading by default)
+// Disabled entirely when MASTRA_OFFLINE is set (air-gapped/offline environments)
 const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
 const autoRefreshEnabled =
-  process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
-  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev);
+  !isOfflineMode() &&
+  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
+    (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev));
 
 if (autoRefreshEnabled) {
   // console.debug('[GatewayRegistry] Auto-refresh enabled');

@@ -27,7 +27,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'gateways/azure-openai',
-          label: 'Azure-openai',
+          label: 'Azure OpenAI',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/mastra',
+          label: 'Mastra',
         },
         {
           type: 'doc',
@@ -100,6 +105,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
+        },
+        {
+          type: 'doc',
+          id: 'providers/abliteration-ai',
+          label: 'abliteration.ai',
         },
         {
           type: 'doc',
@@ -203,6 +213,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/digitalocean',
+          label: 'DigitalOcean',
+        },
+        {
+          type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
         },
@@ -223,13 +238,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/firmware',
-          label: 'Firmware',
+          id: 'providers/friendli',
+          label: 'Friendli',
         },
         {
           type: 'doc',
-          id: 'providers/friendli',
-          label: 'Friendli',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
         },
         {
           type: 'doc',
@@ -245,6 +260,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hpc-ai',
+          label: 'HPC-AI',
         },
         {
           type: 'doc',
@@ -298,6 +318,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/lmstudio',
           label: 'LMStudio',
         },
@@ -333,6 +358,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/mixlayer',
+          label: 'Mixlayer',
+        },
+        {
+          type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
         },
@@ -365,6 +395,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/neuralwatt',
+          label: 'Neuralwatt',
         },
         {
           type: 'doc',
@@ -438,6 +473,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/regolo-ai',
+          label: 'Regolo AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
         },
@@ -483,6 +523,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-tokenhub',
+          label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
+          id: 'providers/the-grid-ai',
+          label: 'The Grid AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
         },
@@ -503,6 +553,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/wafer.ai',
+          label: 'Wafer',
+        },
+        {
+          type: 'doc',
           id: 'providers/wandb',
           label: 'Weights & Biases',
         },
@@ -510,6 +565,21 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi',
           label: 'Xiaomi',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-cn',
+          label: 'Xiaomi Token Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-ams',
+          label: 'Xiaomi Token Plan (Europe)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-sgp',
+          label: 'Xiaomi Token Plan (Singapore)',
         },
         {
           type: 'doc',

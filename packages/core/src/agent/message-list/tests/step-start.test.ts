@@ -41,7 +41,8 @@ describe('MessageList.stepStart', () => {
 
     expect(result).toBe(true);
     const parts = messageList.get.all.db()[0]?.content?.parts ?? [];
-    expect(parts[parts.length - 1]).toEqual({ type: 'step-start' });
+    expect(parts[parts.length - 1]).toMatchObject({ type: 'step-start' });
+    expect(parts[parts.length - 1]).toEqual(expect.objectContaining({ createdAt: expect.any(Number) }));
   });
 
   it('should return false when the last message is a user message', () => {
@@ -113,6 +114,89 @@ describe('MessageList.stepStart', () => {
     expect(unsaved.length).toBeGreaterThan(0);
     const drained = unsaved.find(m => m.id === msg.id);
     expect(drained).toBeDefined();
-    expect(drained?.content.parts.at(-1)).toEqual({ type: 'step-start' });
+    expect(drained?.content.parts.at(-1)).toMatchObject({ type: 'step-start' });
+    expect(drained?.content.parts.at(-1)).toEqual(expect.objectContaining({ createdAt: expect.any(Number) }));
+  });
+
+  it('should enrich the latest step-start with the resolved model', () => {
+    const messageList = new MessageList();
+    const msg = makeAssistantMessage([
+      { type: 'text', text: 'hello' },
+      { type: 'step-start', createdAt: Date.now() },
+    ]);
+    messageList.add(msg, 'response');
+
+    const result = messageList.enrichLastStepStart('openai/gpt-4o');
+
+    expect(result).toBe(true);
+    expect(messageList.get.all.db()[0]?.content.parts.at(-1)).toMatchObject({
+      type: 'step-start',
+      model: 'openai/gpt-4o',
+    });
+  });
+
+  it('should return false when no step-start exists to enrich', () => {
+    const messageList = new MessageList();
+    messageList.add(makeAssistantMessage([{ type: 'text', text: 'hello' }]), 'response');
+
+    const result = messageList.enrichLastStepStart('openai/gpt-4o');
+
+    expect(result).toBe(false);
+  });
+
+  it('should not overwrite a step-start that already has a model attributed', () => {
+    const messageList = new MessageList();
+    const msg = makeAssistantMessage([
+      { type: 'text', text: 'hello' },
+      { type: 'step-start', createdAt: Date.now(), model: 'openai/gpt-4o' },
+    ]);
+    messageList.add(msg, 'response');
+
+    const result = messageList.enrichLastStepStart('anthropic/claude-opus-4-7');
+
+    expect(result).toBe(false);
+    expect(messageList.get.all.db()[0]?.content.parts.at(-1)).toMatchObject({
+      type: 'step-start',
+      model: 'openai/gpt-4o',
+    });
+  });
+
+  it('preserves step-start metadata when merge inserts a synthetic step-start', () => {
+    const messageList = new MessageList();
+    const stepStartCreatedAt = 1234567890;
+
+    messageList.add(
+      makeAssistantMessage(
+        [
+          { type: 'text', text: 'First step' },
+          { type: 'step-start', createdAt: stepStartCreatedAt, model: 'openai/gpt-4o' },
+          { type: 'text', text: 'Starting second step' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tc-1',
+              toolName: 'weather',
+              args: { city: 'London' },
+              result: { temp: 72 },
+            },
+          },
+        ],
+        'assistant-1',
+      ),
+      'response',
+    );
+
+    messageList.add(makeAssistantMessage([{ type: 'text', text: 'Second step' }], 'assistant-1'), 'response');
+
+    const stepStarts = messageList.get.all.db()[0]?.content.parts.filter(p => p.type === 'step-start') ?? [];
+
+    expect(stepStarts).toHaveLength(2);
+    expect(stepStarts[1]).toMatchObject({
+      type: 'step-start',
+      model: 'openai/gpt-4o',
+    });
+    expect(stepStarts[1]?.createdAt).toEqual(expect.any(Number));
+    expect(stepStarts[1]?.createdAt).not.toBe(stepStartCreatedAt);
   });
 });

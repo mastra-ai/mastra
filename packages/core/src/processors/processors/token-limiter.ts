@@ -26,6 +26,7 @@ export interface TokenLimiterOptions {
    * - 'part': Only count tokens in the current part
    */
   countMode?: 'cumulative' | 'part';
+  trimMode?: 'best-fit' | 'contiguous';
 }
 
 /**
@@ -35,7 +36,14 @@ export interface TokenLimiterOptions {
  * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
  * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor<'token-limiter', { systemTokens: number; limit: number }> {
+type TokenLimiterTripWireMetadata = {
+  systemTokens: number;
+  limit: number;
+  remainingBudget?: number;
+  messageCount?: number;
+};
+
+export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoderPromise: Promise<Tiktoken> | undefined;
@@ -43,6 +51,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
   private maxTokens: number;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
+  private trimMode: 'best-fit' | 'contiguous';
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -54,12 +63,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       this.maxTokens = options;
       this.strategy = 'truncate';
       this.countMode = 'cumulative';
+      this.trimMode = 'best-fit';
     } else {
       // Object format with all options
       this.maxTokens = options.limit;
       this.customEncoding = options.encoding;
       this.strategy = options.strategy || 'truncate';
       this.countMode = options.countMode || 'cumulative';
+      this.trimMode = options.trimMode || 'best-fit';
     }
   }
 
@@ -138,10 +149,24 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       const messageTokens = await this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        messagesToKeep.unshift(message); // Add to beginning to maintain order
+        messagesToKeep.unshift(message);
         currentTokens += messageTokens;
+      } else {
+        if (this.trimMode === 'contiguous') {
+          break;
+        }
+        // best-fit → continue (existing behavior)
       }
-      // Continue checking all messages, don't break early
+    }
+
+    if (messagesToKeep.length === 0) {
+      throw new TripWire(
+        'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
+        {
+          retry: false,
+          metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
+        },
+      );
     }
 
     // Remove messages that don't fit within the token budget

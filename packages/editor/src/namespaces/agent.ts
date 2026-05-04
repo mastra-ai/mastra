@@ -44,16 +44,6 @@ import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
 
-/**
- * Stores original code-defined agent field values before stored overrides are applied,
- * so they can be restored if the stored config is later removed.
- * Only instructions and tools are tracked — these are the only fields that
- * `applyStoredOverrides` mutates.
- */
-type AgentOverridableFields = Pick<ReturnType<Agent['__getOverridableFields']>, 'instructions' | 'tools'>;
-
-const codeDefaults = new WeakMap<Agent, AgentOverridableFields>();
-
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
@@ -92,6 +82,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
 
           if (!version) return null;
+          if (version.agentId !== id) {
+            throw new Error(`Version "${version.id}" does not belong to agent "${id}"`);
+          }
 
           const {
             id: versionId,
@@ -183,6 +176,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   async applyStoredOverrides(
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
+    requestContext?: RequestContext,
   ): Promise<Agent> {
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
@@ -193,23 +187,27 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ? { versionId: options.versionId }
           : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
-    } catch {
-      // Editor not registered, storage not available, or agent not found — restore and return unchanged
-      this.restoreCodeDefaults(agent);
+    } catch (error) {
+      // If a specific versionId was requested, don't fail open — propagate the error
+      if (options && 'versionId' in options) {
+        throw error;
+      }
+      // Editor not registered, storage not available, or agent not found — return unchanged
       return agent;
     }
 
     if (!storedConfig) {
-      // No stored config — restore code defaults if previously overridden
-      this.restoreCodeDefaults(agent);
       return agent;
     }
 
-    // Save the original code-defined values before first override,
-    // then restore to a clean state before re-applying (so updated stored configs work correctly)
-    this.saveCodeDefaults(agent);
-    this.restoreCodeDefaults(agent);
-    this.saveCodeDefaults(agent);
+    // If requesting published status but no version has been published, don't override the code-defined agent
+    const requestedPublished = options && !('versionId' in options) && options.status === 'published';
+    if (requestedPublished && !storedConfig.activeVersionId) {
+      return agent;
+    }
+
+    // Fork the agent so overrides don't mutate the singleton instance
+    const fork = agent.__fork();
 
     this.logger?.debug(`[applyStoredOverrides] Applying stored overrides to code agent "${agent.id}"`);
 
@@ -217,7 +215,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
       const resolved = this.resolveStoredInstructions(storedConfig.instructions);
       if (resolved !== undefined) {
-        agent.__updateInstructions(resolved);
+        fork.__updateInstructions(resolved);
       }
     }
 
@@ -236,7 +234,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
-        const originalTools = agent.listTools.bind(agent);
+        const originalTools = fork.listTools.bind(fork);
         const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
           const codeTools = await originalTools({ requestContext });
           const ctx = requestContext.toJSON();
@@ -255,7 +253,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 ctx,
               )
             : (storedConfig!.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
           const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
             ? this.accumulateObjectVariants(
@@ -269,53 +267,31 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
           return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
         };
-        agent.__setTools(toolsFn);
+        fork.__setTools(toolsFn);
       } else {
         // Static tools — resolve once and merge
-        const codeTools = await agent.listTools();
+        const codeTools = await fork.listTools();
         const registryTools = this.resolveStoredTools(
           storedConfig.tools as Record<string, StorageToolConfig> | undefined,
         );
         const mcpTools = await this.resolveStoredMCPTools(
           storedConfig.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+          requestContext,
         );
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
         );
-        agent.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+        fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
       }
     }
 
-    return agent;
-  }
+    // Persist the resolved version ID so it can be read by span attributes / handlers
+    if (storedConfig.resolvedVersionId) {
+      const existing = fork.toRawConfig() ?? {};
+      fork.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
+    }
 
-  /**
-   * Save the agent's current field values to the module-level WeakMap
-   * so they can be restored if the stored config is later removed.
-   * Only saves on the first call (guards against overwriting originals with overridden values).
-   *
-   * Only instructions and tools are saved — these are the only fields
-   * that `applyStoredOverrides` mutates.
-   */
-  private saveCodeDefaults(agent: Agent): void {
-    if (codeDefaults.has(agent)) return;
-    const fields = agent.__getOverridableFields();
-    codeDefaults.set(agent, {
-      instructions: fields.instructions,
-      tools: fields.tools,
-    });
-  }
-
-  /**
-   * Restore the agent's original code-defined field values from the WeakMap.
-   * Clears the saved snapshot afterward.
-   */
-  private restoreCodeDefaults(agent: Agent): void {
-    const saved = codeDefaults.get(agent);
-    if (!saved) return;
-    agent.__updateInstructions(saved.instructions);
-    agent.__setTools(saved.tools);
-    codeDefaults.delete(agent);
+    return fork;
   }
 
   // ============================================================================
@@ -436,7 +412,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
         // Resolve integration tools (tool providers)
         const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
@@ -450,7 +426,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         return { ...registryTools, ...mcpTools, ...integrationTools };
       };
     } else {
-      // All are static — resolve once at agent creation time
+      // All are static — resolve once at agent creation time (no requestContext available)
       const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -780,11 +756,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredMCPTools(
     mcpClients?: Record<string, StorageMCPClientToolsConfig>,
+    requestContext?: RequestContext,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!mcpClients || Object.keys(mcpClients).length === 0) return {};
     if (!this.mastra) return {};
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    // Build auth headers from request context when available.
+    // This allows stored MCP clients to connect to auth-protected MCP servers
+    // (e.g., the Mastra server's own MCP endpoints).
+    const authToken = requestContext?.get('mastra__authToken') as string | undefined;
+    const authRequestInit = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined;
 
     // Lazily loaded — only needed when stored MCP clients are found
     let MCPClient: any;
@@ -811,7 +794,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               continue;
             }
           }
-          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient);
+          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient, authRequestInit);
           const client = new MCPClient(clientOptions);
           tools = await client.listTools();
           this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from stored MCP client "${clientId}"`);
@@ -852,12 +835,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           }
 
           // Agent-level filter: `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+          // The UI may store tools under their bare name (e.g., "searchKnowledgeBase") while
+          // MCPClient returns them namespaced (e.g., "support_searchKnowledgeBase"), so check both.
           const hasAgentFilter = agentAllowedTools && Object.keys(agentAllowedTools).length > 0;
-          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools)) continue;
+          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools) && !(bareToolName in agentAllowedTools))
+            continue;
 
-          // Description override: agent-level (namespaced key) takes precedence over client-level (bare key)
+          // Description override: agent-level (namespaced or bare key) takes precedence over client-level (bare key)
           const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;
-          const description = agentAllowedTools?.[namespacedToolName]?.description ?? serverToolConfig?.description;
+          const description =
+            agentAllowedTools?.[namespacedToolName]?.description ??
+            agentAllowedTools?.[bareToolName]?.description ??
+            serverToolConfig?.description;
 
           if (description) {
             allTools[namespacedToolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description };
