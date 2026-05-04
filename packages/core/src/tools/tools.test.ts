@@ -166,3 +166,43 @@ describe('createTool with providerOptions', () => {
     });
   });
 });
+
+describe('suspend output validation edge cases', () => {
+  it('should skip output validation when suspendData is falsy (empty string)', async () => {
+    const tool = createTool({
+      id: 'suspend-empty-string',
+      description: 'test suspend empty string',
+      suspendSchema: z.any(),
+      execute: async (_input, context: any) => {
+        context.suspend('');
+        return undefined;
+      },
+    });
+
+    const result = await tool.execute?.({}, {
+      requestContext: new RequestContext(),
+      suspend: async () => {},
+    } as any);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should skip output validation when suspendData is 0', async () => {
+    const tool = createTool({
+      id: 'suspend-zero',
+      description: 'test suspend zero',
+      suspendSchema: z.any(),
+      execute: async (_input, context: any) => {
+        context.suspend(0);
+        return undefined;
+      },
+    });
+
+    const result = await tool.execute?.({}, {
+      requestContext: new RequestContext(),
+      suspend: async () => {},
+    } as any);
+
+    expect(result).toBeUndefined();
+  });
+});

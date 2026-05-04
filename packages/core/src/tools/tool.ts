@@ -412,7 +412,7 @@ export class Tool<
           }
         }
 
-        const skiptOutputValidation = !!(typeof output === 'undefined' && suspendData);
+        const skiptOutputValidation = typeof output === 'undefined' && suspendData !== null;
 
         // Validate output if schema exists
         const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
