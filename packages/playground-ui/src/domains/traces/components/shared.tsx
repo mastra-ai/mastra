@@ -7,17 +7,7 @@ import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
-export const spanTypePrefixes = [
-  'agent',
-  'workflow',
-  'model',
-  'mcp',
-  'tool',
-  'memory',
-  'workspace',
-  'scorer',
-  'other',
-];
+export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'memory', 'workspace', 'scorer', 'other'];
 
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
