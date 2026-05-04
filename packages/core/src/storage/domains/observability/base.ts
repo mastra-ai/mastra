@@ -75,8 +75,8 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
-  ListInvocationsArgs,
-  ListInvocationsResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   UpdateSpanArgs,
@@ -259,17 +259,18 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Lists named-entity invocations across all traces. Unlike {@link listTraces}
-   * (which returns one row per root-rooted trace), each row here is a single
-   * invocation span, including ones nested under a different root entity --
-   * useful for "show me every run of agent X" regardless of caller.
+   * Lists trace branches across all traces. Unlike {@link listTraces} (which
+   * returns one row per root-rooted trace), each row here is a single branch
+   * anchor span, including ones nested under a different root entity -- useful
+   * for "show me every run of agent X" regardless of caller. Pairs with
+   * {@link getBranch} to expand a single branch into its subtree.
    */
-  async listInvocations(_args: ListInvocationsArgs): Promise<ListInvocationsResponse> {
+  async listBranches(_args: ListBranchesArgs): Promise<ListBranchesResponse> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_LIST_INVOCATIONS_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_LIST_BRANCHES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support listing invocations',
+      text: 'This storage provider does not support listing trace branches',
     });
   }
 

@@ -495,19 +495,22 @@ export const listTracesResponseSchema = z.object({
 export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
 // ============================================================================
-// Invocations (named entities surfaced as listable rows, including non-root)
+// Trace branches (anchor spans surfaced as listable rows, including non-root)
 // ============================================================================
 
 /**
- * Span types that represent a "named entity got invoked" -- the units a user
- * thinks about when looking for a specific run, regardless of whether the
- * entity ran as the root of its trace or nested under a parent.
+ * Span types that anchor a listable trace branch -- the spans a user thinks
+ * about when looking for a specific run (agent/workflow/tool/etc.),
+ * regardless of whether the entity ran as the root of its trace or nested
+ * under a parent. Each row in {@link listBranchesArgsSchema} corresponds to
+ * one such anchor span; the subtree below it is fetched via
+ * {@link getBranchArgsSchema}.
  *
  * Excludes sub-operation spans (model_step, workflow_step, scorer_step,
- * memory_operation, rag_*, etc.) which are internal to a containing
- * invocation rather than separately listable.
+ * memory_operation, rag_*, etc.) which are internal to a containing branch
+ * rather than separately listable.
  */
-export const INVOCATION_SPAN_TYPES = [
+export const BRANCH_SPAN_TYPES = [
   SpanType.AGENT_RUN,
   SpanType.WORKFLOW_RUN,
   SpanType.PROCESSOR_RUN,
@@ -517,74 +520,76 @@ export const INVOCATION_SPAN_TYPES = [
   SpanType.MCP_TOOL_CALL,
 ] as const satisfies readonly SpanType[];
 
-/** Set form of {@link INVOCATION_SPAN_TYPES} for fast membership checks. */
-export const INVOCATION_SPAN_TYPE_SET: ReadonlySet<SpanType> = new Set(INVOCATION_SPAN_TYPES);
+/** Set form of {@link BRANCH_SPAN_TYPES} for fast membership checks. */
+export const BRANCH_SPAN_TYPE_SET: ReadonlySet<SpanType> = new Set(BRANCH_SPAN_TYPES);
 
-/** Schema for filtering invocations in list queries. */
-export const invocationsFilterSchema = z
+/** Schema for filtering branch anchor spans in list queries. */
+export const branchesFilterSchema = z
   .object({
-    // Date range filters apply to the invocation span itself
+    // Date range filters apply to the branch anchor span itself
     startedAt: dateRangeSchema.optional().describe('Filter by span start time range'),
     endedAt: dateRangeSchema.optional().describe('Filter by span end time range'),
 
-    // Narrow within the invocation set; if omitted, all invocation span types match
+    // Narrow within the branch span-type set; if omitted, all of them match
     spanType: spanTypeField.optional(),
 
     // Identifier filters
     traceId: traceIdField.optional().describe('Filter by parent trace ID'),
 
-    // Per-span context fields (apply to the invocation span, not the trace root)
+    // Per-span context fields (apply to the anchor span, not the trace root)
     ...sharedFields,
 
-    // Derived status filter (computed from this invocation's own error/endedAt)
+    // Derived status filter (computed from this anchor's own error/endedAt)
     status: traceStatusField.optional(),
   })
-  .describe('Filters for querying invocations');
+  .describe('Filters for querying trace branches');
 
-export const invocationsOrderByFieldSchema = z
+export const branchesOrderByFieldSchema = z
   .enum(['startedAt', 'endedAt'])
   .describe("Field to order by: 'startedAt' | 'endedAt'");
 
-export const invocationsOrderBySchema = z
+export const branchesOrderBySchema = z
   .object({
-    field: invocationsOrderByFieldSchema.default('startedAt').describe('Field to order by'),
+    field: branchesOrderByFieldSchema.default('startedAt').describe('Field to order by'),
     direction: sortDirectionSchema.default('DESC').describe('Sort direction'),
   })
   .describe('Order by configuration');
 
 /**
- * Arguments for listing invocations.
+ * Arguments for listing trace branches.
  *
- * Listings span every named-entity invocation ({@link INVOCATION_SPAN_TYPES}),
- * including those nested under a different root entity. Use this when you
+ * Each row is a single branch anchor span ({@link BRANCH_SPAN_TYPES}),
+ * including ones nested under a different root entity. Use this when you
  * want every run of a given agent/processor/tool regardless of how it was
- * triggered. Use {@link listTracesArgsSchema} when you want one row per trace.
+ * triggered. Use {@link listTracesArgsSchema} when you want one row per
+ * trace, and {@link getBranchArgsSchema} to expand a single branch into its
+ * subtree.
  */
-export const listInvocationsArgsSchema = z
+export const listBranchesArgsSchema = z
   .object({
-    filters: invocationsFilterSchema.optional().describe('Optional filters to apply'),
+    filters: branchesFilterSchema.optional().describe('Optional filters to apply'),
     pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: invocationsOrderBySchema
+    orderBy: branchesOrderBySchema
       .default({ field: 'startedAt', direction: 'DESC' })
       .describe('Ordering configuration (defaults to startedAt desc)'),
   })
-  .describe('Arguments for listing invocations');
+  .describe('Arguments for listing trace branches');
 
-/** Arguments for listing invocations with optional filters, pagination, and ordering */
-export type ListInvocationsArgs = z.input<typeof listInvocationsArgsSchema>;
+/** Arguments for listing branches with optional filters, pagination, and ordering */
+export type ListBranchesArgs = z.input<typeof listBranchesArgsSchema>;
 
 /**
- * Schema for listInvocations operation response. Each row is a single
- * invocation span -- repeated invocations within the same parent trace
+ * Schema for listBranches operation response. Each row is a single branch
+ * anchor span -- repeated runs of the same entity within one parent trace
  * surface as separate rows.
  */
-export const listInvocationsResponseSchema = z.object({
+export const listBranchesResponseSchema = z.object({
   pagination: paginationInfoSchema,
-  invocations: z.array(traceSpanSchema),
+  branches: z.array(traceSpanSchema),
 });
 
-/** Response containing paginated invocation spans with computed status */
-export type ListInvocationsResponse = z.infer<typeof listInvocationsResponseSchema>;
+/** Response containing paginated branch anchor spans with computed status */
+export type ListBranchesResponse = z.infer<typeof listBranchesResponseSchema>;
 
 /**
  * Schema for updating a span (without db timestamps and span IDs)

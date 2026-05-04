@@ -103,9 +103,9 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support getting lightweight traces',
     },
     {
-      name: 'listInvocations',
-      callThunk: () => storage.listInvocations({}),
-      expectedMessage: 'does not support listing invocations',
+      name: 'listBranches',
+      callThunk: () => storage.listBranches({}),
+      expectedMessage: 'does not support listing trace branches',
     },
 
     // Scores

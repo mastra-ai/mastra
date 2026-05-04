@@ -258,29 +258,29 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   // ==========================================================================
-  // Invocations
+  // Trace branches
   // ==========================================================================
 
-  describe('invocations', () => {
+  describe('branches', () => {
     /**
-     * Wait until the materialized view has populated `mastra_invocations` with
+     * Wait until the materialized view has populated `mastra_branches` with
      * the expected number of rows. The MV is incremental but ClickHouse is
      * eventually-consistent w.r.t. parts merging; in practice rows appear
      * within a single insert flush, but the retry loop guards against CI flakes.
      */
-    async function waitForInvocations(expected: number, timeoutMs = 5000): Promise<number> {
+    async function waitForBranches(expected: number, timeoutMs = 5000): Promise<number> {
       const deadline = Date.now() + timeoutMs;
       let last = -1;
       while (Date.now() < deadline) {
-        const result = await storage.listInvocations({ pagination: { perPage: 100 } });
-        last = result.invocations.length;
+        const result = await storage.listBranches({ pagination: { perPage: 100 } });
+        last = result.branches.length;
         if (last >= expected) return last;
         await new Promise(r => setTimeout(r, 100));
       }
       return last;
     }
 
-    it('surfaces nested invocations that listTraces would miss', async () => {
+    it('surfaces nested branches that listTraces would miss', async () => {
       // orderWorkflow → Observer (nested AGENT_RUN, twice) and a tool call.
       // Plus a model_step which must NOT appear (sub-operation).
       await storage.batchCreateSpans({
@@ -445,19 +445,19 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
       // Should populate: 1 workflow_run + 2 agent_run + 1 tool_call = 4.
       // The model_step is excluded by the MV WHERE clause.
-      const populated = await waitForInvocations(4);
+      const populated = await waitForBranches(4);
       expect(populated).toBe(4);
 
       // listTraces({ entityName: 'Observer' }) returns nothing since Observer
-      // is never the root span -- this is the gap listInvocations closes.
+      // is never the root span -- this is the gap listBranches closes.
       const traces = await storage.listTraces({ filters: { entityName: 'Observer' } });
       expect(traces.spans).toHaveLength(0);
 
-      const observerInvocations = await storage.listInvocations({
+      const observerBranches = await storage.listBranches({
         filters: { entityName: 'Observer' },
       });
-      expect(observerInvocations.invocations).toHaveLength(2);
-      expect(observerInvocations.invocations.every(i => i.entityName === 'Observer')).toBe(true);
+      expect(observerBranches.branches).toHaveLength(2);
+      expect(observerBranches.branches.every(i => i.entityName === 'Observer')).toBe(true);
     });
 
     it('narrows by spanType and respects pagination', async () => {
@@ -495,21 +495,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }));
       await storage.batchCreateSpans({ records });
 
-      await waitForInvocations(5);
+      await waitForBranches(5);
 
-      const onlyTools = await storage.listInvocations({
+      const onlyTools = await storage.listBranches({
         filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
         pagination: { page: 0, perPage: 2 },
       });
-      expect(onlyTools.invocations).toHaveLength(2);
+      expect(onlyTools.branches).toHaveLength(2);
       expect(onlyTools.pagination.total).toBe(5);
       expect(onlyTools.pagination.hasMore).toBe(true);
 
-      const page2 = await storage.listInvocations({
+      const page2 = await storage.listBranches({
         filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
         pagination: { page: 2, perPage: 2 },
       });
-      expect(page2.invocations).toHaveLength(1);
+      expect(page2.branches).toHaveLength(1);
       expect(page2.pagination.hasMore).toBe(false);
     });
   });

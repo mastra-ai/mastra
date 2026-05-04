@@ -86,8 +86,8 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   LightSpanRecord,
-  ListInvocationsArgs,
-  ListInvocationsResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   SpanRecord,
@@ -95,8 +95,8 @@ import type {
 } from './tracing';
 
 import {
-  INVOCATION_SPAN_TYPE_SET,
-  listInvocationsArgsSchema,
+  BRANCH_SPAN_TYPE_SET,
+  listBranchesArgsSchema,
   listTracesArgsSchema,
   TraceStatus,
   toTraceSpan,
@@ -513,20 +513,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return true;
   }
 
-  async listInvocations(args: ListInvocationsArgs): Promise<ListInvocationsResponse> {
-    const { filters, pagination, orderBy } = listInvocationsArgsSchema.parse(args);
+  async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
 
     const allowedSpanTypes = filters?.spanType
-      ? INVOCATION_SPAN_TYPE_SET.has(filters.spanType)
+      ? BRANCH_SPAN_TYPE_SET.has(filters.spanType)
         ? new Set([filters.spanType])
         : new Set<typeof filters.spanType>()
-      : INVOCATION_SPAN_TYPE_SET;
+      : BRANCH_SPAN_TYPE_SET;
 
     const matches: SpanRecord[] = [];
     for (const [, traceEntry] of this.db.traces) {
       for (const span of Object.values(traceEntry.spans)) {
         if (!allowedSpanTypes.has(span.spanType)) continue;
-        if (!this.spanMatchesInvocationFilters(span, filters)) continue;
+        if (!this.spanMatchesBranchFilters(span, filters)) continue;
         matches.push(span);
       }
     }
@@ -554,16 +554,16 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     return {
       pagination: { total, page, perPage, hasMore: end < total },
-      invocations: paged.map(toTraceSpan),
+      branches: paged.map(toTraceSpan),
     };
   }
 
   /**
-   * Check if a single span matches all provided invocation filters. All
+   * Check if a single anchor span matches all provided branch filters. All
    * predicates apply to the span itself (not the trace root) -- this is the
    * key difference from {@link traceMatchesFilters}.
    */
-  private spanMatchesInvocationFilters(span: SpanRecord, filters: ListInvocationsArgs['filters']): boolean {
+  private spanMatchesBranchFilters(span: SpanRecord, filters: ListBranchesArgs['filters']): boolean {
     if (!filters) return true;
 
     if (filters.startedAt) {

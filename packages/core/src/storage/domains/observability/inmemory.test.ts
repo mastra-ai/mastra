@@ -665,7 +665,7 @@ describe('ObservabilityInMemory', () => {
     ]);
   });
 
-  describe('listInvocations', () => {
+  describe('listBranches', () => {
     function makeSpan(
       overrides: Partial<CreateSpanRecord> & Pick<CreateSpanRecord, 'traceId' | 'spanId'>,
     ): CreateSpanRecord {
@@ -683,7 +683,7 @@ describe('ObservabilityInMemory', () => {
       } as CreateSpanRecord;
     }
 
-    it('returns invocation rows for both root and nested invocation spans, excluding sub-operations', async () => {
+    it('returns branch rows for both root and nested anchor spans, excluding sub-operations', async () => {
       // Root: workflow_run. Children: agent_run (Observer, nested), tool_call,
       // and a model_step (sub-operation, must be excluded).
       await storage.batchCreateSpans({
@@ -724,8 +724,8 @@ describe('ObservabilityInMemory', () => {
         ],
       });
 
-      const result = await storage.listInvocations({});
-      const names = result.invocations.map(s => s.entityName).sort();
+      const result = await storage.listBranches({});
+      const names = result.branches.map(s => s.entityName).sort();
       expect(names).toEqual(['Observer', 'orderWorkflow', 'web_search']);
       expect(result.pagination.total).toBe(3);
     });
@@ -765,10 +765,10 @@ describe('ObservabilityInMemory', () => {
       const traces = await storage.listTraces({ filters: { entityName: 'Observer' } });
       expect(traces.spans).toHaveLength(0);
 
-      const invocations = await storage.listInvocations({ filters: { entityName: 'Observer' } });
-      // Two invocations of Observer in the same trace surface as two rows.
-      expect(invocations.invocations).toHaveLength(2);
-      expect(invocations.invocations.every(s => s.entityName === 'Observer')).toBe(true);
+      const branches = await storage.listBranches({ filters: { entityName: 'Observer' } });
+      // Two Observer invocations in the same trace surface as two rows.
+      expect(branches.branches).toHaveLength(2);
+      expect(branches.branches.every(s => s.entityName === 'Observer')).toBe(true);
     });
 
     it('orders by startedAt DESC by default and supports pagination', async () => {
@@ -795,12 +795,12 @@ describe('ObservabilityInMemory', () => {
         ],
       });
 
-      const page0 = await storage.listInvocations({ pagination: { page: 0, perPage: 2 } });
-      expect(page0.invocations.map(s => s.entityName)).toEqual(['C', 'B']);
+      const page0 = await storage.listBranches({ pagination: { page: 0, perPage: 2 } });
+      expect(page0.branches.map(s => s.entityName)).toEqual(['C', 'B']);
       expect(page0.pagination).toEqual({ total: 3, page: 0, perPage: 2, hasMore: true });
 
-      const page1 = await storage.listInvocations({ pagination: { page: 1, perPage: 2 } });
-      expect(page1.invocations.map(s => s.entityName)).toEqual(['A']);
+      const page1 = await storage.listBranches({ pagination: { page: 1, perPage: 2 } });
+      expect(page1.branches.map(s => s.entityName)).toEqual(['A']);
       expect(page1.pagination.hasMore).toBe(false);
     });
 
@@ -824,13 +824,13 @@ describe('ObservabilityInMemory', () => {
         ],
       });
 
-      const onlyTools = await storage.listInvocations({ filters: { spanType: SpanType.TOOL_CALL } });
-      expect(onlyTools.invocations).toHaveLength(1);
-      expect(onlyTools.invocations[0]!.entityName).toBe('web_search');
+      const onlyTools = await storage.listBranches({ filters: { spanType: SpanType.TOOL_CALL } });
+      expect(onlyTools.branches).toHaveLength(1);
+      expect(onlyTools.branches[0]!.entityName).toBe('web_search');
 
-      // Non-invocation span types yield no rows even when explicitly requested.
-      const noModelSteps = await storage.listInvocations({ filters: { spanType: SpanType.MODEL_STEP } });
-      expect(noModelSteps.invocations).toHaveLength(0);
+      // Non-branch span types yield no rows even when explicitly requested.
+      const noModelSteps = await storage.listBranches({ filters: { spanType: SpanType.MODEL_STEP } });
+      expect(noModelSteps.branches).toHaveLength(0);
     });
 
     it('filters by per-span context fields like threadId and tags', async () => {
@@ -862,11 +862,11 @@ describe('ObservabilityInMemory', () => {
         ],
       });
 
-      const byThread = await storage.listInvocations({ filters: { threadId: 'thread-1' } });
-      expect(byThread.invocations.map(s => s.entityName).sort()).toEqual(['A', 'C']);
+      const byThread = await storage.listBranches({ filters: { threadId: 'thread-1' } });
+      expect(byThread.branches.map(s => s.entityName).sort()).toEqual(['A', 'C']);
 
-      const byTags = await storage.listInvocations({ filters: { tags: ['prod', 'beta'] } });
-      expect(byTags.invocations.map(s => s.entityName)).toEqual(['B']);
+      const byTags = await storage.listBranches({ filters: { tags: ['prod', 'beta'] } });
+      expect(byTags.branches.map(s => s.entityName)).toEqual(['B']);
     });
   });
 

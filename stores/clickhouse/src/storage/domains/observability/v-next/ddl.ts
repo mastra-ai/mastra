@@ -26,7 +26,7 @@
 
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
 export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
-export const TABLE_INVOCATIONS = 'mastra_invocations';
+export const TABLE_BRANCHES = 'mastra_branches';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
@@ -39,20 +39,20 @@ export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 // ---------------------------------------------------------------------------
 
 export const MV_TRACE_ROOTS = 'mastra_mv_trace_roots';
-export const MV_INVOCATIONS = 'mastra_mv_invocations';
+export const MV_BRANCHES = 'mastra_mv_branches';
 export const MV_DISCOVERY_VALUES = 'mastra_mv_discovery_values';
 export const MV_DISCOVERY_PAIRS = 'mastra_mv_discovery_pairs';
 
 /**
- * Span types treated as "invocations" -- a named entity got invoked.
- * Materialized into `mastra_invocations` so they're listable independently
- * of where they appear in a trace tree.
+ * Span types that anchor a listable trace branch -- a named entity got
+ * invoked. Materialized into `mastra_branches` so they're listable
+ * independently of where they appear in a trace tree.
  *
- * Kept as a literal SQL list (not derived from {@link INVOCATION_SPAN_TYPES})
+ * Kept as a literal SQL list (not derived from {@link BRANCH_SPAN_TYPES})
  * so the MV definition is hermetic and doesn't trigger re-creation if a
  * future enum re-order changes the value source.
  */
-export const INVOCATION_SPAN_TYPE_VALUES = [
+export const BRANCH_SPAN_TYPE_VALUES = [
   'agent_run',
   'workflow_run',
   'processor_run',
@@ -218,16 +218,18 @@ WHERE parentSpanId IS NULL
 `;
 
 // ---------------------------------------------------------------------------
-// invocations — named-entity invocations across the whole tree, ReplacingMergeTree
+// branches — anchor spans of every named-entity invocation across the tree,
+//            ReplacingMergeTree
 //
 // Same column shape as span_events / trace_roots (the MV does SELECT *), so a
-// row can flow trace_roots ← span_events → invocations without column-by-column
+// row can flow trace_roots ← span_events → branches without column-by-column
 // projection. Differs in ORDER BY: this table is filter-by-spanType-first to
-// support "all invocations of entity X" listings independent of trace identity.
+// support "all branches anchored at entity X" listings independent of trace
+// identity. Pairs with getBranch() to expand a single anchor into its subtree.
 // ---------------------------------------------------------------------------
 
-export const INVOCATIONS_DDL = `
-CREATE TABLE IF NOT EXISTS ${TABLE_INVOCATIONS} (
+export const BRANCHES_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_BRANCHES} (
   -- Identity
   dedupeKey          String,
 
@@ -294,16 +296,16 @@ ORDER BY (spanType, startedAt, traceId, dedupeKey)
 `;
 
 // ---------------------------------------------------------------------------
-// MV: span_events → invocations (only invocation span types, incremental)
+// MV: span_events → branches (only branch-anchor span types, incremental)
 // ---------------------------------------------------------------------------
 
-export const INVOCATIONS_MV_DDL = `
-CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_INVOCATIONS}
-TO ${TABLE_INVOCATIONS}
+export const BRANCHES_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_BRANCHES}
+TO ${TABLE_BRANCHES}
 AS
 SELECT *
 FROM ${TABLE_SPAN_EVENTS}
-WHERE spanType IN (${INVOCATION_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
+WHERE spanType IN (${BRANCH_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
 `;
 
 // ---------------------------------------------------------------------------
@@ -672,7 +674,7 @@ SELECT DISTINCT kind, key1, key2, value FROM (
 export const ALL_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
-  INVOCATIONS_DDL,
+  BRANCHES_DDL,
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
@@ -681,7 +683,7 @@ export const ALL_TABLE_DDL = [
   DISCOVERY_PAIRS_DDL,
 ];
 
-export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL, INVOCATIONS_MV_DDL];
+export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL, BRANCHES_MV_DDL];
 
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
@@ -700,10 +702,10 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
-  // Invocations (matches span_events shape; columns added defensively)
-  `ALTER TABLE ${TABLE_INVOCATIONS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_INVOCATIONS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
-  `ALTER TABLE ${TABLE_INVOCATIONS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Branches (matches span_events shape; columns added defensively)
+  `ALTER TABLE ${TABLE_BRANCHES} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_BRANCHES} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_BRANCHES} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Metrics
   `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
@@ -727,7 +729,7 @@ export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
-  TABLE_INVOCATIONS,
+  TABLE_BRANCHES,
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
@@ -765,7 +767,7 @@ export interface RetentionConfig {
 const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_SPAN_EVENTS]: 'endedAt',
   [TABLE_TRACE_ROOTS]: 'endedAt',
-  [TABLE_INVOCATIONS]: 'endedAt',
+  [TABLE_BRANCHES]: 'endedAt',
   [TABLE_METRIC_EVENTS]: 'timestamp',
   [TABLE_LOG_EVENTS]: 'timestamp',
   [TABLE_SCORE_EVENTS]: 'timestamp',
@@ -774,7 +776,7 @@ const SIGNAL_TTL_COLUMNS: Record<string, string> = {
 
 /** Maps each signal key to the table(s) it controls. */
 const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
-  tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_INVOCATIONS],
+  tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_BRANCHES],
   logs: [TABLE_LOG_EVENTS],
   metrics: [TABLE_METRIC_EVENTS],
   scores: [TABLE_SCORE_EVENTS],

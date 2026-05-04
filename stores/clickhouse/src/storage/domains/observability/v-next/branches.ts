@@ -1,36 +1,32 @@
 /**
- * Invocations operations for ClickHouse v-next observability.
+ * Trace-branches operations for ClickHouse v-next observability.
  *
- * Owns: listInvocations
- * Reads from: invocations (populated by incremental MV from span_events,
- *             one row per "named-entity invoked" span -- AGENT_RUN,
- *             WORKFLOW_RUN, PROCESSOR_RUN, SCORER_RUN, RAG_INGESTION,
- *             TOOL_CALL, MCP_TOOL_CALL).
+ * Owns: listBranches
+ * Reads from: branches (populated by incremental MV from span_events, one row
+ *             per branch anchor span -- AGENT_RUN, WORKFLOW_RUN, PROCESSOR_RUN,
+ *             SCORER_RUN, RAG_INGESTION, TOOL_CALL, MCP_TOOL_CALL).
  */
 
 import type { ClickHouseClient } from '@clickhouse/client';
-import { INVOCATION_SPAN_TYPES, listInvocationsArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
-import type { ListInvocationsArgs, ListInvocationsResponse } from '@mastra/core/storage';
+import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
+import type { ListBranchesArgs, ListBranchesResponse } from '@mastra/core/storage';
 
-import { TABLE_INVOCATIONS } from './ddl';
+import { TABLE_BRANCHES } from './ddl';
 import { CH_SETTINGS, rowToSpanRecord } from './helpers';
 
-const ALLOWED_SPAN_TYPES_LIST = INVOCATION_SPAN_TYPES.map(t => `'${t}'`).join(', ');
+const ALLOWED_SPAN_TYPES_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 
 /**
- * List invocations with optional filtering, pagination, and ordering.
+ * List trace branches with optional filtering, pagination, and ordering.
  *
- * Reads from `mastra_invocations` (one row per named-entity invocation).
- * Uses the same two-stage dedupe + paginate pattern as listTraces.
+ * Reads from `mastra_branches` (one row per branch anchor span). Uses the
+ * same two-stage dedupe + paginate pattern as listTraces.
  *
- * Filters apply to the invocation span itself (not to a containing trace
- * root) -- which is the whole point of this surface.
+ * Filters apply to the anchor span itself (not to a containing trace root)
+ * -- which is the whole point of this surface.
  */
-export async function listInvocations(
-  client: ClickHouseClient,
-  args: ListInvocationsArgs,
-): Promise<ListInvocationsResponse> {
-  const { filters, pagination, orderBy } = listInvocationsArgsSchema.parse(args);
+export async function listBranches(client: ClickHouseClient, args: ListBranchesArgs): Promise<ListBranchesResponse> {
+  const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
   const perPage = pagination?.perPage ?? 10;
 
@@ -68,7 +64,7 @@ export async function listInvocations(
     params.endedAtEnd = filters.endedAt.end.getTime();
   }
 
-  // All other filters apply to the invocation span itself.
+  // All other filters apply to the anchor span itself.
   type EqDef = { col: string; value: unknown; param: string };
   const eq: EqDef[] = [
     { col: 'traceId', value: filters?.traceId, param: 'traceId' },
@@ -130,7 +126,7 @@ export async function listInvocations(
   } else if (filters?.status === TraceStatus.SUCCESS) {
     conditions.push(`error IS NULL`);
   } else if (filters?.status === TraceStatus.RUNNING) {
-    // listInvocations reads completed-span data; running spans are not surfaced.
+    // listBranches reads completed-span data; running spans are not surfaced.
     conditions.push('1 = 0');
   }
 
@@ -143,7 +139,7 @@ export async function listInvocations(
     query: `
       SELECT count() as cnt FROM (
         SELECT dedupeKey
-        FROM ${TABLE_INVOCATIONS}
+        FROM ${TABLE_BRANCHES}
         ${whereClause}
         ORDER BY dedupeKey
         LIMIT 1 BY dedupeKey
@@ -159,7 +155,7 @@ export async function listInvocations(
   if (total === 0) {
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
-      invocations: [],
+      branches: [],
     };
   }
 
@@ -167,7 +163,7 @@ export async function listInvocations(
     query: `
       SELECT * FROM (
         SELECT *
-        FROM ${TABLE_INVOCATIONS}
+        FROM ${TABLE_BRANCHES}
         ${whereClause}
         ORDER BY dedupeKey
         LIMIT 1 BY dedupeKey
@@ -194,6 +190,6 @@ export async function listInvocations(
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
-    invocations: toTraceSpans(spans),
+    branches: toTraceSpans(spans),
   };
 }
