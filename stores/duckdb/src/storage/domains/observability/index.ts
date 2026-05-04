@@ -4,11 +4,15 @@ import type {
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
@@ -211,6 +215,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
     return tracingOps.getSpan(this.db, args);
   }
+  async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    return tracingOps.getSpans(this.db, args);
+  }
   async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     return tracingOps.getRootSpan(this.db, args);
   }
@@ -222,6 +229,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    return tracingOps.listBranches(this.db, args);
   }
 
   // Logs

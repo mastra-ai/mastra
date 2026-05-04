@@ -4369,7 +4369,7 @@ export class Agent<
                 resourceId,
               });
 
-              const run = await workflow.createRun({ runId: runIdToUse });
+              const run = await workflow.createRun({ runId: runIdToUse, resourceId });
               const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.31.1-alpha.0",
+  "version": "1.32.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -722,6 +722,7 @@
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.18.0",
     "chat": "^4.24.0",
+    "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
     "gray-matter": "^4.0.3",

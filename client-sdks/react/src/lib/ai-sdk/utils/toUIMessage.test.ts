@@ -2850,6 +2850,38 @@ describe('toUIMessage', () => {
       });
     });
 
+    it('should preserve the id when adding a data-* part to an existing assistant message', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: {
+          taskName: 'test-task',
+          progress: 50,
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Processing...', state: 'streaming' }],
+        metadata: baseMetadata,
+      };
+
+      const result = toUIMessage({ chunk, conversation: [existingMessage], metadata: baseMetadata });
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+
+      expect(dataPart).toMatchObject({
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: {
+          taskName: 'test-task',
+          progress: 50,
+        },
+      });
+    });
+
     it('should handle multiple data-* chunks accumulating in the same message', () => {
       const chunk1: ChunkType = {
         type: 'data-progress',
@@ -2883,6 +2915,42 @@ describe('toUIMessage', () => {
       expect(dataParts.length).toBe(2);
       expect((dataParts[0] as any).data.progress).toBe(25);
       expect((dataParts[1] as any).data.progress).toBe(75);
+    });
+
+    it('should preserve stable ids across multiple data-* chunks', () => {
+      const chunk1: ChunkType = {
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: { progress: 25 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const chunk2: ChunkType = {
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: { progress: 75 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      let conversation: MastraUIMessage[] = [existingMessage];
+      conversation = toUIMessage({ chunk: chunk1, conversation, metadata: baseMetadata });
+      conversation = toUIMessage({ chunk: chunk2, conversation, metadata: baseMetadata });
+
+      const lastMessage = conversation[conversation.length - 1];
+      const dataParts = lastMessage.parts.filter((p: any) => p.type === 'data-progress');
+
+      expect(dataParts).toHaveLength(2);
+      expect(dataParts.map((part: any) => part.id)).toEqual(['progress-stable-id', 'progress-stable-id']);
+      expect(dataParts.map((part: any) => part.data.progress)).toEqual([25, 75]);
     });
 
     it('should handle data-* chunks with different types', () => {
@@ -2938,6 +3006,24 @@ describe('toUIMessage', () => {
       const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
       expect(dataPart).toBeDefined();
       expect((dataPart as any).data.progress).toBe(50);
+    });
+
+    it('should preserve the id when creating a new assistant message for a data-* chunk', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        id: 'new-message-stable-id',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const result = toUIMessage({ chunk, conversation: [], metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'data-progress',
+        id: 'new-message-stable-id',
+        data: { progress: 50 },
+      });
     });
 
     it('should create new assistant message for data-* chunk when last message is user message', () => {
