@@ -4729,7 +4729,7 @@ importers:
         version: 4.3.6
       zod-to-ts:
         specifier: ^2.0.0
-        version: 2.0.0(typescript@5.9.3)(zod@4.3.6)
+        version: 2.0.0(typescript@6.0.3)(zod@4.3.6)
 
   pubsub/google-cloud-pubsub:
     dependencies:
@@ -26804,7 +26804,7 @@ packages:
   zod-to-ts@2.0.0:
     resolution: {integrity: sha512-aHsUgIl+CQutKAxtRNeZslLCLXoeuSq+j5HU7q3kvi/c2KIAo6q4YjT7/lwFfACxLB923ELHYMkHmlxiqFy4lw==}
     peerDependencies:
-      typescript: ^5.9.3
+      typescript: ^6.0.3
       zod: ^3.25.0 || ^4.0.0
 
   zod-validation-error@4.0.2:
@@ -51636,9 +51636,9 @@ snapshots:
     dependencies:
       zod: 4.3.6
 
-  zod-to-ts@2.0.0(typescript@5.9.3)(zod@4.3.6):
+  zod-to-ts@2.0.0(typescript@6.0.3)(zod@4.3.6):
     dependencies:
-      typescript: 5.9.3
+      typescript: 6.0.3
       zod: 4.3.6
 
   zod-validation-error@4.0.2(zod@3.25.76):
