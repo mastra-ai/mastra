@@ -376,7 +376,23 @@ function areStatusMessagePartsEqual(
 
   return left.every((part, index) => {
     const other = right[index];
-    return part.kind === other?.kind && part.text === other?.text;
+    if (!other || part.kind !== other.kind) {
+      return false;
+    }
+
+    if (part.kind === 'text' && other.kind === 'text') {
+      return part.text === other.text;
+    }
+
+    if (part.kind === 'data' && other.kind === 'data') {
+      return JSON.stringify(part.data) === JSON.stringify(other.data);
+    }
+
+    if (part.kind === 'file' && other.kind === 'file') {
+      return JSON.stringify(part.file) === JSON.stringify(other.file);
+    }
+
+    return false;
   });
 }
 
