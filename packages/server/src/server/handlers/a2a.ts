@@ -324,24 +324,8 @@ function areArtifactPartsEqual(left: Artifact['parts'], right: Artifact['parts']
       return part.text === other.text;
     }
 
-    if (part.kind === 'data' && other.kind === 'data') {
-      return JSON.stringify(part.data) === JSON.stringify(other.data);
-    }
-
-    return false;
+    return part === other;
   });
-}
-
-function areArtifactsMetadataEqual(left: Artifact['metadata'], right: Artifact['metadata']) {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return left === right;
-  }
-
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefined) {
@@ -357,7 +341,7 @@ function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefin
     left.artifactId === right.artifactId &&
     left.name === right.name &&
     left.description === right.description &&
-    areArtifactsMetadataEqual(left.metadata, right.metadata) &&
+    left.metadata === right.metadata &&
     areArtifactPartsEqual(left.parts, right.parts)
   );
 }
@@ -384,15 +368,7 @@ function areStatusMessagePartsEqual(
       return part.text === other.text;
     }
 
-    if (part.kind === 'data' && other.kind === 'data') {
-      return JSON.stringify(part.data) === JSON.stringify(other.data);
-    }
-
-    if (part.kind === 'file' && other.kind === 'file') {
-      return JSON.stringify(part.file) === JSON.stringify(other.file);
-    }
-
-    return false;
+    return part === other;
   });
 }
 
