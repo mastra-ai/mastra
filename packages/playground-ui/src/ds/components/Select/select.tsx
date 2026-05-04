@@ -20,7 +20,7 @@ export type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPri
 };
 
 const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Trigger>, SelectTriggerProps>(
-  ({ className, children, variant = 'inputLike', size = 'default', ...props }, ref) => {
+  ({ className, children, variant = 'default', size = 'default', ...props }, ref) => {
     return (
       <SelectPrimitive.Trigger
         ref={ref}
@@ -73,7 +73,7 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-neutral5 text-sm',
+      'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-neutral5 text-sm',
       transitions.colors,
       'hover:bg-surface5 hover:text-neutral5',
       'focus:bg-surface5 focus:text-neutral5',

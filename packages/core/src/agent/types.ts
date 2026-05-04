@@ -8,6 +8,7 @@ import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -624,3 +625,71 @@ export type AgentExecuteOnFinishOptions = {
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+
+// =============================================================================
+// Durable Agent Types
+// =============================================================================
+
+/**
+ * Interface for durable agent wrappers (e.g., InngestAgent).
+ *
+ * Durable agents wrap a regular Agent with execution engine-specific
+ * capabilities (like Inngest's durable execution). They expose the
+ * underlying agent and any workflows that need to be registered with Mastra.
+ *
+ * The `stream()` method must return a MastraModelOutput (same as Agent.stream())
+ * to maintain compatibility with the server handlers.
+ */
+export interface DurableAgentLike {
+  /** Agent ID */
+  readonly id: string;
+  /** Agent name */
+  readonly name: string;
+  /** The underlying Mastra Agent */
+  readonly agent: Agent<any, any, any>;
+  /**
+   * Stream a response using durable execution.
+   * Must return MastraModelOutput to be compatible with Agent.stream().
+   */
+  stream(messages: any, options?: any): Promise<any>;
+  /**
+   * The PubSub instance used by this durable agent for streaming events.
+   * Used by server handlers to subscribe to the correct event bus when
+   * observing/reconnecting to agent streams.
+   */
+  readonly pubsub?: PubSub;
+  /**
+   * Get workflows that need to be registered with Mastra.
+   * Called during agent registration to auto-register durable execution workflows.
+   */
+  getDurableWorkflows?(): Workflow<any, any, any, any, any, any, any>[];
+  /**
+   * Set the Mastra instance for observability and other services.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  __setMastra?(mastra: any): void;
+
+  /**
+   * Implementations may proxy all Agent methods to the underlying agent.
+   * For example, InngestAgent uses a Proxy that forwards generate(), listTools(),
+   * getMemory(), etc. to the wrapped Agent instance.
+   */
+  [key: string]: any;
+}
+
+/**
+ * Type guard to check if an object is a DurableAgentLike wrapper.
+ */
+export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
+  if (!obj) return false;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    'agent' in obj &&
+    obj.agent !== null &&
+    typeof obj.agent === 'object' &&
+    typeof obj.agent.id === 'string' &&
+    typeof obj.stream === 'function'
+  );
+}

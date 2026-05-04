@@ -601,14 +601,23 @@ export class ReflectorRunner {
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
-      try {
-        await Promise.race([
-          asyncOp,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-        ]);
-      } catch {
-        // Timeout or error - proceed with what we have
+      // TTL and provider-change triggers should not block on in-progress
+      // reflection buffering. The async op will finish in the background
+      // and the buffered result will be available for activation on the next turn.
+      if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: async op in progress, not blocking for ${activationMetadata.triggeredBy} trigger`,
+        );
+      } else {
+        omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
+        try {
+          await Promise.race([
+            asyncOp,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
+          ]);
+        } catch {
+          // Timeout or error - proceed with what we have
+        }
       }
     }
 
@@ -870,6 +879,13 @@ export class ReflectorRunner {
           `[OM:reflect] blockAfter exceeded (${observationTokens} >= ${this.reflectionConfig.blockAfter}), falling through to sync reflection`,
         );
       } else {
+        const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
+        if (observationTokens < activationPoint) {
+          omDebug(
+            `[OM:reflect] skipping async reflection — observationTokens (${observationTokens}) below activation point (${activationPoint}), triggered by ${activationTriggeredBy}`,
+          );
+          return;
+        }
         omDebug(
           `[OM:reflect] async activation failed, no blockAfter or below it (obsTokens=${observationTokens}, blockAfter=${this.reflectionConfig.blockAfter}) — starting background reflection`,
         );

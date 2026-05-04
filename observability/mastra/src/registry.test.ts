@@ -432,6 +432,26 @@ describe('Observability Registry', () => {
       expect(observability.getSelectedInstance(workflowOptions)).toBe(observability.getInstance('datadog'));
       expect(observability.getSelectedInstance(genericOptions)).toBe(observability.getDefaultInstance()); // Falls back to default (console)
     });
+
+    it('propagates the Mastra environment to instances registered after setMastraContext', () => {
+      observability = new Observability({});
+
+      // Simulate Mastra construction: setMastraContext fires before any instance
+      // is in the registry (this is the path Mastra.registerExporter takes when
+      // bootstrapping observability from a NoOp).
+      const fakeMastra = { getEnvironment: () => 'production' } as any;
+      observability.setMastraContext({ mastra: fakeMastra });
+
+      // Late registration — must still pick up the environment.
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'late-registered',
+        name: 'late',
+        exporters: [new TestExporter()],
+      });
+      observability.registerInstance('late', instance, true);
+
+      expect(instance.getMastraEnvironment()).toBe('production');
+    });
   });
 
   describe('observability = new Observability edge cases', () => {
@@ -773,14 +793,14 @@ describe('Observability Registry', () => {
 
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
 
-      // Spy on console to check for warning message
-      // Note: ConsoleLogger.warn() calls console.info() internally
+      // Spy on console to check for disabled message
+      // Note: ConsoleLogger.debug() calls console.info() internally
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      // CloudExporter should not throw, but log warning instead
+      // CloudExporter should not throw, but log debug message instead
       const exporter = new CloudExporter({ logger });
 
-      // Verify warning message was logged with new exporter name
+      // Verify debug message was logged with exporter name
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining(
           'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',

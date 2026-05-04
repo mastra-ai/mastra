@@ -1,5 +1,43 @@
 # @mastra/agent-builder
 
+## 1.0.33-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`319a94c`](https://github.com/mastra-ai/mastra/commit/319a94c6bf1f8f4ac8249a40b0c99b9c1e0d4598), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d)]:
+  - @mastra/core@1.32.0-alpha.1
+  - @mastra/memory@1.17.5-alpha.0
+
+## 1.0.32
+
+### Patch Changes
+
+- Updated dependencies [[`920c757`](https://github.com/mastra-ai/mastra/commit/920c75799c6bd71787d86deaf654a35af4c839ca), [`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`1fe2533`](https://github.com/mastra-ai/mastra/commit/1fe2533c4382ca6858aac7c4b63e888c2eac6541), [`f8694b6`](https://github.com/mastra-ai/mastra/commit/f8694b6fa0b7a5cde71d794c3bbef4957c55bcb8), [`4b2e4f3`](https://github.com/mastra-ai/mastra/commit/4b2e4f3bc9f5a63dcbfccfa54f9474340c3cea58)]:
+  - @mastra/core@1.30.0
+  - @mastra/memory@1.17.4
+
+## 1.0.32-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d587199`](https://github.com/mastra-ai/mastra/commit/d5871993c0371bde2b0717d6b47194755baa1443), [`4b2e4f3`](https://github.com/mastra-ai/mastra/commit/4b2e4f3bc9f5a63dcbfccfa54f9474340c3cea58)]:
+  - @mastra/core@1.29.2-alpha.0
+  - @mastra/memory@1.17.4-alpha.0
+
+## 1.0.31
+
+### Patch Changes
+
+- dependencies updates: ([#15770](https://github.com/mastra-ai/mastra/pull/15770))
+  - Updated dependency [`@ai-sdk/anthropic-v5@npm:@ai-sdk/anthropic@2.0.77` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic-v5/v/2.0.77) (from `npm:@ai-sdk/anthropic@2.0.61`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/google-v5@npm:@ai-sdk/google@2.0.70` ↗︎](https://www.npmjs.com/package/@ai-sdk/google-v5/v/2.0.70) (from `npm:@ai-sdk/google@2.0.52`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/groq-v5@npm:@ai-sdk/groq@2.0.38` ↗︎](https://www.npmjs.com/package/@ai-sdk/groq-v5/v/2.0.38) (from `npm:@ai-sdk/groq@2.0.34`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-v5@npm:@ai-sdk/openai@2.0.103` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-v5/v/2.0.103) (from `npm:@ai-sdk/openai@2.0.89`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/xai-v5@npm:@ai-sdk/xai@2.0.68` ↗︎](https://www.npmjs.com/package/@ai-sdk/xai-v5/v/2.0.68) (from `npm:@ai-sdk/xai@2.0.57`, in `dependencies`)
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`95b001f`](https://github.com/mastra-ai/mastra/commit/95b001f750af6947ad9d174cd47abffc776663a5), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+  - @mastra/memory@1.17.3
+
 ## 1.0.31-alpha.1
 
 ### Patch Changes

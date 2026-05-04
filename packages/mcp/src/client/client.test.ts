@@ -2331,6 +2331,7 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
 });
 
 describe('MastraMCPClient fetch with requestContext', () => {
+  const datadogTracerTestSymbol = Symbol.for('mastra.mcp.dd-trace-test-tracer');
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -2344,6 +2345,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
     await testServer?.mcpServer.close().catch(() => {});
     await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
+    delete (globalThis as Record<PropertyKey, unknown>)[datadogTracerTestSymbol];
   });
 
   it('should pass requestContext to the custom fetch function during tool execution', async () => {
@@ -2467,6 +2469,45 @@ describe('MastraMCPClient fetch with requestContext', () => {
     // The third argument should be defined (either null or an empty RequestContext)
     const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
     expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
+  }, 15000);
+
+  it('should detach streamable transport GET requests from the active Datadog span', async () => {
+    testServer = await setupTestServer(true);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+    const activateSpy = vi.fn((_span: unknown, callback: () => unknown) => callback());
+
+    (globalThis as Record<PropertyKey, unknown>)[datadogTracerTestSymbol] = {
+      scope: () => ({
+        activate: activateSpy,
+      }),
+    };
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-datadog-stream-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+
+    const streamFetchCalls = fetchSpy.mock.calls.filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'GET');
+
+    expect(streamFetchCalls.length).toBeGreaterThan(0);
+    expect(activateSpy).toHaveBeenCalledTimes(streamFetchCalls.length);
+    expect(activateSpy).toHaveBeenNthCalledWith(1, null, expect.any(Function));
+
+    activateSpy.mockClear();
+    fetchSpy.mockClear();
+
+    await client.tools();
+
+    const postFetchCalls = fetchSpy.mock.calls.filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST');
+    expect(postFetchCalls.length).toBeGreaterThan(0);
+    expect(activateSpy).not.toHaveBeenCalled();
   }, 15000);
 });
 

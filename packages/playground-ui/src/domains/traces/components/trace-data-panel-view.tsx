@@ -8,6 +8,7 @@ import { TraceTimeline } from './trace-timeline';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Notice } from '@/ds/components/Notice';
 import { Icon } from '@/ds/icons/Icon';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { truncateString } from '@/lib/truncate-string';
@@ -183,6 +184,14 @@ export function TraceDataPanelView({
                   </Button>
                 )}
               </div>
+            )}
+
+            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && (
+              <Notice variant="info" className="mb-6">
+                <Notice.Message>
+                  Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).
+                </Notice.Message>
+              </Notice>
             )}
 
             <TraceTimeline

@@ -14,6 +14,7 @@ import { findBestIndex } from './index-map';
 // Vector-specific table names (not in @mastra/core)
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
 const VECTOR_TABLE_PREFIX = 'mastra_vector_';
+const CONVEX_TABLE_WORKFLOW_SNAPSHOTS = 'mastra_workflow_snapshots';
 
 /**
  * Determines which Convex table to use based on the logical table name.
@@ -28,7 +29,7 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
     case TABLE_RESOURCES:
       return { convexTable: 'mastra_resources', isTyped: true };
     case TABLE_WORKFLOW_SNAPSHOT:
-      return { convexTable: 'mastra_workflow_snapshots', isTyped: true };
+      return { convexTable: CONVEX_TABLE_WORKFLOW_SNAPSHOTS, isTyped: true };
     case TABLE_SCORERS:
       return { convexTable: 'mastra_scorers', isTyped: true };
     case TABLE_VECTOR_INDEXES:
@@ -77,7 +78,7 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
  * Records are stored with their `id` field as a regular field (not _id).
  * We query by the `id` field to find/update records.
  */
-async function handleTypedOperation(
+export async function handleTypedOperation(
   ctx: MutationCtx<any>,
   convexTable: string,
   request: StorageRequest,
@@ -134,6 +135,18 @@ async function handleTypedOperation(
         const doc = await ctx.db
           .query(convexTable)
           .withIndex('by_record_id', (q: any) => q.eq('id', keys.id))
+          .unique();
+        return { ok: true, result: doc || null };
+      }
+
+      if (
+        convexTable === CONVEX_TABLE_WORKFLOW_SNAPSHOTS &&
+        typeof keys.workflow_name === 'string' &&
+        typeof keys.run_id === 'string'
+      ) {
+        const doc = await ctx.db
+          .query(convexTable)
+          .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', keys.workflow_name).eq('run_id', keys.run_id))
           .unique();
         return { ok: true, result: doc || null };
       }

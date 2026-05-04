@@ -23,7 +23,7 @@ export function ProcessorCombobox({
   emptyText = 'No processors found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
 }: ProcessorComboboxProps) {
   const { data: processors = {}, isLoading, isError, error } = useProcessors();
   const { navigate, paths } = useLinkComponent();
