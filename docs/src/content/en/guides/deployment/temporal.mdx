@@ -85,6 +85,7 @@ Compose the steps into a workflow. The workflow `id` must be a static string lit
 ```ts title="src/mastra/workflows/index.ts"
 const workflow = createWorkflow({
   id: 'increment-workflow',
+  steps: [incrementStep],
   inputSchema: z.object({
     value: z.number(),
   }),
