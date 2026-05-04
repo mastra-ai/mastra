@@ -3984,11 +3984,12 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(buildRetentionDDL({})).toEqual([]);
     });
 
-    it('buildRetentionDDL generates tracing TTL for both span_events and trace_roots', () => {
+    it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
-      expect(stmts).toHaveLength(2);
+      expect(stmts).toHaveLength(3);
       expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
+      expect(stmts[2]).toBe('ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY');
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
@@ -4030,6 +4031,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const signalTables = [
         'mastra_span_events',
         'mastra_trace_roots',
+        'mastra_trace_branches',
         'mastra_log_events',
         'mastra_metric_events',
         'mastra_score_events',
@@ -4048,6 +4050,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         const expectedTTLs: Record<string, string> = {
           mastra_span_events: 'endedAt + toIntervalDay(30)',
           mastra_trace_roots: 'endedAt + toIntervalDay(30)',
+          mastra_trace_branches: 'endedAt + toIntervalDay(30)',
           mastra_log_events: 'timestamp + toIntervalDay(7)',
           mastra_metric_events: 'timestamp + toIntervalDay(14)',
           mastra_score_events: 'timestamp + toIntervalDay(90)',
