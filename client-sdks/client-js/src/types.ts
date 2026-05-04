@@ -2554,25 +2554,45 @@ export interface ScheduleResponse {
   lastRunId?: string;
   lastRun?: ScheduleRunSummary;
   metadata?: Record<string, unknown>;
+  ownerType?: string;
+  ownerId?: string;
   createdAt: number;
   updatedAt: number;
 }
 
-export type ScheduleTriggerStatus = 'published' | 'failed';
+export type ScheduleTriggerOutcome =
+  | 'published'
+  | 'failed'
+  | 'skipped'
+  | 'acked'
+  | 'alerted'
+  | 'deferred'
+  | 'appended-from-queue'
+  | 'dropped-stale'
+  | 'dropped-superseded'
+  | 'dropped-busy';
+
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
 
 export interface ScheduleTriggerResponse {
+  id?: string;
   scheduleId: string;
-  runId: string;
+  runId: string | null;
   scheduledFireAt: number;
   actualFireAt: number;
-  status: ScheduleTriggerStatus;
+  outcome: ScheduleTriggerOutcome;
   error?: string;
+  triggerKind?: ScheduleTriggerKind;
+  parentTriggerId?: string;
+  metadata?: Record<string, unknown>;
   run?: ScheduleRunSummary;
 }
 
 export interface ListSchedulesParams {
   workflowId?: string;
   status?: ScheduleStatus;
+  ownerType?: string;
+  ownerId?: string;
 }
 
 export interface ListSchedulesResponse {
