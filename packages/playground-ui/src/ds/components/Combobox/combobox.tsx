@@ -2,9 +2,7 @@ import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import { comboboxStyles } from './combobox-styles';
-import type { ButtonProps } from '@/ds/components/Button/Button';
-import { buttonVariants } from '@/ds/components/Button/Button';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { formElementSizes, type FormElementSize } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {
@@ -24,7 +22,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: Extract<ButtonProps['variant'], 'default' | 'ghost' | 'link'>;
+  /** Kept for API compatibility; trigger styling is intrinsic to the Combobox now. */
+  variant?: 'default' | 'ghost' | 'link';
   size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -41,7 +40,6 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'default',
   size = 'default',
   open,
   onOpenChange,
@@ -68,8 +66,8 @@ export function Combobox({
       >
         <BaseCombobox.Trigger
           className={cn(
-            buttonVariants({ variant, size }),
             comboboxStyles.trigger,
+            formElementSizes[size],
             error && comboboxStyles.triggerError,
             className,
           )}
