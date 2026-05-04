@@ -2,16 +2,17 @@
  * Trace-branches operations for ClickHouse v-next observability.
  *
  * Owns: listBranches
- * Reads from: branches (populated by incremental MV from span_events, one row
- *             per branch anchor span -- AGENT_RUN, WORKFLOW_RUN, PROCESSOR_RUN,
- *             SCORER_RUN, RAG_INGESTION, TOOL_CALL, MCP_TOOL_CALL).
+ * Reads from: trace_branches (populated by incremental MV from span_events,
+ *             one row per branch anchor span -- AGENT_RUN, WORKFLOW_RUN,
+ *             PROCESSOR_RUN, SCORER_RUN, RAG_INGESTION, TOOL_CALL,
+ *             MCP_TOOL_CALL).
  */
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type { ListBranchesArgs, ListBranchesResponse } from '@mastra/core/storage';
 
-import { TABLE_BRANCHES } from './ddl';
+import { TABLE_TRACE_BRANCHES } from './ddl';
 import { CH_SETTINGS, rowToSpanRecord } from './helpers';
 
 const ALLOWED_SPAN_TYPES_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
@@ -19,7 +20,7 @@ const ALLOWED_SPAN_TYPES_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 /**
  * List trace branches with optional filtering, pagination, and ordering.
  *
- * Reads from `mastra_branches` (one row per branch anchor span). Uses the
+ * Reads from `mastra_trace_branches` (one row per branch anchor span). Uses the
  * same two-stage dedupe + paginate pattern as listTraces.
  *
  * Filters apply to the anchor span itself (not to a containing trace root)
@@ -139,7 +140,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
     query: `
       SELECT count() as cnt FROM (
         SELECT dedupeKey
-        FROM ${TABLE_BRANCHES}
+        FROM ${TABLE_TRACE_BRANCHES}
         ${whereClause}
         ORDER BY dedupeKey
         LIMIT 1 BY dedupeKey
@@ -163,7 +164,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
     query: `
       SELECT * FROM (
         SELECT *
-        FROM ${TABLE_BRANCHES}
+        FROM ${TABLE_TRACE_BRANCHES}
         ${whereClause}
         ORDER BY dedupeKey
         LIMIT 1 BY dedupeKey

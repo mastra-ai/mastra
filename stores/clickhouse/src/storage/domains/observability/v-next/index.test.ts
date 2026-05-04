@@ -263,7 +263,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('branches', () => {
     /**
-     * Wait until the materialized view has populated `mastra_branches` with
+     * Wait until the materialized view has populated `mastra_trace_branches` with
      * the expected number of rows. The MV is incremental but ClickHouse is
      * eventually-consistent w.r.t. parts merging; in practice rows appear
      * within a single insert flush, but the retry loop guards against CI flakes.
