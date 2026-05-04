@@ -9,6 +9,8 @@ interface MessageListProps {
   isRunning?: boolean;
   emptyState?: ReactNode;
   skeletonTestId?: string;
+  /** Forwarded to MessageRow so chat-rendered tool widgets can address the agent. */
+  agentId?: string;
 }
 
 const hasStreamingPart = (message: MastraUIMessage | undefined) => {
@@ -33,6 +35,7 @@ export const MessageList = ({
   isRunning = false,
   emptyState,
   skeletonTestId,
+  agentId,
 }: MessageListProps) => {
   const scrollRef = useAutoScroll(messages);
   const showSkeleton = isLoading && messages.length === 0;
@@ -54,7 +57,7 @@ export const MessageList = ({
       ) : (
         <div className="flex flex-col gap-6">
           {messages.map(message => (
-            <MessageRow key={message.id} message={message} />
+            <MessageRow key={message.id} message={message} agentId={agentId} />
           ))}
           {showPending && <PendingIndicator />}
         </div>

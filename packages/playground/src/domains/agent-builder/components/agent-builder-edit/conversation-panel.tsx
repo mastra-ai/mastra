@@ -10,6 +10,7 @@ import { MessageList } from '../chat-primitives/message-list';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
 import type { AvailableWorkspace } from './hooks/use-agent-builder-tool';
 import { useChatDraft } from './hooks/use-chat-draft';
+import { CONNECT_CHANNEL_TOOL_NAME, useConnectChannelTool } from './hooks/use-connect-channel-tool';
 import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from './hooks/use-create-skill-tool';
 import { useInitialMessage } from './hooks/use-initial-message';
 import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-chat-context';
@@ -76,9 +77,19 @@ export const ConversationPanelProvider = ({
     availableModels,
   });
   const createSkillTool = useCreateSkillTool({ availableWorkspaces });
+  const connectChannelTool = useConnectChannelTool();
   const clientTools = useMemo(
-    () => (features.skills ? { agentBuilderTool, [CREATE_SKILL_TOOL_NAME]: createSkillTool } : { agentBuilderTool }),
-    [agentBuilderTool, createSkillTool, features.skills],
+    () => ({
+      agentBuilderTool,
+      [CONNECT_CHANNEL_TOOL_NAME]: connectChannelTool,
+      ...(features.skills ? { [CREATE_SKILL_TOOL_NAME]: createSkillTool } : {}),
+    }),
+    [agentBuilderTool, connectChannelTool, createSkillTool, features.skills],
+  );
+
+  const conversationContextValue = useMemo(
+    () => ({ isLoading: isConversationLoading, agentId }),
+    [isConversationLoading, agentId],
   );
 
   return (
@@ -94,14 +105,17 @@ export const ConversationPanelProvider = ({
         isConversationLoading={isConversationLoading}
         hasExistingConversation={hasExistingConversation}
       />
-      <ConversationLoadingContext.Provider value={isConversationLoading}>
-        {children}
-      </ConversationLoadingContext.Provider>
+      <ConversationContext.Provider value={conversationContextValue}>{children}</ConversationContext.Provider>
     </StreamChatProvider>
   );
 };
 
-const ConversationLoadingContext = createContext<boolean>(false);
+interface ConversationContextValue {
+  isLoading: boolean;
+  agentId: string;
+}
+
+const ConversationContext = createContext<ConversationContextValue>({ isLoading: false, agentId: '' });
 
 interface ConversationInitialMessageProps {
   initialUserMessage?: string;
@@ -153,13 +167,14 @@ export const ConversationPanel = (props: ConversationPanelProps) => (
 const ConversationMessageList = () => {
   const messages = useStreamMessages();
   const isRunning = useStreamRunning();
-  const isConversationLoading = useContext(ConversationLoadingContext);
+  const { isLoading: isConversationLoading, agentId } = useContext(ConversationContext);
   return (
     <MessageList
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}
       skeletonTestId="agent-builder-conversation-messages-skeleton"
+      agentId={agentId}
     />
   );
 };
