@@ -1,9 +1,9 @@
 import { Slot } from '@radix-ui/react-slot';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { CircleAlertIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
+import { MainSidebarNavLabel } from './main-sidebar-nav-label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -34,7 +34,7 @@ type ItemStyleOptions = {
  */
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, indent }: ItemStyleOptions = {}) =>
   cn(
-    'flex items-center text-ui-md text-neutral3 rounded-lg h-9',
+    'flex items-center text-ui-md text-neutral3 rounded-lg h-9 min-w-0 whitespace-nowrap',
     'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
     '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0 [&_svg]:text-neutral3/60 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
     'hover:bg-surface3 hover:text-neutral5 [&:hover_svg]:text-neutral3',
@@ -100,7 +100,7 @@ export function MainSidebarNavLink({
     interactiveEl = (
       <Link href={link.url} {...linkParams} className={itemClassName}>
         {link.icon}
-        {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name}
+        <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
         {children}
         {link.isExperimental && !isCollapsed && !needsTooltip && (
           <Tooltip>
@@ -120,7 +120,7 @@ export function MainSidebarNavLink({
     <li
       {...props}
       className={cn(
-        'flex relative',
+        'flex relative min-w-0',
         // Active indicator bar (expanded only) — sits on the <li> so it works
         // regardless of which interactive element is slotted in.
         isActive &&

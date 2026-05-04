@@ -44,7 +44,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <MainSidebarProvider>
+            <MainSidebarProvider mobileBreakpoint={0}>
               <LayoutContent>{children}</LayoutContent>
             </MainSidebarProvider>
           </ExperimentalUIProvider>

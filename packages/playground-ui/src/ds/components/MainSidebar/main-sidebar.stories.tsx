@@ -471,7 +471,7 @@ export const AsChild: Story = {
                 <MainSidebar.NavLink asChild isActive={activeKey === 'agents'}>
                   <button type="button" onClick={() => setActiveKey('agents')}>
                     <Bot />
-                    Agents (button)
+                    <MainSidebar.NavLabel>Agents (button)</MainSidebar.NavLabel>
                   </button>
                 </MainSidebar.NavLink>
 
@@ -481,7 +481,7 @@ export const AsChild: Story = {
                     <MainSidebar.NavLink asChild>
                       <button type="button">
                         <LifeBuoy />
-                        Contact support
+                        <MainSidebar.NavLabel>Contact support</MainSidebar.NavLabel>
                       </button>
                     </MainSidebar.NavLink>
                   </DialogTrigger>
@@ -498,7 +498,7 @@ export const AsChild: Story = {
                 <MainSidebar.NavLink asChild>
                   <a href="https://mastra.ai/docs" target="_blank" rel="noreferrer">
                     <BookOpen />
-                    Docs (custom anchor)
+                    <MainSidebar.NavLabel>Docs (custom anchor)</MainSidebar.NavLabel>
                   </a>
                 </MainSidebar.NavLink>
               </MainSidebar.NavList>

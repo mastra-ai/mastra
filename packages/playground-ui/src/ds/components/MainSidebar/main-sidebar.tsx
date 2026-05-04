@@ -2,6 +2,7 @@ import { MainSidebarBottom } from './main-sidebar-bottom';
 import { MainSidebarMobileTrigger } from './main-sidebar-mobile-trigger';
 import { MainSidebarNav } from './main-sidebar-nav';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
+import { MainSidebarNavLabel } from './main-sidebar-nav-label';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { MainSidebarNavList } from './main-sidebar-nav-list';
 import { MainSidebarNavSection } from './main-sidebar-nav-section';
@@ -27,6 +28,7 @@ export const MainSidebar = Object.assign(MainSidebarRoot, {
   Nav: MainSidebarNav,
   NavSection: MainSidebarNavSection,
   NavLink: MainSidebarNavLink,
+  NavLabel: MainSidebarNavLabel,
   NavHeader: MainSidebarNavHeader,
   NavList: MainSidebarNavList,
   NavSeparator: MainSidebarNavSeparator,

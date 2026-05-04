@@ -38,10 +38,10 @@ export function MainSidebarNavHeader({
   }
 
   return (
-    <div className={cn('grid grid-cols-[auto_1fr] items-center min-h-11', className)}>
+    <div className={cn('grid grid-cols-[auto_1fr] items-center gap-2 min-w-0 min-h-11', className)}>
       <header
         {...props}
-        className={cn('text-ui-xs uppercase tracking-widest pl-3', {
+        className={cn('min-w-0 max-w-full truncate text-ui-xs uppercase tracking-widest pl-3', {
           'text-black dark:text-white font-semibold': isActive,
           'text-neutral3/75': !isActive,
         })}
@@ -49,7 +49,7 @@ export function MainSidebarNavHeader({
         {href ? (
           <Link
             href={href}
-            className={cn('transition-colors duration-normal', {
+            className={cn('block min-w-0 truncate transition-colors duration-normal', {
               'hover:text-neutral5': !isActive,
               'text-black dark:text-white': isActive,
             })}
