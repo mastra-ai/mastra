@@ -1,5 +1,5 @@
 import { useAuiState } from '@assistant-ui/react';
-import { Badge, CodeEditor, IconButton, Icon, cn } from '@mastra/playground-ui';
+import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
@@ -181,7 +181,7 @@ export const FileTreeBadge = ({
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
                 {summary && <span className="text-neutral6 text-xs">{summary}</span>}
-                <IconButton variant="light" size="sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
+                <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
                       style={{ gridArea: '1/1' }}
@@ -196,7 +196,7 @@ export const FileTreeBadge = ({
                       <CopyIcon size={14} />
                     </span>
                   </span>
-                </IconButton>
+                </Button>
               </div>
 
               {/* Tree content */}

@@ -9,7 +9,6 @@ const meta: Meta<typeof SideDialog> = {
   parameters: {
     layout: 'fullscreen',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

@@ -76,8 +76,9 @@ const workspace = new Workspace({
   },
   {
     name: 'embedder',
-    type: '(text: string) => Promise<number[]>',
-    description: 'Embedder function for generating vectors. Required when vectorStore is provided.',
+    type: 'Embedder',
+    description:
+      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/workspace/search#batch-embedding).',
     isOptional: true,
   },
   {

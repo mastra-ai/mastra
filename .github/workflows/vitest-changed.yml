@@ -16,7 +16,7 @@ permissions: {}
 jobs:
   set-pending-status:
     name: Set Pending Status
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
@@ -41,7 +41,7 @@ jobs:
 
   test:
     name: UNIT Test (Shard ${{ matrix.shard }})
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     needs: [set-pending-status]
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 30
@@ -119,7 +119,7 @@ jobs:
 
   e2e-test:
     name: E2E Test (${{ matrix.project }})
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     needs: [set-pending-status]
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 30
@@ -578,7 +578,7 @@ jobs:
 
   merge-reports:
     name: Merge Test Reports
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     needs: [test, e2e-test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     # Minimal permissions - read-only access
@@ -619,7 +619,7 @@ jobs:
 
   pr-status:
     name: PR Status
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     needs: [test, e2e-test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     permissions:

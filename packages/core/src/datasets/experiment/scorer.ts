@@ -1,5 +1,6 @@
 import type { MastraScorer } from '../../evals/base';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
+import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import { EntityType } from '../../observability';
@@ -48,6 +49,26 @@ export function resolveScorers(
 }
 
 /**
+ * Attempt to extract a Trajectory from the observability trace store.
+ * Falls back to undefined if storage is unavailable or the trace has no spans.
+ */
+async function extractTrajectoryFromStorage(
+  storage: MastraCompositeStore | null,
+  traceId?: string,
+): Promise<Trajectory | undefined> {
+  if (!storage || !traceId) return undefined;
+  try {
+    const observabilityStore = await storage.getStore('observability');
+    if (!observabilityStore) return undefined;
+    const trace = await observabilityStore.getTrace({ traceId });
+    if (!trace?.spans?.length) return undefined;
+    return extractTrajectoryFromTrace(trace.spans);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Workflow-specific data forwarded to scorers so they can inspect step-level
  * input/output and the executed step path. Surfaced via `targetMetadata` on
  * the scorer run so existing scorer signatures stay unchanged.
@@ -61,6 +82,8 @@ export interface WorkflowScorerData {
 /**
  * Run all scorers for a single item result.
  * Errors are isolated per scorer - one failing scorer doesn't affect others.
+ * Trajectory scorers (scorer.type === 'trajectory') receive a pre-extracted
+ * Trajectory as their output, mirroring the dispatch runEvals performs.
  */
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
@@ -77,6 +100,16 @@ export async function runScorersForItem(
   workflowData?: WorkflowScorerData,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
+
+  // Pre-extract trajectory once for all trajectory scorers in this batch.
+  // Try the trace store first (requires observability storage + traceId), then
+  // fall back to extracting from the raw MastraDBMessage[] scoring output.
+  const hasTrajectoryScorer = scorers.some(s => s.type === 'trajectory');
+  let trajectoryOutput: Trajectory | undefined;
+  if (hasTrajectoryScorer) {
+    const traceTrajectory = await extractTrajectoryFromStorage(storage, traceId);
+    trajectoryOutput = traceTrajectory ?? (scorerOutput ? extractTrajectory(scorerOutput) : { steps: [] });
+  }
 
   // Build correlation context so scorers can emit scores with full experiment context
   const targetCorrelationContext: CorrelationContext = {
@@ -98,6 +131,7 @@ export async function runScorersForItem(
         targetType,
         traceId,
         targetCorrelationContext,
+        scorer.type === 'trajectory' ? trajectoryOutput : undefined,
         workflowData,
       );
 
@@ -140,11 +174,18 @@ export async function runScorersForItem(
     }),
   );
 
-  return settled.map((s, i) =>
-    s.status === 'fulfilled'
-      ? s.value
-      : { scorerId: scorers[i]!.id, scorerName: scorers[i]!.name, score: null, reason: null, error: String(s.reason) },
-  );
+  return settled.map((s, i) => {
+    if (s.status === 'fulfilled') return s.value;
+    const scorer = scorers[i]!;
+    return {
+      scorerId: scorer.id,
+      scorerName: scorer.name,
+      score: null,
+      reason: null,
+      error: String(s.reason),
+      targetScope: scorer.type === 'trajectory' ? 'trajectory' : 'span',
+    };
+  });
 }
 
 /** Prompt/step metadata returned by scorer.run() for DB persistence. */
@@ -160,6 +201,8 @@ interface ScorerPromptMetadata {
 /**
  * Run a single scorer safely, catching any errors.
  * Returns both the ScorerResult and prompt metadata for DB persistence.
+ * When trajectoryOutput is provided the scorer receives it as run.output,
+ * honoring the type: 'trajectory' contract.
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
@@ -170,13 +213,19 @@ async function runScorerSafe(
   targetType?: TargetType,
   targetTraceId?: string,
   targetCorrelationContext?: CorrelationContext,
+  trajectoryOutput?: Trajectory,
   workflowData?: WorkflowScorerData,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
+    const effectiveOutput = trajectoryOutput ?? scorerOutput ?? output;
+    const effectiveScope = trajectoryOutput ? 'trajectory' : 'span';
+
     // Surface step-level data via targetMetadata so workflow scorers can
     // inspect per-step input/output without changing the scorer signature.
+    // Trajectory scorers already receive the Trajectory as their output, so
+    // the step metadata is only relevant for non-trajectory workflow scorers.
     const targetMetadata: Record<string, unknown> | undefined =
-      workflowData && (workflowData.stepResults || workflowData.stepExecutionPath)
+      !trajectoryOutput && workflowData && (workflowData.stepResults || workflowData.stepExecutionPath)
         ? {
             ...(workflowData.stepResults ? { stepResults: workflowData.stepResults } : {}),
             ...(workflowData.stepExecutionPath ? { stepExecutionPath: workflowData.stepExecutionPath } : {}),
@@ -185,10 +234,10 @@ async function runScorerSafe(
 
     const scoreResult: unknown = await scorer.run({
       input: scorerInput ?? item.input,
-      output: scorerOutput ?? output,
+      output: effectiveOutput,
       groundTruth: item.groundTruth,
       scoreSource: 'experiment',
-      targetScope: 'span',
+      targetScope: effectiveScope,
       targetEntityType: toScorerTargetEntityType(targetType),
       targetTraceId,
       ...(workflowData?.spanId ? { targetSpanId: workflowData.spanId } : {}),
@@ -229,6 +278,7 @@ async function runScorerSafe(
         score,
         reason,
         error: null,
+        targetScope: effectiveScope,
       },
       promptMetadata: {
         generateScorePrompt: str('generateScorePrompt'),
@@ -247,8 +297,197 @@ async function runScorerSafe(
         score: null,
         reason: null,
         error: error instanceof Error ? error.message : String(error),
+        targetScope: trajectoryOutput ? 'trajectory' : 'span',
       },
       promptMetadata: {},
     };
   }
+}
+
+/**
+ * Resolve step-scoped scorers from a `Record<stepId, (MastraScorer | string)[]>`.
+ * String IDs are looked up from Mastra's scorer registry; missing IDs are skipped
+ * with a warning (matching `resolveScorers`).
+ */
+export function resolveStepScorers(
+  mastra: Mastra,
+  stepsConfig?: Record<string, (MastraScorer<any, any, any, any> | string)[]>,
+): Record<string, MastraScorer<any, any, any, any>[]> {
+  if (!stepsConfig) return {};
+  const resolved: Record<string, MastraScorer<any, any, any, any>[]> = {};
+  for (const [stepId, scorers] of Object.entries(stepsConfig)) {
+    const stepScorers = resolveScorers(mastra, scorers);
+    if (stepScorers.length > 0) resolved[stepId] = stepScorers;
+  }
+  return resolved;
+}
+
+/**
+ * Run step-scoped scorers for a single workflow item. Mirrors the per-step
+ * dispatch in `runEvals`: each scorer runs against `stepResult.payload` and
+ * `stepResult.output`, with `targetScope: 'span'` and
+ * `targetEntityType: WORKFLOW_STEP`. The returned `ScorerResult` carries the
+ * originating `stepId` so callers can disambiguate per-step results in the
+ * flat `scores` array. Steps whose result is missing or did not succeed
+ * surface as an error `ScorerResult` rather than disappearing silently.
+ *
+ * Errors are isolated per scorer (consistent with `runScorersForItem`); a
+ * failing scorer produces a `ScorerResult` with `error` set, not a throw.
+ */
+export async function runStepScorersForItem(
+  stepScorers: Record<string, MastraScorer<any, any, any, any>[]>,
+  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  workflowData: WorkflowScorerData | undefined,
+  storage: MastraCompositeStore | null,
+  runId: string,
+  targetType: TargetType,
+  targetId: string,
+  itemId: string,
+  traceId?: string,
+): Promise<ScorerResult[]> {
+  const stepIds = Object.keys(stepScorers);
+  if (stepIds.length === 0) return [];
+
+  const results: ScorerResult[] = [];
+  const stepResults = workflowData?.stepResults;
+
+  for (const stepId of stepIds) {
+    const scorers = stepScorers[stepId]!;
+    const stepResult = stepResults?.[stepId];
+
+    // Skip silently when the step didn't run or didn't succeed — matches runEvals.
+    // Surface this as an "error" ScorerResult so consumers can see the skip in the
+    // flat results array (rather than disappear without a trace).
+    if (!stepResult || stepResult.status !== 'success' || stepResult.output === undefined) {
+      for (const scorer of scorers) {
+        results.push({
+          scorerId: scorer.id,
+          scorerName: scorer.name,
+          score: null,
+          reason: null,
+          error: `Step "${stepId}" did not produce a successful output (status: ${stepResult?.status ?? 'missing'})`,
+          targetScope: 'span',
+          stepId,
+        });
+      }
+      continue;
+    }
+
+    const stepInput = stepResult.payload !== undefined ? stepResult.payload : item.input;
+    const stepOutput = stepResult.output;
+
+    const targetCorrelationContext: CorrelationContext = {
+      ...(traceId ? { traceId } : {}),
+      entityType: EntityType.WORKFLOW_STEP,
+      entityId: stepId,
+      entityName: stepId,
+      experimentId: runId,
+    };
+
+    const settled = await Promise.allSettled(
+      scorers.map(async scorer => {
+        try {
+          const scoreResult: unknown = await scorer.run({
+            input: stepInput,
+            output: stepOutput,
+            groundTruth: item.groundTruth,
+            scoreSource: 'experiment',
+            targetScope: 'span',
+            targetEntityType: EntityType.WORKFLOW_STEP,
+            targetTraceId: traceId,
+            ...(targetCorrelationContext ? { targetCorrelationContext } : {}),
+          });
+
+          if (typeof scoreResult !== 'object' || scoreResult === null) {
+            return {
+              scorerId: scorer.id,
+              scorerName: scorer.name,
+              score: null,
+              reason: null,
+              error: `Scorer ${scorer.name} (${scorer.id}) returned invalid result on step ${stepId}`,
+              targetScope: 'span' as const,
+              stepId,
+            };
+          }
+          const fields = scoreResult as Record<string, unknown>;
+          const score = typeof fields.score === 'number' ? fields.score : null;
+          const reason = typeof fields.reason === 'string' ? fields.reason : null;
+
+          // Persist score (best-effort, mirrors runScorersForItem)
+          if (storage && score !== null) {
+            try {
+              await validateAndSaveScore(storage, {
+                scorerId: scorer.id,
+                score,
+                reason: reason ?? undefined,
+                input: stepInput,
+                output: stepOutput,
+                additionalContext: { ...item.metadata, stepId },
+                entityType: 'WORKFLOW_STEP',
+                entityId: itemId,
+                source: 'TEST',
+                runId,
+                traceId,
+                scorer: {
+                  id: scorer.id,
+                  name: scorer.name,
+                  description: scorer.description ?? '',
+                  hasJudge: !!scorer.judge,
+                },
+                entity: {
+                  id: targetId,
+                  name: targetId,
+                },
+              });
+            } catch (saveError) {
+              console.warn(`Failed to save score for step scorer ${scorer.id} on ${stepId}:`, saveError);
+            }
+          }
+
+          return {
+            scorerId: scorer.id,
+            scorerName: scorer.name,
+            score,
+            reason,
+            error: null,
+            targetScope: 'span' as const,
+            stepId,
+          };
+        } catch (error) {
+          return {
+            scorerId: scorer.id,
+            scorerName: scorer.name,
+            score: null,
+            reason: null,
+            error: error instanceof Error ? error.message : String(error),
+            targetScope: 'span' as const,
+            stepId,
+          };
+        }
+      }),
+    );
+
+    for (let i = 0; i < settled.length; i++) {
+      const s = settled[i]!;
+      if (s.status === 'fulfilled') {
+        results.push(s.value);
+      } else {
+        const scorer = scorers[i]!;
+        results.push({
+          scorerId: scorer.id,
+          scorerName: scorer.name,
+          score: null,
+          reason: null,
+          error: String(s.reason),
+          targetScope: 'span',
+          stepId,
+        });
+      }
+    }
+  }
+
+  // targetType/targetId are intentionally accepted but only used for persistence
+  // entity context; the dispatch itself is workflow-step scoped.
+  void targetType;
+  return results;
 }

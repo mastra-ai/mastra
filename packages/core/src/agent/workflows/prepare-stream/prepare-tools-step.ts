@@ -56,6 +56,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
         delegation: options.delegation,
         backgroundTaskEnabled,
+        inputProcessors: options.inputProcessors,
       });
 
       // Update the agent span with available tool names for observability

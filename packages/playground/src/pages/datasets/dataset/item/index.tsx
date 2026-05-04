@@ -22,7 +22,6 @@ import {
 } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import {
-  AlertTriangleIcon,
   ArrowRightToLineIcon,
   Calendar1Icon,
   DatabaseIcon,
@@ -308,22 +307,23 @@ function DatasetItemPage() {
             <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
               <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Notice variant="destructive">
-                    <AlertTriangleIcon />
+                  <Notice variant="destructive" title="Item deleted">
                     <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
                   </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <>
-                    <Notice variant="warning">
-                      <AlertTriangleIcon />
-                      <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  <Notice
+                    variant="warning"
+                    title="Previous version"
+                    action={
                       <Notice.Button onClick={handleReturnToLatest}>
                         <ArrowRightToLineIcon /> Return to the latest version
                       </Notice.Button>
-                    </Notice>
-                  </>
+                    }
+                  >
+                    <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {isEditing ? (

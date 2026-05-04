@@ -24,7 +24,7 @@ export function ToolCombobox({
   emptyText = 'No tools found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
 }: ToolComboboxProps) {
   const { data: tools = {}, isLoading: isLoadingTools, isError: isErrorTools, error: errorTools } = useTools();
   const { data: agents = {}, isLoading: isLoadingAgents, isError: isErrorAgents, error: errorAgents } = useAgents();

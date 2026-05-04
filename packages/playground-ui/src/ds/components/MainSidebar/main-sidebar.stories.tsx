@@ -31,7 +31,6 @@ const meta: Meta<typeof MainSidebar> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

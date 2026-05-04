@@ -715,6 +715,11 @@ describe('Tracing Integration Tests', () => {
     const mastra = new Mastra({
       ...getBaseMastraConfig(testExporter),
       workflows: { metadataWorkflow },
+      // Mastra-level environment should auto-attach to spans, logs, and metrics
+      // for this run. The snapshot below verifies it lands on root and child
+      // span metadata; explicit assertions below verify it propagates to
+      // log/metric correlationContext.
+      environment: 'production',
     });
 
     const workflow = mastra.getWorkflow('metadataWorkflow');
@@ -731,12 +736,16 @@ describe('Tracing Integration Tests', () => {
     expect(stepLog!.data).toEqual({ value: 'tacos' });
     expect(stepLog!.traceId).toBe(result.traceId);
     expect(stepLog!.spanId).toBeDefined();
+    // Mastra-level environment should be attached to log correlationContext
+    expect(stepLog!.correlationContext?.environment).toBe('production');
 
     // Verify auto-extracted workflow metrics
     const workflowDuration = testExporter.getMetricsByName('mastra_workflow_duration_ms');
     expect(workflowDuration).toHaveLength(1);
     expect(workflowDuration[0]!.value).toBeGreaterThanOrEqual(0);
     expect(workflowDuration[0]!.labels.status).toBe('ok');
+    // Mastra-level environment should be attached to metric correlationContext
+    expect(workflowDuration[0]!.correlationContext?.environment).toBe('production');
   });
 
   it('should add child spans in workflow step', async () => {

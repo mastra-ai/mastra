@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { File, FileCode, FileJson, FileText, Folder, FolderGit2, FolderPlus, Plus, Trash2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
-import { IconButton } from '../IconButton';
+import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
 import { Tree } from './tree';
 
@@ -11,7 +11,6 @@ const meta: Meta<typeof Tree> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -134,9 +133,9 @@ export const WithActions: Story = {
             <Tree.FolderTrigger
               actions={
                 <span className="opacity-0 group-hover:opacity-100">
-                  <IconButton size="sm" variant="ghost" tooltip="Add folder">
+                  <Button size="icon-sm" variant="ghost" tooltip="Add folder">
                     <FolderPlus />
-                  </IconButton>
+                  </Button>
                 </span>
               }
             >
@@ -152,18 +151,18 @@ export const WithActions: Story = {
                 </Tree.Icon>
                 <Tree.Label>index.ts</Tree.Label>
                 <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-                  <IconButton size="sm" variant="ghost" tooltip="Delete file" onClick={e => e.stopPropagation()}>
+                  <Button size="icon-sm" variant="ghost" tooltip="Delete file" onClick={e => e.stopPropagation()}>
                     <Trash2 />
-                  </IconButton>
+                  </Button>
                 </span>
               </Tree.File>
               <Tree.Folder>
                 <Tree.FolderTrigger
                   actions={
                     <span className="opacity-0 group-hover:opacity-100">
-                      <IconButton size="sm" variant="ghost" tooltip="Add file">
+                      <Button size="icon-sm" variant="ghost" tooltip="Add file">
                         <Plus />
-                      </IconButton>
+                      </Button>
                     </span>
                   }
                 >
@@ -257,12 +256,12 @@ function WithInlineCreationExample() {
             <Tree.FolderTrigger
               actions={
                 <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
-                  <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
+                  <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
                     <Plus />
-                  </IconButton>
-                  <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
+                  </Button>
+                  <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
                     <FolderPlus />
-                  </IconButton>
+                  </Button>
                 </span>
               }
             >

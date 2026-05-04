@@ -7,6 +7,7 @@ packages:
   - stores/*
   - browser/*
   - voice/*
+  - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
   - server-adapters/*
@@ -15,6 +16,7 @@ packages:
   - integrations/*
   - auth/*
   - observability/*
+  - channels/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
