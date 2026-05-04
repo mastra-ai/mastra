@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -46,6 +47,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -564,6 +566,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // FGA authorization check before tool execution
+        const toolFgaProvider = mastra?.getServer?.()?.fga;
+        if (toolFgaProvider) {
+          const fgaUser = requestContext?.get('user');
+          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
+          if (!fgaUser) {
+            throw new FGADeniedError(
+              { id: 'unknown' },
+              { type: 'tool', id: inputData.toolName },
+              MastraFGAPermissions.TOOLS_EXECUTE,
+            );
+          }
+          await checkFGA({
+            fgaProvider: toolFgaProvider,
+            user: fgaUser,
+            resource: { type: 'tool', id: inputData.toolName },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          });
+        }
+
         const llmBgOverrides =
           typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
 
@@ -857,6 +879,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         return { result, ...inputData };
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         return {
           error: error as Error,
           ...inputData,

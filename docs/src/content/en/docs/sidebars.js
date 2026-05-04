@@ -461,6 +461,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
             },

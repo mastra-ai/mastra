@@ -1219,6 +1219,46 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.scores[2]!.traceId).toBe('ord-1');
     });
 
+    it('gets a score by id', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'score-lookup-1',
+          timestamp: new Date('2026-01-01T00:00:01Z'),
+          traceId: 'lookup-trace-1',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.8,
+          reason: 'Good answer',
+          experimentId: null,
+          metadata: { entityType: 'agent' },
+        },
+      });
+      await storage.createScore({
+        score: {
+          scoreId: 'score-lookup-2',
+          timestamp: new Date('2026-01-01T00:00:02Z'),
+          traceId: 'lookup-trace-2',
+          spanId: 'lookup-span-2',
+          scorerId: 'factuality',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const score = await storage.getScoreById('score-lookup-1');
+      expect(score).toEqual(
+        expect.objectContaining({
+          scoreId: 'score-lookup-1',
+          traceId: 'lookup-trace-1',
+          scorerId: 'quality',
+          score: 0.8,
+        }),
+      );
+      expect(await storage.getScoreById('missing-score')).toBeNull();
+    });
+
     it('listFeedback defaults to timestamp DESC', async () => {
       await storage.createFeedback({
         feedback: {

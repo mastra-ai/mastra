@@ -1,4 +1,4 @@
-import { PageHeader, PageLayout, SelectField, SettingsIcon, useTheme } from '@mastra/playground-ui';
+import { PageHeader, PageLayout, SectionCard, SelectField, SettingsIcon, useTheme } from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
@@ -23,21 +23,23 @@ export const StudioSettingsPage = () => {
         </PageHeader>
       </PageLayout.TopArea>
 
-      <PageLayout.MainArea className="grid gap-8 mt-6">
-        <section className="rounded-lg border border-border1 bg-surface3 p-4">
-          <div className="space-y-3">
-            <h2 className="text-icon6 font-medium">Theme</h2>
-            <SelectField
-              name="theme"
-              label="Theme mode"
-              value={theme}
-              onValueChange={value => setTheme(value as Theme)}
-              options={THEME_OPTIONS.map(option => ({ ...option }))}
-            />
-          </div>
-        </section>
+      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+        <SectionCard title="Theme" description="Customize the appearance of the studio.">
+          <SelectField
+            name="theme"
+            label="Theme mode"
+            value={theme}
+            onValueChange={value => setTheme(value as Theme)}
+            options={THEME_OPTIONS.map(option => ({ ...option }))}
+          />
+        </SectionCard>
 
-        <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
+        <SectionCard
+          title="Mastra Connection"
+          description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
+        >
+          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
+        </SectionCard>
       </PageLayout.MainArea>
     </PageLayout>
   );

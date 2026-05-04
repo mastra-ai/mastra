@@ -52,6 +52,7 @@ import type {
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -544,6 +545,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    try {
+      return await scoresOps.getScoreById(this.#client, scoreId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SCORE_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { scoreId },
         },
         error,
       );
