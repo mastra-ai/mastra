@@ -919,12 +919,100 @@ export async function executeForeach(
   let inFlight = 0;
   let resolveCompletion: (() => void) | undefined;
 
+  /** Publish a workflow-step-progress event for a single foreach iteration. */
+  const emitIterationProgress = (
+    k: number,
+    iterationStatus: 'success' | 'suspended' | 'failed',
+    iterationOutput?: unknown,
+  ) =>
+    pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-progress',
+        payload: {
+          id: step.id,
+          completedCount,
+          totalCount,
+          currentIndex: k,
+          iterationStatus,
+          ...(iterationOutput !== undefined ? { iterationOutput } : {}),
+        },
+      },
+    });
+
+  /** Drain all queued (not yet in-flight) tasks and kill the queue. */
+  const killQueue = () => {
+    inFlight -= queue.length();
+    queue.kill();
+  };
+
+  /** Execute a single foreach iteration and return its result. */
+  const executeForeachIteration = (item: any, k: number, resumeToUse: typeof resume) =>
+    engine.executeStep({
+      workflowId,
+      runId,
+      resourceId,
+      step,
+      stepResults,
+      restart,
+      timeTravel,
+      executionContext: { ...executionContext, foreachIndex: k },
+      resume: resumeToUse,
+      prevOutput: item,
+      ...createObservabilityContext({ currentSpan: loopSpan }),
+      pubsub,
+      abortController,
+      requestContext,
+      skipEmits: true,
+      outputWriter,
+      disableScorers,
+      serializedStepGraph,
+      perStep,
+    });
+
+  /** Handle a non-success result (suspended or failed). Kills the queue so remaining items are skipped. */
+  const handleNonSuccessResult = async (result: StepResult<any, any, any, any>, k: number) => {
+    const resultAny = result as any;
+    const execResults = {
+      status: resultAny.status,
+      error: resultAny.error,
+      suspendPayload: resultAny.suspendPayload,
+      suspendedAt: resultAny.suspendedAt,
+      endedAt: resultAny.endedAt,
+      output: resultAny.output,
+    };
+
+    if (execResults.status === 'suspended') {
+      if (!foreachIndexObj[k]) {
+        foreachIndexObj[k] = execResults;
+      }
+      await emitIterationProgress(k, 'suspended');
+    } else {
+      completedCount++;
+      await emitIterationProgress(k, 'failed');
+      if (!errorResult) {
+        errorResult = result;
+      }
+    }
+
+    killQueue();
+  };
+
+  /** Handle a successful iteration result. */
+  const handleSuccessResult = async (result: StepResult<any, any, any, any>, k: number) => {
+    completedCount++;
+    await emitIterationProgress(k, 'success', (result as any)?.output);
+
+    const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k)!;
+    delete resumeLabels[indexResumeLabel];
+  };
+
   const worker = async (task: ForeachTask, cb: DoneCallback) => {
     const { item, k, resumeToUse } = task;
 
     try {
-      // Honor cancellation so long-running foreach terminates without
-      // dispatching more work when the run is cancelled.
+      // Honor cancellation before dispatching more work
       if (abortController?.signal?.aborted) {
         if (!canceledResult) {
           canceledResult = {
@@ -934,120 +1022,24 @@ export async function executeForeach(
             endedAt: Date.now(),
           } as unknown as StepResult<any, any, any, any>;
         }
-        inFlight -= queue.length();
-        queue.kill();
+        killQueue();
         inFlight--;
         cb(null);
         if (inFlight === 0) resolveCompletion?.();
         return;
       }
 
-      const stepExecResult = await engine.executeStep({
-        workflowId,
-        runId,
-        resourceId,
-        step,
-        stepResults,
-        restart,
-        timeTravel,
-        executionContext: { ...executionContext, foreachIndex: k },
-        resume: resumeToUse,
-        prevOutput: item,
-        ...createObservabilityContext({ currentSpan: loopSpan }),
-        pubsub,
-        abortController,
-        requestContext,
-        skipEmits: true,
-        outputWriter,
-        disableScorers,
-        serializedStepGraph,
-        perStep,
-      });
+      const stepExecResult = await executeForeachIteration(item, k, resumeToUse);
 
-      // Apply context changes from foreach step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
 
       const result = stepExecResult.result;
 
       if (result.status !== 'success') {
-        const resultAny = result as any;
-        const execResults = {
-          status: resultAny.status,
-          error: resultAny.error,
-          suspendPayload: resultAny.suspendPayload,
-          suspendedAt: resultAny.suspendedAt,
-          endedAt: resultAny.endedAt,
-          output: resultAny.output,
-        };
-
-        if (execResults.status === 'suspended') {
-          // Guard: only record if not already set by a concurrent worker
-          if (!foreachIndexObj[k]) {
-            foreachIndexObj[k] = execResults;
-          }
-
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: {
-              type: 'workflow-step-progress',
-              payload: {
-                id: step.id,
-                completedCount,
-                totalCount,
-                currentIndex: k,
-                iterationStatus: 'suspended' as const,
-              },
-            },
-          });
-        } else {
-          completedCount++;
-
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: {
-              type: 'workflow-step-progress',
-              payload: {
-                id: step.id,
-                completedCount,
-                totalCount,
-                currentIndex: k,
-                iterationStatus: 'failed' as const,
-              },
-            },
-          });
-
-          // Guard: preserve the first observed failure across concurrent workers
-          if (!errorResult) {
-            errorResult = result;
-          }
-        }
-        // Remove all waiting tasks; in-flight ones will finish naturally.
-        inFlight -= queue.length();
-        queue.kill();
+        await handleNonSuccessResult(result, k);
       } else {
-        completedCount++;
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-progress',
-            payload: {
-              id: step.id,
-              completedCount,
-              totalCount,
-              currentIndex: k,
-              iterationStatus: 'success' as const,
-              iterationOutput: result?.output,
-            },
-          },
-        });
-
-        const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k)!;
-        delete resumeLabels[indexResumeLabel];
+        await handleSuccessResult(result, k);
       }
 
       if ((result as any)?.output !== undefined) {
@@ -1056,18 +1048,10 @@ export async function executeForeach(
 
       // Preserve `suspendPayload` for iterations that are still suspended so
       // their resume context (e.g. an agent's `__streamState`) survives the
-      // round-trip through the workflow snapshot. When a different iteration
-      // is resumed later, the foreach loop re-enters with `prevForeachOutput`
-      // and uses each entry's `suspendPayload` to rebuild execution state for
-      // the iterations that are still pending. Wiping it for suspended results
-      // (the previous behavior) caused those iterations to lose their state on
-      // every resume, e.g. parallel tool-call approvals losing conversation
-      // context after the first approval. For non-suspended results, we still
-      // clear `suspendPayload` to keep the snapshot small.
+      // round-trip through the workflow snapshot. For non-suspended results we
+      // clear it to keep the snapshot small.
       prevForeachOutput[k] = result?.status === 'suspended' ? result : ({ ...result, suspendPayload: {} } as any);
     } catch (err) {
-      // Surface unexpected errors (e.g. from applyMutableContext or Object.assign)
-      // so the queue drains with a visible failure instead of silently swallowing.
       if (!errorResult) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
         errorResult = {
@@ -1078,8 +1062,7 @@ export async function executeForeach(
           endedAt: Date.now(),
         } as unknown as StepResult<any, any, any, any>;
       }
-      inFlight -= queue.length();
-      queue.kill();
+      killQueue();
     }
 
     inFlight--;
