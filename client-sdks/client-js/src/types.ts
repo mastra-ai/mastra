@@ -2588,12 +2588,10 @@ export interface ScheduleTriggerResponse {
   run?: ScheduleRunSummary;
 }
 
-export interface ListSchedulesParams {
+export type ListSchedulesParams = {
   workflowId?: string;
   status?: ScheduleStatus;
-  ownerType?: string;
-  ownerId?: string;
-}
+} & ({ ownerType?: undefined; ownerId?: undefined } | { ownerType: string; ownerId?: string });
 
 export interface ListSchedulesResponse {
   schedules: ScheduleResponse[];

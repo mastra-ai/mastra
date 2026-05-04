@@ -125,6 +125,17 @@ describe('Schedules handlers', () => {
 
       expect(result).toEqual({ schedules: [] });
     });
+
+    it('rejects ownerId without ownerType via query schema', () => {
+      const schema = LIST_SCHEDULES_ROUTE.queryParamSchema!;
+      expect(schema.safeParse({ ownerId: 'agent_1' }).success).toBe(false);
+    });
+
+    it('accepts ownerType with optional ownerId via query schema', () => {
+      const schema = LIST_SCHEDULES_ROUTE.queryParamSchema!;
+      expect(schema.safeParse({ ownerType: 'agent' }).success).toBe(true);
+      expect(schema.safeParse({ ownerType: 'agent', ownerId: 'agent_1' }).success).toBe(true);
+    });
   });
 
   describe('GET_SCHEDULE_ROUTE', () => {

@@ -77,12 +77,17 @@ export const scheduleTriggerResponseSchema = z.object({
   run: scheduleRunSummarySchema.optional(),
 });
 
-export const listSchedulesQuerySchema = z.object({
-  workflowId: z.string().optional(),
-  status: scheduleStatusSchema.optional(),
-  ownerType: z.string().optional(),
-  ownerId: z.string().optional(),
-});
+export const listSchedulesQuerySchema = z
+  .object({
+    workflowId: z.string().optional(),
+    status: scheduleStatusSchema.optional(),
+    ownerType: z.string().optional(),
+    ownerId: z.string().optional(),
+  })
+  .refine(data => data.ownerId === undefined || data.ownerType !== undefined, {
+    message: 'ownerId can only be used together with ownerType',
+    path: ['ownerId'],
+  });
 
 export const listSchedulesResponseSchema = z.object({
   schedules: z.array(scheduleResponseSchema),

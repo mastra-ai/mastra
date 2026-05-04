@@ -102,8 +102,10 @@ export type ScheduleTrigger = {
 export type ScheduleFilter = {
   status?: ScheduleStatus;
   workflowId?: string;
-  ownerType?: ScheduleOwnerType;
-  ownerId?: string;
+  /** `null` matches schedules with no owner (e.g. workflow-only schedules). */
+  ownerType?: ScheduleOwnerType | null;
+  /** `null` matches schedules with no owner id. */
+  ownerId?: string | null;
 };
 
 /** Filter / pagination options for listing trigger history. */
