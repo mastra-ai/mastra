@@ -1622,6 +1622,128 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(base64);
     });
 
+    it('should hoist URL and media tool-result blocks into observer input attachments', () => {
+      const imageData = 'E'.repeat(1500);
+      const fileData = 'F'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'captureAssets',
+              args: {},
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Assets captured.' },
+                    { type: 'image-url', url: 'https://example.com/chart.png', mediaType: 'image/png' },
+                    {
+                      type: 'file-url',
+                      url: 'https://example.com/report.pdf',
+                      mediaType: 'application/pdf',
+                      filename: 'report.pdf',
+                    },
+                    { type: 'media', data: imageData, mediaType: 'image/jpeg' },
+                    { type: 'media', data: fileData, mediaType: 'application/pdf' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const fileParts = content.filter(part => part.type === 'file');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts[0]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/chart.png',
+        mimeType: 'image/png',
+      });
+      expect(imageParts[1]).toMatchObject({
+        type: 'image',
+        image: `data:image/jpeg;base64,${imageData}`,
+        mimeType: 'image/jpeg',
+      });
+
+      expect(fileParts).toHaveLength(2);
+      expect(fileParts[0]).toMatchObject({
+        type: 'file',
+        data: 'https://example.com/report.pdf',
+        mimeType: 'application/pdf',
+        filename: 'report.pdf',
+      });
+      expect(fileParts[1]).toMatchObject({
+        type: 'file',
+        data: `data:application/pdf;base64,${fileData}`,
+        mimeType: 'application/pdf',
+      });
+
+      expect(joinedText).toContain('[Image #1: chart.png]');
+      expect(joinedText).toContain('[File #1: report.pdf]');
+      expect(joinedText).toContain('[Image #2: image/jpeg]');
+      expect(joinedText).toContain('[File #2: application/pdf]');
+      expect(joinedText).not.toContain(imageData);
+      expect(joinedText).not.toContain(fileData);
+    });
+
+    it('should hoist image-data without mediaType without leaking base64 into observer text', () => {
+      const base64 = 'G'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: {},
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: base64 }],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(1);
+      expect(imageParts[0]).toMatchObject({ type: 'image', image: base64 });
+      expect(joinedText).toContain('[Image #1]');
+      expect(joinedText).not.toContain(base64);
+    });
+
     it('should share the image counter between user-attached and tool-result images', () => {
       const toolBase64 = 'D'.repeat(1500);
 
