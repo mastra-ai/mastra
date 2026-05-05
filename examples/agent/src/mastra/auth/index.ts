@@ -56,7 +56,7 @@ async function initAuth(): Promise<AuthResult> {
   }
 }
 
-const { mastraAuth, rbacProvider, auth } = await initAuth();
+const { mastraAuth, rbacProvider, fgaProvider, auth } = await initAuth();
 
-export { mastraAuth, rbacProvider, auth };
+export { mastraAuth, rbacProvider, fgaProvider, auth };
 export type { AuthResult, AuthProviderType } from './types';

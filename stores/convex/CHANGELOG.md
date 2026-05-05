@@ -1,5 +1,23 @@
 # @mastra/convex
 
+## 1.0.10-alpha.1
+
+### Patch Changes
+
+- Fixed `@mastra/convex` workflow snapshot persistence when snapshots contain `$`-prefixed JSON Schema keys (for example `$schema` and `$ref`). ([#16169](https://github.com/mastra-ai/mastra/pull/16169))
+  Snapshots are now stored safely, preventing Convex validation failures during workflow runs. Fixes `#16110`.
+- Updated dependencies [[`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0)]:
+  - @mastra/core@1.32.0-alpha.3
+
+## 1.0.10-alpha.0
+
+### Patch Changes
+
+- Improved Convex bulk insert and delete throughput. ([#16149](https://github.com/mastra-ai/mastra/pull/16149))
+
+- Updated dependencies [[`86c0298`](https://github.com/mastra-ai/mastra/commit/86c0298e647306423c842f9d5ac827bd616bd13d), [`7fce309`](https://github.com/mastra-ai/mastra/commit/7fce30912b14170bfc41f0ac736cca0f39fe0cd4), [`7997c2e`](https://github.com/mastra-ai/mastra/commit/7997c2e55ddd121562a4098cd8d2b89c68433bf1), [`e97ccb9`](https://github.com/mastra-ai/mastra/commit/e97ccb900f8b7a390ce82c9f8eb8d6eb2c5e3777), [`c5daf48`](https://github.com/mastra-ai/mastra/commit/c5daf48556e98c46ae06caf00f92c249912007e9), [`cd96779`](https://github.com/mastra-ai/mastra/commit/cd9677937f113b2856dc8b9f3d4bdabcee58bb2e)]:
+  - @mastra/core@1.32.0-alpha.2
+
 ## 1.0.9
 
 ### Patch Changes

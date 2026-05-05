@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree';
 import type { InMemoryFileNode } from '../components/agent-edit-page/utils/form-validation';
+import { usePermissions } from '@/domains/auth/hooks';
 import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 
 interface UpdateSkillParams {
@@ -34,24 +35,30 @@ export function useUpdateSkill() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const writeFile = useWriteWorkspaceFile();
+  const { hasPermission } = usePermissions();
+  const canWriteWorkspace = hasPermission('workspaces:write');
 
   return useMutation({
     mutationFn: async (params: UpdateSkillParams): Promise<StoredSkillResponse> => {
       const { id, name, description, visibility, instructions, files, workspaceId } = params;
 
-      // Write updated files to workspace filesystem if we have files and a workspace
-      if (files?.length && workspaceId) {
+      // Write updated files to workspace filesystem (best-effort — DB is the source of truth)
+      if (files?.length && workspaceId && canWriteWorkspace) {
         const filesToWrite = flattenFiles(files, '');
-        await Promise.all(
-          filesToWrite.map(file =>
-            writeFile.mutateAsync({
-              workspaceId,
-              path: `skills/${file.path}`,
-              content: file.content,
-              recursive: true,
-            }),
-          ),
-        );
+        try {
+          await Promise.all(
+            filesToWrite.map(file =>
+              writeFile.mutateAsync({
+                workspaceId,
+                path: `skills/${file.path}`,
+                content: file.content,
+                recursive: true,
+              }),
+            ),
+          );
+        } catch (err) {
+          console.warn('[skill] Workspace file write failed, saving to DB only:', err);
+        }
       }
 
       // Update stored skill via API

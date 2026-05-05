@@ -208,7 +208,12 @@ export function assertReadAccess(args: {
   if (hasAdminBypass(requestContext, resource)) return;
 
   const callerAuthorId = getCallerAuthorId(requestContext);
-  if (callerAuthorId && callerAuthorId === owner) return;
+  // No authenticated user on the request context means auth is not configured
+  // (single-user/dev mode). When auth IS configured, coreAuthMiddleware
+  // rejects unauthenticated requests with 401 before they reach handlers,
+  // so an absent user here genuinely means no auth provider.
+  if (!callerAuthorId && !requestContext.get(MASTRA_USER_KEY)) return;
+  if (callerAuthorId === owner) return;
 
   if (hasScopedPermission({ requestContext, resource, action: 'read', resourceId })) {
     return;
@@ -243,7 +248,8 @@ export function assertExecuteAccess(args: {
   if (hasAdminBypass(requestContext, resource)) return;
 
   const callerAuthorId = getCallerAuthorId(requestContext);
-  if (callerAuthorId && callerAuthorId === owner) return;
+  if (!callerAuthorId && !requestContext.get(MASTRA_USER_KEY)) return; // No auth configured (see assertReadAccess)
+  if (callerAuthorId === owner) return;
 
   if (hasScopedPermission({ requestContext, resource, action: 'execute', resourceId })) {
     return;
@@ -281,7 +287,8 @@ export function assertWriteAccess(args: {
   if (hasAdminBypass(requestContext, resource)) return;
 
   const callerAuthorId = getCallerAuthorId(requestContext);
-  if (callerAuthorId && callerAuthorId === owner) return;
+  if (!callerAuthorId && !requestContext.get(MASTRA_USER_KEY)) return; // No auth configured (see assertReadAccess)
+  if (callerAuthorId === owner) return;
 
   if (hasScopedPermission({ requestContext, resource, action, resourceId })) {
     return;
@@ -321,7 +328,8 @@ export function assertShareAccess(args: {
   if (hasAdminBypass(requestContext, resource)) return;
 
   const callerAuthorId = getCallerAuthorId(requestContext);
-  if (callerAuthorId && callerAuthorId === owner) return;
+  if (!callerAuthorId && !requestContext.get(MASTRA_USER_KEY)) return; // No auth configured (see assertReadAccess)
+  if (callerAuthorId === owner) return;
 
   if (hasScopedPermission({ requestContext, resource, action: 'share', resourceId })) {
     return;

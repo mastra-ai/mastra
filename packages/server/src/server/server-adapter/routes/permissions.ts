@@ -163,14 +163,18 @@ export function derivePermission(route: Pick<ServerRoute, 'path' | 'method'>): s
  * Gets the effective permission for a route.
  *
  * Priority:
- * 1. Explicit requiresPermission on the route
+ * 1. Explicit requiresPermission on the route (string or string[])
  * 2. Derived permission from path/method convention
  * 3. null (no permission required - should only happen for public routes)
  *
+ * When the route specifies an array of permissions, the user needs ANY ONE
+ * of them (logical OR). This is useful for routes that serve multiple
+ * resource types.
+ *
  * @param route - The server route
- * @returns The permission string or null
+ * @returns The permission string, array of alternative permissions, or null
  */
-export function getEffectivePermission(route: ServerRoute): string | null {
+export function getEffectivePermission(route: ServerRoute): string | string[] | null {
   // If route is explicitly public, no permission needed
   if (route.requiresAuth === false) {
     return null;

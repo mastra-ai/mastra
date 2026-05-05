@@ -30,12 +30,15 @@ const mismatches: string[] = [];
 for (const route of SERVER_ROUTES) {
   if (route.method === 'ALL') continue;
 
-  const runtimePerm = getEffectivePermission(route);
-  if (runtimePerm) {
-    runtimePermissions.add(runtimePerm);
+  const effective = getEffectivePermission(route);
+  if (effective) {
+    const perms = Array.isArray(effective) ? effective : [effective];
+    for (const runtimePerm of perms) {
+      runtimePermissions.add(runtimePerm);
 
-    if (!generatedPermissions.has(runtimePerm)) {
-      mismatches.push(`Missing: ${runtimePerm} (from ${route.method} ${route.path})`);
+      if (!generatedPermissions.has(runtimePerm)) {
+        mismatches.push(`Missing: ${runtimePerm} (from ${route.method} ${route.path})`);
+      }
     }
   }
 }

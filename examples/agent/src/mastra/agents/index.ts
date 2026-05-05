@@ -6,6 +6,7 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { calculatorWithUI, greetUserWithUI } from '../mcp/app-tools';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { requestContextDemoAgent } from './request-context-demo-agent';
@@ -241,3 +242,27 @@ export const evalAgent = new Agent({
 });
 
 export { requestContextDemoAgent };
+
+// MCP Apps Demo Agent — tools are passed directly, not via mcpServers/mcpClients.
+// The MCPServer is registered at the Mastra level for Studio resource resolution,
+// while the agent simply consumes tools. Studio resolves ui:// app resources by
+// scanning registered MCP servers and matching tool names.
+export const mcpAppsAgent = new Agent({
+  id: 'mcp-apps-agent',
+  name: 'MCP Apps Agent',
+  description: 'An agent that demonstrates MCP Apps — tools with interactive HTML UIs rendered in chat.',
+  instructions: `You are a helpful assistant with access to interactive UI tools.
+Your tools open interactive UIs that render directly in the chat. When you use a tool with an interactive UI:
+- Briefly describe what the UI shows and what the user can do with it.
+- Do NOT repeat or narrate the computed result — the UI displays it directly.
+- Encourage the user to interact with the UI for further actions.
+
+Available tools:
+- calculatorWithUI: Opens an interactive calculator. Use when asked to do math.
+- greetUserWithUI: Opens an interactive greeting app. Use when asked to greet someone.`,
+  model: 'openai/gpt-5-mini',
+  tools: {
+    calculatorWithUI,
+    greetUserWithUI,
+  },
+});

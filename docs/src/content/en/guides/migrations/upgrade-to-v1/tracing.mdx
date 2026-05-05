@@ -7,6 +7,12 @@ description: "Migration guide for updating from otel-telemetry or AI tracing to 
 
 The observability system has been restructured in v1 with a dedicated `@mastra/observability` package. This guide covers two migration paths depending on which version you're upgrading from.
 
+:::warning[Observability data stops flowing on upgrade]
+If you upgrade Mastra packages to v1 without migrating your `telemetry:` config to `observability:`, the old config is ignored at runtime. Your service will start cleanly with no error, but **no traces, logs, or metrics will be sent anywhere**. If you were sending data to Mastra Cloud, the dashboard will go empty.
+
+Complete this migration in the same change that bumps your Mastra packages, and verify traces appear in [Mastra Studio](/docs/studio/observability) before considering the upgrade complete. If you previously hosted on Mastra Cloud, also follow the [Mastra Cloud migration guide](/guides/migrations/mastra-cloud) — the new platform requires a new access token and a Studio project before `CloudExporter` can route data to it.
+:::
+
 ## Migration paths
 
 ### From OTEL-based Telemetry (0.x)

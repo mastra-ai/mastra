@@ -70,6 +70,7 @@ export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
+export * from './ds/components/SectionCard';
 export * from './ds/components/SelectElement';
 export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';

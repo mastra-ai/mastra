@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.32.0-alpha.1",
+  "version": "1.32.0-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -100,6 +100,7 @@
     "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "generate:permissions": "pnpx tsx scripts/generate-permissions.ts",
+    "generate:route-types": "pnpx tsx scripts/generate-route-types.ts",
     "check:permissions": "pnpx tsx scripts/check-permissions.ts",
     "test": "vitest run",
     "lint": "eslint ."
@@ -130,7 +131,8 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-ts": "^2.0.0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

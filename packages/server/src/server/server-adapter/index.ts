@@ -448,6 +448,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
    * 3. Routes with `requiresAuth: false` skip permission checks
    *
+   * When the route specifies an array of permissions, the user needs ANY ONE
+   * of them (logical OR).
+   *
    * @param route - The route being accessed
    * @param userPermissions - The user's permissions from the request context
    * @returns Error response if permission denied, null if allowed
@@ -472,12 +475,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return null;
     }
 
-    // Check if user has the required permission
-    if (!userPermissions || !hasPermissionFn(userPermissions, requiredPermission)) {
+    // Check if user has the required permission(s)
+    // When an array is provided, user needs ANY ONE of them (logical OR)
+    const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
+
+    if (!hasAny) {
       return {
         status: 403,
         error: 'Forbidden',
-        message: `Missing required permission: ${requiredPermission}`,
+        message: `Missing required permission: ${permissions.join(' or ')}`,
       };
     }
 
@@ -867,4 +874,88 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
     };
   }
+}
+
+/**
+ * Check FGA authorization for an HTTP route.
+ * Returns null if authorized or FGA not configured, or an error object if denied.
+ */
+export async function checkRouteFGA(
+  mastra: any,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<{ status: number; error: string; message: string } | null> {
+  const fgaConfig = route.fga;
+  if (!fgaConfig) return null;
+
+  const fgaProvider = mastra?.getServer?.()?.fga;
+  if (!fgaProvider) return null;
+
+  const user = requestContext?.get('user');
+  if (!user) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: authenticated user is required',
+    };
+  }
+
+  const resourceId =
+    typeof fgaConfig.resourceId === 'function'
+      ? fgaConfig.resourceId(params, { requestContext })
+      : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
+  if (!fgaConfig.resourceType || !resourceId) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is incomplete',
+    };
+  }
+  const permission =
+    fgaConfig.permission ||
+    (route.path ? getEffectivePermission(route) : null) ||
+    `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
+
+  const authorized = await fgaProvider.check(user, {
+    resource: { type: fgaConfig.resourceType, id: resourceId },
+    permission,
+    context: { resourceId, requestContext },
+  });
+
+  if (!authorized) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
+    };
+  }
+
+  return null;
+}
+
+function deriveFGAAction(method: string): string {
+  switch (method.toUpperCase()) {
+    case 'GET':
+      return 'read';
+    case 'DELETE':
+      return 'delete';
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+      return 'write';
+    default:
+      return 'read';
+  }
+}
+
+function getFGAResourcePermissionSlug(resourceType: string): string {
+  const resourcePermissionSlugs: Record<string, string> = {
+    agent: 'agents',
+    workflow: 'workflows',
+    tool: 'tools',
+    thread: 'memory',
+  };
+
+  return resourcePermissionSlugs[resourceType] ?? resourceType;
 }

@@ -73,9 +73,7 @@ const installRadixDomShims = () => {
 };
 
 const slackOnlyHandlers = () => [
-  http.get('*/api/channels/platforms', () =>
-    HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }]),
-  ),
+  http.get('*/api/channels/platforms', () => HttpResponse.json([{ id: 'slack', name: 'Slack', isConfigured: true }])),
   http.get('*/api/channels/:platform/installations', () => HttpResponse.json([])),
 ];
 

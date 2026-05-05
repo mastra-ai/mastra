@@ -158,6 +158,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/temporal',
+          label: 'Temporal',
+        },
+        {
+          type: 'doc',
           id: 'deployment/vercel',
           label: 'Vercel',
         },

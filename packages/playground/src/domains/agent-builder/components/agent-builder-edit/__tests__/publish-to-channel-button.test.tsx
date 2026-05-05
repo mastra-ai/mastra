@@ -77,10 +77,7 @@ describe('PublishToChannelButton', () => {
   });
 
   it('renders nothing when agentId is missing', () => {
-    server.use(
-      platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
-      installationsHandler({}),
-    );
+    server.use(platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]), installationsHandler({}));
     render(
       <Wrapper>
         <PublishToChannelButton agentId={undefined} />
@@ -302,10 +299,7 @@ describe('PublishToChannelButton', () => {
   });
 
   it('opens the default dialog for an unconfigured platform with the "Not configured" notice', async () => {
-    server.use(
-      platformsHandler([{ id: 'discord', name: 'Discord', isConfigured: false }]),
-      installationsHandler({}),
-    );
+    server.use(platformsHandler([{ id: 'discord', name: 'Discord', isConfigured: false }]), installationsHandler({}));
 
     render(
       <Wrapper>

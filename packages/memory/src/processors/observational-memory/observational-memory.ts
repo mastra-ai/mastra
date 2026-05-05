@@ -2,6 +2,7 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
@@ -290,6 +291,7 @@ export class ObservationalMemory {
 
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
+  private mastra?: Mastra;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -370,6 +372,7 @@ export class ObservationalMemory {
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
     this.onIndexObservations = config.onIndexObservations;
+    this.mastra = config.mastra;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -540,6 +543,7 @@ export class ObservationalMemory {
       observedMessageIds: this.observedMessageIds,
       resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
       tokenCounter: this.tokenCounter,
+      mastra: config.mastra,
     });
 
     this.buffering = new BufferingCoordinator({
@@ -560,6 +564,7 @@ export class ObservationalMemory {
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
+      mastra: config.mastra,
     });
 
     // Validate buffer configuration
@@ -568,6 +573,12 @@ export class ObservationalMemory {
     omDebug(
       `[OM:init] new ObservationalMemory instance created — scope=${this.scope}, messageTokens=${JSON.stringify(this.observationConfig.messageTokens)}, obsAsyncEnabled=${this.buffering.isAsyncObservationEnabled()}, bufferTokens=${this.observationConfig.bufferTokens}, bufferActivation=${this.observationConfig.bufferActivation}, blockAfter=${this.observationConfig.blockAfter}, reflectionTokens=${this.reflectionConfig.observationTokens}, refAsyncEnabled=${this.buffering.isAsyncReflectionEnabled()}, refAsyncActivation=${this.reflectionConfig.bufferActivation}, refBlockAfter=${this.reflectionConfig.blockAfter}`,
     );
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
+    this.observer.__registerMastra(mastra);
+    this.reflector.__registerMastra(mastra);
   }
 
   /**
@@ -742,7 +753,7 @@ export class ObservationalMemory {
       return undefined;
     }
 
-    const resolved = await resolveModelConfig(modelToResolve, requestContext);
+    const resolved = await resolveModelConfig(modelToResolve, requestContext, this.mastra);
     return {
       provider: resolved.provider,
       modelId: resolved.modelId,

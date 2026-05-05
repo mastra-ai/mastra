@@ -195,9 +195,7 @@ const AgentBuilderAgentViewReady = ({
             <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
           ) : undefined
         }
-        mobileExtra={
-          isOwner ? <AgentBuilderMobileMenu agentId={id} showPublishToChannel={isPublishable} /> : undefined
-        }
+        mobileExtra={isOwner ? <AgentBuilderMobileMenu agentId={id} showPublishToChannel={isPublishable} /> : undefined}
         chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
         configure={
           <ConfigurePanelConnected

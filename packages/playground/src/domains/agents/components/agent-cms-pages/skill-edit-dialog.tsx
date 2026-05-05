@@ -331,7 +331,7 @@ export function SkillEditDialog({
                   Hide skill details
                 </button>
 
-                {(!hasFilesystem || !workspaceId) && (
+                {isAdmin && (!hasFilesystem || !workspaceId) && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>
