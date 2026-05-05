@@ -157,6 +157,10 @@ function findNextConfigObject(program: t.Program): t.ObjectExpression | null {
 }
 
 function parseNextConfig(nextConfigContent: string): NextConfig | null {
+  if (!nextConfigContent.includes('serverExternalPackages')) {
+    return {};
+  }
+
   const program = parseProgram(nextConfigContent);
   const config = findNextConfigObject(program);
   if (!config) {
