@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Fixed `buildScoreEvent` so `scorerName` and `targetEntityType` from `ScoreInput` are forwarded onto the emitted `ExportedScore`. Without this, exporters consuming `score.scorerName` (Langfuse, Braintrust, LangSmith, Laminar) silently fell back to the scorer id and lost the human-readable name.
+Fixed `buildScoreEvent` so `scorerName` and `targetEntityType` from `ScoreInput` are forwarded onto the emitted `ExportedScore`. Previously these two fields were dropped during event construction, so consumers of `ScoreEvent` saw them as `undefined` even when the caller supplied them.
