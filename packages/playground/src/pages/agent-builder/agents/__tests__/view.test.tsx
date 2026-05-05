@@ -58,6 +58,11 @@ const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({
 }));
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
+  useStoredAgentMutations: () => ({
+    createStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    updateStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    deleteStoredAgent: { mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false },
+  }),
 }));
 
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({

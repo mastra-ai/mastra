@@ -12,6 +12,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
+import { DeleteAgentDesktopButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
 import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
@@ -192,10 +193,23 @@ const AgentBuilderAgentViewReady = ({
         }
         primaryAction={
           isOwner ? (
-            <ViewHeaderActions onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })} />
+            <ViewHeaderActions
+              agentId={id}
+              agentName={storedAgent?.name ?? ''}
+              onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
+            />
           ) : undefined
         }
-        mobileExtra={isOwner ? <AgentBuilderMobileMenu agentId={id} showPublishToChannel={isPublishable} /> : undefined}
+        mobileExtra={
+          isOwner ? (
+            <AgentBuilderMobileMenu
+              agentId={id}
+              showPublishToChannel={isPublishable}
+              showDelete
+              agentName={storedAgent?.name ?? ''}
+            />
+          ) : undefined
+        }
         chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
         configure={
           <ConfigurePanelConnected
@@ -223,19 +237,30 @@ const AgentBuilderAgentViewReady = ({
   );
 };
 
-const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
+const ViewHeaderActions = ({
+  agentId,
+  agentName,
+  onEdit,
+}: {
+  agentId: string;
+  agentName: string;
+  onEdit: () => void;
+}) => {
   const isRunning = useStreamRunning();
   return (
-    <Button
-      size="icon-sm"
-      variant="ghost"
-      onClick={onEdit}
-      disabled={isRunning}
-      tooltip="Edit agent"
-      data-testid="agent-builder-view-edit"
-    >
-      <PencilIcon />
-    </Button>
+    <div className="flex items-center gap-2">
+      <DeleteAgentDesktopButton agentId={agentId} agentName={agentName} disabled={isRunning} />
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        onClick={onEdit}
+        disabled={isRunning}
+        tooltip="Edit agent"
+        data-testid="agent-builder-view-edit"
+      >
+        <PencilIcon />
+      </Button>
+    </div>
   );
 };
 

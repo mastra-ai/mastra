@@ -58,8 +58,14 @@ vi.mock('@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter
 }));
 
 const useStoredAgentMock = vi.fn((..._args: unknown[]) => ({ data: storedAgent, isLoading: false }));
+const deleteStoredAgentMutateAsync = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({
   useStoredAgent: (...args: unknown[]) => useStoredAgentMock(...args),
+  useStoredAgentMutations: () => ({
+    createStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    updateStoredAgent: { mutateAsync: vi.fn(), isPending: false },
+    deleteStoredAgent: { mutateAsync: deleteStoredAgentMutateAsync, isPending: false },
+  }),
 }));
 
 vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
@@ -144,6 +150,8 @@ describe('AgentBuilderAgentEdit', () => {
     navigateMock.mockReset();
     saveMock.mockClear();
     useStoredAgentMock.mockClear();
+    deleteStoredAgentMutateAsync.mockClear();
+    deleteStoredAgentMutateAsync.mockResolvedValue(undefined);
     storedAgent = null;
     currentUser = { id: 'current-user' };
     isCurrentUserLoading = false;
@@ -172,6 +180,11 @@ describe('AgentBuilderAgentEdit', () => {
     it('does not render the Publish to channel button in create mode', () => {
       const { queryByTestId } = renderAt();
       expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
+    });
+
+    it('does not render the Delete agent button in create mode', () => {
+      const { queryByTestId } = renderAt();
+      expect(queryByTestId('agent-builder-delete-agent')).toBeNull();
     });
 
     it('renders Chat and Configuration tabs in create mode', () => {
@@ -307,6 +320,19 @@ describe('AgentBuilderAgentEdit', () => {
 
       expect(chatPanel.getAttribute('data-active-tab')).toBe('configure');
       expect(configureTab.getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('renders the Delete agent button in edit mode and triggers the mutation + redirect on confirm', async () => {
+      const { getByTestId } = renderAt();
+      const deleteButton = getByTestId('agent-builder-delete-agent');
+      fireEvent.click(deleteButton);
+
+      const confirm = getByTestId('agent-builder-delete-agent-confirm');
+      fireEvent.click(confirm);
+
+      await waitFor(() => expect(deleteStoredAgentMutateAsync).toHaveBeenCalledTimes(1));
+      expect(deleteStoredAgentMutateAsync).toHaveBeenCalledWith(undefined);
+      await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/agent-builder/agents', { viewTransition: true }));
     });
 
     it('redirects non-owners to the view page after current user loads', () => {

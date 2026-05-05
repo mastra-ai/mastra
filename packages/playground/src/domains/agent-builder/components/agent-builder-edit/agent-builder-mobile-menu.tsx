@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
+import { DeleteAgentMenuItem } from './delete-agent-action';
 import { ChannelDialog } from './publish-channel-dialogs';
 import type { Visibility } from './visibility-select';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -33,6 +34,10 @@ export interface AgentBuilderMobileMenuProps {
   showSetVisibility?: boolean;
   /** When true, includes the per-channel publish items. */
   showPublishToChannel?: boolean;
+  /** When true, includes the destructive "Delete agent" item. Owner-only. */
+  showDelete?: boolean;
+  /** Required when showDelete is true — used in the confirm dialog copy. */
+  agentName?: string;
   /** Disables all actions (e.g. during streaming). */
   disabled?: boolean;
 }
@@ -41,6 +46,8 @@ export function AgentBuilderMobileMenu({
   agentId,
   showSetVisibility = false,
   showPublishToChannel = true,
+  showDelete = false,
+  agentName,
   disabled = false,
 }: AgentBuilderMobileMenuProps) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
@@ -54,8 +61,9 @@ export function AgentBuilderMobileMenu({
   const canPublishToChannel = showPublishToChannel && Boolean(agentId);
   const { data: platforms = [] } = useChannelPlatforms();
   const platformsToShow = canPublishToChannel ? platforms : [];
+  const canDelete = showDelete && Boolean(agentId) && Boolean(agentName);
 
-  if (!showSetVisibility && (!canPublishToChannel || platformsToShow.length === 0)) return null;
+  if (!showSetVisibility && !canDelete && (!canPublishToChannel || platformsToShow.length === 0)) return null;
 
   const setVisibility = (next: Visibility) => {
     formMethods.setValue('visibility', next, { shouldDirty: true });
@@ -96,6 +104,12 @@ export function AgentBuilderMobileMenu({
                   onSelect={installation => setActiveChannel({ platform, installation })}
                 />
               ))}
+            </>
+          )}
+          {canDelete && (
+            <>
+              {(showSetVisibility || (canPublishToChannel && platformsToShow.length > 0)) && <DropdownMenu.Separator />}
+              <DeleteAgentMenuItem agentId={agentId as string} agentName={agentName as string} disabled={disabled} />
             </>
           )}
         </DropdownMenu.Content>

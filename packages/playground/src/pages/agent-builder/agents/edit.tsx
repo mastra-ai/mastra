@@ -12,6 +12,7 @@ import {
   ConversationPanelChat,
   ConversationPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
+import { DeleteAgentDesktopButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
@@ -245,8 +246,14 @@ const AgentBuilderAgentEditReady = ({
             <VisibilitySelectConnected />
           </div>
         }
-        primaryAction={<HeaderActions mode={mode} isSaving={isSaving} onSave={handleSave} />}
-        mobileExtra={<AgentBuilderMobileMenuConnected agentId={id} showPublishToChannel={canPublishToChannel} />}
+        primaryAction={<HeaderActions mode={mode} agentId={id} isSaving={isSaving} onSave={handleSave} />}
+        mobileExtra={
+          <AgentBuilderMobileMenuConnected
+            agentId={id}
+            showPublishToChannel={canPublishToChannel}
+            showDelete={mode === 'edit'}
+          />
+        }
         chat={<ConversationPanelChat />}
         configure={
           <ConfigurePanelConnected
@@ -272,18 +279,24 @@ const VisibilitySelectConnected = () => {
 const AgentBuilderMobileMenuConnected = ({
   agentId,
   showPublishToChannel,
+  showDelete,
 }: {
   agentId: string | undefined;
   showPublishToChannel: boolean;
+  showDelete: boolean;
 }) => {
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
   const authEnabled = !!capabilities?.enabled;
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const name = useWatch({ control: formMethods.control, name: 'name' }) ?? '';
   return (
     <AgentBuilderMobileMenu
       agentId={agentId}
       showSetVisibility={authEnabled}
       showPublishToChannel={showPublishToChannel}
+      showDelete={showDelete}
+      agentName={name}
       disabled={isRunning}
     />
   );
@@ -291,15 +304,19 @@ const AgentBuilderMobileMenuConnected = ({
 
 interface HeaderActionsProps {
   mode: 'create' | 'edit';
+  agentId: string;
   isSaving: boolean;
   onSave: () => void;
 }
 
-const HeaderActions = ({ mode, isSaving, onSave }: HeaderActionsProps) => {
+const HeaderActions = ({ mode, agentId, isSaving, onSave }: HeaderActionsProps) => {
   const isRunning = useStreamRunning();
   const disabled = isSaving || isRunning;
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const name = useWatch({ control: formMethods.control, name: 'name' }) ?? '';
   return (
     <div className="flex items-center gap-2">
+      {mode === 'edit' && <DeleteAgentDesktopButton agentId={agentId} agentName={name} disabled={disabled} />}
       <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
         <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
       </Button>
