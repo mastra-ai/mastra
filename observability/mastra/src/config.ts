@@ -127,7 +127,7 @@ export interface ObservabilityInstanceConfig {
   logging?: {
     /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
     enabled?: boolean;
-    /** Minimum log level to write to observability storage. Defaults to `'debug'`. */
+    /** Minimum log level to write to observability storage. Defaults to `'warn'`. */
     level?: LogLevel;
   };
 }

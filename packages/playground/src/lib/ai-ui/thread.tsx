@@ -1,6 +1,6 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, IconButton, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, useAutoscroll } from '@mastra/playground-ui';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
@@ -117,6 +117,11 @@ interface ComposerProps {
 const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Track IME composition state to prevent Enter from submitting during CJK input.
+  // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
+  // triggers form submission instead of completing the IME composition.
+  // See: https://github.com/mastra-ai/mastra/issues/16109
+  const isComposingRef = useRef(false);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
@@ -167,6 +172,24 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                isComposingRef.current = false;
+              }}
+              onKeyDown={e => {
+                // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
+                // while an IME composition session is active (e.g. Chinese pinyin).
+                // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
+                // not prevent the primitive's onKeyDown from running on the same element —
+                // preventDefault() is required. e.nativeEvent.isComposing is added as a
+                // defensive fallback for browsers/timings where compositionend has already fired.
+                if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
               disabled={!canExecuteAgent}
             />
           </ComposerPrimitive.Input>
@@ -194,16 +217,16 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   }, [composerRuntime, transcript]);
 
   return (
-    <IconButton
-      variant="light"
-      size="md"
+    <Button
+      variant="default"
+      size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
       {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
-    </IconButton>
+    </Button>
   );
 };
 
@@ -217,38 +240,38 @@ const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
   return (
     <>
       {canExecute && (
-        <IconButton
-          variant="light"
-          size="md"
+        <Button
+          variant="default"
+          size="icon-md"
           type="button"
           tooltip="Add attachment"
           className="rounded-full"
           onClick={() => setIsAddAttachmentDialogOpen(true)}
         >
           <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-        </IconButton>
+        </Button>
       )}
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild disabled={!canExecute}>
-          <IconButton
-            variant="light"
-            size="md"
+          <Button
+            variant="default"
+            size="icon-md"
             tooltip={canExecute ? 'Send' : 'No permission to execute'}
             className="rounded-full border border-border1 bg-surface5"
             disabled={!canExecute}
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-          </IconButton>
+          </Button>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running>
         <ComposerPrimitive.Cancel asChild>
-          <IconButton variant="light" size="md" tooltip="Cancel">
+          <Button variant="default" size="icon-md" tooltip="Cancel">
             <CircleStopIcon />
-          </IconButton>
+          </Button>
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
     </>

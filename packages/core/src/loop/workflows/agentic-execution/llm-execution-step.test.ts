@@ -575,6 +575,93 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  it('updates model step tracing with final input messages', async () => {
+    messageList.addSystem(
+      'WORKING_MEMORY_SYSTEM_INSTRUCTION:\n<working_memory_data>saved</working_memory_data>',
+      'memory',
+    );
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({})),
+      startStep: vi.fn(),
+      updateStep: vi.fn(),
+    };
+
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([]),
+      request: {
+        body: JSON.stringify({
+          model: 'mock-model-id',
+          messages: [{ role: 'user', content: 'Find the latest AI agent news' }],
+        }),
+      },
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      modelSpanTracker,
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(modelSpanTracker.updateStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputMessages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('WORKING_MEMORY_SYSTEM_INSTRUCTION'),
+          }),
+          expect.objectContaining({
+            role: 'user',
+          }),
+        ]),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'step-start',
+        payload: expect.not.objectContaining({
+          inputMessages: expect.any(Array),
+        }),
+      }),
+    );
+  });
+
   it('stamps step-start.model from the processor-updated model', async () => {
     const initialDoStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([]),

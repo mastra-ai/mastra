@@ -17,6 +17,12 @@ This guide provides a comprehensive overview of breaking changes when upgrading 
 Need help with the migration? Join our [Discord community](https://discord.gg/BTYqqHKUrf) to ask questions.
 :::
 
+:::warning[Coming from Mastra Cloud?]
+The legacy Mastra Cloud product has been replaced by the [Mastra platform](/docs/mastra-platform/overview), which splits hosting into two separate products: **Studio** (visual environment, observability) and **Server** (production API). Old Mastra Cloud access tokens do not work with Mastra platform — you must create new ones with `mastra auth tokens create`.
+
+If you upgrade to v1 packages without also migrating your `telemetry:` config to `observability:` and creating a Studio project, observability data will stop flowing. Follow the [Mastra Cloud migration guide](/guides/migrations/mastra-cloud) end to end.
+:::
+
 ## Migration strategy
 
 ### Update all Mastra packages to `latest` tag

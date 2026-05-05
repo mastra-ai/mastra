@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { SearchEngine, splitIntoChunks } from './search-engine';
-import type { Embedder } from './search-engine';
+import { SearchEngine, isBatchEmbedder, splitIntoChunks } from './search-engine';
+import type { BatchEmbedder, Embedder } from './search-engine';
 
 describe('SearchEngine', () => {
   describe('BM25-only mode', () => {
@@ -359,6 +359,18 @@ Line 3`;
       // Should not have indexed the removed document
       expect(mockVectorStore.upsert).not.toHaveBeenCalled();
     });
+
+    it('should dedupe pending vector docs by id so last content wins', async () => {
+      await engine.index({ id: 'doc1', content: 'first' });
+      await engine.index({ id: 'doc1', content: 'second' });
+
+      mockVectorStore.query.mockResolvedValue([]);
+
+      await engine.search('hello');
+
+      expect(mockVectorStore.upsert).toHaveBeenCalledTimes(1);
+      expect(mockEmbedder).toHaveBeenCalledWith('second');
+    });
   });
 
   describe('Hybrid mode', () => {
@@ -699,6 +711,196 @@ Third line has learning too`;
         indexName: 'test-index',
         filter: { sourceFile: 'file.txt' },
       });
+    });
+  });
+
+  describe('BatchEmbedder support', () => {
+    function makeStore() {
+      return {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        deleteVectors: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {}),
+      } as any;
+    }
+
+    function makeBatchEmbedder(maxBatchSize?: number) {
+      const fn = vi.fn(async (texts: string[]) =>
+        texts.map(t => {
+          const hash = t.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+          return [hash % 100, (hash * 2) % 100, (hash * 3) % 100];
+        }),
+      );
+      const embedder: BatchEmbedder = Object.assign(fn, {
+        batch: true as const,
+        ...(maxBatchSize !== undefined ? { maxBatchSize } : {}),
+      });
+      return { embedder, fn };
+    }
+
+    it('isBatchEmbedder distinguishes batch and single embedders', () => {
+      const single: Embedder = vi.fn(async () => [0]);
+      const { embedder: batch } = makeBatchEmbedder();
+      const fakeBranded = Object.assign(
+        vi.fn(async () => [0]),
+        { batch: false },
+      ) as unknown as Embedder;
+
+      expect(isBatchEmbedder(single)).toBe(false);
+      expect(isBatchEmbedder(batch)).toBe(true);
+      expect(isBatchEmbedder(fakeBranded)).toBe(false);
+    });
+
+    it('flushes the entire pending queue in a single embedder call when no maxBatchSize is set', async () => {
+      const store = makeStore();
+      const { embedder, fn } = makeBatchEmbedder();
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+        { id: 'c', content: 'gamma' },
+        { id: 'd', content: 'delta' },
+        { id: 'e', content: 'epsilon' },
+      ]);
+
+      // Lazy: nothing called yet.
+      expect(fn).not.toHaveBeenCalled();
+      expect(store.upsert).not.toHaveBeenCalled();
+
+      // Trigger flush via search.
+      await engine.search('alpha', { mode: 'vector' });
+
+      // One batched embedder call for the docs and one upsert.
+      const docCalls = fn.mock.calls.filter(call => Array.isArray(call[0]) && call[0].length === 5);
+      expect(docCalls).toHaveLength(1);
+      expect(docCalls[0]?.[0]).toEqual(['alpha', 'beta', 'gamma', 'delta', 'epsilon']);
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+      const upsertArgs = store.upsert.mock.calls[0]![0];
+      expect(upsertArgs.ids).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(upsertArgs.vectors).toHaveLength(5);
+    });
+
+    it('chunks pending docs by maxBatchSize when configured', async () => {
+      const store = makeStore();
+      const { embedder, fn } = makeBatchEmbedder(2);
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: '1', content: 'one' },
+        { id: '2', content: 'two' },
+        { id: '3', content: 'three' },
+        { id: '4', content: 'four' },
+        { id: '5', content: 'five' },
+      ]);
+
+      // Lazy: nothing called yet; indexMany only enqueues.
+      expect(fn).not.toHaveBeenCalled();
+
+      await engine.search('one', { mode: 'vector' });
+
+      // 5 docs / batch size 2 = 3 embedder calls (2, 2, 1). Plus one more for the search query.
+      // The search query is sent as a one-element batch, so we'll see four total
+      // calls and three of them flush docs.
+      expect(fn).toHaveBeenCalledTimes(4);
+      const docCallSizes = fn.mock.calls
+        .slice(0, 3)
+        .map(c => (c[0] as string[]).length)
+        .sort();
+      expect(docCallSizes).toEqual([1, 2, 2]);
+
+      // Single upsert with all 5 vectors.
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+      expect(store.upsert.mock.calls[0]![0].vectors).toHaveLength(5);
+    });
+
+    it('uses batched call for single search query', async () => {
+      const store = makeStore();
+      store.query.mockResolvedValue([{ id: 'a', score: 0.9, metadata: { id: 'a', text: 'alpha' } }]);
+      const { embedder, fn } = makeBatchEmbedder();
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+      });
+
+      await engine.search('hello', { mode: 'vector' });
+
+      // Search query is sent as a one-element batch.
+      expect(fn).toHaveBeenCalledWith(['hello']);
+    });
+
+    it('falls back to per-doc embedding for single-text embedders', async () => {
+      const store = makeStore();
+      const single: Embedder = vi.fn(async (text: string) => [text.length, 0, 0]);
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder: single, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+      ]);
+      await engine.search('alpha', { mode: 'vector' });
+
+      // Two doc embeddings + one query embedding = 3 calls.
+      expect(single).toHaveBeenCalledTimes(3);
+      // Two upserts (one per doc) — same shape as before this PR.
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-queues batch on flush failure for batch embedders', async () => {
+      const store = makeStore();
+      let attempts = 0;
+      const fn = vi.fn(async (texts: string[]) => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error('transient embedder failure');
+        }
+        return texts.map(() => [1, 2, 3]);
+      });
+      const embedder: BatchEmbedder = Object.assign(fn, { batch: true as const });
+
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+      ]);
+
+      await expect(engine.search('alpha', { mode: 'vector' })).rejects.toThrow('transient embedder failure');
+
+      // Second search succeeds because the batch was re-queued.
+      await engine.search('alpha', { mode: 'vector' });
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+      expect(store.upsert.mock.calls[0]![0].ids).toEqual(['a', 'b']);
+    });
+
+    it('throws when batch embedder returns wrong number of embeddings', async () => {
+      const store = makeStore();
+      const fn = vi.fn(async (_texts: string[]) => [[1, 2, 3]]);
+      const embedder: BatchEmbedder = Object.assign(fn, { batch: true as const });
+
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+        lazyVectorIndex: true,
+      });
+
+      await engine.indexMany([
+        { id: 'a', content: 'alpha' },
+        { id: 'b', content: 'beta' },
+      ]);
+
+      await expect(engine.search('alpha', { mode: 'vector' })).rejects.toThrow(/returned 1 embeddings for 2 inputs/);
     });
   });
 });

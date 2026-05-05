@@ -173,9 +173,44 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided
+    // Process initial message if provided (e.g. piped stdin content).
+    // Runs the same validation as interactive input: model check, prompt hooks.
     if (this.state.options.initialMessage) {
-      this.fireMessage(this.state.options.initialMessage);
+      const msg = this.state.options.initialMessage;
+
+      if (!this.state.harness.hasModelSelected()) {
+        showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+      } else {
+        const messageId = `user-${Date.now()}`;
+        addUserMessage(this.state, {
+          id: messageId,
+          role: 'user',
+          content: [{ type: 'text', text: msg }],
+          createdAt: new Date(),
+        });
+        this.state.ui.requestRender();
+
+        const allowed = await this.runUserPromptHook(msg);
+        if (!allowed) {
+          const comp = this.state.messageComponentsById.get(messageId);
+          if (comp) {
+            this.state.chatContainer.removeChild(comp as never);
+            this.state.messageComponentsById.delete(messageId);
+            this.state.ui.requestRender();
+          }
+        } else {
+          try {
+            if (this.state.pendingNewThread) {
+              await this.state.harness.createThread();
+              this.state.pendingNewThread = false;
+            }
+            this.fireMessage(msg);
+          } catch (error) {
+            this.state.pendingNewThread = false;
+            showError(this.state, error instanceof Error ? error.message : 'Failed to start thread');
+          }
+        }
+      }
     }
 
     // Main interactive loop — never blocks on streaming,
@@ -198,29 +233,21 @@ export class MastraTUI {
           continue;
         }
 
-        // Create thread lazily on first message (may load last-used model)
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
-        // Check if a model is selected
+        // Check if a model is selected (sync — fast, no reason to defer)
         if (!this.state.harness.hasModelSelected()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
-          continue;
-        }
-
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
           continue;
         }
 
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        // Add user message to chat immediately
+        // Show the user message in the TUI right away — before any async work
+        // (thread creation, hooks, sending) so the UI feels instant even when
+        // GC pauses or I/O slow things down.
+        const messageId = `user-${Date.now()}`;
         addUserMessage(this.state, {
-          id: `user-${Date.now()}`,
+          id: messageId,
           role: 'user',
           content: [
             { type: 'text', text: content },
@@ -233,6 +260,25 @@ export class MastraTUI {
           createdAt: new Date(),
         });
         this.state.ui.requestRender();
+
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          // Hook blocked the message — remove it from the chat
+          const comp = this.state.messageComponentsById.get(messageId);
+          if (comp) {
+            this.state.chatContainer.removeChild(comp as never);
+            this.state.messageComponentsById.delete(messageId);
+            this.state.ui.requestRender();
+          }
+          continue;
+        }
+
+        // Create thread lazily on first message (may load last-used model).
+        // Runs after the hook check so we don't create a thread for blocked messages.
+        if (this.state.pendingNewThread) {
+          await this.state.harness.createThread();
+          this.state.pendingNewThread = false;
+        }
 
         // Normal send — fire and forget; events handle the rest
         this.fireMessage(content, images);

@@ -7,6 +7,7 @@
  * into the tool execution context.
  */
 
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -27,7 +28,7 @@ import { listFilesTool } from './list-files';
 import { lspInspectTool } from './lsp-inspect';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
-import { searchTool } from './search';
+import { searchInputSchema, searchTool } from './search';
 import type {
   WorkspaceToolsConfig,
   DynamicToolConfigValue,
@@ -425,7 +426,25 @@ export async function createWorkspaceTools(
 
   // Search tools
   if (workspace.canBM25 || workspace.canVector) {
-    await addTool(WORKSPACE_TOOLS.SEARCH.SEARCH, searchTool);
+    // Build a dynamic search tool that only exposes modes the workspace supports.
+    // This prevents the LLM from picking an unsupported mode (e.g. 'hybrid' when
+    // only BM25 is configured), rather than relying solely on runtime fallback.
+    const availableModes = [
+      workspace.canBM25 ? 'bm25' : null,
+      workspace.canVector ? 'vector' : null,
+      workspace.canHybrid ? 'hybrid' : null,
+    ].filter((m): m is 'bm25' | 'vector' | 'hybrid' => m !== null);
+
+    const dynamicSearchTool = {
+      ...searchTool,
+      inputSchema: searchInputSchema.extend({
+        mode: z
+          .enum(availableModes as [(typeof availableModes)[number], ...(typeof availableModes)[number][]])
+          .optional()
+          .describe(`Search mode: ${availableModes.join(', ')}`),
+      }),
+    };
+    await addTool(WORKSPACE_TOOLS.SEARCH.SEARCH, dynamicSearchTool);
     await addTool(WORKSPACE_TOOLS.SEARCH.INDEX, indexContentTool, { requireWrite: true });
   }
 

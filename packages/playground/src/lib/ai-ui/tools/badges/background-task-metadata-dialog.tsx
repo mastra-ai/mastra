@@ -1,6 +1,6 @@
 import {
+  Button,
   CodeEditor,
-  IconButton,
   Txt,
   Dialog,
   DialogContent,
@@ -108,9 +108,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
-      <IconButton
-        variant="light"
-        size="md"
+      <Button
+        variant="default"
+        size="icon-md"
         tooltip="Show background task information"
         onClick={() => setIsOpen(s => !s)}
       >
@@ -119,7 +119,7 @@ export const BackgroundTaskMetadataDialogTrigger = ({
         ) : (
           <Loader2Icon className="text-neutral3 size-5 animate-spin" />
         )}
-      </IconButton>
+      </Button>
 
       <BackgroundTaskMetadata
         backgroundTaskTaskId={backgroundTaskTaskId}

@@ -7,7 +7,6 @@ import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
-import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -60,9 +59,9 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
         <div className="flex items-center justify-between pl-3 pr-4 py-1.5 border-b border-border1 border-dashed">
           <span className="text-ui-xs text-neutral3">Group</span>
           {onRemove && (
-            <IconButton type="button" onClick={onRemove} tooltip="Remove group" size="sm" variant="ghost">
+            <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />
-            </IconButton>
+            </Button>
           )}
         </div>
       )}

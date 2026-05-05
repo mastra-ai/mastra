@@ -34,11 +34,11 @@ import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list';
-import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
+import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list';
 import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
+import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { Link } from '@/lib/link';
 
 export default function TracesPage() {

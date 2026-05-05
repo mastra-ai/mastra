@@ -45,6 +45,8 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
+import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
@@ -487,13 +489,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   processorStates,
   requestContext,
   methodType,
+  requireToolApproval,
+  toolCallConcurrency,
+  toolCallForeachOptions,
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
   outputWriter,
-}: OuterLLMRun<TOOLS, OUTPUT>) {
+}: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialSystemMessages = messageList.getAllSystemMessages();
+  const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
 
@@ -782,6 +788,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
           }
 
+          if (toolCallForeachOptions) {
+            updateToolCallForeachConcurrency(toolCallForeachOptions, {
+              requireToolApproval,
+              tools: currentStep.tools,
+              activeTools: currentStep.activeTools as string[] | undefined,
+              configuredConcurrency: configuredToolCallConcurrency,
+            });
+          }
+
           const runState = new AgenticRunState({
             _internal: _internal!,
             model: currentStep.model,
@@ -927,6 +942,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     warnings = warningsFromStream;
                     request = requestFromStream || {};
                     rawResponse = rawResponseFromStream;
+
+                    modelSpanTracker?.updateStep?.({
+                      request: request || {},
+                      inputMessages,
+                      warnings: warnings || [],
+                      messageId: currentStep.messageId,
+                    });
 
                     safeEnqueue(controller, {
                       runId,

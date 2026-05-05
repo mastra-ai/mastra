@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -5909,6 +5910,171 @@ describe('Locking Behavior', () => {
         vi.useRealTimers();
       }
     });
+
+    it('should not start async reflection buffering on TTL trigger when observation tokens are below activation point', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        // reflectionObservationTokens=20000, bufferActivation=0.5 → activationPoint=10000
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 20000,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+
+        // Seed active observations with a small token count (well below the 10k activation point)
+        const activeObservations = '- Small observation line 1\n- Small observation line 2';
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+        const obsTokens = om.getTokenCounter().countObservations(activeObservations);
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: obsTokens,
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+
+        const { writer } = makeCapturingWriter();
+
+        const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        // TTL has expired (lastActivityAt was 301s ago > 5m=300s)
+        await om.reflector.maybeReflect({
+          record: freshRecord,
+          observationTokens: freshRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer,
+        });
+
+        // Reflector model should NOT have been called — tokens are below activation point
+        expect(getReflectorCalled()).toBe(false);
+        const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterRecord.bufferedReflection).toBeFalsy();
+        expect(afterRecord.isBufferingReflection).toBeFalsy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not start async reflection buffering on provider-change trigger when observation tokens are below activation point', async () => {
+      const { MessageList } = await import('@mastra/core/agent');
+
+      // reflectionObservationTokens=20000, bufferActivation=0.5 → activationPoint=10000
+      const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+        activateOnProviderChange: true,
+        reflectionObservationTokens: 20000,
+      });
+
+      const threadId = 'thread-overshoot';
+      const resourceId = 'resource-overshoot';
+
+      // Seed active observations with a small token count (well below 10k activation point)
+      const activeObservations = '- Small observation line 1\n- Small observation line 2';
+      const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+      const obsTokens = om.getTokenCounter().countObservations(activeObservations);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: activeObservations,
+        tokenCount: obsTokens,
+        lastObservedAt: new Date(),
+      });
+
+      const { writer } = makeCapturingWriter();
+
+      // Simulate prior assistant message with a different model
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(
+        {
+          id: 'assistant-prev',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Prior response' },
+              { type: 'step-start', createdAt: Date.now(), model: 'openai/gpt-4o' },
+            ],
+          },
+          createdAt: new Date(),
+        } as any,
+        'response',
+      );
+
+      const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+      await om.reflector.maybeReflect({
+        record: freshRecord,
+        observationTokens: freshRecord.observationTokenCount ?? 0,
+        threadId,
+        writer,
+        messageList,
+        currentModel: { provider: 'cerebras', modelId: 'zai-glm-4.5' },
+      });
+
+      // Reflector model should NOT have been called — tokens are below activation point
+      expect(getReflectorCalled()).toBe(false);
+      const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+      expect(afterRecord.bufferedReflection).toBeFalsy();
+      expect(afterRecord.isBufferingReflection).toBeFalsy();
+    });
+
+    it('should still start async reflection buffering on TTL trigger when observation tokens are above activation point', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        // reflectionObservationTokens=500, bufferActivation=0.5 → activationPoint=250
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 500,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+
+        // Build observations large enough to exceed the 250-token activation point
+        const observationLines = Array.from(
+          { length: 40 },
+          (_, i) => `- Substantial observation about topic ${i + 1} with enough detail to accumulate tokens`,
+        );
+        const activeObservations = observationLines.join('\n');
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+        const obsTokens = om.getTokenCounter().countObservations(activeObservations);
+        expect(obsTokens).toBeGreaterThan(250);
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: obsTokens,
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+
+        const { writer } = makeCapturingWriter();
+
+        const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: freshRecord,
+          observationTokens: freshRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer,
+        });
+
+        // Wait for the background async reflection op to complete
+        const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+        await Promise.allSettled(pendingOps);
+
+        // Reflector model should have been called — tokens are above the activation point
+        expect(getReflectorCalled()).toBe(true);
+      } finally {
+        BufferingCoordinator.asyncBufferingOps.clear();
+        BufferingCoordinator.lastBufferedBoundary.clear();
+        BufferingCoordinator.lastBufferedAtTime.clear();
+        BufferingCoordinator.reflectionBufferCycleIds.clear();
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('should skip observation when isObserving flag is true in processOutputResult', async () => {
@@ -7143,7 +7309,7 @@ describe('Model Requirement', () => {
     ).toThrow('Please bump @mastra/core to a newer version');
   });
 
-  it('should throw when no model is provided at all', () => {
+  it('should use the default model when no model is provided', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -7152,19 +7318,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
-    ).toThrow('Observational Memory requires a model to be set');
-  });
-
-  it('should include docs link in model error', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          observation: { messageTokens: 50000 },
-          reflection: { observationTokens: 20000 },
-        }),
-    ).toThrow('https://mastra.ai/docs/memory/observational-memory#models');
+    ).not.toThrow();
   });
 
   it('should accept a top-level model', () => {
@@ -7221,6 +7375,30 @@ describe('Model Requirement', () => {
           reflection: { observationTokens: 20000 },
         }),
     ).not.toThrow();
+  });
+
+  it('should resolve model: "default" using contextual observation and reflection defaults', () => {
+    const originalObservationModel = OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+    const originalReflectionModel = OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+
+    try {
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model = 'test/observer-default';
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model = 'test/reflector-default';
+
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: 'default',
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).observationConfig.model).toBe('test/observer-default');
+      expect((om as any).reflectionConfig.model).toBe('test/reflector-default');
+    } finally {
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model = originalObservationModel;
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model = originalReflectionModel;
+    }
   });
 
   it('should not allow top-level model with observation.model', () => {

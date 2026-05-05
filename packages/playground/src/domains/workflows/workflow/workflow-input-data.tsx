@@ -184,7 +184,7 @@ const JSONInput = ({
       {children}
 
       {withoutSubmit ? null : (
-        <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">
+        <Button variant="default" onClick={handleSubmit} className="w-full" size="lg">
           {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
         </Button>
       )}
@@ -301,7 +301,7 @@ const SimpleProcessorInput = ({
       {children}
 
       {withoutSubmit ? null : (
-        <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">
+        <Button variant="default" onClick={handleSubmit} className="w-full" size="lg">
           {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
         </Button>
       )}

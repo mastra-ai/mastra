@@ -95,8 +95,8 @@ describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
   beforeEach<LocalTestContext>(async ctx => {
-    ctx.inngestPort = 4000;
-    ctx.handlerPort = 4001;
+    ctx.inngestPort = 4100;
+    ctx.handlerPort = 4101;
 
     globServer?.close();
 
@@ -13984,7 +13984,7 @@ describe('MastraInngestWorkflow', () => {
         server: {
           apiRoutes: [
             {
-              path: '/api/inngest',
+              path: '/inngest/api',
               method: 'ALL',
               createHandler: async ({ mastra }) =>
                 inngestServe({
@@ -14018,7 +14018,7 @@ describe('MastraInngestWorkflow', () => {
 
       try {
         // Make a request to the Inngest endpoint to get function introspection
-        const response = await fetch(`http://127.0.0.1:${port}/api/inngest`);
+        const response = await fetch(`http://127.0.0.1:${port}/inngest/api`);
         expect(response.ok).toBe(true);
 
         const introspectionData = await response.json();

@@ -10,15 +10,13 @@ packages:
 
 [ClickHouse](https://clickhouse.com/) is a columnar database designed for analytical workloads. The `@mastra/clickhouse` package provides storage adapters for several Mastra storage domains and is the recommended backend for production observability.
 
-ClickHouse is most commonly used as the dedicated observability backend in a [composite storage](/reference/storage/composite) setup, with another database serving the remaining domains. It can also back the supported domains on its own through `ClickhouseStore`.
+ClickHouse is most commonly used as the dedicated observability backend in a [composite storage](/reference/storage/composite) setup, with another database serving the remaining domains.
 
 ## When to use ClickHouse
 
-- Production observability for traces, logs, metrics, scores, and feedback.
-- Append-heavy workloads where columnar storage and compression help keep costs down.
-- Deployment platforms with ephemeral filesystems (such as [Railway](#deploying-with-railway-and-similar-platforms), Fly.io, Render, Heroku, or container schedulers) where embedded backends like DuckDB cannot persist data.
+Production observability for traces, logs, metrics, scores, and feedback.
 
-For local development, [LibSQL](/reference/storage/libsql) or `@mastra/duckdb` are usually a better fit because they need no external service.
+For local development, use a composite store that combines [LibSQL](/reference/storage/libsql) (for memory and workflows) and `@mastra/duckdb` (for observability). Neither alone covers a development setup: LibSQL does not implement the observability domain, and DuckDB does not implement the other domains. See the [observability overview](/docs/observability/overview#get-started) for an example.
 
 ## Installation
 
@@ -39,7 +37,7 @@ Compose it with another storage adapter so observability writes do not contend w
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraCompositeStore } from '@mastra/core/storage'
-import { LibSQLStore } from '@mastra/libsql'
+import { PostgresStore } from '@mastra/pg'
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 import { Observability, DefaultExporter } from '@mastra/observability'
 
@@ -52,9 +50,9 @@ const observabilityStore = new ObservabilityStorageClickhouseVNext({
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
     id: 'composite-storage',
-    default: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:./mastra.db',
+    default: new PostgresStore({
+      id: 'pg',
+      connectionString: process.env.DATABASE_URL!,
     }),
     domains: {
       observability: observabilityStore,
@@ -89,20 +87,48 @@ const observabilityStore = new ObservabilityStorageClickhouse({
 
 New projects should use `ObservabilityStorageClickhouseVNext` instead.
 
-### Full storage with `ClickhouseStore`
+### ClickHouse for every domain
 
-`ClickhouseStore` implements the `memory`, `workflows`, `scores`, and `observability` domains. Use it when you want a single backend for the supported domains. For most observability deployments, the composite setup above is preferable because it isolates observability writes from primary application data.
+`ClickhouseStoreVNext` backs the `memory`, `workflows`, and `observability` domains with ClickHouse and uses the vNext observability adapter automatically. Use it when you want ClickHouse to back the entire application without wiring a composite store manually.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { ClickhouseStore } from '@mastra/clickhouse'
+import { ClickhouseStoreVNext } from '@mastra/clickhouse'
 
 export const mastra = new Mastra({
-  storage: new ClickhouseStore({
+  storage: new ClickhouseStoreVNext({
     id: 'clickhouse-storage',
     url: process.env.CLICKHOUSE_URL!,
     username: process.env.CLICKHOUSE_USERNAME!,
     password: process.env.CLICKHOUSE_PASSWORD!,
+  }),
+})
+```
+
+`ClickhouseStoreVNext` accepts the same configuration as `ClickhouseStore` and reuses the same ClickHouse client across every domain.
+
+#### Manual composition
+
+`ClickhouseStore` is the long-standing class that backs every domain with the legacy observability adapter. New projects should prefer `ClickhouseStoreVNext`. If you need to customize the composite (for example, to override one domain with a different backend), build it manually:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { ClickhouseStore, ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+
+const credentials = {
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+}
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new ClickhouseStore({ id: 'clickhouse-storage', ...credentials }),
+    domains: {
+      observability: new ObservabilityStorageClickhouseVNext(credentials),
+    },
   }),
 })
 ```
@@ -157,7 +183,7 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
     name: 'password',
     type: 'string',
     description:
-      'ClickHouse password. Required when not passing a pre-configured `client`. Can be an empty string for the default user on a local instance.',
+      'ClickHouse password. Required when not passing a pre-configured `client`. It can be an empty string for the default user on a local instance.',
     isOptional: true,
   },
   {
