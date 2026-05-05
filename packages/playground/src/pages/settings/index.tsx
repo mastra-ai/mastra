@@ -21,6 +21,8 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: 'System' },
 ];
 
+const isTheme = (value: string): value is Theme => THEME_OPTIONS.some(option => option.value === value);
+
 export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
   const { theme, setTheme } = useTheme();
@@ -38,7 +40,12 @@ export const StudioSettingsPage = () => {
       <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
         <SectionCard title="Theme" description="Customize the appearance of the studio.">
           <SettingsRow label="Theme mode" htmlFor="theme">
-            <Select value={theme} onValueChange={value => setTheme(value as Theme)}>
+            <Select
+              value={theme}
+              onValueChange={value => {
+                if (isTheme(value)) setTheme(value);
+              }}
+            >
               <SelectTrigger id="theme" className="w-full sm:w-48">
                 <SelectValue />
               </SelectTrigger>
