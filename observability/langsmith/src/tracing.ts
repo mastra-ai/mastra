@@ -26,7 +26,16 @@ export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterC
    * If neither is set, traces are sent to the "default" project.
    */
   projectName?: string;
+  /**
+   * Maximum number of `spanId → langsmithRunId` mappings to retain for resolving
+   * `onScoreEvent` lookups. Older entries are evicted in LRU order when the cap
+   * is exceeded so long-running processes do not grow unbounded.
+   * Defaults to 10000.
+   */
+  runIdCacheMaxEntries?: number;
 }
+
+const DEFAULT_RUN_ID_CACHE_MAX_ENTRIES = 10_000;
 
 type LangSmithRoot = undefined;
 type LangSmithSpan = RunTree;
@@ -70,8 +79,12 @@ export class LangSmithExporter extends TrackingExporter<
    * RunTree was created. LangSmith's `createFeedback` requires the LangSmith runId,
    * not the Mastra span id, so scores submitted via `onScoreEvent` look up the
    * LangSmith runId here before calling the API.
+   *
+   * Bounded LRU keyed by Mastra span id — entries are evicted oldest-first when
+   * size exceeds `#runIdCacheMaxEntries` so the cache cannot grow without bound.
    */
   #langsmithRunIdBySpanId = new Map<string, string>();
+  #runIdCacheMaxEntries: number;
 
   constructor(config: LangSmithExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -82,12 +95,37 @@ export class LangSmithExporter extends TrackingExporter<
       apiKey,
     });
 
+    this.#runIdCacheMaxEntries = Math.max(1, config.runIdCacheMaxEntries ?? DEFAULT_RUN_ID_CACHE_MAX_ENTRIES);
+
     if (!apiKey) {
       this.setDisabled(`Missing required credentials (apiKey: ${!!apiKey})`);
       return;
     }
 
     this.#client = config.client ?? new Client(this.config);
+  }
+
+  /** Look up the LangSmith runId for a Mastra span id, refreshing its LRU position on hit. */
+  #getLangsmithRunId(spanId: string): string | undefined {
+    const runId = this.#langsmithRunIdBySpanId.get(spanId);
+    if (runId === undefined) return undefined;
+    // Re-insert to mark as most-recently-used (Map preserves insertion order).
+    this.#langsmithRunIdBySpanId.delete(spanId);
+    this.#langsmithRunIdBySpanId.set(spanId, runId);
+    return runId;
+  }
+
+  /** Remember the LangSmith runId for a Mastra span id, evicting oldest entries when full. */
+  #rememberLangsmithRunId(spanId: string, runId: string): void {
+    if (this.#langsmithRunIdBySpanId.has(spanId)) {
+      this.#langsmithRunIdBySpanId.delete(spanId);
+    }
+    this.#langsmithRunIdBySpanId.set(spanId, runId);
+    while (this.#langsmithRunIdBySpanId.size > this.#runIdCacheMaxEntries) {
+      const oldest = this.#langsmithRunIdBySpanId.keys().next().value;
+      if (oldest === undefined) break;
+      this.#langsmithRunIdBySpanId.delete(oldest);
+    }
   }
 
   /**
@@ -117,7 +155,7 @@ export class LangSmithExporter extends TrackingExporter<
       return;
     }
 
-    const langsmithRunId = this.#langsmithRunIdBySpanId.get(score.spanId);
+    const langsmithRunId = this.#getLangsmithRunId(score.spanId);
     if (!langsmithRunId) {
       this.logger.warn(
         'LangSmith exporter: dropping score for a span that was not previously emitted to LangSmith ' +
@@ -184,7 +222,7 @@ export class LangSmithExporter extends TrackingExporter<
     const langSmithSpan = span.isRootSpan ? new RunTree(payload) : parent!.createChild(payload);
 
     if (langSmithSpan.id) {
-      this.#langsmithRunIdBySpanId.set(span.id, langSmithSpan.id);
+      this.#rememberLangsmithRunId(span.id, langSmithSpan.id);
     }
 
     await langSmithSpan.postRun();

@@ -1473,6 +1473,43 @@ describe('TestLangSmithExporter', () => {
 
       expect(mockClient.createFeedback).not.toHaveBeenCalled();
     });
+
+    it('evicts the oldest spanId mapping once the cache cap is exceeded', async () => {
+      const cappedExporter = new TestLangSmithExporter({
+        apiKey: 'test-api-key',
+        runIdCacheMaxEntries: 2,
+      });
+
+      const emit = (id: string) =>
+        cappedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
+          exportedSpan: createMockSpan({ id, name: id, type: SpanType.GENERIC, isRoot: true, attributes: {} }),
+        });
+
+      // Three spans at cap=2 → the oldest (span-a) must be evicted.
+      await emit('span-a');
+      await emit('span-b');
+      await emit('span-c');
+
+      const score = (spanId: string) => ({
+        type: 'score',
+        score: {
+          scoreId: `sc-${spanId}`,
+          timestamp: new Date(),
+          traceId: 't',
+          spanId,
+          scorerId: 'x',
+          score: 1,
+        },
+      });
+
+      await cappedExporter.onScoreEvent(score('span-a') as any);
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+
+      await cappedExporter.onScoreEvent(score('span-b') as any);
+      await cappedExporter.onScoreEvent(score('span-c') as any);
+      expect(mockClient.createFeedback).toHaveBeenCalledTimes(2);
+    });
   });
 });
 
