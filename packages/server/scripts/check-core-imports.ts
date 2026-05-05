@@ -116,27 +116,73 @@ function extractCorePackage(version: string, tempDir: string) {
   return join(tempDir, 'package');
 }
 
+function getExportTypesTarget(exportValue: unknown): string | undefined {
+  if (typeof exportValue === 'string') {
+    return exportValue.endsWith('.d.ts') ? exportValue : undefined;
+  }
+
+  if (!exportValue || typeof exportValue !== 'object') {
+    return undefined;
+  }
+
+  const exportRecord = exportValue as Record<string, unknown>;
+
+  if (typeof exportRecord.types === 'string') {
+    return exportRecord.types;
+  }
+
+  return getExportTypesTarget(exportRecord.import) ?? getExportTypesTarget(exportRecord.require);
+}
+
+function getCoreExportSubpath(moduleName: string) {
+  if (moduleName === '@mastra/core') {
+    return '.';
+  }
+
+  return `.${moduleName.slice('@mastra/core'.length)}`;
+}
+
+function resolveExportTypesPath(coreRoot: string, moduleName: string) {
+  const corePackageJson = JSON.parse(readFileSync(join(coreRoot, 'package.json'), 'utf-8')) as {
+    exports?: Record<string, unknown>;
+  };
+  const exportsMap = corePackageJson.exports ?? {};
+  const exportSubpath = getCoreExportSubpath(moduleName);
+  const exactTarget = getExportTypesTarget(exportsMap[exportSubpath]);
+
+  if (exactTarget) {
+    return join(coreRoot, exactTarget.replace(/^\.\//, ''));
+  }
+
+  for (const [exportKey, exportValue] of Object.entries(exportsMap)) {
+    if (!exportKey.includes('*')) continue;
+
+    const [prefix, suffix] = exportKey.split('*') as [string, string];
+    if (!exportSubpath.startsWith(prefix) || !exportSubpath.endsWith(suffix)) continue;
+
+    const matchedSubpath = exportSubpath.slice(prefix.length, exportSubpath.length - suffix.length);
+    const wildcardTarget = getExportTypesTarget(exportValue)?.replace('*', matchedSubpath);
+
+    if (wildcardTarget) {
+      return join(coreRoot, wildcardTarget.replace(/^\.\//, ''));
+    }
+  }
+}
+
 function createCorePaths(coreRoot: string, moduleNames: string[]) {
   const paths: Record<string, string[]> = {};
   let availablePaths = 0;
 
   for (const moduleName of moduleNames) {
+    const typePath = resolveExportTypesPath(coreRoot, moduleName);
+
+    if (typePath && existsSync(typePath)) {
+      paths[moduleName] = [typePath];
+      availablePaths++;
+      continue;
+    }
+
     const subpath = moduleName.replace('@mastra/core', '').replace(/^\//, '');
-    const indexPath = subpath ? join(coreRoot, 'dist', subpath, 'index.d.ts') : join(coreRoot, 'dist', 'index.d.ts');
-    const filePath = subpath ? join(coreRoot, 'dist', `${subpath}.d.ts`) : join(coreRoot, 'dist', 'index.d.ts');
-
-    if (existsSync(indexPath)) {
-      paths[moduleName] = [indexPath];
-      availablePaths++;
-      continue;
-    }
-
-    if (existsSync(filePath)) {
-      paths[moduleName] = [filePath];
-      availablePaths++;
-      continue;
-    }
-
     // Point exact imports at a missing file so TypeScript reports the subpath as unavailable
     // instead of falling back to the workspace version of @mastra/core.
     paths[moduleName] = [join(coreRoot, '__missing__', `${subpath || 'index'}.d.ts`)];

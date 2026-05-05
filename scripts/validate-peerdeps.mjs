@@ -66,19 +66,6 @@ function coreRangeSubset(range, requiredRange) {
   }
 }
 
-function rangeFloorIsCurrentCore(range) {
-  const floor = semver.minVersion(range, { includePrerelease: true });
-  const current = semver.parse(coreVersion);
-
-  return Boolean(
-    floor &&
-      current &&
-      floor.major === current.major &&
-      floor.minor === current.minor &&
-      floor.patch >= current.patch,
-  );
-}
-
 const packageJsonFiles = findPackageJsonFiles(rootDir);
 const packages = [];
 const packageByName = new Map();
@@ -135,8 +122,7 @@ for (const packageInfo of packages) {
       continue;
     }
 
-    const corePeerDepFallsBelowDependency =
-      corePeerDep && rangeFloorIsCurrentCore(dependencyCorePeerDep) && !coreRangeSubset(corePeerDep, dependencyCorePeerDep);
+    const corePeerDepFallsBelowDependency = corePeerDep && !coreRangeSubset(corePeerDep, dependencyCorePeerDep);
 
     if (corePeerDepFallsBelowDependency) {
       propagatedPeerErrors.push({

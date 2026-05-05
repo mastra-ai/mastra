@@ -46,7 +46,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.16.0-0 <2.0.0-0",
     "@opentelemetry/auto-instrumentations-node": ">=0.50.0",
     "@opentelemetry/sdk-node": ">=0.50.0"
   },
