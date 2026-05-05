@@ -43,6 +43,9 @@ import type {
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
   RestoreAgentVersionResponse,
+  PartProviderMetadata,
+  MaybeProviderMetadata,
+  ToolInvocationUIPartWithMeta,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
@@ -609,18 +612,32 @@ export class Agent extends BaseResource {
     let currentReasoningPart: ReasoningUIPart | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
-    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+    function updateToolInvocationPart(
+      toolCallId: string,
+      invocation: ToolInvocation,
+      partProviderMetadata?: PartProviderMetadata,
+    ) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as ToolInvocationUIPartWithMeta | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
+        if (partProviderMetadata !== undefined) {
+          part.providerMetadata = {
+            ...(part.providerMetadata ?? {}),
+            ...partProviderMetadata,
+          };
+        }
       } else {
-        message.parts.push({
+        const newPart: ToolInvocationUIPartWithMeta = {
           type: 'tool-invocation',
           toolInvocation: invocation,
-        });
+        };
+        if (partProviderMetadata !== undefined) {
+          newPart.providerMetadata = partProviderMetadata;
+        }
+        message.parts.push(newPart);
       }
     }
 
@@ -1000,18 +1017,32 @@ export class Agent extends BaseResource {
     let currentReasoningPart: ReasoningUIPart | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
-    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+    function updateToolInvocationPart(
+      toolCallId: string,
+      invocation: ToolInvocation,
+      partProviderMetadata?: PartProviderMetadata,
+    ) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as ToolInvocationUIPartWithMeta | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
+        if (partProviderMetadata !== undefined) {
+          part.providerMetadata = {
+            ...(part.providerMetadata ?? {}),
+            ...partProviderMetadata,
+          };
+        }
       } else {
-        message.parts.push({
+        const newPart: ToolInvocationUIPartWithMeta = {
           type: 'tool-invocation',
           toolInvocation: invocation,
-        });
+        };
+        if (partProviderMetadata !== undefined) {
+          newPart.providerMetadata = partProviderMetadata;
+        }
+        message.parts.push(newPart);
       }
     }
 
@@ -1168,7 +1199,11 @@ export class Agent extends BaseResource {
               message.toolInvocations.push(invocation as ToolInvocation);
             }
 
-            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+            updateToolInvocationPart(
+              chunk.payload.toolCallId,
+              invocation as ToolInvocation,
+              (chunk.payload as MaybeProviderMetadata).providerMetadata,
+            );
 
             execUpdate();
 
@@ -1188,7 +1223,11 @@ export class Agent extends BaseResource {
                 // store the result in the tool invocation
                 message.toolInvocations![message.toolInvocations!.length - 1] = invocation as ToolInvocation;
 
-                updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+                updateToolInvocationPart(
+                  chunk.payload.toolCallId,
+                  invocation as ToolInvocation,
+                  (chunk.payload as MaybeProviderMetadata).providerMetadata,
+                );
 
                 execUpdate();
               }
@@ -1272,7 +1311,11 @@ export class Agent extends BaseResource {
 
             toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
 
-            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+            updateToolInvocationPart(
+              chunk.payload.toolCallId,
+              invocation as ToolInvocation,
+              (chunk.payload as MaybeProviderMetadata).providerMetadata,
+            );
 
             execUpdate();
             break;
