@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.32.1-alpha.0
+
+### Patch Changes
+
+- Fix a startup crash in `@mastra/server` when paired with an older `@mastra/core` (e.g. `1.31.0`) that does not export newer 1.32 names. ([#16194](https://github.com/mastra-ai/mastra/pull/16194))
+
+  The server now starts successfully on those versions. Endpoints that depend on 1.32-only functionality degrade at request time instead of failing at module load.
+
+- Updated dependencies [[`cc0469d`](https://github.com/mastra-ai/mastra/commit/cc0469d671d6f7a426013e4425f9501da6fa45f2)]:
+  - @mastra/core@1.32.1-alpha.0
+
 ## 1.32.0
 
 ### Minor Changes

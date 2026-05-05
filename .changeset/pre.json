@@ -138,5 +138,9 @@
     "@mastra/s3": "0.5.1",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "four-foxes-act",
+    "green-birds-knock",
+    "server-fix-fga-import-on-old-core"
+  ]
 }
