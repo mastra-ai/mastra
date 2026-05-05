@@ -25,7 +25,11 @@ export interface MastraVersionFooterProps {
   collapsed?: boolean;
 }
 
-type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun';
+const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
+type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+
+const isPackageManager = (value: string): value is PackageManager =>
+  (PACKAGE_MANAGERS as readonly string[]).includes(value);
 
 const packageManagerCommands: Record<PackageManager, string> = {
   pnpm: 'pnpm add',
@@ -277,7 +281,9 @@ const PackagesModalContent = ({
                 { label: 'bun', value: 'bun' },
               ]}
               value={packageManager}
-              onValueChange={value => onPackageManagerChange(value as PackageManager)}
+              onValueChange={value => {
+                if (isPackageManager(value)) onPackageManagerChange(value);
+              }}
               copyMessage="Copied update command!"
               copyTooltip="Copy command"
             />

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import type { ThemedToken } from 'shiki';
 
 import { highlight } from '../CodeEditor';
 import { CopyButton } from '../CopyButton';
@@ -65,7 +66,7 @@ export function CodeBlock({
 
       {useSelect && options && (
         <div className="flex items-center border-b border-border2/40 px-2 py-1.5">
-          <Select value={value} onValueChange={onValueChange}>
+          <Select value={activeValue} onValueChange={onValueChange}>
             <SelectTrigger size="sm" variant="ghost">
               <SelectValue />
             </SelectTrigger>
@@ -109,7 +110,7 @@ interface HighlightedCodeProps {
 }
 
 function HighlightedCode({ code, lang }: HighlightedCodeProps) {
-  const [tokens, setTokens] = React.useState<any[] | null>(null);
+  const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
 
   React.useEffect(() => {
     if (!lang) {
@@ -137,7 +138,7 @@ function HighlightedCode({ code, lang }: HighlightedCodeProps) {
         {tokens.map((line, lineIndex) => (
           <React.Fragment key={lineIndex}>
             <span>
-              {line.map((token: any, tokenIndex: number) => {
+              {line.map((token, tokenIndex) => {
                 const style = typeof token.htmlStyle === 'string' ? undefined : token.htmlStyle;
                 return (
                   <span
