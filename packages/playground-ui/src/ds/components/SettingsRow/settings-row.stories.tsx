@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { SettingsRow } from './settings-row';
 import { Button } from '@/ds/components/Button';
 import { SectionCard } from '@/ds/components/SectionCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { SettingsRow } from './settings-row';
 
 const meta: Meta<typeof SettingsRow> = {
   title: 'Layout/SettingsRow',
