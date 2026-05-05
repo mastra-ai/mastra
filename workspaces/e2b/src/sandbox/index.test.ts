@@ -891,6 +891,29 @@ describe('E2BSandbox Mount Configuration', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid region/);
   });
+
+  it('S3 mount rejects missing region (undefined) before invoking s3fs', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-no-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: undefined,
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-no-region');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid region/);
+  });
 });
 
 /**
