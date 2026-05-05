@@ -1,7 +1,7 @@
 import type { UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
-import { prepareServerHistoryRequest } from '../transport';
+import { prepareServerHistoryRequest } from './transport';
 
 describe('prepareServerHistoryRequest', () => {
   it('sends only the latest submitted message', () => {
@@ -78,6 +78,28 @@ describe('prepareServerHistoryRequest', () => {
         messages: [
           { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Question' }] },
           { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'Old answer' }] },
+        ],
+      }),
+    ).toEqual({
+      body: {
+        id: 'thread-1',
+        trigger: 'regenerate-message',
+        messageId: 'assistant-1',
+      },
+    });
+  });
+
+  it('uses the latest assistant message id as the regeneration target when a user message trails it', () => {
+    const prepareRequest = prepareServerHistoryRequest<UIMessage>();
+
+    expect(
+      prepareRequest({
+        id: 'thread-1',
+        trigger: 'regenerate-message',
+        messages: [
+          { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Question' }] },
+          { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'Old answer' }] },
+          { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'Follow-up' }] },
         ],
       }),
     ).toEqual({

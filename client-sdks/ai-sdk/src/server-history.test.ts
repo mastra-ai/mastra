@@ -403,7 +403,7 @@ describe('server history', () => {
       get: (key: string) => contextStore.get(key),
     });
 
-    expect(response.status).not.toBe(400);
+    expect(response.ok).toBe(true);
     expect(agent.stream).toHaveBeenCalledWith(
       [body.message],
       expect.objectContaining({

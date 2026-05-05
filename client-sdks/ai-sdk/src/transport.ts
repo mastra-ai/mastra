@@ -1,14 +1,14 @@
 type ServerHistoryTrigger = 'submit-message' | 'regenerate-message';
 const APPROVAL_ID_SEPARATOR = '::';
 
-export type PrepareServerHistoryRequestOptions<UI_MESSAGE extends { id?: string }> = {
+export type PrepareServerHistoryRequestOptions<UI_MESSAGE extends { id?: string; role?: string }> = {
   id: string;
   messages: UI_MESSAGE[];
   trigger?: ServerHistoryTrigger;
   messageId?: string;
 };
 
-export type ServerHistoryRequestBody<UI_MESSAGE extends { id?: string }> =
+export type ServerHistoryRequestBody<UI_MESSAGE extends { id?: string; role?: string }> =
   | {
       id: string;
       trigger: 'submit-message';
@@ -60,7 +60,18 @@ function extractApprovalResume(messages: Array<{ id?: string; role?: string; par
   return null;
 }
 
-export function prepareServerHistoryRequest<UI_MESSAGE extends { id?: string }>() {
+function getLatestAssistantMessageId(messages: Array<{ id?: string; role?: string }>) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'assistant' && message.id) {
+      return message.id;
+    }
+  }
+
+  return undefined;
+}
+
+export function prepareServerHistoryRequest<UI_MESSAGE extends { id?: string; role?: string }>() {
   return ({
     id,
     messages,
@@ -78,7 +89,7 @@ export function prepareServerHistoryRequest<UI_MESSAGE extends { id?: string }>(
     }
 
     if (trigger === 'regenerate-message') {
-      const targetMessageId = messageId ?? messages.at(-1)?.id;
+      const targetMessageId = messageId ?? getLatestAssistantMessageId(messages);
       if (!targetMessageId) {
         throw new Error('messageId is required when regenerating with server history');
       }
