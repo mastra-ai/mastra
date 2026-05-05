@@ -180,10 +180,10 @@ describe('AgentBuilderAgentEdit', () => {
       };
     });
 
-    it('renders Save in the top right (no Cancel)', () => {
-      const { getByTestId, queryByTestId } = renderAt();
+    it('does not render Cancel or Save buttons (autosaved)', () => {
+      const { queryByTestId } = renderAt();
       expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
-      expect(getByTestId('agent-builder-edit-save').textContent).toContain('Save');
+      expect(queryByTestId('agent-builder-edit-save')).toBeNull();
     });
 
     it('shows the Publish to channel button for the owner when the agent is public', () => {
@@ -225,13 +225,15 @@ describe('AgentBuilderAgentEdit', () => {
       expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
     });
 
-    it('Save navigates to the view page after a successful save', async () => {
+    it('autosaves edits without navigating away', async () => {
       const { getByTestId } = renderAt();
-      fireEvent.click(getByTestId('agent-builder-edit-save'));
+      fireEvent.change(getByTestId('agent-configure-name'), { target: { value: 'Renamed' } });
 
-      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(navigateMock).toHaveBeenCalled());
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+      await waitFor(() => expect(saveMock).toHaveBeenCalled());
+      expect(navigateMock).not.toHaveBeenCalledWith(
+        '/agent-builder/agents/agent-123/view',
+        expect.anything(),
+      );
     });
 
     it('reads the latest draft so freshly saved edits appear', () => {
@@ -242,20 +244,17 @@ describe('AgentBuilderAgentEdit', () => {
       );
     });
 
-    it('saves edits made in the configure panel', async () => {
+    it('autosaves edits made in the configure panel', async () => {
       const { getByTestId } = renderAt();
       fireEvent.change(getByTestId('agent-configure-name'), { target: { value: 'Updated name' } });
       fireEvent.change(getByTestId('agent-configure-description'), { target: { value: 'Updated description' } });
 
-      fireEvent.click(getByTestId('agent-builder-edit-save'));
-
-      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      expect(saveMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'Updated name',
-          description: 'Updated description',
-        }),
-      );
+      await waitFor(() => expect(saveMock).toHaveBeenCalled());
+      const lastCall = saveMock.mock.calls[saveMock.mock.calls.length - 1]![0];
+      expect(lastCall).toMatchObject({
+        name: 'Updated name',
+        description: 'Updated description',
+      });
     });
 
     it('waits for the current user before redirecting an owned agent', () => {

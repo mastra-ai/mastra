@@ -20,8 +20,22 @@ export interface StreamChatProviderProps {
    */
   initialUserMessage?: string;
   clientTools?: Record<string, unknown>;
+  /**
+   * Optional per-call system-prompt augmentation forwarded to the agent on
+   * every send via `modelSettings.instructions`. Read fresh at send time so the
+   * snapshot stays in sync with the form, but never enters the visible message
+   * list and is not persisted as a chat turn.
+   */
+  extraInstructions?: string;
   children: ReactNode;
 }
+
+type SendPayload = {
+  message: string;
+  threadId: string;
+  clientTools?: Record<string, unknown>;
+  modelSettings?: { instructions?: string };
+};
 
 export const StreamChatProvider = ({
   agentId,
@@ -29,6 +43,7 @@ export const StreamChatProvider = ({
   initialMessages,
   initialUserMessage,
   clientTools,
+  extraInstructions,
   children,
 }: StreamChatProviderProps) => {
   const { messages, isRunning, sendMessage } = useChat({ agentId, initialMessages });
@@ -37,14 +52,27 @@ export const StreamChatProvider = ({
   threadIdRef.current = threadId;
   const clientToolsRef = useRef(clientTools);
   clientToolsRef.current = clientTools;
+  const instructionsRef = useRef(extraInstructions);
+  instructionsRef.current = extraInstructions;
 
   const send = useCallback(
     (message: string) => {
-      void sendMessage({
+      const tools = clientToolsRef.current;
+      const instructions = instructionsRef.current;
+
+      const payload: SendPayload = {
         message,
         threadId: threadIdRef.current,
-        ...(clientToolsRef.current ? { clientTools: clientToolsRef.current } : {}),
-      });
+      };
+
+      if (tools !== undefined) {
+        payload.clientTools = tools;
+      }
+      if (instructions !== undefined && instructions.length > 0) {
+        payload.modelSettings = { instructions };
+      }
+
+      void sendMessage(payload);
     },
     [sendMessage],
   );

@@ -607,3 +607,40 @@ describe('AgentConfigurePanel divider placement', () => {
     expect(detailPane.className).not.toMatch(/lg:border-r-/);
   });
 });
+
+describe('AgentConfigurePanel delete action slot', () => {
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders the deleteAction node when the prop is provided', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel deleteAction={<div data-testid="stub-delete-action">stub</div>} />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-configure-delete-action')).toBeTruthy();
+    expect(screen.getByTestId('stub-delete-action')).toBeTruthy();
+  });
+
+  it('does not render the delete-action footer when the prop is omitted', () => {
+    render(
+      <FormWrapper>
+        <AgentConfigurePanel />
+      </FormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-configure-delete-action')).toBeNull();
+  });
+});

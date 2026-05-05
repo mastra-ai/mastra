@@ -8,7 +8,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DeleteAgentDesktopButton, DeleteAgentMenuItem } from '../delete-agent-action';
+import { DeleteAgentPanelButton, DeleteAgentMenuItem } from '../delete-agent-action';
 import { server } from '@/test/msw-server';
 
 const navigate = vi.fn();
@@ -61,7 +61,7 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
   );
 };
 
-describe('DeleteAgentDesktopButton', () => {
+describe('DeleteAgentPanelButton', () => {
   beforeAll(() => {
     installRadixDomShims();
   });
@@ -79,11 +79,14 @@ describe('DeleteAgentDesktopButton', () => {
   it('opens the confirmation dialog with the agent name when clicked', () => {
     render(
       <Wrapper>
-        <DeleteAgentDesktopButton agentId="agent-123" agentName="My Agent" />
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
       </Wrapper>,
     );
 
-    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+    const button = screen.getByTestId('agent-builder-delete-agent');
+    expect(button.textContent).toContain('Delete agent');
+
+    fireEvent.click(button);
 
     const dialog = screen.getByTestId('agent-builder-delete-agent-dialog');
     expect(dialog.textContent).toContain('My Agent');
@@ -100,7 +103,7 @@ describe('DeleteAgentDesktopButton', () => {
 
     render(
       <Wrapper>
-        <DeleteAgentDesktopButton agentId="agent-123" agentName="My Agent" />
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
       </Wrapper>,
     );
 
@@ -124,7 +127,7 @@ describe('DeleteAgentDesktopButton', () => {
 
     render(
       <Wrapper>
-        <DeleteAgentDesktopButton agentId="agent-123" agentName="My Agent" />
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
       </Wrapper>,
     );
 
@@ -149,7 +152,7 @@ describe('DeleteAgentDesktopButton', () => {
 
     render(
       <Wrapper>
-        <DeleteAgentDesktopButton agentId="agent-123" agentName="My Agent" />
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
       </Wrapper>,
     );
 

@@ -3,6 +3,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import type { MastraUIMessage } from '@mastra/react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useFormContext, useWatch } from 'react-hook-form';
 
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { ChatComposer } from '../chat-primitives/chat-composer';
@@ -14,8 +15,10 @@ import { CONNECT_CHANNEL_TOOL_NAME, useConnectChannelTool } from './hooks/use-co
 import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from './hooks/use-create-skill-tool';
 import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-chat-context';
 import { StreamChatProvider } from './stream-chat-provider';
-import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
+import { buildFormSnapshotInstructions } from '@/domains/agent-builder/mappers/build-form-snapshot';
+import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProviderProps {
@@ -77,6 +80,20 @@ export const ConversationPanelProvider = ({
     availableSkills,
     availableModels,
   });
+
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const formValues = useWatch({ control }) as AgentBuilderEditFormValues;
+  const extraInstructions = useMemo(
+    () =>
+      buildFormSnapshotInstructions(formValues, {
+        availableAgentTools,
+        availableSkills,
+        availableWorkspaces,
+        availableModels,
+        features,
+      }),
+    [formValues, availableAgentTools, availableSkills, availableWorkspaces, availableModels, features],
+  );
   const createSkillTool = useCreateSkillTool({ availableWorkspaces });
   const connectChannelTool = useConnectChannelTool();
   const clientTools = useMemo(
@@ -108,6 +125,7 @@ export const ConversationPanelProvider = ({
       initialMessages={v5Messages}
       initialUserMessage={starterMessageReady}
       clientTools={clientTools}
+      extraInstructions={extraInstructions}
     >
       <ConversationContext.Provider value={conversationContextValue}>{children}</ConversationContext.Provider>
     </StreamChatProvider>

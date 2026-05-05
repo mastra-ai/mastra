@@ -76,20 +76,21 @@ interface DeleteAgentEntryProps {
   disabled?: boolean;
 }
 
-export const DeleteAgentDesktopButton = ({ agentId, agentName, disabled = false }: DeleteAgentEntryProps) => {
+export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }: DeleteAgentEntryProps) => {
   const { open, setOpen, isPending, confirm } = useDeleteAgentAction({ agentId, agentName });
 
   return (
     <>
       <Button
-        size="icon-sm"
-        variant="ghost"
+        size="lg"
+        variant="default"
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
-        tooltip="Delete agent"
+        className="w-full"
         data-testid="agent-builder-delete-agent"
       >
         <Trash2 />
+        <span>Delete agent</span>
       </Button>
       <DeleteAgentDialog
         open={open}

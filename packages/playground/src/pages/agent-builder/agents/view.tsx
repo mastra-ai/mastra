@@ -12,7 +12,7 @@ import {
 } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
-import { DeleteAgentDesktopButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
+import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
 import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { PublishToChannelButton } from '@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button';
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
@@ -194,8 +194,6 @@ const AgentBuilderAgentViewReady = ({
         primaryAction={
           isOwner ? (
             <ViewHeaderActions
-              agentId={id}
-              agentName={storedAgent?.name ?? ''}
               onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
             />
           ) : undefined
@@ -219,6 +217,11 @@ const AgentBuilderAgentViewReady = ({
             availableSkills={availableSkills}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
+            deleteAction={
+              isOwner ? (
+                <DeleteAgentPanelButtonConnected agentId={id} agentName={storedAgent?.name ?? ''} />
+              ) : undefined
+            }
           />
         }
         browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
@@ -237,19 +240,10 @@ const AgentBuilderAgentViewReady = ({
   );
 };
 
-const ViewHeaderActions = ({
-  agentId,
-  agentName,
-  onEdit,
-}: {
-  agentId: string;
-  agentName: string;
-  onEdit: () => void;
-}) => {
+const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
   const isRunning = useStreamRunning();
   return (
     <div className="flex items-center gap-2">
-      <DeleteAgentDesktopButton agentId={agentId} agentName={agentName} disabled={isRunning} />
       <Button
         size="icon-sm"
         variant="ghost"
@@ -262,6 +256,11 @@ const ViewHeaderActions = ({
       </Button>
     </div>
   );
+};
+
+const DeleteAgentPanelButtonConnected = ({ agentId, agentName }: { agentId: string; agentName: string }) => {
+  const isRunning = useStreamRunning();
+  return <DeleteAgentPanelButton agentId={agentId} agentName={agentName} disabled={isRunning} />;
 };
 
 const VisibilitySelectIfAuth = ({ agentId }: { agentId: string }) => {

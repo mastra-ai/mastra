@@ -22,7 +22,12 @@ type Features = {
   browser: boolean;
 };
 
-const sentMessages: Array<{ message: string; threadId?: string; clientTools: Record<string, any> }> = [];
+const sentMessages: Array<{
+  message: string;
+  threadId?: string;
+  clientTools: Record<string, any>;
+  modelSettings?: { instructions?: string };
+}> = [];
 const agentMessagesCalls: Array<{ agentId: string; threadId: string; memory?: boolean }> = [];
 const chatCalls: Array<{ agentId: string }> = [];
 const chatState = { isRunning: false };
@@ -34,7 +39,12 @@ vi.mock('@mastra/react', () => ({
       messages: [],
       isRunning: chatState.isRunning,
       setMessages: () => {},
-      sendMessage: (payload: { message: string; threadId?: string; clientTools: Record<string, any> }) => {
+      sendMessage: (payload: {
+        message: string;
+        threadId?: string;
+        clientTools: Record<string, any>;
+        modelSettings?: { instructions?: string };
+      }) => {
         sentMessages.push(payload);
       },
     };
@@ -587,6 +597,19 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(createSkill.inputSchema.shape.name).toBeDefined();
     expect(createSkill.inputSchema.shape.description).toBeDefined();
     expect(createSkill.inputSchema.shape.instructions).toBeDefined();
+  });
+
+  it('forwards a form-snapshot via modelSettings.instructions on send', () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
+
+    expect(sentMessages.length).toBeGreaterThan(0);
+    const instructions = sentMessages[0].modelSettings?.instructions;
+    expect(typeof instructions).toBe('string');
+    expect(instructions).toContain('Current agent configuration');
+    expect(instructions).toContain('"Initial"');
+    expect(instructions).toContain('Tools: (none selected)');
+    // Snapshot lives only in modelSettings, not as a top-level instructions field.
+    expect(sentMessages[0]).not.toHaveProperty('instructions');
   });
 });
 

@@ -13,6 +13,8 @@ interface WorkspaceLayoutProps {
   isLoading: boolean;
   mode: WorkspaceMode;
   creating?: boolean;
+  /** Very-subtle slot rendered first (leftmost) in the right action cluster (e.g. autosave status). */
+  rightAside?: ReactNode;
   modeAction?: ReactNode;
   primaryAction?: ReactNode;
   /** Optional slot rendered AFTER primaryAction (e.g. mobile-only 3-dot menu). */
@@ -35,6 +37,7 @@ export const WorkspaceLayout = ({
   isLoading,
   mode,
   creating = false,
+  rightAside,
   modeAction,
   primaryAction,
   mobileExtra,
@@ -96,6 +99,7 @@ export const WorkspaceLayout = ({
             creating={creating}
           />
           <div className="justify-self-end flex items-center gap-2 shrink-0">
+            {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
             {modeAction && <div className="shrink-0">{modeAction}</div>}
             {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
             {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}

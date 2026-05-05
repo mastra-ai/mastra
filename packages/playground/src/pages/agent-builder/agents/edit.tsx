@@ -1,18 +1,18 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, Spinner } from '@mastra/playground-ui';
-import { CheckIcon } from 'lucide-react';
+import { Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
-import { Navigate, useNavigate, useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-builder-edit/autosave-indicator';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import {
   ConversationPanelChat,
   ConversationPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
-import { DeleteAgentDesktopButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
+import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
@@ -20,8 +20,8 @@ import { PublishToChannelButton } from '@/domains/agent-builder/components/agent
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
+import { useAutosaveAgent } from '@/domains/agent-builder/hooks/use-autosave-agent';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
-import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
@@ -177,7 +177,6 @@ const AgentBuilderAgentEditReady = ({
   initialUserMessage,
   isOwner,
 }: AgentBuilderAgentEditReadyProps) => {
-  const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
@@ -199,13 +198,7 @@ const AgentBuilderAgentEditReady = ({
 
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
 
-  const { save, isSaving } = useSaveAgent({ agentId: id, availableAgentTools, availableSkills });
-
-  const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
-    await save(values);
-    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
-  };
-  const handleSave = formMethods.handleSubmit(handleSaveSuccess);
+  const autosave = useAutosaveAgent({ agentId: id, availableAgentTools, availableSkills });
 
   const isFreshThread = initialUserMessage !== undefined;
   const canPublishToChannel = isOwner && isPublishable;
@@ -230,13 +223,19 @@ const AgentBuilderAgentEditReady = ({
         showConfigure={isOwner}
         backHref={`/agent-builder/agents/${id}/view`}
         backTooltip="Back to agent chat"
+        rightAside={
+          <AutosaveIndicator
+            status={autosave.status}
+            lastError={autosave.lastError}
+            onRetry={autosave.retry}
+          />
+        }
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
             {canPublishToChannel && <PublishToChannelButton agentId={id} />}
             <VisibilitySelectConnected agentId={id} />
           </div>
         }
-        primaryAction={<HeaderActions agentId={id} isSaving={isSaving} onSave={handleSave} />}
         mobileExtra={
           <AgentBuilderMobileMenuConnected
             agentId={id}
@@ -251,6 +250,7 @@ const AgentBuilderAgentEditReady = ({
             availableSkills={availableSkills}
             activeDetail={activeDetail}
             onActiveDetailChange={setActiveDetail}
+            deleteAction={isOwner ? <DeleteAgentPanelButtonConnected agentId={id} /> : undefined}
           />
         }
       />
@@ -288,23 +288,9 @@ const AgentBuilderMobileMenuConnected = ({
   );
 };
 
-interface HeaderActionsProps {
-  agentId: string;
-  isSaving: boolean;
-  onSave: () => void;
-}
-
-const HeaderActions = ({ agentId, isSaving, onSave }: HeaderActionsProps) => {
+const DeleteAgentPanelButtonConnected = ({ agentId }: { agentId: string }) => {
   const isRunning = useStreamRunning();
-  const disabled = isSaving || isRunning;
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control: formMethods.control, name: 'name' }) ?? '';
-  return (
-    <div className="flex items-center gap-2">
-      <DeleteAgentDesktopButton agentId={agentId} agentName={name} disabled={disabled} />
-      <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
-        <CheckIcon /> {isSaving ? 'Saving…' : 'Save'}
-      </Button>
-    </div>
-  );
+  return <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />;
 };

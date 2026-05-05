@@ -13,6 +13,7 @@ interface UseSaveAgentArgs {
   availableAgentTools?: AgentTool[];
   availableSkills?: StoredSkillResponse[];
   onSuccess?: (agentId: string) => void;
+  silent?: boolean;
 }
 
 export function useSaveAgent({
@@ -20,6 +21,7 @@ export function useSaveAgent({
   availableAgentTools = [],
   availableSkills = [],
   onSuccess,
+  silent = false,
 }: UseSaveAgentArgs) {
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
   const defaultVisibility = useDefaultVisibility();
@@ -47,7 +49,7 @@ export function useSaveAgent({
           ...browserField,
           ...metadataField,
         });
-        toast.success('Agent updated');
+        if (!silent) toast.success('Agent updated');
         onSuccess?.(agentId);
         return updated;
       } catch (error) {
@@ -60,7 +62,7 @@ export function useSaveAgent({
         throw error;
       }
     },
-    [agentId, availableAgentTools, availableSkills, updateStoredAgent, onSuccess, defaultVisibility],
+    [agentId, availableAgentTools, availableSkills, updateStoredAgent, onSuccess, defaultVisibility, silent],
   );
 
   return { save, isSaving: updateStoredAgent.isPending };
