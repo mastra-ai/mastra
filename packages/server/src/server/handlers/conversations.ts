@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   conversationDeletedSchema,

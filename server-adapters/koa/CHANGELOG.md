@@ -1,5 +1,31 @@
 # @mastra/koa
 
+## 1.5.2-alpha.0
+
+### Patch Changes
+
+- Fixed peer dependency ranges so packages that use the Mastra server require a compatible Mastra core version. ([#16208](https://github.com/mastra-ai/mastra/pull/16208))
+
+- Updated dependencies [[`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60), [`aefd33b`](https://github.com/mastra-ai/mastra/commit/aefd33b09f7e192639535df2a36129f40d05c046)]:
+  - @mastra/core@1.33.0-alpha.0
+  - @mastra/server@1.33.0-alpha.0
+
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`cc0469d`](https://github.com/mastra-ai/mastra/commit/cc0469d671d6f7a426013e4425f9501da6fa45f2), [`ddc0174`](https://github.com/mastra-ai/mastra/commit/ddc0174da0f39008e178c02194a2eaeab0829b15)]:
+  - @mastra/core@1.32.1
+  - @mastra/server@1.32.1
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cc0469d`](https://github.com/mastra-ai/mastra/commit/cc0469d671d6f7a426013e4425f9501da6fa45f2), [`ddc0174`](https://github.com/mastra-ai/mastra/commit/ddc0174da0f39008e178c02194a2eaeab0829b15)]:
+  - @mastra/core@1.32.1-alpha.0
+  - @mastra/server@1.32.1-alpha.0
+
 ## 1.5.0
 
 ### Minor Changes

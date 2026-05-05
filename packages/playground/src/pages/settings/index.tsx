@@ -1,13 +1,27 @@
-import { PageHeader, PageLayout, SectionCard, SelectField, SettingsIcon, useTheme } from '@mastra/playground-ui';
+import {
+  PageHeader,
+  PageLayout,
+  SectionCard,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SettingsIcon,
+  SettingsRow,
+  useTheme,
+} from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 
-const THEME_OPTIONS = [
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' },
   { value: 'light', label: 'Light' },
   { value: 'system', label: 'System' },
-] as const;
+];
+
+const isTheme = (value: string): value is Theme => THEME_OPTIONS.some(option => option.value === value);
 
 export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
@@ -25,13 +39,25 @@ export const StudioSettingsPage = () => {
 
       <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
         <SectionCard title="Theme" description="Customize the appearance of the studio.">
-          <SelectField
-            name="theme"
-            label="Theme mode"
-            value={theme}
-            onValueChange={value => setTheme(value as Theme)}
-            options={THEME_OPTIONS.map(option => ({ ...option }))}
-          />
+          <SettingsRow label="Theme mode" htmlFor="theme">
+            <Select
+              value={theme}
+              onValueChange={value => {
+                if (isTheme(value)) setTheme(value);
+              }}
+            >
+              <SelectTrigger id="theme" className="w-full sm:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {THEME_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
         </SectionCard>
 
         <SectionCard

@@ -36,7 +36,7 @@ overrides:
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.2.2
-  inngest: ^3.50.0
+  inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
   langsmith@<0.5.19: ^0.5.19
   lodash@<=4.17.23: ^4.18.0
@@ -4154,7 +4154,7 @@ importers:
         version: 8.21.3(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@uiw/react-codemirror':
         specifier: ^4.25.9
-        version: 4.25.9(@babel/runtime@7.29.2)(@codemirror/autocomplete@6.20.1)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.0)(@codemirror/search@6.6.0)(@codemirror/state@6.6.0)(@codemirror/theme-one-dark@6.1.3)(@codemirror/view@6.41.0)(codemirror@6.0.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        version: 4.25.9(@babel/runtime@7.29.2)(@codemirror/autocomplete@6.20.1)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.0)(@codemirror/search@6.7.0)(@codemirror/state@6.6.0)(@codemirror/theme-one-dark@6.1.3)(@codemirror/view@6.41.0)(codemirror@6.0.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.10.1(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -4345,6 +4345,9 @@ importers:
       '@radix-ui/react-slider':
         specifier: ^1.3.6
         version: 1.3.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@radix-ui/react-slot':
+        specifier: ^1.2.4
+        version: 1.2.4(@types/react@19.2.14)(react@19.2.5)
       '@radix-ui/react-switch':
         specifier: ^1.2.6
         version: 1.2.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -4752,8 +4755,8 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
       inngest:
-        specifier: ^3.50.0
-        version: 3.52.7(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@6.0.3)(zod@4.3.6)
+        specifier: ^4.2.2
+        version: 4.2.6(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6)
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -6856,9 +6859,6 @@ importers:
 
   workflows/inngest:
     dependencies:
-      '@inngest/realtime':
-        specifier: ^0.4.6
-        version: 0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -6866,8 +6866,8 @@ importers:
         specifier: ^1.30.1
         version: 1.30.1(@opentelemetry/api@1.9.1)
       inngest:
-        specifier: ^3.50.0
-        version: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@6.0.3)(zod@4.3.6)
+        specifier: ^4.2.2
+        version: 4.2.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -9488,6 +9488,9 @@ packages:
   '@codemirror/search@6.6.0':
     resolution: {integrity: sha512-koFuNXcDvyyotWcgOnZGmY7LZqEOXZaaxD/j6n18TCLx2/9HieZJ5H6hs1g8FiRxBD0DNfs0nXn17g872RmYdw==}
 
+  '@codemirror/search@6.7.0':
+    resolution: {integrity: sha512-ZvGm99wc/s2cITtMT15LFdn8aH/aS+V+DqyGq/N5ZlV5vWtH+nILvC2nw0zX7ByNoHHDZ2IxxdW38O0tc5nVHg==}
+
   '@codemirror/state@6.6.0':
     resolution: {integrity: sha512-4nbvra5R5EtiCzr9BTHiTLc+MLXK2QGiAVYMyi8PkQd3SR+6ixar/Q/01Fa21TBIDOZXgeWV4WppsQolSreAPQ==}
 
@@ -9496,6 +9499,9 @@ packages:
 
   '@codemirror/view@6.41.0':
     resolution: {integrity: sha512-6H/qadXsVuDY219Yljhohglve8xf4B8xJkVOEWfA5uiYKiTFppjqsvsfR5iPA0RbvRBoOyTZpbLIxe9+0UR8xA==}
+
+  '@codemirror/view@6.41.1':
+    resolution: {integrity: sha512-ToDnWKbBnke+ZLrP6vgTTDScGi5H37YYuZGniQaBzxMVdtCxMrslsmtnOvbPZk4RX9bvkQqnWR/WS/35tJA0qg==}
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
@@ -17991,6 +17997,9 @@ packages:
   caniuse-lite@1.0.30001776:
     resolution: {integrity: sha512-sg01JDPzZ9jGshqKSckOQthXnYwOEP50jeVFhaSFbZcOy05TiuuaffDOfcwtCisJ9kNQuLBFibYywv2Bgm9osw==}
 
+  caniuse-lite@1.0.30001791:
+    resolution: {integrity: sha512-yk0l/YSrOnFZk3UROpDLQD9+kC1l4meK/wed583AXrzoarMGJcbRi2Q4RaUYbKxYAsZ8sWmaSa/DsLmdBeI1vQ==}
+
   canonicalize@1.0.8:
     resolution: {integrity: sha512-0CNTVCLZggSh7bc5VkX5WWPWO+cyZbNd07IHIsSXLia/eAq+r836hgk+8BKoEh7949Mda87VUOitx5OddVj64A==}
 
@@ -20678,10 +20687,9 @@ packages:
     resolution: {integrity: sha512-sb+9iGgdKin0Rk2WznXBbX/ivLPZiuP3jnEJjicMQU8sb3/GQQ5X8p7GI6brMSuqluK0b7sXXTUAvQUr9R59VA==}
     hasBin: true
 
-  inngest@3.52.7:
-    resolution: {integrity: sha512-Bj4LttRrNUfVz745MVxQio34QwHzwG7dHiAI6DmRIZqfRjQ6tdV4mg70xzbRmwsaXgN+iboa+SXP6ILkziUf4g==}
+  inngest@4.2.6:
+    resolution: {integrity: sha512-d6oFhG4CXIyJHJ8Z029shqENn9R2Etn/5PPZHXVlK0YgHOW77DchO5gnMu9TQdUoyWnZeXKq1veZQL+NCRmRNQ==}
     engines: {node: '>=20'}
-    deprecated: 'CRITICAL SECURITY: upgrade to >=3.54.0'
     peerDependencies:
       '@sveltejs/kit': '>=1.27.3'
       '@vercel/node': '>=2.15.9'
@@ -20692,6 +20700,7 @@ packages:
       hono: '>=4.2.7'
       koa: '>=2.14.2'
       next: '>=12.0.0'
+      react: '>=18.0.0'
       typescript: ^6.0.3
       zod: ^3.25.0 || ^4.0.0
     peerDependenciesMeta:
@@ -20712,6 +20721,8 @@ packages:
       koa:
         optional: true
       next:
+        optional: true
+      react:
         optional: true
       typescript:
         optional: true
@@ -22367,6 +22378,11 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
+  nanoid@3.3.12:
+    resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
   nanoid@5.1.9:
     resolution: {integrity: sha512-ZUvP7KeBLe3OZ1ypw6dI/TzYJuvHP77IM4Ry73waSQTLn8/g8rpdjfyVAh7t1/+FjBtG4lCP42MEbDxOsRpBMw==}
     engines: {node: ^18 || >=20}
@@ -22611,8 +22627,8 @@ packages:
   nwsapi@2.2.23:
     resolution: {integrity: sha512-7wfH4sLbt4M0gCDzGE6vzQBo0bfTKjU7Sfpqy/7gs1qBfYz2vEJH6vXcBKpO3+6Yu1telwd0t9HpyOoLEQQbIQ==}
 
-  nypm@0.6.5:
-    resolution: {integrity: sha512-K6AJy1GMVyfyMXRVB88700BJqNUkByijGJM8kEHpLdcAt+vSQAVfkWWHYzuRXHSY6xA2sNc5RjTj0p9rE2izVQ==}
+  nypm@0.6.6:
+    resolution: {integrity: sha512-vRyr0r4cbBapw07Xw8xrj9Teq3o7MUD35rSaTcanDbW+aK2XHDgJFiU6ZTj2GBw7Q12ysdsyFss+Vdz4hQ0Y6Q==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -23167,6 +23183,9 @@ packages:
 
   pkg-types@2.3.0:
     resolution: {integrity: sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig==}
+
+  pkg-types@2.3.1:
+    resolution: {integrity: sha512-y+ichcgc2LrADuhLNAx8DFjVfgz91pRxfZdI3UDhxHvcVEZsenLO+7XaU5vOp0u/7V/wZ+plyuQxtrDlZJ+yeg==}
 
   pkijs@3.3.3:
     resolution: {integrity: sha512-+KD8hJtqQMYoTuL1bbGOqxb4z+nZkTAwVdNtWwe8Tc2xNbEmdJYIYoc6Qt0uF55e6YW6KuTHw1DjQ18gMhzepw==}
@@ -29950,6 +29969,12 @@ snapshots:
       '@codemirror/view': 6.41.0
       crelt: 1.0.6
 
+  '@codemirror/search@6.7.0':
+    dependencies:
+      '@codemirror/state': 6.6.0
+      '@codemirror/view': 6.41.1
+      crelt: 1.0.6
+
   '@codemirror/state@6.6.0':
     dependencies:
       '@marijn/find-cluster-break': 1.0.2
@@ -29958,10 +29983,17 @@ snapshots:
     dependencies:
       '@codemirror/language': 6.12.3
       '@codemirror/state': 6.6.0
-      '@codemirror/view': 6.41.0
+      '@codemirror/view': 6.41.1
       '@lezer/highlight': 1.2.3
 
   '@codemirror/view@6.41.0':
+    dependencies:
+      '@codemirror/state': 6.6.0
+      crelt: 1.0.6
+      style-mod: 4.1.3
+      w3c-keyname: 2.2.8
+
+  '@codemirror/view@6.41.1':
     dependencies:
       '@codemirror/state': 6.6.0
       crelt: 1.0.6
@@ -32384,33 +32416,11 @@ snapshots:
       '@types/node': 22.19.15
       typescript: 6.0.3
 
-  '@inngest/realtime@0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      debug: 4.4.3
-      inngest: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@6.0.3)(zod@4.3.6)
-      react: 19.2.5
-      zod: 4.3.6
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - supports-color
-      - typescript
-
   '@inngest/realtime@0.4.6(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3
-      inngest: 3.52.7(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@6.0.3)(zod@4.3.6)
+      inngest: 4.2.6(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6)
       react: 19.2.5
       zod: 4.3.6
     transitivePeerDependencies:
@@ -38770,6 +38780,16 @@ snapshots:
       '@codemirror/state': 6.6.0
       '@codemirror/view': 6.41.0
 
+  '@uiw/codemirror-extensions-basic-setup@4.25.9(@codemirror/autocomplete@6.20.1)(@codemirror/commands@6.10.3)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.0)(@codemirror/search@6.7.0)(@codemirror/state@6.6.0)(@codemirror/view@6.41.0)':
+    dependencies:
+      '@codemirror/autocomplete': 6.20.1
+      '@codemirror/commands': 6.10.3
+      '@codemirror/language': 6.12.3
+      '@codemirror/lint': 6.9.0
+      '@codemirror/search': 6.7.0
+      '@codemirror/state': 6.6.0
+      '@codemirror/view': 6.41.0
+
   '@uiw/codemirror-theme-dracula@4.25.9(@codemirror/language@6.12.3)(@codemirror/state@6.6.0)(@codemirror/view@6.41.0)':
     dependencies:
       '@uiw/codemirror-themes': 4.25.9(@codemirror/language@6.12.3)(@codemirror/state@6.6.0)(@codemirror/view@6.41.0)
@@ -38792,6 +38812,23 @@ snapshots:
       '@codemirror/theme-one-dark': 6.1.3
       '@codemirror/view': 6.41.0
       '@uiw/codemirror-extensions-basic-setup': 4.25.9(@codemirror/autocomplete@6.20.1)(@codemirror/commands@6.10.3)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.0)(@codemirror/search@6.6.0)(@codemirror/state@6.6.0)(@codemirror/view@6.41.0)
+      codemirror: 6.0.2
+      react: 19.2.5
+      react-dom: 19.2.5(react@19.2.5)
+    transitivePeerDependencies:
+      - '@codemirror/autocomplete'
+      - '@codemirror/language'
+      - '@codemirror/lint'
+      - '@codemirror/search'
+
+  '@uiw/react-codemirror@4.25.9(@babel/runtime@7.29.2)(@codemirror/autocomplete@6.20.1)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.0)(@codemirror/search@6.7.0)(@codemirror/state@6.6.0)(@codemirror/theme-one-dark@6.1.3)(@codemirror/view@6.41.0)(codemirror@6.0.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@codemirror/commands': 6.10.3
+      '@codemirror/state': 6.6.0
+      '@codemirror/theme-one-dark': 6.1.3
+      '@codemirror/view': 6.41.0
+      '@uiw/codemirror-extensions-basic-setup': 4.25.9(@codemirror/autocomplete@6.20.1)(@codemirror/commands@6.10.3)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.0)(@codemirror/search@6.7.0)(@codemirror/state@6.6.0)(@codemirror/view@6.41.0)
       codemirror: 6.0.2
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
@@ -40322,7 +40359,7 @@ snapshots:
       ohash: 2.0.11
       pathe: 2.0.3
       perfect-debounce: 2.1.0
-      pkg-types: 2.3.0
+      pkg-types: 2.3.1
       rc9: 2.1.2
     optionalDependencies:
       magicast: 0.5.2
@@ -40393,6 +40430,9 @@ snapshots:
       lodash.uniq: 4.5.0
 
   caniuse-lite@1.0.30001776: {}
+
+  caniuse-lite@1.0.30001791:
+    optional: true
 
   canonicalize@1.0.8: {}
 
@@ -40738,9 +40778,9 @@ snapshots:
       '@codemirror/commands': 6.10.3
       '@codemirror/language': 6.12.3
       '@codemirror/lint': 6.9.0
-      '@codemirror/search': 6.6.0
+      '@codemirror/search': 6.7.0
       '@codemirror/state': 6.6.0
-      '@codemirror/view': 6.41.0
+      '@codemirror/view': 6.41.1
 
   collapse-white-space@2.1.0: {}
 
@@ -42959,7 +42999,7 @@ snapshots:
       consola: 3.4.2
       defu: 6.1.7
       node-fetch-native: 1.6.7
-      nypm: 0.6.5
+      nypm: 0.6.6
       pathe: 2.0.3
 
   github-slugger@1.5.0: {}
@@ -43780,7 +43820,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@6.0.3)(zod@4.3.6):
+  inngest@4.2.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6):
     dependencies:
       '@bufbuild/protobuf': 2.10.0
       '@inngest/ai': 0.1.7
@@ -43797,14 +43837,12 @@ snapshots:
       '@types/debug': 4.1.13
       '@types/ms': 2.1.0
       canonicalize: 1.0.8
-      chalk: 4.1.2
       cross-fetch: 4.1.0(encoding@0.1.13)
       debug: 4.4.3
       hash.js: 1.1.7
       json-stringify-safe: 5.0.1
       ms: 2.1.3
       serialize-error-cjs: 0.1.4
-      strip-ansi: 5.2.0
       temporal-polyfill: 0.2.5
       ulid: 2.4.0
       zod: 4.3.6
@@ -43814,13 +43852,14 @@ snapshots:
       hono: 4.12.14
       koa: 3.1.2
       next: 15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react: 19.2.5
       typescript: 6.0.3
     transitivePeerDependencies:
       - '@opentelemetry/core'
       - encoding
       - supports-color
 
-  inngest@3.52.7(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@6.0.3)(zod@4.3.6):
+  inngest@4.2.6(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(typescript@6.0.3)(zod@4.3.6):
     dependencies:
       '@bufbuild/protobuf': 2.10.0
       '@inngest/ai': 0.1.7
@@ -43837,14 +43876,12 @@ snapshots:
       '@types/debug': 4.1.13
       '@types/ms': 2.1.0
       canonicalize: 1.0.8
-      chalk: 4.1.2
       cross-fetch: 4.1.0(encoding@0.1.13)
       debug: 4.4.3
       hash.js: 1.1.7
       json-stringify-safe: 5.0.1
       ms: 2.1.3
       serialize-error-cjs: 0.1.4
-      strip-ansi: 5.2.0
       temporal-polyfill: 0.2.5
       ulid: 2.4.0
       zod: 4.3.6
@@ -43854,6 +43891,7 @@ snapshots:
       hono: 4.12.14
       koa: 3.1.2
       next: 15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react: 19.2.5
       typescript: 6.0.3
     transitivePeerDependencies:
       - '@opentelemetry/core'
@@ -45949,6 +45987,9 @@ snapshots:
 
   nanoid@3.3.11: {}
 
+  nanoid@3.3.12:
+    optional: true
+
   nanoid@5.1.9: {}
 
   nanostores@1.1.0: {}
@@ -45981,7 +46022,7 @@ snapshots:
     dependencies:
       '@next/env': 15.5.15
       '@swc/helpers': 0.5.15
-      caniuse-lite: 1.0.30001776
+      caniuse-lite: 1.0.30001791
       postcss: 8.4.31
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
@@ -46007,7 +46048,7 @@ snapshots:
     dependencies:
       '@next/env': 15.5.15
       '@swc/helpers': 0.5.15
-      caniuse-lite: 1.0.30001776
+      caniuse-lite: 1.0.30001791
       postcss: 8.4.31
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
@@ -46221,7 +46262,7 @@ snapshots:
 
   nwsapi@2.2.23: {}
 
-  nypm@0.6.5:
+  nypm@0.6.6:
     dependencies:
       citty: 0.2.2
       pathe: 2.0.3
@@ -46862,6 +46903,12 @@ snapshots:
       exsolve: 1.0.8
       pathe: 2.0.3
 
+  pkg-types@2.3.1:
+    dependencies:
+      confbox: 0.2.4
+      exsolve: 1.0.8
+      pathe: 2.0.3
+
   pkijs@3.3.3:
     dependencies:
       '@noble/hashes': 1.4.0
@@ -47338,7 +47385,7 @@ snapshots:
 
   postcss@8.4.31:
     dependencies:
-      nanoid: 3.3.11
+      nanoid: 3.3.12
       picocolors: 1.1.1
       source-map-js: 1.2.1
     optional: true
