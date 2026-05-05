@@ -973,6 +973,7 @@ describe('A2A Handler', () => {
       const pushNotificationStore = new InMemoryPushNotificationStore();
       const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
         fetch: fetchMock,
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
       });
 
       const params: MessageSendParams = {
@@ -1050,6 +1051,7 @@ describe('A2A Handler', () => {
       const pushNotificationStore = new InMemoryPushNotificationStore();
       const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
         fetch: fetchMock,
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
       });
       const logger = {
         error: vi.fn(),
@@ -1088,6 +1090,65 @@ describe('A2A Handler', () => {
 
       expect(result.result?.status.state).toBe('completed');
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
+      });
+    });
+
+    it('uses a provided push notification store even when no sender is passed', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const logger = {
+        error: vi.fn(),
+      } as any;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'http://localhost:9999/webhook',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        agent: mockAgent,
+        agentId,
+        logger,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+      expect(
+        pushNotificationStore.get({
+          agentId,
+          params: { id: taskId },
+        }),
+      ).toEqual({
+        taskId,
+        pushNotificationConfig: {
+          id: taskId,
+          url: 'http://localhost:9999/webhook',
+        },
+      });
+
       await vi.waitFor(() => {
         expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
       });

@@ -273,12 +273,31 @@ function createDataArtifactUpdate({
   };
 }
 
-function resolvePushNotificationStore(pushNotificationStore?: InMemoryPushNotificationStore) {
-  return pushNotificationStore ?? defaultPushNotificationStore;
-}
+function resolvePushNotificationPair({
+  pushNotificationStore,
+  pushNotificationSender,
+}: {
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  pushNotificationSender?: DefaultPushNotificationSender;
+}) {
+  if (pushNotificationSender) {
+    return {
+      pushNotificationStore: pushNotificationSender.getStore(),
+      pushNotificationSender,
+    };
+  }
 
-function resolvePushNotificationSender(pushNotificationSender?: DefaultPushNotificationSender) {
-  return pushNotificationSender ?? defaultPushNotificationSender;
+  if (pushNotificationStore) {
+    return {
+      pushNotificationStore,
+      pushNotificationSender: new DefaultPushNotificationSender(pushNotificationStore),
+    };
+  }
+
+  return {
+    pushNotificationStore: defaultPushNotificationStore,
+    pushNotificationSender: defaultPushNotificationSender,
+  };
 }
 
 function createTaskPushNotificationConfig(
@@ -524,8 +543,13 @@ export async function handleMessageSend({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
-  const resolvedPushNotificationStore = resolvePushNotificationStore(pushNotificationStore);
-  const resolvedPushNotificationSender = resolvePushNotificationSender(pushNotificationSender);
+  const {
+    pushNotificationStore: resolvedPushNotificationStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+  } = resolvePushNotificationPair({
+    pushNotificationStore,
+    pushNotificationSender,
+  });
 
   // Load or create task
   let currentData = await loadOrCreateTask({
@@ -694,7 +718,10 @@ export async function handleSetTaskPushNotificationConfig({
     taskId: params.taskId,
   });
 
-  const config = resolvePushNotificationStore(pushNotificationStore).set({
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const config = resolvedPushNotificationStore.set({
     agentId,
     config: createTaskPushNotificationConfig(params.taskId, params.pushNotificationConfig),
   });
@@ -721,7 +748,10 @@ export async function handleGetTaskPushNotificationConfig({
     taskId: params.id,
   });
 
-  const config = resolvePushNotificationStore(pushNotificationStore).get({
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const config = resolvedPushNotificationStore.get({
     agentId,
     params,
   });
@@ -754,7 +784,10 @@ export async function handleListTaskPushNotificationConfig({
     taskId: params.id,
   });
 
-  const configs = resolvePushNotificationStore(pushNotificationStore).list({
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const configs = resolvedPushNotificationStore.list({
     agentId,
     params,
   });
@@ -781,7 +814,10 @@ export async function handleDeleteTaskPushNotificationConfig({
     taskId: params.id,
   });
 
-  const deleted = resolvePushNotificationStore(pushNotificationStore).delete({
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const deleted = resolvedPushNotificationStore.delete({
     agentId,
     params,
   });
@@ -819,8 +855,13 @@ export async function* handleMessageStream({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
-  const resolvedPushNotificationStore = resolvePushNotificationStore(pushNotificationStore);
-  const resolvedPushNotificationSender = resolvePushNotificationSender(pushNotificationSender);
+  const {
+    pushNotificationStore: resolvedPushNotificationStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+  } = resolvePushNotificationPair({
+    pushNotificationStore,
+    pushNotificationSender,
+  });
 
   let currentData = await loadOrCreateTask({
     taskId,
@@ -1196,7 +1237,7 @@ export async function handleTaskCancel({
   // Save the updated state
   await saveTaskAndMaybeSendPushNotification({
     taskStore,
-    pushNotificationSender: resolvePushNotificationSender(pushNotificationSender),
+    pushNotificationSender: resolvePushNotificationPair({ pushNotificationSender }).pushNotificationSender,
     previousTask,
     nextTask: data,
     agentId,
@@ -1245,8 +1286,13 @@ export async function getAgentExecutionHandler({
   abortSignal?: AbortSignal;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
-  const resolvedPushNotificationStore = resolvePushNotificationStore(pushNotificationStore);
-  const resolvedPushNotificationSender = resolvePushNotificationSender(pushNotificationSender);
+  const {
+    pushNotificationStore: resolvedPushNotificationStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+  } = resolvePushNotificationPair({
+    pushNotificationStore,
+    pushNotificationSender,
+  });
 
   let taskId: string | undefined; // For error context
 

@@ -1,8 +1,61 @@
+import { lookup as defaultLookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import type { Task } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryPushNotificationStore } from './push-notification-store';
 
 export const DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER = 'X-A2A-Notification-Token';
+
+function isDisallowedHostname(hostname: string) {
+  const normalized = hostname.toLowerCase();
+
+  return (
+    normalized === 'localhost' ||
+    normalized.endsWith('.localhost') ||
+    normalized.endsWith('.local') ||
+    normalized.endsWith('.internal') ||
+    !normalized.includes('.')
+  );
+}
+
+function isDisallowedIpv4(address: string) {
+  const [first = -1, second = -1] = address.split('.').map(Number);
+
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function isDisallowedIpv6(address: string) {
+  const normalized = address.toLowerCase();
+
+  return (
+    normalized === '::1' ||
+    normalized.startsWith('fe8') ||
+    normalized.startsWith('fe9') ||
+    normalized.startsWith('fea') ||
+    normalized.startsWith('feb') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd')
+  );
+}
+
+function isDisallowedIpAddress(address: string) {
+  const version = isIP(address);
+  if (version === 4) {
+    return isDisallowedIpv4(address);
+  }
+
+  if (version === 6) {
+    return isDisallowedIpv6(address);
+  }
+
+  return false;
+}
 
 export class DefaultPushNotificationSender {
   constructor(
@@ -11,8 +64,44 @@ export class DefaultPushNotificationSender {
       timeout?: number;
       tokenHeaderName?: string;
       fetch?: typeof fetch;
+      lookup?: typeof defaultLookup;
+      allowedHosts?: string[];
     } = {},
   ) {}
+
+  getStore() {
+    return this.pushNotificationStore;
+  }
+
+  private async normalizeAndValidateUrl(rawUrl: string) {
+    const url = new URL(rawUrl);
+
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new Error(`Push notification URL must use http or https: ${url.protocol}`);
+    }
+
+    const hostname = url.hostname.toLowerCase();
+    if (this.options.allowedHosts && !this.options.allowedHosts.includes(hostname)) {
+      throw new Error(`Push notification host is not allowed: ${hostname}`);
+    }
+
+    if (isDisallowedHostname(hostname)) {
+      throw new Error(`Push notification URL must not target local or internal hosts: ${hostname}`);
+    }
+
+    if (isDisallowedIpAddress(hostname)) {
+      throw new Error(`Push notification URL must not target local or private IPs: ${hostname}`);
+    }
+
+    const lookup = this.options.lookup ?? defaultLookup;
+    const resolvedAddresses = await lookup(hostname, { all: true, verbatim: true });
+
+    if (resolvedAddresses.some(result => isDisallowedIpAddress(result.address))) {
+      throw new Error(`Push notification URL resolved to a local or private IP: ${hostname}`);
+    }
+
+    return url.toString();
+  }
 
   async sendNotifications({
     agentId,
@@ -54,7 +143,8 @@ export class DefaultPushNotificationSender {
           }
         }
 
-        const response = await (this.options.fetch ?? fetch)(config.pushNotificationConfig.url, {
+        const url = await this.normalizeAndValidateUrl(config.pushNotificationConfig.url);
+        const response = await (this.options.fetch ?? fetch)(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(task),

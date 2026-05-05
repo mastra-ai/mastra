@@ -13,7 +13,7 @@ export class InMemoryPushNotificationStore {
   private store = new Map<string, Map<string, TaskPushNotificationConfig>>();
 
   private getKey(agentId: string, taskId: string) {
-    return `${agentId}-${taskId}`;
+    return JSON.stringify([agentId, taskId]);
   }
 
   set({ agentId, config }: { agentId: string; config: TaskPushNotificationConfig }): TaskPushNotificationConfig {
