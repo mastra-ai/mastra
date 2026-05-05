@@ -17,7 +17,6 @@ import { LibSQLStore } from '@mastra/libsql';
 import { MastraEditor } from './index';
 import { ComposioToolProvider } from './providers/composio';
 import { ArcadeToolProvider } from './providers/arcade';
-import { getProviderUserId } from './providers/identity';
 
 /**
  * A mock tool provider for tests. Implements the full ToolProvider interface.
@@ -406,21 +405,6 @@ describe('Integration Tools (tool providers)', () => {
     });
   });
 
-  describe('Tool provider identity resolution', () => {
-    it('should prefer Mastra resource identity from request context over options.userId', () => {
-      expect(
-        getProviderUserId({
-          requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'auth-resource' },
-          userId: 'explicit-user',
-        }),
-      ).toBe('auth-resource');
-    });
-
-    it('should fall back to options.userId, then "default"', () => {
-      expect(getProviderUserId({ userId: 'explicit-user' })).toBe('explicit-user');
-      expect(getProviderUserId()).toBe('default');
-    });
-  });
 
   describe.skipIf(!process.env.COMPOSIO_API_KEY)(
     'ComposioToolProvider e2e (real API, requires COMPOSIO_API_KEY)',

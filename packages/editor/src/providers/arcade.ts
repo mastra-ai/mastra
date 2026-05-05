@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
 import type { StorageToolConfig } from '@mastra/core/storage';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 
 import { Arcade } from '@arcadeai/arcadejs';
 import type {
@@ -18,7 +19,6 @@ import type {
 } from '@arcadeai/arcadejs/resources';
 import { toZodToolSet, executeOrAuthorizeZodTool } from '@arcadeai/arcadejs/lib/index';
 import type { ZodTool, ToolAuthorizationResponse } from '@arcadeai/arcadejs/lib/index';
-import { getProviderUserId } from './identity';
 
 export interface ArcadeToolProviderConfig {
   /** Arcade AI API key */
@@ -309,7 +309,8 @@ export class ArcadeToolProvider implements ToolProvider {
     if (toolSlugs.length === 0) return {};
 
     const client = this.getClient();
-    const userId = getProviderUserId(options);
+    const userId =
+      (options?.requestContext?.[MASTRA_RESOURCE_ID_KEY] as string | undefined) ?? options?.userId ?? 'default';
 
     // Fetch tool definitions for the requested slugs
     const toolDefs = await Promise.all(toolSlugs.map(slug => client.tools.get(slug).catch(() => null)));
