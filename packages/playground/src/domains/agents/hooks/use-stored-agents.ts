@@ -57,12 +57,17 @@ export const useStoredAgentMutations = (agentId?: string) => {
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params),
     onSuccess: created => {
+      // Prime the per-agent details cache with the response so the next page
+      // (the edit page) can render the agent on first paint without a refetch.
+      // The starter relies on this to immediately mount the conversation panel
+      // and dispatch the user's initial message.
+      queryClient.setQueryData(['stored-agent', created.id, 'draft', requestContext], created);
+      queryClient.setQueryData(['stored-agent', created.id, undefined, requestContext], created);
       // Invalidate both stored-agents list and the merged agents list
       void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       void queryClient.invalidateQueries({ queryKey: ['agents'] });
-      // Invalidate the specific agent details so the freshly-created id resolves
+      // Invalidate the merged agent details so the freshly-created id resolves
       // instead of staying stuck on the initial `null` from the 404 lookup.
-      void queryClient.invalidateQueries({ queryKey: ['stored-agent', created.id] });
       void queryClient.invalidateQueries({ queryKey: ['agent', created.id] });
     },
     onError: invalidateBuilderSettingsOnPolicyReject,

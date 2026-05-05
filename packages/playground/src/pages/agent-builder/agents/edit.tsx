@@ -43,11 +43,7 @@ export default function AgentBuilderAgentEdit() {
   useChannelConnectToast();
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
-  const fromStarter = initialUserMessage !== undefined;
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, {
-    status: 'draft',
-    enabled: !fromStarter,
-  });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
@@ -57,10 +53,10 @@ export default function AgentBuilderAgentEdit() {
   const { data: workspacesData } = useStoredWorkspaces();
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
-  const isOwnershipLoading = !fromStarter && Boolean(storedAgent?.authorId) && isCurrentUserLoading;
+  const isOwnershipLoading = Boolean(storedAgent?.authorId) && isCurrentUserLoading;
   const isReady =
     Boolean(id) &&
-    (fromStarter || !isStoredAgentLoading) &&
+    !isStoredAgentLoading &&
     !isOwnershipLoading &&
     (!features.tools || !isToolsPending) &&
     (!features.skills || !isSkillsPending) &&
@@ -83,8 +79,13 @@ export default function AgentBuilderAgentEdit() {
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
 
+  // Edit-only route: bounce out to the agents list when no stored agent exists for this id.
+  if (!storedAgent) {
+    return <Navigate to="/agent-builder/agents" replace />;
+  }
+
   // Redirect non-owners to the view page (server blocks writes anyway)
-  if (!fromStarter && !isOwner) {
+  if (!isOwner) {
     return <Navigate to={`/agent-builder/agents/${id}/view`} replace />;
   }
 
@@ -98,7 +99,6 @@ export default function AgentBuilderAgentEdit() {
       availableWorkspaces={availableWorkspaces}
       availableSkills={availableSkills}
       initialUserMessage={initialUserMessage}
-      fromStarter={fromStarter}
       isOwner={isOwner}
     />
   );
@@ -106,14 +106,13 @@ export default function AgentBuilderAgentEdit() {
 
 interface PageProps {
   id: string | undefined;
-  storedAgent: StoredAgent | null | undefined;
+  storedAgent: StoredAgent;
   toolsData: ToolsData | undefined;
   agentsData: AgentsData | undefined;
   workflowsData: WorkflowsData | undefined;
   availableWorkspaces: AvailableWorkspace[];
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
-  fromStarter: boolean;
   isOwner: boolean;
 }
 
@@ -126,20 +125,16 @@ const AgentBuilderAgentEditPage = ({
   availableWorkspaces,
   availableSkills,
   initialUserMessage,
-  fromStarter,
   isOwner,
 }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
   });
 
-  const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
-
   return (
     <FormProvider {...formMethods}>
       <AgentBuilderAgentEditReady
         id={id!}
-        mode={mode}
         storedAgent={storedAgent}
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
@@ -147,7 +142,6 @@ const AgentBuilderAgentEditPage = ({
         availableWorkspaces={availableWorkspaces}
         availableSkills={availableSkills}
         initialUserMessage={initialUserMessage}
-        fromStarter={fromStarter}
         isOwner={isOwner}
       />
     </FormProvider>
@@ -162,21 +156,18 @@ const AgentBuilderAgentEditSkeleton = () => (
 
 interface AgentBuilderAgentEditReadyProps {
   id: string;
-  mode: 'create' | 'edit';
-  storedAgent: StoredAgent | null | undefined;
+  storedAgent: StoredAgent;
   toolsData: ToolsData;
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
   availableWorkspaces: AvailableWorkspace[];
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
-  fromStarter: boolean;
   isOwner: boolean;
 }
 
 const AgentBuilderAgentEditReady = ({
   id,
-  mode,
   storedAgent,
   toolsData,
   agentsData,
@@ -184,7 +175,6 @@ const AgentBuilderAgentEditReady = ({
   availableWorkspaces,
   availableSkills,
   initialUserMessage,
-  fromStarter,
   isOwner,
 }: AgentBuilderAgentEditReadyProps) => {
   const navigate = useNavigate();
@@ -195,7 +185,7 @@ const AgentBuilderAgentEditReady = ({
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
 
   // Gate publishing on the *saved* visibility — unsaved form edits should not unlock publishing.
-  const isPublishable = storedAgent?.visibility === 'public';
+  const isPublishable = storedAgent.visibility === 'public';
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
@@ -209,7 +199,7 @@ const AgentBuilderAgentEditReady = ({
 
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
 
-  const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableAgentTools, availableSkills });
+  const { save, isSaving } = useSaveAgent({ agentId: id, availableAgentTools, availableSkills });
 
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
@@ -217,12 +207,13 @@ const AgentBuilderAgentEditReady = ({
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
 
-  const canPublishToChannel = mode === 'edit' && isOwner && isPublishable;
+  const isFreshThread = initialUserMessage !== undefined;
+  const canPublishToChannel = isOwner && isPublishable;
 
   return (
     <ConversationPanelProvider
       initialUserMessage={initialUserMessage}
-      isFreshThread={fromStarter}
+      isFreshThread={isFreshThread}
       features={features}
       availableAgentTools={availableAgentTools}
       availableWorkspaces={availableWorkspaces}
@@ -234,24 +225,22 @@ const AgentBuilderAgentEditReady = ({
       <WorkspaceLayout
         isLoading={false}
         mode="build"
-        creating={mode === 'create'}
-        defaultExpanded={mode === 'edit'}
+        defaultExpanded
         detailOpen={activeDetail !== null}
         showConfigure={isOwner}
-        backHref={mode === 'edit' ? `/agent-builder/agents/${id}/view` : '/agent-builder/agents'}
-        backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
+        backHref={`/agent-builder/agents/${id}/view`}
+        backTooltip="Back to agent chat"
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
             {canPublishToChannel && <PublishToChannelButton agentId={id} />}
             <VisibilitySelectConnected />
           </div>
         }
-        primaryAction={<HeaderActions mode={mode} agentId={id} isSaving={isSaving} onSave={handleSave} />}
+        primaryAction={<HeaderActions agentId={id} isSaving={isSaving} onSave={handleSave} />}
         mobileExtra={
           <AgentBuilderMobileMenuConnected
             agentId={id}
             showPublishToChannel={canPublishToChannel}
-            showDelete={mode === 'edit'}
           />
         }
         chat={<ConversationPanelChat />}
@@ -279,11 +268,9 @@ const VisibilitySelectConnected = () => {
 const AgentBuilderMobileMenuConnected = ({
   agentId,
   showPublishToChannel,
-  showDelete,
 }: {
   agentId: string | undefined;
   showPublishToChannel: boolean;
-  showDelete: boolean;
 }) => {
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
@@ -295,7 +282,7 @@ const AgentBuilderMobileMenuConnected = ({
       agentId={agentId}
       showSetVisibility={authEnabled}
       showPublishToChannel={showPublishToChannel}
-      showDelete={showDelete}
+      showDelete
       agentName={name}
       disabled={isRunning}
     />
@@ -303,22 +290,21 @@ const AgentBuilderMobileMenuConnected = ({
 };
 
 interface HeaderActionsProps {
-  mode: 'create' | 'edit';
   agentId: string;
   isSaving: boolean;
   onSave: () => void;
 }
 
-const HeaderActions = ({ mode, agentId, isSaving, onSave }: HeaderActionsProps) => {
+const HeaderActions = ({ agentId, isSaving, onSave }: HeaderActionsProps) => {
   const isRunning = useStreamRunning();
   const disabled = isSaving || isRunning;
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control: formMethods.control, name: 'name' }) ?? '';
   return (
     <div className="flex items-center gap-2">
-      {mode === 'edit' && <DeleteAgentDesktopButton agentId={agentId} agentName={name} disabled={disabled} />}
+      <DeleteAgentDesktopButton agentId={agentId} agentName={name} disabled={disabled} />
       <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
-        <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
+        <CheckIcon /> {isSaving ? 'Saving…' : 'Save'}
       </Button>
     </div>
   );

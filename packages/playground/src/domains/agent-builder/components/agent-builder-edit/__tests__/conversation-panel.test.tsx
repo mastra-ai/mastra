@@ -81,23 +81,17 @@ const builderFilterRef: { fn: (models: MockModel[]) => MockModel[] } = {
   fn: models => models.filter(model => model.provider === 'openai'),
 };
 
-vi.mock('@/domains/llm', () => ({
-  useLLMProviders: () => ({
-    data: {
-      providers: llmProvidersFixture.value,
-    },
-    isLoading: llmProviderState.isLoading,
-  }),
-  useAllModels: (providers: MockProvider[]) =>
-    providers.flatMap(provider =>
+vi.mock('@/domains/agent-builder/hooks/use-agent-builder-allowed-models', () => ({
+  useAgentBuilderAllowedModels: () => {
+    const allModels: MockModel[] = llmProvidersFixture.value.flatMap(provider =>
       provider.models.map(model => ({ provider: provider.id, providerName: provider.name, model: model.name })),
-    ),
-  cleanProviderId: (provider: string) => provider.replace(/^gateway\//, ''),
-}));
-
-vi.mock('@/domains/builder', () => ({
-  useBuilderModelPolicy: () => ({ active: true }),
-  useBuilderFilteredModels: (models: MockModel[]) => builderFilterRef.fn(models),
+    );
+    return {
+      providers: llmProvidersFixture.value,
+      models: builderFilterRef.fn(allModels),
+      isLoading: llmProviderState.isLoading,
+    };
+  },
 }));
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;

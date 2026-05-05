@@ -140,6 +140,7 @@ const renderAt = (path = '/agent-builder/agents/agent-123/edit') =>
         <Routes>
           <Route path="/agent-builder/agents/:id/edit" element={<AgentBuilderAgentEdit />} />
           <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
+          <Route path="/agent-builder/agents" element={<div data-testid="agents-list-page" />} />
         </Routes>
       </MemoryRouter>
     </TooltipProvider>,
@@ -161,37 +162,10 @@ describe('AgentBuilderAgentEdit', () => {
     cleanup();
   });
 
-  describe('create mode (no stored agent)', () => {
-    it('renders only the primary Create button (no Cancel)', () => {
-      const { queryByTestId, getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-edit-save').textContent).toContain('Create');
-      expect(queryByTestId('agent-builder-edit-cancel')).toBeNull();
-    });
-
-    it('navigates to the view page after a successful save', async () => {
-      const { getByTestId } = renderAt();
-      fireEvent.click(getByTestId('agent-builder-edit-save'));
-
-      await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(navigateMock).toHaveBeenCalled());
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
-    });
-
-    it('does not render the Publish to channel button in create mode', () => {
-      const { queryByTestId } = renderAt();
-      expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
-    });
-
-    it('does not render the Delete agent button in create mode', () => {
-      const { queryByTestId } = renderAt();
-      expect(queryByTestId('agent-builder-delete-agent')).toBeNull();
-    });
-
-    it('renders Chat and Configuration tabs in create mode', () => {
-      const { getByTestId } = renderAt();
-      expect(getByTestId('agent-builder-tab-chat')).not.toBeNull();
-      expect(getByTestId('agent-builder-tab-configure')).not.toBeNull();
-    });
+  it('redirects to the agents list when no stored agent exists', () => {
+    storedAgent = null;
+    const { getByTestId } = renderAt();
+    expect(getByTestId('agents-list-page')).not.toBeNull();
   });
 
   describe('edit mode (stored agent present)', () => {
@@ -264,7 +238,7 @@ describe('AgentBuilderAgentEdit', () => {
       renderAt();
       expect(useStoredAgentMock).toHaveBeenCalledWith(
         'agent-123',
-        expect.objectContaining({ status: 'draft', enabled: true }),
+        expect.objectContaining({ status: 'draft' }),
       );
     });
 
@@ -355,12 +329,6 @@ describe('AgentBuilderAgentEdit', () => {
   });
 
   describe('back arrow', () => {
-    it('navigates to the agents list in create mode', () => {
-      const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Agents list'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
-    });
-
     it('navigates to the view page in edit mode', () => {
       storedAgent = {
         id: 'agent-123',

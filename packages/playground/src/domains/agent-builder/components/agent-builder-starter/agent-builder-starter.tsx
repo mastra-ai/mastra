@@ -1,8 +1,12 @@
-import { Button, Textarea } from '@mastra/playground-ui';
+import { Button, Spinner, Textarea, toast } from '@mastra/playground-ui';
 import { ArrowUpIcon, GraduationCap, MessageCircleQuestion, MessagesSquare, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
+import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
+import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 const EXAMPLES = [
   {
@@ -31,16 +35,54 @@ const EXAMPLES = [
   },
 ];
 
+const truncateName = (prompt: string): string =>
+  prompt.length <= 20 ? prompt : prompt.slice(0, 20) + '…';
+
+const FALLBACK_MODEL = { provider: 'google', name: 'gemini-2.5-flash' } as const;
+
+/**
+ * Picks a model the server will accept for the new agent. The starter has to
+ * commit to *some* model up front (visibility/persistence happens before the
+ * user reaches the configure panel), but we deliberately reuse the same
+ * filtered list the picker shows so we never propose a model the admin policy
+ * blocks. Users override this immediately on the next screen.
+ */
+const resolveStarterModel = (allowedModels: ModelInfo[]): { provider: string; name: string } => {
+  const first = allowedModels[0];
+  if (first) return { provider: first.provider, name: first.model };
+  return FALLBACK_MODEL;
+};
+
 export const AgentBuilderStarter = () => {
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { createStoredAgent } = useStoredAgentMutations(undefined);
+  const defaultVisibility = useDefaultVisibility();
+  const { models: allowedModels } = useAgentBuilderAllowedModels();
   const trimmed = message.trim();
+  const isCreating = createStoredAgent.isPending;
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (trimmed.length === 0) return;
+    if (trimmed.length === 0 || isCreating) return;
     const id = nanoid();
+    try {
+      await createStoredAgent.mutateAsync({
+        id,
+        name: truncateName(trimmed),
+        instructions: '',
+        tools: {},
+        agents: {},
+        workflows: {},
+        skills: {},
+        visibility: defaultVisibility,
+        model: resolveStarterModel(allowedModels),
+      });
+    } catch {
+      toast.error('Failed to start a new agent');
+      return;
+    }
     void navigate(`/agent-builder/agents/${id}/edit`, {
       state: { userMessage: trimmed },
       viewTransition: true,
@@ -48,6 +90,7 @@ export const AgentBuilderStarter = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isCreating) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       e.currentTarget.form?.requestSubmit();
@@ -83,6 +126,7 @@ export const AgentBuilderStarter = () => {
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
+              disabled={isCreating}
               className="min-h-[112px] resize-none px-5 py-4 text-ui-md outline-none placeholder:text-neutral3 focus:outline-none focus-visible:outline-none"
               rows={3}
             />
@@ -92,11 +136,17 @@ export const AgentBuilderStarter = () => {
                 variant="default"
                 size="icon-md"
                 tooltip="Start building"
-                disabled={trimmed.length === 0}
+                disabled={trimmed.length === 0 || isCreating}
                 data-testid="agent-builder-starter-submit"
                 className="rounded-full"
               >
-                <ArrowUpIcon />
+                {isCreating ? (
+                  <span data-testid="agent-builder-starter-submit-spinner">
+                    <Spinner />
+                  </span>
+                ) : (
+                  <ArrowUpIcon />
+                )}
               </Button>
             </div>
           </div>
