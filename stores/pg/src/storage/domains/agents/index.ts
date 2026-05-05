@@ -321,31 +321,19 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.clearTable({ tableName: TABLE_AGENTS });
   }
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
+  private parseJson(value: any, _fieldName?: string): any {
+    if (value == null) return undefined;
     if (typeof value !== 'string') return value;
 
     try {
       return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
+    } catch {
+      // The pg driver auto-deserialises jsonb columns, so a jsonb scalar string
+      // (e.g. jsonb `"google/gemini-3-flash"`) arrives here as the bare JS
+      // string `google/gemini-3-flash` and re-parsing fails. Return the value
+      // as-is so callers receive the same scalar the driver materialised. See
+      // https://github.com/mastra-ai/mastra/issues/16224.
+      return value;
     }
   }
 
@@ -641,7 +629,14 @@ export class AgentsPG extends AgentsStorage {
         [...queryParams, limitValue, offset],
       );
 
-      const agents = (dataResult || []).map(row => this.parseRow(row));
+      const agents = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map agent row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         agents,
@@ -669,6 +664,18 @@ export class AgentsPG extends AgentsStorage {
 
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
     try {
+      if (typeof input.model === 'string') {
+        // Reject string `model` at the write path so we never store a jsonb scalar
+        // string that the read path would later mishandle. See #16224.
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'CREATE_VERSION', 'INVALID_MODEL'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'createVersion: `model` must be an object, received a string. Pass `{ slug: "<value>" }` instead.',
+          details: { model: String(input.model) },
+        });
+      }
+
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
@@ -853,7 +860,14 @@ export class AgentsPG extends AgentsStorage {
         [agentId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map agent version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,

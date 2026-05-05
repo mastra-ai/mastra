@@ -917,5 +917,126 @@ export function pgTests() {
         expect(foundRun).toBeDefined();
       });
     });
+
+    // PG-specific: AgentsPG resilience to jsonb scalar string rows
+    // See: https://github.com/mastra-ai/mastra/issues/16224
+    describe('AgentsPG jsonb scalar string resilience (#16224)', () => {
+      let agentsStore: any;
+      let agentsTestStore: PostgresStore;
+
+      beforeAll(async () => {
+        agentsTestStore = new PostgresStore({ ...TEST_CONFIG, id: 'agents-jsonb-scalar-test' });
+        await agentsTestStore.init();
+        agentsStore = await agentsTestStore.getStore('agents');
+      });
+
+      afterAll(async () => {
+        try {
+          await agentsTestStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        // Wipe both tables — versions first because of the FK direction
+        await agentsTestStore.db.none(`DELETE FROM mastra_agent_versions`);
+        await agentsTestStore.db.none(`DELETE FROM mastra_agents`);
+      });
+
+      it('listVersions skips rows whose jsonb model column is a scalar string instead of crashing', async () => {
+        const agentId = `agent-${Date.now()}`;
+        const goodVersionId = `${agentId}-v1`;
+        const badVersionId = `${agentId}-v2`;
+
+        // Seed the parent agent row
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agents (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [agentId],
+        );
+
+        // Good version with model stored as a jsonb object (the canonical shape)
+        await agentsStore.createVersion({
+          id: goodVersionId,
+          agentId,
+          versionNumber: 1,
+          name: 'good-agent',
+          instructions: 'be helpful',
+          model: { slug: 'anthropic/claude-haiku-4.5' },
+        });
+
+        // Bad version: bypass createVersion (which now rejects strings) and write the
+        // exact pathological shape the bug describes — jsonb scalar string. The pg
+        // driver auto-deserialises this back to a JS string on read, which used to
+        // make parseJson crash and take down the whole listing.
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agent_versions (
+             id, "agentId", "versionNumber", name, instructions, model,
+             "createdAt", "createdAtZ"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())`,
+          [badVersionId, agentId, 2, 'bad-agent', 'be helpful', '"google/gemini-3-flash"'],
+        );
+
+        // The crucial assertion: the listing returns successfully (one bad row no
+        // longer fails fast), and the bad row's model arrives as the deserialised
+        // scalar instead of throwing.
+        const result = await agentsStore.listVersions({ agentId, perPage: false });
+
+        expect(result.versions.length).toBe(2);
+        const versionsById = new Map(result.versions.map((v: any) => [v.id, v]));
+        expect((versionsById.get(goodVersionId) as any)?.model).toEqual({
+          slug: 'anthropic/claude-haiku-4.5',
+        });
+        expect((versionsById.get(badVersionId) as any)?.model).toBe('google/gemini-3-flash');
+      });
+
+      it('getVersion returns a jsonb scalar string model as the deserialised scalar instead of throwing', async () => {
+        const agentId = `agent-${Date.now()}-getversion`;
+        const versionId = `${agentId}-v1`;
+
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agents (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [agentId],
+        );
+
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agent_versions (
+             id, "agentId", "versionNumber", name, instructions, model,
+             "createdAt", "createdAtZ"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())`,
+          [versionId, agentId, 1, 'scalar-model-agent', 'be helpful', '"openai/gpt-4o-mini"'],
+        );
+
+        const version = await agentsStore.getVersion(versionId);
+
+        expect(version).toBeDefined();
+        expect(version.model).toBe('openai/gpt-4o-mini');
+      });
+
+      it('createVersion rejects a string `model` with an INVALID_MODEL error', async () => {
+        const agentId = `agent-${Date.now()}-reject`;
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agents (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [agentId],
+        );
+
+        await expect(
+          agentsStore.createVersion({
+            id: `${agentId}-v1`,
+            agentId,
+            versionNumber: 1,
+            name: 'scalar-input-agent',
+            instructions: 'be helpful',
+            // exercising the runtime guard against string-typed `model`
+            model: 'anthropic/claude-haiku-4.5' as any,
+          }),
+        ).rejects.toThrow(/must be an object, received a string/);
+
+        // No version row should have been written
+        const { versions } = await agentsStore.listVersions({ agentId, perPage: false });
+        expect(versions.length).toBe(0);
+      });
+    });
   });
 }
