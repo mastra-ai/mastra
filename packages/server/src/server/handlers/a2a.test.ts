@@ -1024,7 +1024,7 @@ describe('A2A Handler', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://example.com/webhook',
+        'https://93.184.216.34/webhook',
         expect.objectContaining({
           method: 'POST',
           headers: expect.any(Headers),
@@ -1033,6 +1033,7 @@ describe('A2A Handler', () => {
       );
 
       const [, requestInit] = fetchMock.mock.calls[0]!;
+      expect((requestInit!.headers as Headers).get('host')).toBe('example.com');
       expect((requestInit!.headers as Headers).get(DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER)).toBe('notification-token');
       expect(JSON.parse(requestInit!.body as string)).toMatchObject({
         id: taskId,

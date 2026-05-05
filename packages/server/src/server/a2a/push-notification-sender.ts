@@ -1,4 +1,6 @@
 import { lookup as defaultLookup } from 'node:dns/promises';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import type { Task } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -73,7 +75,7 @@ export class DefaultPushNotificationSender {
     return this.pushNotificationStore;
   }
 
-  private async normalizeAndValidateUrl(rawUrl: string) {
+  private async resolveValidatedDestination(rawUrl: string) {
     const url = new URL(rawUrl);
 
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -93,14 +95,92 @@ export class DefaultPushNotificationSender {
       throw new Error(`Push notification URL must not target local or private IPs: ${hostname}`);
     }
 
-    const lookup = this.options.lookup ?? defaultLookup;
-    const resolvedAddresses = await lookup(hostname, { all: true, verbatim: true });
+    const resolvedAddresses =
+      isIP(hostname) === 0
+        ? await (this.options.lookup ?? defaultLookup)(hostname, { all: true, verbatim: true })
+        : [{ address: hostname, family: isIP(hostname) }];
 
     if (resolvedAddresses.some(result => isDisallowedIpAddress(result.address))) {
       throw new Error(`Push notification URL resolved to a local or private IP: ${hostname}`);
     }
 
-    return url.toString();
+    const requestUrl = new URL(url.toString());
+    requestUrl.hostname = resolvedAddresses[0]!.address;
+
+    return {
+      originalUrl: url,
+      requestUrl,
+      hostHeader: url.host,
+      servername: isIP(hostname) === 0 ? hostname : undefined,
+    };
+  }
+
+  private async postTaskSnapshot({
+    requestUrl,
+    hostHeader,
+    servername,
+    headers,
+    body,
+    timeout,
+  }: {
+    requestUrl: URL;
+    hostHeader: string;
+    servername?: string;
+    headers: Headers;
+    body: string;
+    timeout: number;
+  }) {
+    headers.set('host', hostHeader);
+    const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeout) : undefined;
+
+    if (this.options.fetch) {
+      return this.options.fetch(requestUrl.toString(), {
+        method: 'POST',
+        headers,
+        body,
+        signal,
+      });
+    }
+
+    const transport = requestUrl.protocol === 'https:' ? httpsRequest : httpRequest;
+
+    return await new Promise<{ ok: boolean; status: number; statusText: string }>((resolve, reject) => {
+      const request = transport(
+        {
+          protocol: requestUrl.protocol,
+          hostname: requestUrl.hostname,
+          port: requestUrl.port || undefined,
+          path: `${requestUrl.pathname}${requestUrl.search}`,
+          method: 'POST',
+          headers: Object.fromEntries(headers.entries()),
+          servername,
+        },
+        response => {
+          response.resume();
+          response.on('end', () => {
+            resolve({
+              ok: !!response.statusCode && response.statusCode >= 200 && response.statusCode < 300,
+              status: response.statusCode ?? 0,
+              statusText: response.statusMessage ?? '',
+            });
+          });
+        },
+      );
+
+      request.on('error', reject);
+
+      if (signal) {
+        signal.addEventListener(
+          'abort',
+          () => {
+            request.destroy(signal.reason instanceof Error ? signal.reason : new Error('Push notification timed out'));
+          },
+          { once: true },
+        );
+      }
+
+      request.end(body);
+    });
   }
 
   async sendNotifications({
@@ -143,17 +223,22 @@ export class DefaultPushNotificationSender {
           }
         }
 
-        const url = await this.normalizeAndValidateUrl(config.pushNotificationConfig.url);
-        const response = await (this.options.fetch ?? fetch)(url, {
-          method: 'POST',
+        const { requestUrl, hostHeader, servername } = await this.resolveValidatedDestination(
+          config.pushNotificationConfig.url,
+        );
+        const response = await this.postTaskSnapshot({
+          requestUrl,
+          hostHeader,
+          servername,
           headers,
           body: JSON.stringify(task),
-          signal:
-            typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(this.options.timeout ?? 5_000) : undefined,
+          timeout: this.options.timeout ?? 5_000,
         });
 
         if (!response.ok) {
-          throw new Error(`Push notification failed with status ${response.status} ${response.statusText}`);
+          throw new Error(
+            `Push notification failed with status ${response.status} ${response.statusText ?? ''}`.trim(),
+          );
         }
       }),
     ).then(results => {

@@ -73,4 +73,40 @@ describe('DefaultPushNotificationSender', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
   });
+
+  it('pins delivery to the validated IP while preserving the original host header', async () => {
+    const store = new InMemoryPushNotificationStore();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    const sender = new DefaultPushNotificationSender(store, {
+      fetch: fetchMock,
+      lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+    });
+
+    store.set({
+      agentId: 'test-agent',
+      config: {
+        taskId: task.id,
+        pushNotificationConfig: {
+          url: 'https://example.com/webhook',
+        },
+      },
+    });
+
+    await sender.sendNotifications({
+      agentId: 'test-agent',
+      task,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://93.184.216.34/webhook',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0]!;
+    expect((requestInit!.headers as Headers).get('host')).toBe('example.com');
+  });
 });
