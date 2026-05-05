@@ -1443,6 +1443,32 @@ describe('TestLangSmithExporter', () => {
       expect(opts.sourceInfo).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', foo: 'bar' });
     });
 
+    it('does not let user metadata overwrite authoritative scorerId/scoreSource in sourceInfo', async () => {
+      const span = createMockSpan({ id: 'mastra-span-1', name: 'agent', isRoot: true, attributes: {} });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-override',
+          timestamp: new Date(),
+          traceId: 'mastra-trace-1',
+          spanId: 'mastra-span-1',
+          scorerId: 'accuracy',
+          scoreSource: 'live',
+          score: 0.9,
+          metadata: { scorerId: 'evil', scoreSource: 'evil', foo: 'bar' },
+        },
+      } as any);
+
+      const [, , opts] = mockClient.createFeedback.mock.calls.at(-1)!;
+      expect(opts.sourceInfo).toMatchObject({
+        scorerId: 'accuracy',
+        scoreSource: 'live',
+        foo: 'bar',
+      });
+    });
+
     it('drops scores with no spanId (trace-level scoring is not yet supported)', async () => {
       await exporter.onScoreEvent({
         type: 'score',

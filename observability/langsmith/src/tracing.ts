@@ -178,9 +178,12 @@ export class LangSmithExporter extends TrackingExporter<
         feedbackId: score.scoreId,
         ...(score.scoreTraceId ? { sourceRunId: score.scoreTraceId } : {}),
         sourceInfo: {
+          // User-supplied metadata is spread first so the authoritative reserved
+          // fields below cannot be overwritten by `scorerId` / `scoreSource` keys
+          // a caller may have set inside metadata.
+          ...(score.metadata ?? {}),
           scorerId: score.scorerId,
           ...(score.scoreSource ? { scoreSource: score.scoreSource } : {}),
-          ...(score.metadata ?? {}),
         },
       });
     } catch (err) {
