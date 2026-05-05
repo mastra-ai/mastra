@@ -78,7 +78,7 @@ export const WorkspaceLayout = ({
           'lg:flex-1',
         )}
       >
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4 md:px-10">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
           <div className="justify-self-start">
             <Button
               size="icon-sm"
@@ -90,7 +90,7 @@ export const WorkspaceLayout = ({
             </Button>
           </div>
           <AgentBuilderBreadcrumb
-            className="min-w-0 lg:justify-self-center"
+            className="min-w-0 justify-self-start"
             isLoading={isLoading}
             mode={mode}
             creating={creating}
