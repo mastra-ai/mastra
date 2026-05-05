@@ -405,7 +405,6 @@ describe('Integration Tools (tool providers)', () => {
     });
   });
 
-
   describe.skipIf(!process.env.COMPOSIO_API_KEY)(
     'ComposioToolProvider e2e (real API, requires COMPOSIO_API_KEY)',
     () => {
