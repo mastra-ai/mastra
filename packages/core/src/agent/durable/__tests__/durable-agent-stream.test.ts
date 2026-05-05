@@ -10,6 +10,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { OutputProcessor } from '../../../processors';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -228,6 +229,55 @@ describe('DurableAgent streaming execution', () => {
       // Cleanup should remove from registry
       cleanup();
       expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    });
+
+    it('should stream custom chunks emitted by output processors before finish', async () => {
+      let writerWasProvided = false;
+      const outputProcessor: OutputProcessor = {
+        id: 'durable-output-writer',
+        name: 'Durable Output Writer',
+        processOutputResult: async ({ messages, writer }) => {
+          writerWasProvided = !!writer;
+          const lastAssistantMessage = [...messages].reverse().find(message => message.role === 'assistant');
+          const textPart = lastAssistantMessage?.content.parts.find(part => part.type === 'text');
+
+          if (textPart && 'text' in textPart) {
+            textPart.text = 'processed response';
+          }
+
+          await writer?.custom({
+            type: 'data-durable-output',
+            data: { status: 'processed' },
+          });
+
+          return messages;
+        },
+      };
+
+      const baseAgent = new Agent({
+        id: 'output-writer-agent',
+        name: 'Output Writer Agent',
+        instructions: 'Test durable output writer',
+        model: createTextStreamModel('draft response') as LanguageModelV2,
+        outputProcessors: [outputProcessor],
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { output, cleanup } = await durableAgent.stream('Test');
+      const chunks: any[] = [];
+
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      cleanup();
+
+      const finishChunk = chunks.find(chunk => chunk.type === 'finish');
+
+      expect(writerWasProvided).toBe(true);
+      expect(chunks.some(chunk => chunk.type === 'data-durable-output')).toBe(true);
+      expect(finishChunk?.payload.output.text).toBe('processed response');
+      await expect(output.text).resolves.toBe('processed response');
     });
   });
 

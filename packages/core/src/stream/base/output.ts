@@ -884,7 +884,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 } else if (!self.#options.isLLMExecutionStep) {
                   // No processor runner, not in LLM execution step - resolve with buffered text
                   this.resolvePromises({
-                    text: self.#bufferedText.join(''),
+                    text: (chunk.payload.output as { text?: string }).text ?? self.#bufferedText.join(''),
                     finishReason: self.#finishReason,
                   });
                 }

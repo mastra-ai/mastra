@@ -10,7 +10,7 @@ import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
-import { emitFinishEvent } from '../stream-adapter';
+import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableAgenticWorkflowInput,
@@ -246,7 +246,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
-          const finalText = lastStep?.text;
+          let finalText = lastStep?.text;
 
           // Run output processors (processOutputResult) if available
           const registryEntry = globalRunRegistry.get(state.runId);
@@ -263,7 +263,39 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               });
               const outputMessageList = new MessageList();
               outputMessageList.deserialize(state.messageListState);
-              await runner.runOutputProcessors(outputMessageList, {} as any, requestContext ?? new RequestContext(), 0);
+              const outputProcessorWriter = pubsub
+                ? {
+                    custom: async (data: { type: string }) => {
+                      await emitChunkEvent(pubsub, state.runId, data as any);
+                    },
+                  }
+                : undefined;
+              const processedMessageList = await runner.runOutputProcessors(
+                outputMessageList,
+                {} as any,
+                requestContext ?? new RequestContext(),
+                0,
+                outputProcessorWriter,
+                {
+                  text: finalText ?? '',
+                  usage: state.accumulatedUsage,
+                  finishReason: state.lastStepResult?.reason ?? 'unknown',
+                  steps: state.accumulatedSteps,
+                },
+              );
+              state.messageListState = processedMessageList.serialize();
+
+              const lastAssistantMessage = [...processedMessageList.get.response.db()]
+                .reverse()
+                .find(message => message.role === 'assistant');
+              const processedText = lastAssistantMessage?.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join('');
+
+              if (processedText) {
+                finalText = processedText;
+              }
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
             }
