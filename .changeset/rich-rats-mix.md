@@ -2,6 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed agent crashing on Anthropic with `messages.N.content.0: unexpected tool_use_id` when SemanticRecall (or any recall window) returned a partial parallel tool-call group. The conversion path now drops orphan `tool_use` / `tool_result` blocks before sending to the LLM, so a recalled exchange that lost half its pair no longer poisons the next request.
+Fixed agent requests to Anthropic failing with `400 unexpected tool_use_id` when recalled history contained an incomplete `tool_use` / `tool_result` pair. This most commonly hit agents using parallel tool calls when an earlier run was interrupted before every tool finished — pulling that broken exchange into a new prompt no longer crashes the next request.
 
 Closes #16193
