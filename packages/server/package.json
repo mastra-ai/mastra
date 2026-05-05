@@ -102,6 +102,7 @@
     "generate:permissions": "pnpx tsx scripts/generate-permissions.ts",
     "generate:route-types": "pnpx tsx scripts/generate-route-types.ts",
     "check:permissions": "pnpx tsx scripts/check-permissions.ts",
+    "check:core-imports": "pnpx tsx scripts/check-core-imports.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
