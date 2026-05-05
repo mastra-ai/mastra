@@ -117,10 +117,15 @@ function HighlightedCode({ code, lang }: HighlightedCodeProps) {
       setTokens(null);
       return;
     }
+    setTokens(null);
     let cancelled = false;
-    void highlight(code, lang).then(result => {
-      if (!cancelled && result) setTokens(result);
-    });
+    void highlight(code, lang)
+      .then(result => {
+        if (!cancelled && result) setTokens(result);
+      })
+      .catch(() => {
+        // Highlighting failed — plain-text fallback remains visible.
+      });
     return () => {
       cancelled = true;
     };
@@ -138,18 +143,14 @@ function HighlightedCode({ code, lang }: HighlightedCodeProps) {
         {tokens.map((line, lineIndex) => (
           <React.Fragment key={lineIndex}>
             <span>
-              {line.map((token, tokenIndex) => {
-                const style = typeof token.htmlStyle === 'string' ? undefined : token.htmlStyle;
-                return (
-                  <span
-                    key={tokenIndex}
-                    className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                    style={style}
-                  >
-                    {token.content}
-                  </span>
-                );
-              })}
+              {line.map((token, tokenIndex) => (
+                <span
+                  key={tokenIndex}
+                  className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
+                >
+                  {token.content}
+                </span>
+              ))}
             </span>
             {lineIndex !== tokens.length - 1 && '\n'}
           </React.Fragment>
