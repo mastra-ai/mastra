@@ -885,18 +885,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
               tools: currentStep.tools,
             });
+            const streamFinished = collectedChunks.some(chunk => chunk.type === 'finish');
             for (const msg of builtMessages) {
-              if (options?.abortSignal?.aborted && msg.content && typeof msg.content === 'object') {
+              if (options?.abortSignal?.aborted && !streamFinished && msg.content && typeof msg.content === 'object') {
                 const existingMastraMetadata =
                   typeof msg.content.metadata?.mastra === 'object' && msg.content.metadata.mastra !== null
                     ? msg.content.metadata.mastra
                     : {};
-                const existingStatus = (existingMastraMetadata as { responseStatus?: unknown }).responseStatus;
-                if (existingStatus === 'finished' || existingStatus === 'completed') {
-                  messageList.add(msg, 'response');
-                  continue;
-                }
-
                 msg.content = {
                   ...msg.content,
                   metadata: {

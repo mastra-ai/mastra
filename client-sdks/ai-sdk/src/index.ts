@@ -4,6 +4,7 @@ export type {
   ChatStreamHandlerParams,
   ChatStreamHandlerOptions,
   AgentVersionOptions,
+  HistorySource,
 } from './chat-route';
 export { workflowRoute, handleWorkflowStream } from './workflow-route';
 export type { WorkflowRouteOptions, WorkflowStreamHandlerParams, WorkflowStreamHandlerOptions } from './workflow-route';

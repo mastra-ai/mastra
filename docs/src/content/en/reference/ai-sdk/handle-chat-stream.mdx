@@ -205,7 +205,7 @@ export async function POST(req: Request) {
 
 ## Server history mode
 
-Use `historySource: 'server'` when a framework route should let Mastra memory load stored messages. In this mode, do not pass the browser's full `messages` array to `handleChatStream()`. Pass only the request body produced by `prepareServerHistoryRequest()`, and set memory scope from server code.
+Use `historySource: 'server'` when a framework route should let Mastra memory load stored messages. In this mode, do not pass the browser's full `messages` array to `handleChatStream()`. Pass only the request body produced by [`prepareServerHistoryRequest()`](/reference/ai-sdk/prepare-server-history-request), and set memory scope from server code.
 
 ```typescript title="app/api/chat/route.ts"
 import { handleChatStream } from '@mastra/ai-sdk'

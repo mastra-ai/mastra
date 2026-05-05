@@ -1252,4 +1252,132 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(assistantMessage?.content.metadata?.modelId).not.toBe(apiResponseModelId);
     expect(assistantMessage?.content.metadata?.provider).toBe('openai');
   });
+
+  const createStreamingExecutionStep = (doStream: Mock, executionOptions?: any) =>
+    createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      options: executionOptions,
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'openai',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+  it('does not mark completed assistant messages as aborted when the signal aborts after finish', async () => {
+    const abortController = new AbortController();
+    const streamParts = [
+      { type: 'response-metadata', id: 'resp-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+      { type: 'text-end', id: 'text-1' },
+      { type: 'finish', finishReason: 'stop', usage: testUsage },
+      { type: 'text-start', id: 'post-finish' },
+    ];
+    const doStream = vi.fn(async () => ({
+      stream: new ReadableStream({
+        pull(controller) {
+          const next = streamParts.shift();
+          if (next) {
+            if (next.type === 'text-start' && next.id === 'post-finish') {
+              abortController.abort();
+            }
+            controller.enqueue(next);
+            return;
+          }
+          controller.close();
+        },
+      }),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createStreamingExecutionStep(doStream, { abortSignal: abortController.signal });
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    const assistantMessage = messageList.get.response.db().find(message => message.role === 'assistant');
+    expect(assistantMessage?.content.metadata?.mastra?.responseStatus).toBeUndefined();
+  });
+
+  it('marks assistant messages as aborted when the signal aborts before finish', async () => {
+    const abortController = new AbortController();
+    const streamParts = [
+      { type: 'response-metadata', id: 'resp-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+      { type: 'text-delta', id: 'text-1', delta: ' This chunk should not be stored.' },
+      { type: 'text-end', id: 'text-1' },
+    ];
+    const doStream = vi.fn(async () => ({
+      stream: new ReadableStream({
+        pull(controller) {
+          const next = streamParts.shift();
+          if (next) {
+            controller.enqueue(next);
+            return;
+          }
+          controller.close();
+        },
+      }),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createStreamingExecutionStep(doStream, {
+      abortSignal: abortController.signal,
+      onChunk: vi.fn(chunk => {
+        if (chunk.type === 'text-delta') {
+          abortController.abort();
+        }
+      }),
+    });
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    const assistantMessage = messageList.get.response.db().find(message => message.role === 'assistant');
+    expect(assistantMessage?.content.metadata?.mastra).toMatchObject({
+      responseStatus: 'aborted',
+      runId: 'test-run',
+    });
+  });
 });

@@ -1,0 +1,156 @@
+---
+title: "Reference: prepareServerHistoryRequest() | AI SDK"
+description: API reference for prepareServerHistoryRequest(), a browser-safe helper for AI SDK UI server history requests.
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# prepareServerHistoryRequest()
+
+Creates a `prepareSendMessagesRequest` callback for AI SDK UI server history mode. Use it with [`chatRoute()`](/reference/ai-sdk/chat-route) or [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) when `historySource` is set to `'server'`.
+
+**Added in:** `@mastra/ai-sdk@1.5.0`
+
+The helper sends compact request bodies for new messages, regeneration, and approval resume responses. It does not send the full browser message history.
+
+## Usage example
+
+Configure the Mastra route with server-controlled memory scope:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+        historySource: 'server',
+        defaultOptions: {
+          memory: {
+            resource: 'user-123',
+          },
+        },
+      }),
+    ],
+  },
+})
+```
+
+Use `prepareServerHistoryRequest()` with AI SDK UI:
+
+```typescript
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+import { prepareServerHistoryRequest } from '@mastra/ai-sdk/transport'
+
+const { messages, sendMessage, regenerate } = useChat({
+  id: 'thread-123',
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest: prepareServerHistoryRequest(),
+  }),
+})
+```
+
+## Parameters
+
+`prepareServerHistoryRequest()` does not accept parameters.
+
+The generic type parameter `<UI_MESSAGE>` lets the returned callback preserve the AI SDK UI message type used by your app.
+
+The returned callback receives the AI SDK UI `prepareSendMessagesRequest` options:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'The chat ID from AI SDK UI. Mastra can use this as the thread ID when the server provides a memory resource but no thread.',
+    isOptional: false,
+  },
+  {
+    name: 'messages',
+    type: 'UIMessage[]',
+    description:
+      'The current AI SDK UI messages. The helper only sends the latest submitted message, regeneration target, or approval response.',
+    isOptional: false,
+  },
+  {
+    name: 'trigger',
+    type: "'submit-message' | 'regenerate-message'",
+    description: 'The AI SDK UI request trigger. Defaults to `submit-message`.',
+    isOptional: true,
+    defaultValue: "'submit-message'",
+  },
+  {
+    name: 'messageId',
+    type: 'string',
+    description:
+      'The assistant message ID to regenerate. If omitted during regeneration, the helper uses the latest message ID.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Return value
+
+```typescript
+{
+  body: ServerHistoryRequestBody<UI_MESSAGE>
+}
+```
+
+The body is one of the following shapes:
+
+Submit requests include only the latest message.
+
+```json
+{
+  "id": "thread-123",
+  "trigger": "submit-message",
+  "message": {
+    "id": "user-1",
+    "role": "user",
+    "parts": [{ "type": "text", "text": "Hello" }]
+  }
+}
+```
+
+Regenerate requests include only the target assistant message ID.
+
+```json
+{
+  "id": "thread-123",
+  "trigger": "regenerate-message",
+  "messageId": "assistant-1"
+}
+```
+
+Approval resume requests include compact resume data.
+
+```json
+{
+  "id": "thread-123",
+  "runId": "run-123",
+  "resumeData": {
+    "approved": false,
+    "reason": "Not now"
+  },
+  "messageId": "assistant-1"
+}
+```
+
+## Errors
+
+The helper throws these errors:
+
+- `A message is required when submitting with server history`
+- `messageId is required when regenerating with server history`
+
+Server-side validation still rejects browser-provided history, memory scope, request context, and execution options in server history mode.
