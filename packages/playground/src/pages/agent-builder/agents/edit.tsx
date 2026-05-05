@@ -263,7 +263,6 @@ const EditWorkspaceLayoutConnected = ({
     <WorkspaceLayout
       isLoading={false}
       mode="build"
-      defaultExpanded
       detailOpen={activeDetail !== null}
       showConfigure={isOwner}
       backHref={`/agent-builder/agents/${agentId}/view`}

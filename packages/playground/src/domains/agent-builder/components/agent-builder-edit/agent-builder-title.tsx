@@ -47,7 +47,7 @@ export const AgentBuilderTitle = ({
           <StatusBadge
             variant={badge.variant}
             size="lg"
-            className="h-form-sm"
+            className="hidden sm:inline-flex h-form-sm"
             data-testid={badge.testId}
           >
             {badge.label}
@@ -60,7 +60,7 @@ export const AgentBuilderTitle = ({
             tooltip={toggleLabel}
             onClick={onModeToggle}
             disabled={disabled}
-            className="rounded-full"
+            className="hidden lg:inline-flex rounded-full"
             data-testid="agent-builder-mode-toggle"
           >
             <RefreshCwIcon />

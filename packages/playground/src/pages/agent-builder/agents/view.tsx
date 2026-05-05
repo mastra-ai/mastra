@@ -240,7 +240,7 @@ const ViewWorkspaceConnected = ({
   return (
     <WorkspaceLayout
       isLoading={false}
-      mode="test"
+      mode={isOwner ? 'test' : undefined}
       defaultExpanded={false}
       detailOpen={activeDetail !== null}
       showConfigure={isOwner}
