@@ -102,6 +102,27 @@ describe('sanitizeOrphanedToolPairs', () => {
     expect(sanitizeOrphanedToolPairs(messages)).toEqual([assistantWithToolCalls('A'), toolMessageWithResults('A')]);
   });
 
+  it('preserves a deferred provider-executed tool_use with no matching tool_result', () => {
+    // Anthropic non-deterministically defers server-side tools (e.g. web_search).
+    // The tool_use must survive in history so the provider can resume on the next call.
+    const assistant: ModelMessage = {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'srv-deferred',
+          toolName: 'web_search',
+          input: { query: 'x' },
+          providerExecuted: true,
+        } as any,
+      ],
+    };
+
+    const messages: ModelMessage[] = [assistant, { role: 'user', content: 'continue' }];
+
+    expect(sanitizeOrphanedToolPairs(messages)).toEqual(messages);
+  });
+
   it('preserves inline provider-executed tool_result on assistant content', () => {
     // For provider-executed tools (e.g. Anthropic web_search) tool_use and tool_result
     // live in the same assistant message; only tool_call parts on assistants are subject

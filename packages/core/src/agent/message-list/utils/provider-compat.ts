@@ -114,9 +114,13 @@ export function sanitizeOrphanedToolPairs(messages: ModelMessage[]): ModelMessag
 
       const validPairs = new Set([...useIds].filter(id => inlineResultIds.has(id) || nextResultIds.has(id)));
 
-      filteredContents[i] = filteredContents[i]!.filter(
-        p => p.type !== 'tool-call' || validPairs.has((p as { toolCallId: string }).toolCallId),
-      );
+      filteredContents[i] = filteredContents[i]!.filter(p => {
+        if (p.type !== 'tool-call') return true;
+        const tc = p as { toolCallId: string; providerExecuted?: boolean };
+        // Provider-executed tools may be deferred (e.g. Anthropic web_search): the tool_use
+        // can appear without a matching tool_result until the provider resumes on the next call.
+        return tc.providerExecuted === true || validPairs.has(tc.toolCallId);
+      });
 
       if (next && next.role === 'tool' && Array.isArray(next.content)) {
         filteredContents[i + 1] = filteredContents[i + 1]!.filter(
