@@ -383,16 +383,20 @@ export class LaminarExporter extends BaseExporter {
       payload.traceId = otelTraceIdToUUID(traceId);
     }
 
-    try {
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        'content-type': 'application/json',
-      };
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.config.apiKey}`,
+      'content-type': 'application/json',
+    };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.timeoutMillis);
+
+    try {
       const response = await fetch(`${stripTrailingSlash(this.config.baseUrl)}/v1/evaluators/score`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -405,12 +409,17 @@ export class LaminarExporter extends BaseExporter {
         });
       }
     } catch (error) {
+      const isAbort = error instanceof Error && error.name === 'AbortError';
       this.logger.error('[LaminarExporter] Error attaching score to trace/span', {
         error,
+        timedOut: isAbort,
+        timeoutMillis: this.config.timeoutMillis,
         traceId,
         spanId,
         name,
       });
+    } finally {
+      clearTimeout(timer);
     }
   }
 
