@@ -50,6 +50,7 @@ describe('TestLangSmithExporter', () => {
 
     // Set up mocks for RunTree
     mockRunTree = {
+      id: 'ls-run-uuid',
       createChild: vi.fn(),
       postRun: vi.fn().mockResolvedValue(undefined),
       patchRun: vi.fn().mockResolvedValue(undefined),
@@ -1407,14 +1408,19 @@ describe('TestLangSmithExporter', () => {
       mockClient.createFeedback = vi.fn().mockResolvedValue({});
     });
 
-    it('forwards to client.createFeedback keyed by spanId', async () => {
+    it('forwards to client.createFeedback using the LangSmith runId allocated for the span', async () => {
+      // First create the LangSmith run for this Mastra span — this is what populates
+      // the spanId → langsmithRunId mapping the onScoreEvent path looks up.
+      const span = createMockSpan({ id: 'mastra-span-1', name: 'agent', isRoot: true, attributes: {} });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
       await exporter.onScoreEvent({
         type: 'score',
         score: {
           scoreId: 'sc-1',
           timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: 'span-1',
+          traceId: 'mastra-trace-1',
+          spanId: 'mastra-span-1',
           scorerId: 'accuracy',
           scorerName: 'Accuracy',
           scoreSource: 'live',
@@ -1426,7 +1432,8 @@ describe('TestLangSmithExporter', () => {
 
       expect(mockClient.createFeedback).toHaveBeenCalledTimes(1);
       const [runId, key, opts] = mockClient.createFeedback.mock.calls[0];
-      expect(runId).toBe('span-1');
+      // Assert the LangSmith-allocated runId (from mockRunTree.id), NOT the Mastra spanId.
+      expect(runId).toBe('ls-run-uuid');
       expect(key).toBe('Accuracy');
       expect(opts).toMatchObject({
         score: 0.9,
@@ -1436,7 +1443,7 @@ describe('TestLangSmithExporter', () => {
       expect(opts.sourceInfo).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', foo: 'bar' });
     });
 
-    it('falls back to traceId when spanId is missing', async () => {
+    it('drops scores with no spanId (trace-level scoring is not yet supported)', async () => {
       await exporter.onScoreEvent({
         type: 'score',
         score: {
@@ -1448,7 +1455,23 @@ describe('TestLangSmithExporter', () => {
         },
       } as any);
 
-      expect(mockClient.createFeedback).toHaveBeenCalledWith('trace-only', 'x', expect.any(Object));
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+    });
+
+    it('drops scores for spans the exporter has not seen yet', async () => {
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-3',
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          spanId: 'never-emitted-span',
+          scorerId: 'x',
+          score: 0.5,
+        },
+      } as any);
+
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
     });
   });
 });

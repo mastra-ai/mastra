@@ -65,6 +65,14 @@ export class LangSmithExporter extends TrackingExporter<
   override name = 'langsmith';
   #client: Client | undefined;
 
+  /**
+   * Maps Mastra `span.id` to the runId LangSmith allocated when the corresponding
+   * RunTree was created. LangSmith's `createFeedback` requires the LangSmith runId,
+   * not the Mastra span id, so scores submitted via `onScoreEvent` look up the
+   * LangSmith runId here before calling the API.
+   */
+  #langsmithRunIdBySpanId = new Map<string, string>();
+
   constructor(config: LangSmithExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
     const apiKey = config.apiKey ?? process.env.LANGSMITH_API_KEY;
@@ -94,22 +102,39 @@ export class LangSmithExporter extends TrackingExporter<
     }
   }
 
+  protected override async _postShutdown(): Promise<void> {
+    this.#langsmithRunIdBySpanId.clear();
+  }
+
   async onScoreEvent(event: ScoreEvent): Promise<void> {
     if (!this.#client) return;
 
     const { score } = event;
-    const runId = score.spanId ?? score.traceId;
-    if (!runId) {
-      this.logger.debug('LangSmith exporter: skipping score with no spanId or traceId', {
+    if (!score.spanId) {
+      this.logger.warn('LangSmith exporter: dropping score with no spanId; trace-level scoring is not yet supported', {
         scorerId: score.scorerId,
       });
+      return;
+    }
+
+    const langsmithRunId = this.#langsmithRunIdBySpanId.get(score.spanId);
+    if (!langsmithRunId) {
+      this.logger.warn(
+        'LangSmith exporter: dropping score for a span that was not previously emitted to LangSmith ' +
+          '(span_started must be processed before submitting a score for it)',
+        {
+          traceId: score.traceId,
+          spanId: score.spanId,
+          scorerId: score.scorerId,
+        },
+      );
       return;
     }
 
     const key = score.scorerName ?? score.scorerId;
 
     try {
-      await this.#client.createFeedback(runId, key, {
+      await this.#client.createFeedback(langsmithRunId, key, {
         score: score.score,
         ...(score.reason ? { comment: score.reason } : {}),
         feedbackId: score.scoreId,
@@ -157,6 +182,10 @@ export class LangSmithExporter extends TrackingExporter<
     };
 
     const langSmithSpan = span.isRootSpan ? new RunTree(payload) : parent!.createChild(payload);
+
+    if (langSmithSpan.id) {
+      this.#langsmithRunIdBySpanId.set(span.id, langSmithSpan.id);
+    }
 
     await langSmithSpan.postRun();
     return langSmithSpan;
