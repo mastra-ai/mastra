@@ -335,6 +335,14 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   if (slashCommandMatch) {
     const commandName = slashCommandMatch[1]!;
     const commandContent = slashCommandMatch[2]!.trim();
+    const existingSlashComp = state.allSlashCommandComponents.find(
+      component => component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSlashComp) {
+      state.messageComponentsById.set(message.id, existingSlashComp);
+      return;
+    }
+
     const slashComp = new SlashCommandComponent(commandName, commandContent);
     state.allSlashCommandComponents.push(slashComp);
     state.chatContainer.addChild(slashComp);

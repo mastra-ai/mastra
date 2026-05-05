@@ -101,6 +101,7 @@ describe('Harness signal messages', () => {
 
     await harness.createThread();
     await harness.sendMessage({ content: 'hello' });
+    await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const assistantStarts = events.filter(
       (event): event is Extract<HarnessEvent, { type: 'message_start' }> =>
@@ -126,10 +127,14 @@ describe('Harness signal messages', () => {
     });
     const harness = createHarness(storage, agent);
     const thread = await harness.createThread();
-    (harness as any).currentRunId = 'active-run-id';
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
-    vi.spyOn(agent, 'isThreadStreamActive').mockReturnValue(true);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'active-run-id',
+    });
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -143,14 +148,13 @@ describe('Harness signal messages', () => {
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ id: signal.id, type: 'user-message', contents: 'active hello' }),
       {
-        runId: 'active-run-id',
         resourceId: thread.resourceId,
         threadId: thread.id,
       },
     );
   });
 
-  it('aborts the current thread stream even when this harness is only following it', async () => {
+  it('aborts the current thread stream through the active subscription', async () => {
     const storage = new InMemoryStore();
     const agent = new Agent({
       id: 'abort-followed-agent',
@@ -159,12 +163,25 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const harness = createHarness(storage, agent);
-    const thread = await harness.createThread();
-    const abortThreadStream = vi.spyOn(agent, 'abortThreadStream').mockReturnValue(true);
+    const abort = vi.fn();
+    await harness.createThread();
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort,
+      activeRunId: () => 'active-run-id',
+    });
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'active-run-id',
+      signal: createSignal({ type: 'user-message', contents: 'active hello' }),
+    });
 
+    const signal = harness.sendSignal({ content: 'active hello' });
+    await signal.accepted;
     harness.abort();
 
-    expect(abortThreadStream).toHaveBeenCalledWith({ resourceId: thread.resourceId, threadId: thread.id });
+    expect(abort).toHaveBeenCalled();
   });
 
   it('starts a new idle signal after a subscription-owned run completes', async () => {
@@ -190,6 +207,78 @@ describe('Harness signal messages', () => {
     );
 
     expect(events.some(event => event.type === 'error')).toBe(false);
+  });
+
+  it('continues approved tool streams through the active thread subscription', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'subscription-tool-agent',
+      name: 'subscription-tool-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('unused'),
+    });
+    const harness = new Harness({
+      id: 'subscription-tool-harness',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { yolo: true } as any,
+    });
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {
+        yield { type: 'start', runId: 'run-1', payload: {} };
+        yield {
+          type: 'tool-call-approval',
+          runId: 'run-1',
+          payload: { toolCallId: 'tool-1', toolName: 'testTool', args: { ok: true } },
+        };
+        yield { type: 'text-start', runId: 'run-1', payload: { id: 'text-1' } };
+        yield { type: 'text-delta', runId: 'run-1', payload: { id: 'text-1', text: 'approved through subscription' } };
+        yield { type: 'text-end', runId: 'run-1', payload: { id: 'text-1' } };
+        yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
+      })() as any,
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const directResumeStream = (async function* () {
+      yield { type: 'text-start', payload: { id: 'direct-text' } };
+      yield { type: 'text-delta', payload: { id: 'direct-text', text: 'direct resume should not render' } };
+      yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
+    })();
+    const approveToolCall = vi
+      .spyOn(agent, 'approveToolCall')
+      .mockResolvedValue({ fullStream: directResumeStream } as any);
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'run-1',
+      signal: createSignal({ type: 'user-message', contents: 'run tool' }),
+    });
+
+    await harness.createThread();
+    const signal = harness.sendSignal({ content: 'run tool' });
+    await signal.accepted;
+    await waitFor(() =>
+      events.some(
+        event =>
+          event.type === 'message_end' &&
+          event.message.role === 'assistant' &&
+          event.message.content.some(part => part.type === 'text' && part.text === 'approved through subscription'),
+      ),
+    );
+
+    expect(approveToolCall).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-1' }));
+    expect(
+      events.some(
+        event =>
+          event.type === 'message_end' &&
+          event.message.content.some(part => part.type === 'text' && part.text === 'direct resume should not render'),
+      ),
+    ).toBe(false);
   });
 
   it('starts idle text signals through ifIdle stream options', async () => {
@@ -285,6 +374,48 @@ describe('Harness signal messages', () => {
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
   });
 
+  it('emits echoed file user-message signals as user message events', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await (harness as any).processStreamChunk(
+      (harness as any).createStreamState(),
+      {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-file-1',
+          type: 'user-message',
+          contents: {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Review this' },
+              { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
+            ],
+          },
+          createdAt: '2026-05-04T00:00:00.000Z',
+        },
+      },
+      new RequestContext(),
+    );
+
+    const signalEnd = events.find(event => event.type === 'message_end' && event.message.id === 'signal-file-1');
+    expect(signalEnd).toMatchObject({
+      type: 'message_end',
+      message: {
+        id: 'signal-file-1',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Review this' },
+          { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
+        ],
+      },
+    });
+  });
+
   it('emits echoed user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
@@ -293,19 +424,16 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await (harness as any).processStream(
+    await (harness as any).processStreamChunk(
+      (harness as any).createStreamState(),
       {
-        fullStream: (async function* () {
-          yield {
-            type: 'data-user-message',
-            data: {
-              id: 'signal-user-1',
-              type: 'user-message',
-              contents: 'continue with this',
-              createdAt: '2026-05-04T00:00:00.000Z',
-            },
-          };
-        })(),
+        type: 'data-user-message',
+        data: {
+          id: 'signal-user-1',
+          type: 'user-message',
+          contents: 'continue with this',
+          createdAt: '2026-05-04T00:00:00.000Z',
+        },
       },
       new RequestContext(),
     );

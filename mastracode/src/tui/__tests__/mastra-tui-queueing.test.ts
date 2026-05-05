@@ -38,6 +38,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     streamingComponent: undefined,
     streamingMessage: undefined,
     followUpComponents: [],
+    messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
@@ -201,6 +202,110 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).not.toHaveBeenCalled();
   });
 
+  it('creates a pending new thread before sending an optimistic signal', async () => {
+    const createThread = vi.fn().mockResolvedValue({ id: 'thread-new' });
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      pendingNewThread: true,
+      harness: {
+        createThread,
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      sendOptimisticSignal: (text: string, images: undefined, optimisticMessageId: string) => void;
+    };
+    tui.state = state;
+    state.messageComponentsById.set('user-optimistic', {} as never);
+
+    tui.sendOptimisticSignal('starts new thread', undefined, 'user-optimistic');
+
+    expect(createThread).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'starts new thread' });
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('remaps pre-hook optimistic messages to signal ids for echo dedupe', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-after-hook', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      renderOptimisticUserMessage: (text: string) => string;
+      sendOptimisticSignal: (text: string, images: undefined, optimisticMessageId: string) => void;
+    };
+    tui.state = state;
+
+    const optimisticId = 'user-optimistic';
+    const component = {};
+    state.messageComponentsById.set(optimisticId, component as never);
+
+    tui.sendOptimisticSignal('shows immediately', undefined, optimisticId);
+    await Promise.resolve();
+
+    expect(state.messageComponentsById.has(optimisticId)).toBe(false);
+    expect(state.messageComponentsById.has('signal-after-hook')).toBe(true);
+  });
+
+  it('creates a pending new thread before sending an idle signal message', async () => {
+    const createThread = vi.fn().mockResolvedValue({ id: 'thread-new' });
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      pendingNewThread: true,
+      harness: {
+        createThread,
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage('new thread follow-up');
+
+    expect(createThread).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'new thread follow-up' });
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-after-new',
+      role: 'user',
+      content: [{ type: 'text', text: 'new thread follow-up' }],
+      createdAt: expect.any(Date),
+    });
+    expect(state.pendingNewThread).toBe(false);
+  });
+
   it('renders idle signal messages directly instead of pending them', async () => {
     const sendSignal = vi
       .fn()
@@ -230,6 +335,48 @@ describe('MastraTUI queueing', () => {
       id: 'signal-idle-1',
       role: 'user',
       content: [{ type: 'text', text: 'render directly' }],
+      createdAt: expect.any(Date),
+    });
+  });
+
+  it('renders idle image signals with the echoed signal id so they dedupe', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-image-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string, images?: Array<{ data: string; mimeType: string }>) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage("what's in this image?", [{ data: 'data:image/png;base64,abc', mimeType: 'image/png' }]);
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: {
+        role: 'user',
+        content: [
+          { type: 'text', text: "what's in this image?" },
+          { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+        ],
+      },
+    });
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-image-1',
+      role: 'user',
+      content: [
+        { type: 'text', text: "what's in this image?" },
+        { type: 'image', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+      ],
       createdAt: expect.any(Date),
     });
   });

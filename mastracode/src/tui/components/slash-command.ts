@@ -23,6 +23,10 @@ export class SlashCommandComponent extends Container {
     this.rebuild();
   }
 
+  matches(commandName: string, content: string): boolean {
+    return this.commandName === commandName && this.contentLines.join('\n') === content.split('\n').filter(l => l.trim()).join('\n');
+  }
+
   setExpanded(expanded: boolean): void {
     if (this.expanded === expanded) return;
     this.expanded = expanded;

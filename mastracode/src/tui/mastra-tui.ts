@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessEvent } from '@mastra/core/harness';
+import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -258,50 +258,14 @@ export class MastraTUI {
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
+        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
+          this.removeOptimisticUserMessage(optimisticMessageId);
           continue;
         }
 
-        // Plain text user input is always represented as a signal. If the agent is idle,
-        // sendSignal starts the stream explicitly via its ifIdle stream options.
-        if (!images?.length && content.trim()) {
-          if (this.state.pendingNewThread) {
-            await this.state.harness.createThread();
-            this.state.pendingNewThread = false;
-          }
-          this.signalMessage(content);
-          continue;
-        }
-
-        // Show image/empty user messages in the TUI right away — before any async work
-        // (thread creation, hooks, sending) so the UI feels instant even when
-        // GC pauses or I/O slow things down.
-        const messageId = `user-${Date.now()}`;
-        addUserMessage(this.state, {
-          id: messageId,
-          role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...(images?.map(img => ({
-              type: 'image' as const,
-              data: img.data,
-              mimeType: img.mimeType,
-            })) ?? []),
-          ],
-          createdAt: new Date(),
-        });
-        this.state.ui.requestRender();
-
-        // Create thread lazily on first message (may load last-used model).
-        // Runs after the hook check so we don't create a thread for blocked messages.
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
-        // Non-signal send — fire and forget; events handle the rest
-        this.fireMessage(content, images);
+        this.sendOptimisticSignal(content, images, optimisticMessageId);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -319,40 +283,118 @@ export class MastraTUI {
     });
   }
 
-  private signalMessage(content: string): void {
-    const harness = this.state.harness as typeof this.state.harness & { isCurrentThreadStreamActive?: () => boolean };
-    const hasActiveRun =
-      typeof harness.isCurrentThreadStreamActive === 'function'
-        ? harness.isCurrentThreadStreamActive()
-        : !!harness.getCurrentRunId();
-    const signal = (
-      this.state.harness as unknown as {
-        sendSignal: (input: { content: string }) => { id: string; accepted: Promise<unknown> };
-      }
-    ).sendSignal({ content });
+  private createUserSignalMessage(
+    content: string,
+    images?: Array<{ data: string; mimeType: string }>,
+    id = '',
+  ): HarnessMessage {
+    return {
+      id,
+      role: 'user',
+      content: [
+        { type: 'text', text: content },
+        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+      ],
+      createdAt: new Date(),
+    };
+  }
 
-    if (hasActiveRun) {
-      addPendingUserMessage(this.state, signal.id, content);
-    } else {
-      addUserMessage(this.state, {
-        id: signal.id,
-        role: 'user',
-        content: [{ type: 'text', text: content }],
-        createdAt: new Date(),
+  private createUserSignalContent(content: string, images?: Array<{ data: string; mimeType: string }>) {
+    return images?.length
+      ? {
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: content },
+            ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
+          ],
+        }
+      : content;
+  }
+
+  private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
+    const messageId = `user-${Date.now()}`;
+    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId));
+    this.state.ui.requestRender();
+    return messageId;
+  }
+
+  private removeOptimisticUserMessage(messageId: string): void {
+    const component = this.state.messageComponentsById.get(messageId);
+    if (!component) return;
+    this.state.chatContainer.removeChild(component as never);
+    this.state.messageComponentsById.delete(messageId);
+    this.state.ui.requestRender();
+  }
+
+  private remapOptimisticUserMessage(optimisticMessageId: string, signalId: string): void {
+    if (optimisticMessageId === signalId) return;
+    const component = this.state.messageComponentsById.get(optimisticMessageId);
+    if (!component) return;
+    this.state.messageComponentsById.delete(optimisticMessageId);
+    this.state.messageComponentsById.set(signalId, component);
+  }
+
+  private createPendingNewThread(): Promise<void> | undefined {
+    if (!this.state.pendingNewThread) return undefined;
+    this.state.pendingNewThread = false;
+    return this.state.harness.createThread().then(() => undefined);
+  }
+
+  private sendOptimisticSignal(
+    content: string,
+    images: Array<{ data: string; mimeType: string }> | undefined,
+    optimisticMessageId: string,
+  ): void {
+    const send = () => {
+      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
+      signal.accepted.catch((error: unknown) => {
+        this.removeOptimisticUserMessage(signal.id);
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       });
+    };
+
+    const pendingThread = this.createPendingNewThread();
+    if (!pendingThread) {
+      send();
+      return;
     }
 
-    signal.accepted.catch((error: unknown) => {
+    pendingThread.then(send).catch((error: unknown) => {
+      this.removeOptimisticUserMessage(optimisticMessageId);
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+    });
+  }
+
+  private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+    const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
+
+    const send = () => {
+      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+
       if (hasActiveRun) {
-        removePendingUserMessage(this.state, signal.id);
+        addPendingUserMessage(this.state, signal.id, content, images);
       } else {
-        const component = this.state.messageComponentsById.get(signal.id);
-        if (component) {
-          this.state.chatContainer.removeChild(component as never);
-          this.state.messageComponentsById.delete(signal.id);
-          this.state.ui.requestRender();
-        }
+        addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
       }
+
+      signal.accepted.catch((error: unknown) => {
+        if (hasActiveRun) {
+          removePendingUserMessage(this.state, signal.id);
+        } else {
+          this.removeOptimisticUserMessage(signal.id);
+        }
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
+    };
+
+    const pendingThread = this.createPendingNewThread();
+    if (!pendingThread) {
+      send();
+      return;
+    }
+
+    pendingThread.then(send).catch((error: unknown) => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
