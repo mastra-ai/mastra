@@ -133,6 +133,19 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return hasMetadata ? providerMetadata : undefined;
       }
 
+      async function getProviderMetadataForToolResult(toolCall: {
+        toolName: string;
+        result?: unknown;
+        providerMetadata?: Record<string, unknown>;
+        denied?: boolean;
+      }) {
+        if (toolCall.denied === true) {
+          const providerMetadata = toolCall.providerMetadata as ProviderMetadata | undefined;
+          return providerMetadata && Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
+        }
+        return getProviderMetadataWithModelOutput(toolCall);
+      }
+
       if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
 
@@ -194,6 +207,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   result: toolCall.result,
+                  denied: toolCall.denied,
+                  deniedReason: toolCall.deniedReason,
                   providerMetadata: toolCall.providerMetadata,
                   providerExecuted: toolCall.providerExecuted,
                 },
@@ -202,9 +217,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               if (processed) await rest.options?.onChunk?.(processed);
 
               if (!toolCall.providerExecuted) {
-                // Update tool invocations from state:'call' to state:'result' for successful client tools.
+                // Update tool invocations from state:'call' to state:'result' for completed client tools.
                 // Provider-executed tools are handled by llm-execution-step.
-                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                const providerMetadata = await getProviderMetadataForToolResult(toolCall);
                 rest.messageList.updateToolInvocation({
                   type: 'tool-invocation' as const,
                   toolInvocation: {
@@ -213,6 +228,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolName: sanitizeToolName(toolCall.toolName),
                     args: toolCall.args,
                     result: toolCall.result,
+                    ...(toolCall.denied === true ? { denied: true, deniedReason: toolCall.deniedReason } : {}),
                   },
                   ...(providerMetadata ? { providerMetadata } : {}),
                 });
@@ -268,6 +284,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               result: toolCall.result,
+              denied: toolCall.denied,
+              deniedReason: toolCall.deniedReason,
               providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               providerExecuted: toolCall.providerExecuted,
             },
@@ -279,7 +297,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Exclude provider-executed tools — these are handled by llm-execution-step
           // (same-turn results are stored directly, deferred results are resolved via updateToolInvocation).
           if (!toolCall.providerExecuted) {
-            const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+            const providerMetadata = await getProviderMetadataForToolResult(toolCall);
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
@@ -288,6 +306,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
                 result: toolCall.result,
+                ...(toolCall.denied === true ? { denied: true, deniedReason: toolCall.deniedReason } : {}),
               },
               ...(providerMetadata ? { providerMetadata } : {}),
             });

@@ -237,6 +237,37 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('preserves denied metadata on result-state tool invocations', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', args: { q: 'test' } },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          result: 'Tool call was not approved by the user',
+          denied: true,
+          deniedReason: 'User declined approval',
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc1',
+        result: 'Tool call was not approved by the user',
+        denied: true,
+        deniedReason: 'User declined approval',
+      },
+    });
+  });
+
   // ── Source and file parts ───────────────────────────────────
 
   it('should produce a source part', () => {

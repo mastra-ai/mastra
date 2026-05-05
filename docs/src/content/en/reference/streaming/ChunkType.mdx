@@ -456,6 +456,18 @@ Result from a tool execution.
             description: 'Whether the result is an error',
           },
           {
+            name: 'denied',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Whether the tool call was declined through an approval flow before the tool executed.',
+          },
+          {
+            name: 'deniedReason',
+            type: 'string',
+            isOptional: true,
+            description: 'Reason for the declined tool approval, when available.',
+          },
+          {
             name: 'providerExecuted',
             type: 'boolean',
             isOptional: true,

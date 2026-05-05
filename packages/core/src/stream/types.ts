@@ -174,6 +174,8 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   toolName: string;
   result: TResult;
   isError?: boolean;
+  denied?: boolean;
+  deniedReason?: string;
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   args?: TArgs;

@@ -534,8 +534,10 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
         output: chunk.payload.result,
+        denied: chunk.payload.denied,
+        deniedReason: chunk.payload.deniedReason,
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
-      };
+      } as TextStreamPart<ToolSet> & { denied?: boolean; deniedReason?: string };
     case 'tool-error':
       return {
         type: 'tool-error',

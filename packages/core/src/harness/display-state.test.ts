@@ -276,6 +276,23 @@ describe('tool lifecycle', () => {
       expect(tool!.status).toBe('error');
       expect(tool!.isError).toBe(true);
     });
+
+    it('marks tool as denied on declined approval tool_end', () => {
+      emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'delete_file', args: {} });
+      emit(harness, {
+        type: 'tool_end',
+        toolCallId: 't1',
+        result: 'Tool call was not approved by the user',
+        isError: false,
+        denied: true,
+        deniedReason: 'User declined approval',
+      });
+
+      const tool = harness.getDisplayState().activeTools.get('t1');
+      expect(tool!.status).toBe('denied');
+      expect(tool!.isError).toBe(false);
+      expect(tool!.deniedReason).toBe('User declined approval');
+    });
   });
 
   describe('tool_update', () => {
@@ -488,6 +505,20 @@ describe('modifiedFiles tracking', () => {
     emit(harness, { type: 'tool_end', toolCallId: 't1', result: 'error', isError: true });
 
     expect(harness.getDisplayState().modifiedFiles.has('fail.ts')).toBe(false);
+  });
+
+  it('does not track file modifications for denied tools', () => {
+    emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args: { path: 'declined.ts' } });
+    emit(harness, {
+      type: 'tool_end',
+      toolCallId: 't1',
+      result: 'Tool call was not approved by the user',
+      isError: false,
+      denied: true,
+      deniedReason: 'User declined approval',
+    });
+
+    expect(harness.getDisplayState().modifiedFiles.has('declined.ts')).toBe(false);
   });
 
   it('does not track non-file tools', () => {
