@@ -11,6 +11,7 @@ import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcesso
 import type { RequestContext } from '../request-context';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { CreatedAgentSignal } from './signals';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -630,6 +631,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * `agent.streamUntilIdle`, which drives continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /** @internal Signals that should be echoed to the stream but are already present in the initial messages. */
+  _initialSignalEchoes?: CreatedAgentSignal[];
 } & Partial<ObservabilityContext>;
 
 /**

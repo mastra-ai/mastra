@@ -5,11 +5,11 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { signalToMessage } from './signals';
+import { createSignal, signalToMessage } from './signals';
+import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
-  AgentThreadRun,
   AgentThreadSubscription,
   SendAgentSignalOptions,
 } from './types';
@@ -25,12 +25,20 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   streamOptions: AgentExecutionOptions<OUTPUT>;
 };
 
+type PreparedThreadRun = {
+  abortController: AbortController;
+  cleanup: () => void;
+};
+
 export class AgentThreadStreamRuntime {
   #threadRunsById = new Map<string, AgentThreadRunRecord<any>>();
+  #threadKeysByRunId = new Map<string, string>();
   #activeThreadRunIds = new Map<string, string>();
   #threadRunSubscribers = new Map<string, Set<(run: AgentThreadRunRecord<any>) => void>>();
-  #pendingSignalsByThread = new Map<string, AgentSignal[]>();
+  #pendingSignalsByThread = new Map<string, CreatedAgentSignal[]>();
   #watchedThreadRunIds = new Set<string>();
+  #preparedRunsById = new Map<string, PreparedThreadRun>();
+  #abortedRunIds = new Set<string>();
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
@@ -47,17 +55,57 @@ export class AgentThreadStreamRuntime {
     return { threadId, resourceId };
   }
 
-  #toAgentThreadRun<OUTPUT>(record: AgentThreadRunRecord<OUTPUT>): AgentThreadRun<OUTPUT> {
+  prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>): AgentExecutionOptions<OUTPUT> {
+    const { threadId } = this.#getThreadTarget(options);
+    if (!threadId || !options.runId) return options;
+
+    const abortController = new AbortController();
+    const upstreamAbortSignal = options.abortSignal;
+    const abort = () => abortController.abort();
+    if (upstreamAbortSignal?.aborted) {
+      abort();
+    } else {
+      upstreamAbortSignal?.addEventListener('abort', abort, { once: true });
+    }
+
+    this.#preparedRunsById.set(options.runId, {
+      abortController,
+      cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
+    });
+
+    if (this.#abortedRunIds.has(options.runId)) {
+      abort();
+    }
+
     return {
-      output: record.output,
-      get fullStream() {
-        return record.output.fullStream as ReadableStream<any>;
-      },
-      runId: record.runId,
-      threadId: record.threadId,
-      resourceId: record.resourceId,
-      cleanup: () => {},
+      ...options,
+      abortSignal: abortController.signal,
     };
+  }
+
+  abortRun(runId: string): boolean {
+    const preparedRun = this.#preparedRunsById.get(runId);
+    if (!preparedRun) {
+      this.#abortedRunIds.add(runId);
+      return false;
+    }
+
+    preparedRun.abortController.abort();
+    this.#abortedRunIds.add(runId);
+    return true;
+  }
+
+  abortThread(options: AgentSubscribeToThreadOptions): boolean {
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const activeRunId = this.#activeThreadRunIds.get(key);
+    if (!activeRunId) return false;
+    return this.abortRun(activeRunId);
+  }
+
+  #cleanupPreparedRun(runId: string) {
+    this.#preparedRunsById.get(runId)?.cleanup();
+    this.#preparedRunsById.delete(runId);
+    this.#abortedRunIds.delete(runId);
   }
 
   #notifyThreadRun(record: AgentThreadRunRecord<any>) {
@@ -84,6 +132,7 @@ export class AgentThreadStreamRuntime {
     };
 
     this.#threadRunsById.set(output.runId, record);
+    this.#threadKeysByRunId.set(output.runId, key);
     this.#activeThreadRunIds.set(key, output.runId);
     this.#notifyThreadRun(record);
     this.#watchThreadRunCompletion(key, record);
@@ -96,6 +145,8 @@ export class AgentThreadStreamRuntime {
     void record.output.getFullOutput().finally(() => {
       this.#watchedThreadRunIds.delete(record.runId);
       this.#threadRunsById.delete(record.runId);
+      this.#threadKeysByRunId.delete(record.runId);
+      this.#cleanupPreparedRun(record.runId);
       if (this.#activeThreadRunIds.get(key) === record.runId) {
         this.#activeThreadRunIds.delete(key);
       }
@@ -129,6 +180,18 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  drainPendingSignals(runId: string) {
+    const record = this.#threadRunsById.get(runId);
+    const key = record ? this.#threadKey(record.resourceId, record.threadId) : this.#threadKeysByRunId.get(runId);
+    if (!key) return [];
+
+    const queue = this.#pendingSignalsByThread.get(key);
+    if (!queue || queue.length === 0) return [];
+
+    this.#pendingSignalsByThread.delete(key);
+    return queue;
+  }
+
   async waitForCrossAgentThreadRun(
     agent: Agent<any, any, any, any>,
     options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext },
@@ -152,7 +215,7 @@ export class AgentThreadStreamRuntime {
     void agent;
     const key = this.#threadKey(options.resourceId, options.threadId);
     const seenRunIds = new Set<string>();
-    const pendingRuns: AgentThreadRun<OUTPUT>[] = [];
+    const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
     let done = false;
 
@@ -160,10 +223,18 @@ export class AgentThreadStreamRuntime {
       while (waiters.length) waiters.shift()?.();
     };
 
+    const activeRunId = () => {
+      const runId = this.#activeThreadRunIds.get(key);
+      if (!runId) return null;
+      const record = this.#threadRunsById.get(runId);
+      if (!record) return runId;
+      return record.output.status === 'running' ? runId : null;
+    };
+
     const enqueueRun = (record: AgentThreadRunRecord<any>) => {
       if (done || seenRunIds.has(record.runId)) return;
       seenRunIds.add(record.runId);
-      pendingRuns.push(this.#toAgentThreadRun(record) as AgentThreadRun<OUTPUT>);
+      pendingRuns.push(record);
       wake();
     };
 
@@ -171,7 +242,13 @@ export class AgentThreadStreamRuntime {
     listeners.add(enqueueRun);
     this.#threadRunSubscribers.set(key, listeners);
 
-    const cleanup = () => {
+    const currentRunId = activeRunId();
+    const currentRecord = currentRunId ? this.#threadRunsById.get(currentRunId) : undefined;
+    if (currentRecord) {
+      enqueueRun(currentRecord);
+    }
+
+    const unsubscribe = () => {
       if (done) return;
       done = true;
       listeners.delete(enqueueRun);
@@ -182,18 +259,24 @@ export class AgentThreadStreamRuntime {
     };
 
     return {
-      cleanup,
-      runs: (async function* () {
+      activeRunId,
+      abort: () => this.abortThread(options),
+      unsubscribe,
+      stream: (async function* () {
         try {
           while (!done || pendingRuns.length > 0) {
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
             }
-            yield pendingRuns.shift()!;
+            const run = pendingRuns.shift()!;
+            for await (const part of run.output.fullStream) {
+              yield part as any;
+              if (done) break;
+            }
           }
         } finally {
-          cleanup();
+          unsubscribe();
         }
       })(),
     };
@@ -201,9 +284,10 @@ export class AgentThreadStreamRuntime {
 
   sendSignal<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
-    signal: AgentSignal,
+    signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
-  ): { accepted: true; runId: string } {
+  ): { accepted: true; runId: string; signal: CreatedAgentSignal } {
+    const signal = createSignal(signalInput);
     let key: string | undefined;
     let runId = target.runId;
 
@@ -212,7 +296,7 @@ export class AgentThreadStreamRuntime {
       key = this.#threadKey(target.resourceId, target.threadId);
       const activeRunId = this.#activeThreadRunIds.get(key);
       activeRecord = activeRunId ? this.#threadRunsById.get(activeRunId) : undefined;
-      if (activeRecord?.output.status !== 'running') {
+      if (activeRecord && activeRecord.output.status !== 'running') {
         this.#activeThreadRunIds.delete(key);
         activeRecord = undefined;
       }
@@ -230,8 +314,15 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           this.#pendingSignalsByThread.set(key, queue);
           this.#watchThreadRunCompletion(key, activeRecord);
-          return { accepted: true, runId };
+          return { accepted: true, runId, signal };
         }
+      }
+
+      if (key && this.#activeThreadRunIds.get(key) === runId) {
+        const queue = this.#pendingSignalsByThread.get(key) ?? [];
+        queue.push(signal);
+        this.#pendingSignalsByThread.set(key, queue);
+        return { accepted: true, runId, signal };
       }
     }
 
@@ -240,14 +331,28 @@ export class AgentThreadStreamRuntime {
     if (!threadId) {
       throw new Error('No active agent run found for signal target');
     }
+    if (!target.ifIdle) {
+      throw new Error('No active agent run found for signal target');
+    }
 
     runId = randomUUID();
+    key ??= this.#threadKey(resourceId, threadId);
+    if (!this.#activeThreadRunIds.has(key)) {
+      this.#activeThreadRunIds.set(key, runId);
+      this.#threadKeysByRunId.set(runId, key);
+    }
     void (agent.stream as any)(signalToMessage(signal), {
-      ...(target.streamOptions as AgentExecutionOptions<OUTPUT> | undefined),
+      ...target.ifIdle.streamOptions,
       runId,
-      memory: target.streamOptions?.memory ?? ({ resource: resourceId, thread: threadId } as any),
+      memory: target.ifIdle.streamOptions.memory ?? ({ resource: resourceId, thread: threadId } as any),
+      _initialSignalEchoes: [signal],
+    }).catch(() => {
+      this.#threadKeysByRunId.delete(runId);
+      if (this.#activeThreadRunIds.get(key) === runId) {
+        this.#activeThreadRunIds.delete(key);
+      }
     });
 
-    return { accepted: true, runId };
+    return { accepted: true, runId, signal };
   }
 }

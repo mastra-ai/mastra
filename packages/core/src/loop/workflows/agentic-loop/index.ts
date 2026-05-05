@@ -81,6 +81,17 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
+      const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
+      if (pendingSignals.length > 0) {
+        for (const pendingSignal of pendingSignals) {
+          messageList.add(pendingSignal.toLLMMessage(), 'input');
+          safeEnqueue(controller, pendingSignal.toDataPart() as any);
+        }
+        if (typedInputData.stepResult) {
+          typedInputData.stepResult.isContinued = true;
+        }
+      }
+
       if (pendingFeedbackStop) {
         hasFinishedSteps = true;
         pendingFeedbackStop = false;

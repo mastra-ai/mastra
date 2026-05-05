@@ -527,6 +527,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
+          const initialSignalEchoes = _internal.initialSignalEchoes?.splice(0) ?? [];
+          for (const initialSignal of initialSignalEchoes) {
+            safeEnqueue(controller, initialSignal.toDataPart() as any);
+          }
+
+          const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
+          for (const pendingSignal of pendingSignals) {
+            messageList.add(pendingSignal.toLLMMessage(), 'input');
+            safeEnqueue(controller, pendingSignal.toDataPart() as any);
+          }
+
           const currentStep: {
             messageId: string;
             model: MastraLanguageModel;

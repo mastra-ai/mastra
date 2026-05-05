@@ -1586,8 +1586,8 @@ export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
-      const streamOptionsWithContext: { streamOptions?: any } = streamOptions
-        ? { streamOptions: { ...streamOptions, requestContext: serverRequestContext } }
+      const ifIdleWithContext: { ifIdle?: { streamOptions: any } } = streamOptions
+        ? { ifIdle: { streamOptions: { ...streamOptions, requestContext: serverRequestContext } } }
         : {};
 
       if (effectiveThreadId && effectiveResourceId) {
@@ -1603,7 +1603,7 @@ export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
           runId,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
-          ...streamOptionsWithContext,
+          ...ifIdleWithContext,
         });
       }
 
@@ -1614,7 +1614,7 @@ export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
       return agent.sendSignal(signal, {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
-        ...streamOptionsWithContext,
+        ...ifIdleWithContext,
       });
     } catch (error) {
       return handleError(error, 'error sending agent signal');
@@ -1661,7 +1661,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       return new ReadableStream({
         async start(controller) {
           const cleanup = () => {
-            subscription.cleanup();
+            subscription.unsubscribe();
             try {
               controller.close();
             } catch {}
@@ -1670,30 +1670,15 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
           abortSignal?.addEventListener('abort', cleanup, { once: true });
 
           try {
-            for await (const run of subscription.runs) {
-              controller.enqueue({
-                type: 'run-started',
-                runId: run.runId,
-                threadId: run.threadId,
-                resourceId: run.resourceId,
-              });
-              const reader = run.fullStream.getReader();
-              try {
-                while (true) {
-                  const { value, done } = await reader.read();
-                  if (done) break;
-                  controller.enqueue(value);
-                }
-              } finally {
-                reader.releaseLock();
-              }
+            for await (const part of subscription.stream) {
+              controller.enqueue(part);
             }
           } catch (error) {
             controller.error(error);
           }
         },
         cancel() {
-          subscription.cleanup();
+          subscription.unsubscribe();
         },
       });
     } catch (error) {

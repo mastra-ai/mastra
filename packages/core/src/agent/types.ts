@@ -41,7 +41,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -80,8 +80,18 @@ export type AgentInstructions = SystemMessage;
 export type { AgentSignalInput as AgentSignal, AgentSignalType, AgentSignalDataPart } from './signals';
 
 export type SendAgentSignalOptions<OUTPUT = unknown> =
-  | { runId: string; resourceId?: string; threadId?: string; streamOptions?: AgentExecutionOptions<OUTPUT> }
-  | { runId?: string; resourceId: string; threadId: string; streamOptions?: AgentExecutionOptions<OUTPUT> };
+  | {
+      runId: string;
+      resourceId?: string;
+      threadId?: string;
+      ifIdle?: { streamOptions: AgentExecutionOptions<OUTPUT> };
+    }
+  | {
+      runId?: string;
+      resourceId: string;
+      threadId: string;
+      ifIdle?: { streamOptions: AgentExecutionOptions<OUTPUT> };
+    };
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
@@ -98,8 +108,10 @@ export interface AgentSubscribeToThreadOptions {
 }
 
 export interface AgentThreadSubscription<OUTPUT = unknown> {
-  runs: AsyncIterable<AgentThreadRun<OUTPUT>>;
-  cleanup: () => void;
+  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+  activeRunId: () => string | null;
+  abort: () => boolean;
+  unsubscribe: () => void;
 }
 
 export type ToolsetsInput = Record<string, ToolsInput>;

@@ -1093,27 +1093,22 @@ describe('Agent Routes Authorization', () => {
         threadId: 'subscribe-thread-from-context',
       });
       let capturedTarget: any;
-      const cleanup = vi.fn();
-      const chunk = { type: 'text-delta', id: 'text-1', delta: 'hello' };
+      const unsubscribe = vi.fn();
+      const chunk = {
+        type: 'text-delta',
+        runId: 'subscribed-run-id',
+        from: 'AGENT',
+        payload: { id: 'text-1', text: 'hello' },
+      };
 
       vi.spyOn(mockAgent, 'subscribeToThread').mockImplementation(async target => {
         capturedTarget = target;
         return {
-          cleanup,
-          runs: (async function* () {
-            yield {
-              runId: 'subscribed-run-id',
-              threadId: target.threadId,
-              resourceId: target.resourceId,
-              fullStream: new ReadableStream({
-                start(controller) {
-                  controller.enqueue(chunk);
-                  controller.close();
-                },
-              }),
-              output: {} as any,
-              cleanup: vi.fn(),
-            };
+          activeRunId: () => null,
+          abort: () => false,
+          unsubscribe,
+          stream: (async function* () {
+            yield chunk;
           })(),
         } as any;
       });
@@ -1129,18 +1124,9 @@ describe('Agent Routes Authorization', () => {
 
       expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
       const reader = stream.getReader();
-      await expect(reader.read()).resolves.toEqual({
-        value: {
-          type: 'run-started',
-          runId: 'subscribed-run-id',
-          threadId: 'subscribe-thread-from-context',
-          resourceId: 'user-a',
-        },
-        done: false,
-      });
       await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
       await reader.cancel();
-      expect(cleanup).toHaveBeenCalled();
+      expect(unsubscribe).toHaveBeenCalled();
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

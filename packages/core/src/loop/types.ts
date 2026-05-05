@@ -11,6 +11,7 @@ import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
+import type { CreatedAgentSignal } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
@@ -72,6 +73,8 @@ export type StreamInternal = {
   // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
   // continuation from the outside — the inner loop shouldn't also wait.
   skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  initialSignalEchoes?: CreatedAgentSignal[];
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
