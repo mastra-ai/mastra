@@ -233,7 +233,7 @@ const AgentBuilderAgentEditReady = ({
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
             {canPublishToChannel && <PublishToChannelButton agentId={id} />}
-            <VisibilitySelectConnected />
+            <VisibilitySelectConnected agentId={id} />
           </div>
         }
         primaryAction={<HeaderActions agentId={id} isSaving={isSaving} onSave={handleSave} />}
@@ -258,11 +258,10 @@ const AgentBuilderAgentEditReady = ({
   );
 };
 
-const VisibilitySelectConnected = () => {
-  const isRunning = useStreamRunning();
+const VisibilitySelectConnected = ({ agentId }: { agentId: string }) => {
   const { data: capabilities } = useAuthCapabilities();
   if (!capabilities?.enabled) return null;
-  return <VisibilitySelect disabled={isRunning} variant="ghost" />;
+  return <VisibilitySelect agentId={agentId} variant="ghost" />;
 };
 
 const AgentBuilderMobileMenuConnected = ({

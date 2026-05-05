@@ -159,6 +159,21 @@ describe('AgentBuilderAgentView MSW integration', () => {
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
     expect(screen.queryByTestId('agent-builder-view-edit')).toBeNull();
     expect(screen.queryByTestId('agent-builder-publish-channel')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-visibility-trigger')).toBeNull();
+  });
+
+  it('shows the visibility trigger for the owner', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
+      http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+        HttpResponse.json({ enabled: true, user: { id: 'user-1' } }),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId('agent-builder-visibility-trigger')).toBeTruthy();
   });
 
   it('shows Chat and Configuration tabs for the owner via real stored-agent data', async () => {

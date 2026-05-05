@@ -188,7 +188,7 @@ const AgentBuilderAgentViewReady = ({
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
             {isOwner && isPublishable && <PublishToChannelButton agentId={id} />}
-            <VisibilitySelectIfAuth />
+            {isOwner && <VisibilitySelectIfAuth agentId={id} />}
           </div>
         }
         primaryAction={
@@ -264,8 +264,8 @@ const ViewHeaderActions = ({
   );
 };
 
-const VisibilitySelectIfAuth = () => {
+const VisibilitySelectIfAuth = ({ agentId }: { agentId: string }) => {
   const { data: capabilities } = useAuthCapabilities();
   if (!capabilities?.enabled) return null;
-  return <VisibilitySelect disabled variant="ghost" />;
+  return <VisibilitySelect agentId={agentId} variant="ghost" />;
 };
