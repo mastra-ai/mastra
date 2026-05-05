@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import { createSignal } from '../agent/signals';
+import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -86,6 +87,51 @@ function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase
   return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
+function getStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getRecordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function toSystemReminderContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
+  const attributes = getRecordValue(payload.attributes);
+  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  if (message === undefined) return undefined;
+
+  return {
+    type: 'system_reminder',
+    message,
+    reminderType: getStringValue(payload.reminderType) ?? getStringValue(attributes?.type),
+    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
+    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
+    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
+    gapMs:
+      typeof payload.gapMs === 'number'
+        ? payload.gapMs
+        : typeof attributes?.gapMs === 'number'
+          ? attributes.gapMs
+          : undefined,
+    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
+  };
+}
+
+function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
+  const id = getStringValue(payload.id);
+  const contents = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  if (!id || contents === undefined) return undefined;
+
+  return {
+    id,
+    role: 'user',
+    content: [{ type: 'text', text: contents }],
+    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+  };
+}
+
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -129,6 +175,12 @@ export class Harness<TState = {}> {
   private currentRunId: string | null = null;
   private currentTraceId: string | null = null;
   private currentOperationId: number = 0;
+  private agentThreadSubscription: AgentThreadSubscription<any> | null = null;
+  private agentThreadSubscriptionKey: string | null = null;
+  private subscribedRunWaiters = new Map<
+    string,
+    { promise: Promise<void>; resolve: () => void; reject: (error: unknown) => void }
+  >();
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
   private pendingApprovalResolve:
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
@@ -707,6 +759,7 @@ export class Harness<TState = {}> {
   }
 
   setResourceId({ resourceId }: { resourceId: string }): void {
+    this.cleanupAgentThreadSubscription();
     this.resourceId = resourceId;
     this.currentThreadId = null;
   }
@@ -722,6 +775,7 @@ export class Harness<TState = {}> {
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
+    this.cleanupAgentThreadSubscription();
     const now = new Date();
     const thread: HarnessThread = {
       id: this.generateId(),
@@ -848,6 +902,7 @@ export class Harness<TState = {}> {
       } catch {
         // Lock release failed; proceed with state cleanup regardless
       }
+      this.cleanupAgentThreadSubscription();
       this.currentThreadId = null;
       this.tokenUsage = createEmptyTokenUsage();
     }
@@ -921,6 +976,7 @@ export class Harness<TState = {}> {
       }
     }
 
+    this.cleanupAgentThreadSubscription();
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
@@ -930,6 +986,7 @@ export class Harness<TState = {}> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
+    this.cleanupAgentThreadSubscription();
     this.abort();
 
     // Acquire lock on new thread before releasing old one.
@@ -1428,6 +1485,169 @@ export class Harness<TState = {}> {
   // Message Handling
   // ===========================================================================
 
+  private cleanupAgentThreadSubscription(): void {
+    this.agentThreadSubscription?.cleanup();
+    this.agentThreadSubscription = null;
+    this.agentThreadSubscriptionKey = null;
+  }
+
+  private getAgentThreadSubscriptionKey(agent: Agent, threadId: string): string {
+    return `${agent.id}:${this.resourceId}:${threadId}`;
+  }
+
+  private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
+    const key = this.getAgentThreadSubscriptionKey(agent, threadId);
+    if (this.agentThreadSubscriptionKey === key && this.agentThreadSubscription) return;
+
+    this.cleanupAgentThreadSubscription();
+    const subscription = await agent.subscribeToThread({ resourceId: this.resourceId, threadId });
+    this.agentThreadSubscription = subscription;
+    this.agentThreadSubscriptionKey = key;
+    void this.processSubscribedThreadRuns(subscription, key);
+  }
+
+  private getSubscribedRunWaiter(runId: string) {
+    let waiter = this.subscribedRunWaiters.get(runId);
+    if (!waiter) {
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<void>((promiseResolve, promiseReject) => {
+        resolve = promiseResolve;
+        reject = promiseReject;
+      });
+      waiter = { promise, resolve, reject };
+      this.subscribedRunWaiters.set(runId, waiter);
+    }
+    return waiter;
+  }
+
+  private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
+    if (this.followUpQueue.length === 0) return;
+
+    const next = this.followUpQueue.shift()!;
+    await this.sendMessage({
+      content: next.content,
+      requestContext: next.requestContext,
+      tracingContext: options?.tracingContext,
+      tracingOptions: options?.tracingOptions,
+    });
+  }
+
+  private async processSubscribedThreadRuns(
+    subscription: AgentThreadSubscription<any>,
+    subscriptionKey: string,
+  ): Promise<void> {
+    for await (const run of subscription.runs) {
+      if (this.agentThreadSubscriptionKey !== subscriptionKey) {
+        run.cleanup();
+        continue;
+      }
+
+      const waiter = this.getSubscribedRunWaiter(run.runId);
+      const operationId = ++this.currentOperationId;
+      this.abortController ??= new AbortController();
+      this.currentRunId = run.runId;
+      this.currentTraceId = null;
+      this.emit({ type: 'agent_start' });
+
+      let runError: unknown;
+      try {
+        const requestContext = await this.buildRequestContext();
+        const streamResult = await this.processStream(run.output, requestContext);
+        if (this.currentOperationId === operationId) {
+          const reason = streamResult.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
+          this.emit({ type: 'agent_end', reason });
+        }
+      } catch (error) {
+        runError = error;
+        if (this.currentOperationId !== operationId) continue;
+        if (error instanceof Error && error.name === 'AbortError') {
+          this.emit({ type: 'agent_end', reason: 'aborted' });
+        } else {
+          this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+          this.emit({ type: 'agent_end', reason: 'error' });
+        }
+      } finally {
+        run.cleanup();
+        if (runError) {
+          waiter.reject(runError);
+        } else {
+          waiter.resolve();
+        }
+        this.subscribedRunWaiters.delete(run.runId);
+
+        if (this.currentOperationId === operationId) {
+          this.currentRunId = null;
+          this.currentTraceId = null;
+          this.abortController = null;
+          this.abortRequested = false;
+          await this.drainFollowUpQueue();
+        }
+      }
+    }
+  }
+
+  /**
+   * Send a user signal to the current agent/thread.
+   */
+  sendSignal({
+    content,
+    tracingContext,
+    tracingOptions,
+    requestContext: requestContextInput,
+  }: {
+    content: string;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): { id: string; type: 'user-message'; accepted: Promise<{ accepted: true; runId: string }> } {
+    const signal = createSignal({ type: 'user-message', contents: content });
+    const accepted = Promise.resolve().then(async () => {
+      if (!this.currentThreadId) {
+        const thread = await this.createThread();
+        this.currentThreadId = thread.id;
+      }
+
+      const agent = this.getCurrentAgent();
+      await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
+
+      if (agent.isThreadStreamActive({ resourceId: this.resourceId, threadId: this.currentThreadId })) {
+        const result = agent.sendSignal(signal, {
+          ...(this.currentRunId ? { runId: this.currentRunId } : {}),
+          resourceId: this.resourceId,
+          threadId: this.currentThreadId,
+        });
+        this.currentRunId = result.runId;
+        return { accepted: result.accepted, runId: result.runId };
+      }
+
+      const requestContext = await this.buildRequestContext(requestContextInput);
+      const isYolo = (this.state as Record<string, unknown>).yolo === true;
+      const streamOptions: Record<string, unknown> = {
+        memory: { thread: this.currentThreadId, resource: this.resourceId },
+        abortSignal: this.abortController?.signal,
+        requestContext,
+        maxSteps: 1000,
+        savePerStep: false,
+        requireToolApproval: !isYolo,
+        modelSettings: { temperature: 1 },
+        ...(tracingContext && { tracingContext }),
+        ...(tracingOptions && { tracingOptions }),
+      };
+      streamOptions.toolsets = await this.buildToolsets(requestContext);
+
+      const result = agent.sendSignal(signal, {
+        resourceId: this.resourceId,
+        threadId: this.currentThreadId,
+        ifIdle: { streamOptions: streamOptions as any },
+      });
+      this.currentRunId = result.runId;
+      return { accepted: result.accepted, runId: result.runId };
+    });
+
+    return { id: signal.id, type: 'user-message', accepted };
+  }
+
   /**
    * Send a message to the current agent.
    * Streams the response and emits events.
@@ -1450,13 +1670,15 @@ export class Harness<TState = {}> {
       this.currentThreadId = thread.id;
     }
 
-    const operationId = ++this.currentOperationId;
+    const agent = this.getCurrentAgent();
+    await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
+
+    const setupOperationId = ++this.currentOperationId;
     this.abortRequested = false;
     this.abortController = new AbortController();
     this.currentTraceId = null;
-    const agent = this.getCurrentAgent();
-    this.emit({ type: 'agent_start' });
 
+    let subscribedRunStarted = false;
     try {
       const requestContext = await this.buildRequestContext(requestContextInput);
 
@@ -1518,14 +1740,17 @@ export class Harness<TState = {}> {
           : (messageInput as any),
         streamOptions as any,
       );
-      const streamResult = await this.processStream(response, requestContext);
-
-      if (this.currentOperationId === operationId) {
+      if (response.runId) {
+        subscribedRunStarted = true;
+        await this.getSubscribedRunWaiter(response.runId).promise;
+      } else {
+        const streamResult = await this.processStream(response, requestContext);
         const reason = streamResult.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
         this.emit({ type: 'agent_end', reason });
       }
     } catch (error) {
-      if (this.currentOperationId !== operationId) return;
+      if (subscribedRunStarted) return;
+      if (this.currentOperationId !== setupOperationId) return;
 
       if (error instanceof Error && error.name === 'AbortError') {
         this.emit({ type: 'agent_end', reason: 'aborted' });
@@ -1561,19 +1786,10 @@ export class Harness<TState = {}> {
         this.emit({ type: 'agent_end', reason: 'error' });
       }
     } finally {
-      if (this.currentOperationId === operationId) {
+      if (!subscribedRunStarted && this.currentOperationId === setupOperationId) {
         this.abortController = null;
         this.abortRequested = false;
-      }
-
-      if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
-        const next = this.followUpQueue.shift()!;
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
-          tracingContext,
-          tracingOptions,
-        });
+        await this.drainFollowUpQueue({ tracingContext, tracingOptions });
       }
     }
   }
@@ -1674,6 +1890,7 @@ export class Harness<TState = {}> {
     role: 'user' | 'assistant' | 'system' | 'signal';
     createdAt: Date;
     content: {
+      content?: string;
       parts: Array<{
         type: string;
         text?: string;
@@ -1697,16 +1914,12 @@ export class Harness<TState = {}> {
     };
   }): HarnessMessage {
     const content: HarnessMessageContent[] = [];
-    const systemReminder =
-      typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
-        ? msg.content.metadata.systemReminder
-        : undefined;
+    const systemReminder = getRecordValue(msg.content.metadata?.systemReminder);
 
-    if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
-      content.push({
-        type: 'system_reminder',
-        message:
-          'message' in systemReminder && typeof systemReminder.message === 'string' ? systemReminder.message : '',
+    if (systemReminder && typeof systemReminder.type === 'string') {
+      const reminder = toSystemReminderContent({
+        ...systemReminder,
+        contents: typeof systemReminder.message === 'string' ? systemReminder.message : '',
         reminderType: systemReminder.type,
         path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
         precedesMessageId:
@@ -1731,10 +1944,32 @@ export class Harness<TState = {}> {
             ? systemReminder.judgeModelId
             : undefined,
       });
+      if (reminder) {
+        content.push(reminder);
+      }
 
       return {
         id: msg.id,
         role: msg.role === 'signal' ? 'user' : msg.role,
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
+
+    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
+    if (msg.role === 'signal' && signalMetadata?.type === 'system-reminder') {
+      const reminder = toSystemReminderContent({
+        type: signalMetadata.type,
+        contents: msg.content.content,
+        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
+      });
+      if (reminder) {
+        content.push(reminder);
+      }
+
+      return {
+        id: msg.id,
+        role: 'user',
         content,
         createdAt: msg.createdAt,
       };
@@ -1818,20 +2053,19 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-user-message': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          const message = toUserSignalMessage(data);
+          if (message) {
+            content.push(...message.content);
+          }
+          break;
+        }
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          const message = data.message;
-          if (typeof message === 'string') {
-            content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
-              path: typeof data.path === 'string' ? data.path : undefined,
-              precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
-              gapText: typeof data.gapText === 'string' ? data.gapText : undefined,
-              gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
-              timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
-            });
+          const reminder = toSystemReminderContent(data);
+          if (reminder) {
+            content.push(reminder);
           }
           break;
         }
@@ -2337,20 +2571,32 @@ export class Harness<TState = {}> {
           }
           break;
         }
+        case 'data-user-message': {
+          const payload = (chunk as any).data as Record<string, unknown> | undefined;
+          const message = payload ? toUserSignalMessage(payload) : undefined;
+          if (message) {
+            if (currentMessage.content.length > 0) {
+              currentMessage.stopReason ??= 'complete';
+              this.emit({ type: 'message_end', message: { ...currentMessage } });
+              currentMessage = {
+                id: this.generateId(),
+                role: 'assistant',
+                content: [],
+                createdAt: new Date(),
+              };
+              textContentById.clear();
+              thinkingContentById.clear();
+            }
+            this.emit({ type: 'message_start', message });
+            this.emit({ type: 'message_end', message });
+          }
+          break;
+        }
         case 'data-system-reminder': {
           const payload = (chunk as any).data as Record<string, unknown> | undefined;
-          const message = payload?.message;
-          if (typeof message === 'string') {
-            currentMessage.content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
-              path: typeof payload?.path === 'string' ? payload.path : undefined,
-              precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
-              gapText: typeof payload?.gapText === 'string' ? payload.gapText : undefined,
-              gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
-              timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
-            });
+          const reminder = payload ? toSystemReminderContent(payload) : undefined;
+          if (reminder) {
+            currentMessage.content.push(reminder);
             this.emit({ type: 'message_update', message: currentMessage });
           }
           break;
@@ -2424,8 +2670,13 @@ export class Harness<TState = {}> {
    * Abort the current operation.
    */
   abort(): void {
+    this.abortRequested = true;
+    if (this.currentThreadId) {
+      try {
+        this.getCurrentAgent().abortThreadStream({ resourceId: this.resourceId, threadId: this.currentThreadId });
+      } catch {}
+    }
     if (this.abortController) {
-      this.abortRequested = true;
       try {
         this.abortController.abort();
       } catch {}
@@ -2464,6 +2715,11 @@ export class Harness<TState = {}> {
 
   getCurrentRunId(): string | null {
     return this.currentRunId;
+  }
+
+  isCurrentThreadStreamActive(): boolean {
+    if (!this.currentThreadId) return false;
+    return this.getCurrentAgent().isThreadStreamActive({ resourceId: this.resourceId, threadId: this.currentThreadId });
   }
 
   getCurrentTraceId(): string | null {

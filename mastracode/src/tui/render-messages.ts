@@ -18,7 +18,7 @@ import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
-import { UserMessageComponent } from './components/user-message.js';
+import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
@@ -145,9 +145,14 @@ function createReminderComponent(
 }
 
 function addChildBeforeFollowUps(state: TUIState, child: Component): void {
-  if (state.followUpComponents.length > 0) {
-    const firstFollowUp = state.followUpComponents[0];
-    const idx = state.chatContainer.children.indexOf(firstFollowUp as never);
+  const pendingSignalComponents = state.pendingSignalMessageComponentsById?.values() ?? [];
+  const firstPinned = [...state.followUpComponents, ...pendingSignalComponents].find(pinned =>
+    state.chatContainer.children.includes(('component' in pinned ? pinned.component : pinned) as never),
+  );
+
+  if (firstPinned) {
+    const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
+    const idx = state.chatContainer.children.indexOf(component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 0, child);
       state.chatContainer.invalidate();
@@ -177,7 +182,80 @@ export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Compone
 /**
  * Add a user message to the chat container.
  */
+export function addPendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  images?: Array<{ data: string; mimeType: string }>,
+): void {
+  const existing = state.pendingSignalMessageComponentsById.get(messageId);
+  if (existing) {
+    state.chatContainer.removeChild(existing.component as never);
+  }
+
+  const component = new PendingUserMessageComponent(text, images?.length ?? 0);
+  state.pendingSignalMessageComponentsById.set(messageId, { component, text });
+  state.chatContainer.addChild(component);
+  state.ui.requestRender();
+}
+
+export function confirmPendingUserMessage(state: TUIState, messageId: string, text: string): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+
+  const confirmed = new UserMessageComponent(text);
+  const idx = state.chatContainer.children.indexOf(pending.component as never);
+  if (idx >= 0) {
+    (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
+    state.chatContainer.invalidate();
+  }
+  state.pendingSignalMessageComponentsById.delete(messageId);
+  state.messageComponentsById.set(messageId, confirmed);
+  state.ui.requestRender();
+}
+
+export function removePendingUserMessage(state: TUIState, messageId: string): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+  state.chatContainer.removeChild(pending.component as never);
+  state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
+export function clearPendingUserMessages(state: TUIState): void {
+  for (const pending of state.pendingSignalMessageComponentsById.values()) {
+    state.chatContainer.removeChild(pending.component as never);
+  }
+  state.pendingSignalMessageComponentsById.clear();
+  state.ui.requestRender();
+}
+
+function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, text: string): boolean {
+  const normalizedText = text.trim();
+  for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
+    if (pending.text.trim() !== normalizedText) continue;
+
+    const confirmed = new UserMessageComponent(text);
+    const idx = state.chatContainer.children.indexOf(pending.component as never);
+    if (idx >= 0) {
+      (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
+      state.chatContainer.invalidate();
+    } else {
+      addChildBeforeFollowUps(state, confirmed);
+    }
+    state.pendingSignalMessageComponentsById.delete(pendingId);
+    state.messageComponentsById.set(messageId, confirmed);
+    state.ui.requestRender();
+    return true;
+  }
+  return false;
+}
+
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
+  if (state.messageComponentsById.has(message.id)) {
+    return;
+  }
+
   const reminderPart = message.content.find(
     (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
       content.type === 'system_reminder',
@@ -221,6 +299,15 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
 
+  if (state.pendingSignalMessageComponentsById.has(message.id)) {
+    confirmPendingUserMessage(state, message.id, displayText);
+    return;
+  }
+
+  if (confirmMatchingPendingUserMessage(state, message.id, displayText)) {
+    return;
+  }
+
   const legacyReminderMatch = exactDisplayText.match(
     /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
   );
@@ -261,16 +348,13 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    // Always append to end — follow-ups should stay at the bottom
-    state.chatContainer.addChild(userComponent);
-
-    // Track follow-up components sent while streaming so tool calls
-    // can be inserted before them (keeping them anchored at bottom).
-    // Only track if the agent is already streaming a response — otherwise
-    // this is the initial message that triggers the response, not a follow-up.
-    if (state.harness.getDisplayState().isRunning && state.streamingComponent) {
+    if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+      state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
+      return;
     }
+
+    addChildBeforeFollowUps(state, userComponent);
   }
 }
 
@@ -394,6 +478,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
+  state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during visible history reconstruction.

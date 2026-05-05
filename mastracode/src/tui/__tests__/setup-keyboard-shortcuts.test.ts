@@ -141,7 +141,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
-  it('queues follow-up input on Enter while the harness is running', () => {
+  it('submits through the editor handler on Enter while the harness is running', () => {
     const { state, editor, actions } = createState(true);
     const queueFollowUpMessage = vi.fn();
 
@@ -155,10 +155,10 @@ describe('setupKeyboardShortcuts', () => {
     expect(followUp).toBeDefined();
 
     expect(followUp?.()).toBe(true);
-    expect(editor.addToHistory).toHaveBeenCalledWith('/help');
-    expect(queueFollowUpMessage).toHaveBeenCalledWith('/help');
-    expect(editor.setText).toHaveBeenCalledWith('');
-    expect(editor.onSubmit).not.toHaveBeenCalled();
+    expect(editor.onSubmit).toHaveBeenCalledWith('/help');
+    expect(queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(editor.addToHistory).not.toHaveBeenCalled();
+    expect(editor.setText).not.toHaveBeenCalled();
   });
 
   it('blocks Enter submissions while the goal judge is evaluating', () => {

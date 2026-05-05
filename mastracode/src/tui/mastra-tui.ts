@@ -46,7 +46,9 @@ import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
+  addPendingUserMessage,
   addUserMessage,
+  removePendingUserMessage,
   renderCompletedTasksInline,
   renderClearedTasksInline,
   renderExistingMessages,
@@ -256,7 +258,23 @@ export class MastraTUI {
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        // Show the user message in the TUI right away — before any async work
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          continue;
+        }
+
+        // Plain text user input is always represented as a signal. If the agent is idle,
+        // sendSignal starts the stream explicitly via its ifIdle stream options.
+        if (!images?.length && content.trim()) {
+          if (this.state.pendingNewThread) {
+            await this.state.harness.createThread();
+            this.state.pendingNewThread = false;
+          }
+          this.signalMessage(content);
+          continue;
+        }
+
+        // Show image/empty user messages in the TUI right away — before any async work
         // (thread creation, hooks, sending) so the UI feels instant even when
         // GC pauses or I/O slow things down.
         const messageId = `user-${Date.now()}`;
@@ -275,18 +293,6 @@ export class MastraTUI {
         });
         this.state.ui.requestRender();
 
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
-          // Hook blocked the message — remove it from the chat
-          const comp = this.state.messageComponentsById.get(messageId);
-          if (comp) {
-            this.state.chatContainer.removeChild(comp as never);
-            this.state.messageComponentsById.delete(messageId);
-            this.state.ui.requestRender();
-          }
-          continue;
-        }
-
         // Create thread lazily on first message (may load last-used model).
         // Runs after the hook check so we don't create a thread for blocked messages.
         if (this.state.pendingNewThread) {
@@ -294,7 +300,7 @@ export class MastraTUI {
           this.state.pendingNewThread = false;
         }
 
-        // Normal send — fire and forget; events handle the rest
+        // Non-signal send — fire and forget; events handle the rest
         this.fireMessage(content, images);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
@@ -309,6 +315,44 @@ export class MastraTUI {
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
     this.state.harness.sendMessage({ content, files }).catch(error => {
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+    });
+  }
+
+  private signalMessage(content: string): void {
+    const harness = this.state.harness as typeof this.state.harness & { isCurrentThreadStreamActive?: () => boolean };
+    const hasActiveRun =
+      typeof harness.isCurrentThreadStreamActive === 'function'
+        ? harness.isCurrentThreadStreamActive()
+        : !!harness.getCurrentRunId();
+    const signal = (
+      this.state.harness as unknown as {
+        sendSignal: (input: { content: string }) => { id: string; accepted: Promise<unknown> };
+      }
+    ).sendSignal({ content });
+
+    if (hasActiveRun) {
+      addPendingUserMessage(this.state, signal.id, content);
+    } else {
+      addUserMessage(this.state, {
+        id: signal.id,
+        role: 'user',
+        content: [{ type: 'text', text: content }],
+        createdAt: new Date(),
+      });
+    }
+
+    signal.accepted.catch((error: unknown) => {
+      if (hasActiveRun) {
+        removePendingUserMessage(this.state, signal.id);
+      } else {
+        const component = this.state.messageComponentsById.get(signal.id);
+        if (component) {
+          this.state.chatContainer.removeChild(component as never);
+          this.state.messageComponentsById.delete(signal.id);
+          this.state.ui.requestRender();
+        }
+      }
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
@@ -691,9 +735,16 @@ export class MastraTUI {
    * If no follow-ups are pending, appends to end.
    */
   private addChildBeforeFollowUps(child: Component): void {
-    if (this.state.followUpComponents.length > 0) {
-      const firstFollowUp = this.state.followUpComponents[0];
-      const idx = this.state.chatContainer.children.indexOf(firstFollowUp as any);
+    const firstPinned = [
+      ...this.state.followUpComponents,
+      ...this.state.pendingSignalMessageComponentsById.values(),
+    ].find(pinned =>
+      this.state.chatContainer.children.includes(('component' in pinned ? pinned.component : pinned) as any),
+    );
+
+    if (firstPinned) {
+      const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
+      const idx = this.state.chatContainer.children.indexOf(component as any);
       if (idx >= 0) {
         (this.state.chatContainer.children as unknown[]).splice(idx, 0, child);
         this.state.chatContainer.invalidate();
@@ -724,7 +775,20 @@ export class MastraTUI {
         this.state.editor.setText('');
 
         if (this.state.harness.isRunning()) {
-          this.queueFollowUpMessage(text);
+          if (text.startsWith('/')) {
+            this.queueFollowUpMessage(text);
+            return;
+          }
+
+          const { content, images } = consumePendingImages(text, this.state.pendingImages);
+          this.state.pendingImages = [];
+          if (images?.length) {
+            this.state.pendingImages = images;
+            this.queueFollowUpMessage(text);
+            return;
+          }
+
+          this.signalMessage(content);
           return;
         }
 

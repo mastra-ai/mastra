@@ -1,3 +1,4 @@
+import { Container } from '@mariozechner/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -7,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../render-messages.js', async importOriginal => {
-  const actual = await importOriginal();
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     addUserMessage: mocks.addUserMessage,
@@ -37,6 +38,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     streamingComponent: undefined,
     streamingMessage: undefined,
     followUpComponents: [],
+    pendingSignalMessageComponentsById: new Map(),
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     pendingSlashCommands: [],
@@ -52,7 +54,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
     allShellComponents: [],
-    ui: { requestRender: vi.fn() } as TUIState['ui'],
+    ui: { requestRender: vi.fn() } as unknown as TUIState['ui'],
     ...overrides,
   } as unknown as TUIState;
 }
@@ -85,7 +87,7 @@ describe('MastraTUI queueing', () => {
     mocks.showError.mockReset();
   });
 
-  it('queues editor submissions instead of resolving input while the harness is running', async () => {
+  it('sends editor submissions as signals instead of resolving input while the harness is running', async () => {
     const editor = {
       onSubmit: undefined as ((text: string) => void) | undefined,
       addToHistory: vi.fn(),
@@ -107,16 +109,19 @@ describe('MastraTUI queueing', () => {
       state: typeof state;
       getUserInput: () => Promise<string>;
       queueFollowUpMessage: (text: string) => void;
+      signalMessage: (text: string) => void;
     };
     tui.state = state;
     tui.queueFollowUpMessage = vi.fn();
+    tui.signalMessage = vi.fn();
 
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('queued follow-up');
 
     expect(editor.addToHistory).toHaveBeenCalledWith('queued follow-up');
     expect(editor.setText).toHaveBeenCalledWith('');
-    expect(tui.queueFollowUpMessage).toHaveBeenCalledWith('queued follow-up');
+    expect(tui.signalMessage).toHaveBeenCalledWith('queued follow-up');
+    expect(tui.queueFollowUpMessage).not.toHaveBeenCalled();
 
     const resolution = await Promise.race([
       pendingInput.then(value => ({ resolved: true as const, value })),
@@ -166,6 +171,67 @@ describe('MastraTUI queueing', () => {
       Promise.resolve({ resolved: false as const, value: undefined }),
     ]);
     expect(resolution).toEqual({ resolved: false, value: undefined });
+  });
+
+  it('keeps signal messages pending after sendSignal accepts until the stream echoes them', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => true,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: true }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage('stay pending');
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'stay pending' });
+    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(mocks.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('renders idle signal messages directly instead of pending them', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-idle-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = createQueueState({
+      harness: {
+        sendSignal,
+        isCurrentThreadStreamActive: () => false,
+        getCurrentRunId: () => null,
+        getDisplayState: () => ({ isRunning: false }),
+      } as unknown as TUIState['harness'],
+      chatContainer: new Container(),
+    });
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      signalMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.signalMessage('render directly');
+    await Promise.resolve();
+
+    expect(sendSignal).toHaveBeenCalledWith({ content: 'render directly' });
+    expect(state.pendingSignalMessageComponentsById.has('signal-idle-1')).toBe(false);
+    expect(state.chatContainer.children).toHaveLength(0);
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-idle-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'render directly' }],
+      createdAt: expect.any(Date),
+    });
   });
 
   it('queues follow-up messages with images in FIFO order metadata', () => {
