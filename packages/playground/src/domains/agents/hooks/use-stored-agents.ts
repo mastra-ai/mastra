@@ -92,13 +92,13 @@ export const useStoredAgentMutations = (agentId?: string) => {
       return client.getStoredAgent(agentId).delete(requestContext);
     },
     onSuccess: () => {
-      // Invalidate lists
+      // Invalidate lists so the agents list page refetches without the deleted entry
       void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       void queryClient.invalidateQueries({ queryKey: ['agents'] });
-      // Invalidate specific agent details
+      // Drop the deleted entity from the cache so active observers don't refetch a 404
       if (agentId) {
-        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        queryClient.removeQueries({ queryKey: ['stored-agent', agentId] });
+        queryClient.removeQueries({ queryKey: ['agent', agentId] });
       }
     },
   });
