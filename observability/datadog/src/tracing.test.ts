@@ -1619,5 +1619,25 @@ describe('DatadogExporter', () => {
 
       expect(mockSubmitEvaluation).not.toHaveBeenCalled();
     });
+
+    it('drops scores when SPAN_ENDED has not yet been processed for the target span', async () => {
+      const span = createMockSpan();
+      // SPAN_STARTED only — the dd-span tree is not flushed until the root SPAN_ENDED fires.
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-early',
+          timestamp: new Date(),
+          traceId: span.traceId,
+          spanId: span.id,
+          scorerId: 'accuracy',
+          score: 0.5,
+        },
+      } as any);
+
+      expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+    });
   });
 });

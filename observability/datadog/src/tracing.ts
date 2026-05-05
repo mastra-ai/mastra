@@ -410,15 +410,23 @@ export class DatadogExporter extends BaseExporter {
 
   /**
    * Submit an eval score to Datadog LLM Observability for the matching ddSpan.
-   * Resolved by Mastra `traceId` + `spanId`; if no matching span context is found
-   * (e.g. score arrives after the trace state has been cleaned up) the event is dropped.
+   *
+   * Ordering constraint: the matching span must have already been emitted to dd-trace
+   * (i.e. its `SPAN_ENDED` event must have been processed and the trace tree flushed).
+   * On Mastra's normal scoring path this is always true — scorer hooks fire after the
+   * scored entity completes, so the root span has ended by the time `onScoreEvent` runs.
+   *
+   * If a score arrives for an unexported span (either before `SPAN_ENDED` or after the
+   * `traceState` entry has been cleaned up), the event is dropped and a warning is logged
+   * so the misuse is observable. Scores must therefore only be submitted for spans whose
+   * lifecycle has completed.
    */
   async onScoreEvent(event: ScoreEvent): Promise<void> {
     if (this.isDisabled || !(tracer as any).llmobs?.submitEvaluation) return;
 
     const { score } = event;
     if (!score.traceId || !score.spanId) {
-      this.logger.debug('Datadog exporter: skipping score with no traceId/spanId', {
+      this.logger.warn('Datadog exporter: dropping score with no traceId/spanId', {
         scorerId: score.scorerId,
       });
       return;
@@ -427,11 +435,15 @@ export class DatadogExporter extends BaseExporter {
     const ctx = this.traceState.get(score.traceId)?.contexts.get(score.spanId);
     const exported = ctx?.exported;
     if (!exported) {
-      this.logger.debug('Datadog exporter: no exported span context for score', {
-        traceId: score.traceId,
-        spanId: score.spanId,
-        scorerId: score.scorerId,
-      });
+      this.logger.warn(
+        'Datadog exporter: dropping score for span that has not been emitted to dd-trace yet ' +
+          '(span_ended must be processed before submitting a score for it)',
+        {
+          traceId: score.traceId,
+          spanId: score.spanId,
+          scorerId: score.scorerId,
+        },
+      );
       return;
     }
 
