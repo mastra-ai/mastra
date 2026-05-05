@@ -1044,6 +1044,7 @@ describe('createLLMMappingStep toModelOutput', () => {
     );
 
     expect(toModelOutputMock).not.toHaveBeenCalled();
+    expect(bail).not.toHaveBeenCalled();
     expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool-invocation',
@@ -1056,6 +1057,10 @@ describe('createLLMMappingStep toModelOutput', () => {
         }),
       }),
     );
+    const deniedPart = (messageList.updateToolInvocation as Mock).mock.calls.find(
+      ([part]) => part.toolInvocation?.toolCallId === 'call-1',
+    )?.[0];
+    expect(deniedPart?.providerMetadata).toBeUndefined();
   });
 
   it('should NOT call toModelOutput for denied tool results in mixed error turns', async () => {
@@ -1102,6 +1107,7 @@ describe('createLLMMappingStep toModelOutput', () => {
     );
 
     expect(toModelOutputMock).not.toHaveBeenCalled();
+    expect(bail).not.toHaveBeenCalled();
     expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool-invocation',
@@ -1109,6 +1115,25 @@ describe('createLLMMappingStep toModelOutput', () => {
           state: 'result',
           toolCallId: 'call-1',
           denied: true,
+        }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: 'call-2',
+          toolName: 'missing_tool',
+        }),
+      }),
+    );
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'result',
+          toolCallId: 'call-2',
+          result: 'Tool not found',
         }),
       }),
     );
