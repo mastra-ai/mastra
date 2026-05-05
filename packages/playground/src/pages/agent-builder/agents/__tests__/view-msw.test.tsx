@@ -157,7 +157,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
     renderPage();
 
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
-    expect(screen.queryByTestId('agent-builder-view-edit')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
     expect(screen.queryByTestId('agent-builder-publish-channel')).toBeNull();
     expect(screen.queryByTestId('agent-builder-visibility-trigger')).toBeNull();
   });

@@ -2,7 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
-import { Navigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
@@ -202,6 +202,11 @@ const AgentBuilderAgentEditReady = ({
 
   const isFreshThread = initialUserMessage !== undefined;
   const canPublishToChannel = isOwner && isPublishable;
+  const navigate = useNavigate();
+
+  const onModeToggle = isOwner
+    ? () => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })
+    : undefined;
 
   return (
     <ConversationPanelProvider
@@ -215,46 +220,80 @@ const AgentBuilderAgentEditReady = ({
       agentId={id}
       canPublishToChannel={canPublishToChannel}
     >
-      <WorkspaceLayout
-        isLoading={false}
-        mode="build"
-        defaultExpanded
-        detailOpen={activeDetail !== null}
-        showConfigure={isOwner}
-        backHref={`/agent-builder/agents/${id}/view`}
-        backTooltip="Back to agent chat"
-        rightAside={
-          <AutosaveIndicator
-            status={autosave.status}
-            lastError={autosave.lastError}
-            onRetry={autosave.retry}
-          />
-        }
-        modeAction={
-          <div className="hidden lg:flex items-center gap-2">
-            {canPublishToChannel && <PublishToChannelButton agentId={id} />}
-            <VisibilitySelectConnected agentId={id} />
-          </div>
-        }
-        mobileExtra={
-          <AgentBuilderMobileMenuConnected
-            agentId={id}
-            showPublishToChannel={canPublishToChannel}
-          />
-        }
-        chat={<ConversationPanelChat />}
-        configure={
-          <ConfigurePanelConnected
-            editable
-            availableAgentTools={availableAgentTools}
-            availableSkills={availableSkills}
-            activeDetail={activeDetail}
-            onActiveDetailChange={setActiveDetail}
-            deleteAction={isOwner ? <DeleteAgentPanelButtonConnected agentId={id} /> : undefined}
-          />
-        }
+      <EditWorkspaceLayoutConnected
+        agentId={id}
+        isOwner={isOwner}
+        canPublishToChannel={canPublishToChannel}
+        autosave={autosave}
+        availableAgentTools={availableAgentTools}
+        availableSkills={availableSkills}
+        activeDetail={activeDetail}
+        onActiveDetailChange={setActiveDetail}
+        onModeToggle={onModeToggle}
       />
     </ConversationPanelProvider>
+  );
+};
+
+interface EditWorkspaceLayoutConnectedProps {
+  agentId: string;
+  isOwner: boolean;
+  canPublishToChannel: boolean;
+  autosave: ReturnType<typeof useAutosaveAgent>;
+  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
+  availableSkills: StoredSkillResponse[];
+  activeDetail: ActiveDetail;
+  onActiveDetailChange: (next: ActiveDetail) => void;
+  onModeToggle: (() => void) | undefined;
+}
+
+const EditWorkspaceLayoutConnected = ({
+  agentId,
+  isOwner,
+  canPublishToChannel,
+  autosave,
+  availableAgentTools,
+  availableSkills,
+  activeDetail,
+  onActiveDetailChange,
+  onModeToggle,
+}: EditWorkspaceLayoutConnectedProps) => {
+  const isRunning = useStreamRunning();
+  return (
+    <WorkspaceLayout
+      isLoading={false}
+      mode="build"
+      defaultExpanded
+      detailOpen={activeDetail !== null}
+      showConfigure={isOwner}
+      backHref={`/agent-builder/agents/${agentId}/view`}
+      backTooltip="Back to agent chat"
+      onModeToggle={onModeToggle}
+      modeToggleDisabled={isRunning}
+      rightAside={
+        <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
+      }
+      modeAction={
+        <div className="hidden lg:flex items-center gap-2">
+          {canPublishToChannel && <PublishToChannelButton agentId={agentId} />}
+          <VisibilitySelectConnected agentId={agentId} />
+        </div>
+      }
+      mobileExtra={
+        <AgentBuilderMobileMenuConnected agentId={agentId} showPublishToChannel={canPublishToChannel} />
+      }
+      chat={<ConversationPanelChat />}
+      configure={
+        <ConfigurePanelConnected
+          editable
+          availableAgentTools={availableAgentTools}
+          availableSkills={availableSkills}
+          activeDetail={activeDetail}
+          onActiveDetailChange={onActiveDetailChange}
+          deleteAction={isOwner ? <DeleteAgentPanelButtonConnected agentId={agentId} /> : undefined}
+        />
+      }
+    />
   );
 };
 

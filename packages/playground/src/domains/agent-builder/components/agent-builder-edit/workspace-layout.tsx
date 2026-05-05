@@ -12,7 +12,10 @@ type ActiveTab = 'chat' | 'configure';
 interface WorkspaceLayoutProps {
   isLoading: boolean;
   mode: WorkspaceMode;
-  creating?: boolean;
+  /** Called when the user clicks the mode badge to switch between Edit and View. */
+  onModeToggle?: () => void;
+  /** Disables the mode-toggle button (e.g. while a stream is running). */
+  modeToggleDisabled?: boolean;
   /** Very-subtle slot rendered first (leftmost) in the right action cluster (e.g. autosave status). */
   rightAside?: ReactNode;
   modeAction?: ReactNode;
@@ -36,7 +39,8 @@ interface WorkspaceLayoutProps {
 export const WorkspaceLayout = ({
   isLoading,
   mode,
-  creating = false,
+  onModeToggle,
+  modeToggleDisabled = false,
   rightAside,
   modeAction,
   primaryAction,
@@ -96,7 +100,8 @@ export const WorkspaceLayout = ({
             className="min-w-0 justify-self-start"
             isLoading={isLoading}
             mode={mode}
-            creating={creating}
+            onModeToggle={onModeToggle}
+            disabled={modeToggleDisabled}
           />
           <div className="justify-self-end flex items-center gap-2 shrink-0">
             {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}

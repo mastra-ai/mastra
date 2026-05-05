@@ -1,6 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, Spinner } from '@mastra/playground-ui';
-import { PencilIcon } from 'lucide-react';
+import { Spinner } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
@@ -172,6 +171,10 @@ const AgentBuilderAgentViewReady = ({
   const features = useBuilderAgentFeatures();
   const hasBrowser = features.browser && storedAgent?.browser != null;
 
+  const onModeToggle = isOwner
+    ? () => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })
+    : undefined;
+
   const content = (
     <AgentChatPanelProvider
       agentId={id}
@@ -179,52 +182,18 @@ const AgentBuilderAgentViewReady = ({
       agentDescription={storedAgent?.description}
       agentAvatarUrl={agent?.avatarUrl}
     >
-      <WorkspaceLayout
-        isLoading={false}
-        mode="test"
-        defaultExpanded={false}
-        detailOpen={activeDetail !== null}
-        showConfigure={isOwner}
-        modeAction={
-          <div className="hidden lg:flex items-center gap-2">
-            {isOwner && isPublishable && <PublishToChannelButton agentId={id} />}
-            {isOwner && <VisibilitySelectIfAuth agentId={id} />}
-          </div>
-        }
-        primaryAction={
-          isOwner ? (
-            <ViewHeaderActions
-              onEdit={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
-            />
-          ) : undefined
-        }
-        mobileExtra={
-          isOwner ? (
-            <AgentBuilderMobileMenu
-              agentId={id}
-              showPublishToChannel={isPublishable}
-              showDelete
-              agentName={storedAgent?.name ?? ''}
-            />
-          ) : undefined
-        }
-        chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
-        configure={
-          <ConfigurePanelConnected
-            editable={false}
-            agent={agent}
-            availableAgentTools={availableAgentTools}
-            availableSkills={availableSkills}
-            activeDetail={activeDetail}
-            onActiveDetailChange={setActiveDetail}
-            deleteAction={
-              isOwner ? (
-                <DeleteAgentPanelButtonConnected agentId={id} agentName={storedAgent?.name ?? ''} />
-              ) : undefined
-            }
-          />
-        }
-        browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
+      <ViewWorkspaceConnected
+        agentId={id}
+        agentName={storedAgent?.name ?? ''}
+        agent={agent}
+        isOwner={isOwner}
+        isPublishable={isPublishable}
+        hasBrowser={hasBrowser}
+        onModeToggle={onModeToggle}
+        availableAgentTools={availableAgentTools}
+        availableSkills={availableSkills}
+        activeDetail={activeDetail}
+        onActiveDetailChange={setActiveDetail}
       />
     </AgentChatPanelProvider>
   );
@@ -240,21 +209,75 @@ const AgentBuilderAgentViewReady = ({
   );
 };
 
-const ViewHeaderActions = ({ onEdit }: { onEdit: () => void }) => {
+interface ViewWorkspaceConnectedProps {
+  agentId: string;
+  agentName: string;
+  agent: ReturnType<typeof storedAgentToAgentConfig>;
+  isOwner: boolean;
+  isPublishable: boolean;
+  hasBrowser: boolean;
+  onModeToggle: (() => void) | undefined;
+  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
+  availableSkills: StoredSkillResponse[];
+  activeDetail: ActiveDetail;
+  onActiveDetailChange: (next: ActiveDetail) => void;
+}
+
+const ViewWorkspaceConnected = ({
+  agentId,
+  agentName,
+  agent,
+  isOwner,
+  isPublishable,
+  hasBrowser,
+  onModeToggle,
+  availableAgentTools,
+  availableSkills,
+  activeDetail,
+  onActiveDetailChange,
+}: ViewWorkspaceConnectedProps) => {
   const isRunning = useStreamRunning();
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        onClick={onEdit}
-        disabled={isRunning}
-        tooltip="Edit agent"
-        data-testid="agent-builder-view-edit"
-      >
-        <PencilIcon />
-      </Button>
-    </div>
+    <WorkspaceLayout
+      isLoading={false}
+      mode="test"
+      defaultExpanded={false}
+      detailOpen={activeDetail !== null}
+      showConfigure={isOwner}
+      onModeToggle={onModeToggle}
+      modeToggleDisabled={isRunning}
+      modeAction={
+        <div className="hidden lg:flex items-center gap-2">
+          {isOwner && isPublishable && <PublishToChannelButton agentId={agentId} />}
+          {isOwner && <VisibilitySelectIfAuth agentId={agentId} />}
+        </div>
+      }
+      mobileExtra={
+        isOwner ? (
+          <AgentBuilderMobileMenu
+            agentId={agentId}
+            showPublishToChannel={isPublishable}
+            showDelete
+            agentName={agentName}
+          />
+        ) : undefined
+      }
+      chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
+      configure={
+        <ConfigurePanelConnected
+          editable={false}
+          agent={agent}
+          availableAgentTools={availableAgentTools}
+          availableSkills={availableSkills}
+          activeDetail={activeDetail}
+          onActiveDetailChange={onActiveDetailChange}
+          deleteAction={
+            isOwner ? <DeleteAgentPanelButtonConnected agentId={agentId} agentName={agentName} /> : undefined
+          }
+        />
+      }
+      browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
+    />
   );
 };
 

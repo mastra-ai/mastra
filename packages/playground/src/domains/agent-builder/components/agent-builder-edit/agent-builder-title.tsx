@@ -1,4 +1,5 @@
-import { Skeleton, StatusBadge } from '@mastra/playground-ui';
+import { IconButton, Skeleton, StatusBadge } from '@mastra/playground-ui';
+import { EyeIcon, PencilIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { WorkspaceMode } from './workspace-layout';
@@ -7,7 +8,8 @@ export interface AgentBuilderTitleProps {
   className?: string;
   isLoading?: boolean;
   mode?: WorkspaceMode;
-  creating?: boolean;
+  onModeToggle?: () => void;
+  disabled?: boolean;
 }
 
 const MODE_BADGE: Record<WorkspaceMode, { label: string; variant: 'success' | 'neutral'; testId: string }> = {
@@ -15,26 +17,22 @@ const MODE_BADGE: Record<WorkspaceMode, { label: string; variant: 'success' | 'n
   test: { label: 'View mode', variant: 'neutral', testId: 'agent-builder-mode-badge-test' },
 };
 
-export const AgentBuilderTitle = ({ className, isLoading = false, mode, creating = false }: AgentBuilderTitleProps) => {
+export const AgentBuilderTitle = ({
+  className,
+  isLoading = false,
+  mode,
+  onModeToggle,
+  disabled = false,
+}: AgentBuilderTitleProps) => {
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' });
 
-  if (creating) {
-    return (
-      <div className={className} data-testid="agent-builder-title">
-        <span
-          aria-current="page"
-          className="block text-ui-md leading-ui-md text-white truncate"
-          data-testid="agent-builder-create-title"
-        >
-          New agent
-        </span>
-      </div>
-    );
-  }
-
   const displayName = name && name.trim() ? name : 'Untitled';
   const badge = mode ? MODE_BADGE[mode] : null;
+  const switchToEdit = mode === 'test';
+  const toggleLabel = switchToEdit ? 'Switch to Edit mode' : 'Switch to View mode';
+  const ToggleIcon = switchToEdit ? PencilIcon : EyeIcon;
+  const showToggle = Boolean(badge && onModeToggle);
 
   return (
     <div className={className} data-testid="agent-builder-title">
@@ -50,6 +48,18 @@ export const AgentBuilderTitle = ({ className, isLoading = false, mode, creating
           <StatusBadge variant={badge.variant} size="sm" data-testid={badge.testId}>
             {badge.label}
           </StatusBadge>
+        )}
+        {showToggle && (
+          <IconButton
+            size="sm"
+            variant="ghost"
+            onClick={onModeToggle}
+            disabled={disabled}
+            tooltip={toggleLabel}
+            data-testid="agent-builder-mode-toggle"
+          >
+            <ToggleIcon />
+          </IconButton>
         )}
       </div>
     </div>
