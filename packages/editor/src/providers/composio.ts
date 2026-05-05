@@ -154,8 +154,8 @@ export class ComposioToolProvider implements ToolProvider {
   ): Promise<Record<string, ToolAction<unknown, unknown>>> {
     if (toolSlugs.length === 0) return {};
 
-    const userId =
-      (options?.requestContext?.[MASTRA_RESOURCE_ID_KEY] as string | undefined) ?? options?.userId ?? 'default';
+    const resourceId = options?.requestContext?.[MASTRA_RESOURCE_ID_KEY];
+    const userId = typeof resourceId === 'string' ? resourceId : (options?.userId ?? 'default');
     const composio = this.getMastraClient();
 
     // composio.tools.get returns MastraToolCollection = Record<string, MastraTool>

@@ -309,8 +309,8 @@ export class ArcadeToolProvider implements ToolProvider {
     if (toolSlugs.length === 0) return {};
 
     const client = this.getClient();
-    const userId =
-      (options?.requestContext?.[MASTRA_RESOURCE_ID_KEY] as string | undefined) ?? options?.userId ?? 'default';
+    const resourceId = options?.requestContext?.[MASTRA_RESOURCE_ID_KEY];
+    const userId = typeof resourceId === 'string' ? resourceId : (options?.userId ?? 'default');
 
     // Fetch tool definitions for the requested slugs
     const toolDefs = await Promise.all(toolSlugs.map(slug => client.tools.get(slug).catch(() => null)));
