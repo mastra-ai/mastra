@@ -10,6 +10,8 @@ import {
   LIST_MCP_SERVER_TOOLS_ROUTE,
   GET_MCP_SERVER_TOOL_DETAIL_ROUTE,
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
+  LIST_MCP_SERVER_RESOURCES_ROUTE,
+  READ_MCP_SERVER_RESOURCE_ROUTE,
 } from './mcp';
 import { createTestServerContext } from './test-utils';
 
@@ -82,6 +84,15 @@ describe('MCP Registry Handlers', () => {
       }),
       executeTool: vi.fn(async (toolId: string, data: unknown) => {
         return { result: 'success', toolId, data };
+      }),
+      listResources: vi.fn(async () => ({
+        resources: [{ uri: 'ui://test/app', name: 'Test App', mimeType: 'text/html;type=mcp-app' }],
+      })),
+      readResource: vi.fn(async (uri: string) => {
+        if (uri === 'ui://test/app') {
+          return { contents: [{ uri, text: '<html><body>Test</body></html>' }] };
+        }
+        throw new Error(`App resource not found: ${uri}`);
       }),
     };
 
@@ -541,6 +552,121 @@ describe('MCP Registry Handlers', () => {
           data: {},
         }),
       ).rejects.toThrow(/cannot execute tools/);
+    });
+  });
+
+  describe('LIST_MCP_SERVER_RESOURCES_ROUTE', () => {
+    it('should return resources for a valid server', async () => {
+      const mastra = {
+        getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
+      } as unknown as Mastra;
+
+      const result = await LIST_MCP_SERVER_RESOURCES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+      });
+
+      expect(result).toEqual({
+        resources: [{ uri: 'ui://test/app', name: 'Test App', mimeType: 'text/html;type=mcp-app' }],
+      });
+      expect(mockMCPServer.listResources).toHaveBeenCalled();
+    });
+
+    it('should throw 404 when server not found', async () => {
+      const mastra = {
+        getMCPServerById: vi.fn(() => undefined),
+      } as unknown as Mastra;
+
+      await expect(
+        LIST_MCP_SERVER_RESOURCES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'nonexistent',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should return empty resources when server does not support listResources', async () => {
+      const serverWithoutResources = {
+        ...mockMCPServer,
+        listResources: undefined,
+      };
+
+      const mastra = {
+        getMCPServerById: vi.fn(() => serverWithoutResources as MCPServerBase),
+      } as unknown as Mastra;
+
+      const result = await LIST_MCP_SERVER_RESOURCES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+      });
+
+      expect(result).toEqual({ resources: [] });
+    });
+  });
+
+  describe('READ_MCP_SERVER_RESOURCE_ROUTE', () => {
+    it('should return resource content for a valid URI', async () => {
+      const mastra = {
+        getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
+      } as unknown as Mastra;
+
+      const result = await READ_MCP_SERVER_RESOURCE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        uri: 'ui://test/app',
+      });
+
+      expect(result).toEqual({
+        contents: [{ uri: 'ui://test/app', text: '<html><body>Test</body></html>' }],
+      });
+      expect(mockMCPServer.readResource).toHaveBeenCalledWith('ui://test/app');
+    });
+
+    it('should throw 404 when server not found', async () => {
+      const mastra = {
+        getMCPServerById: vi.fn(() => undefined),
+      } as unknown as Mastra;
+
+      await expect(
+        READ_MCP_SERVER_RESOURCE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'nonexistent',
+          uri: 'ui://test/app',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw 501 when server does not support readResource', async () => {
+      const serverWithoutResources = {
+        ...mockMCPServer,
+        readResource: undefined,
+      };
+
+      const mastra = {
+        getMCPServerById: vi.fn(() => serverWithoutResources as MCPServerBase),
+      } as unknown as Mastra;
+
+      await expect(
+        READ_MCP_SERVER_RESOURCE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'server1',
+          uri: 'ui://test/app',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw 404 when resource URI is not found', async () => {
+      const mastra = {
+        getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
+      } as unknown as Mastra;
+
+      await expect(
+        READ_MCP_SERVER_RESOURCE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'server1',
+          uri: 'ui://nonexistent/resource',
+        }),
+      ).rejects.toThrow(HTTPException);
     });
   });
 });

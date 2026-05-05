@@ -33,7 +33,7 @@ export const agent = new Agent({
 })
 ```
 
-That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. To use a different model or customize thresholds, pass a config object instead:
+That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. Config objects also use this model unless you set a different one. To use a different model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
@@ -58,7 +58,7 @@ For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
-It uses background agents for managing memory. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
+It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 :::
 
@@ -227,7 +227,7 @@ The progress bars update live while the agent is observing or reflecting, showin
 
 ## Models
 
-The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
+The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 Generally speaking, we recommend using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 

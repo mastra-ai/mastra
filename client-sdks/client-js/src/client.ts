@@ -8,6 +8,10 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
   // Logs
   ListLogsArgs,
   ListLogsResponse,
@@ -719,6 +723,40 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists resources available on an MCP server.
+   * @param serverId - The ID of the MCP server.
+   * @returns Promise containing the list of resources.
+   */
+  public getMcpServerResources(serverId: string): Promise<{
+    resources: Array<{
+      uri: string;
+      name: string;
+      description?: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+    }>;
+  }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources`);
+  }
+
+  /**
+   * Reads the content of a resource from an MCP server.
+   * Used for fetching ui:// MCP App HTML content.
+   * @param serverId - The ID of the MCP server.
+   * @param uri - The resource URI to read.
+   * @returns Promise containing the resource content.
+   */
+  public readMcpServerResource(
+    serverId: string,
+    uri: string,
+  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
+      method: 'POST',
+      body: { uri },
+    });
+  }
+
+  /**
    * Gets an A2A client for interacting with an agent via the A2A protocol
    * @param agentId - ID of the agent to interact with
    * @returns A2A client instance
@@ -950,6 +988,24 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
+   * ones nested under a different root entity. Pairs with {@link getBranch} to expand
+   * a single branch into its subtree.
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    return this.observability.listBranches(params);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span. The optional `depth` field
+   * bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    return this.observability.getBranch(params);
   }
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {

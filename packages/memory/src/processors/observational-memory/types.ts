@@ -1,4 +1,5 @@
 import type { AgentConfig } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ModelByInputTokens } from './model-by-input-tokens';
@@ -869,6 +870,9 @@ export interface ObservationalMemoryConfig {
    * This helps flush prompt-cache-specific memory before switching to a different model.
    */
   activateOnProviderChange?: boolean;
+
+  /** @internal Parent Mastra instance for custom gateway model resolution. */
+  mastra?: Mastra;
 }
 
 /**

@@ -13984,7 +13984,7 @@ describe('MastraInngestWorkflow', () => {
         server: {
           apiRoutes: [
             {
-              path: '/api/inngest',
+              path: '/inngest/api',
               method: 'ALL',
               createHandler: async ({ mastra }) =>
                 inngestServe({
@@ -14018,7 +14018,7 @@ describe('MastraInngestWorkflow', () => {
 
       try {
         // Make a request to the Inngest endpoint to get function introspection
-        const response = await fetch(`http://127.0.0.1:${port}/api/inngest`);
+        const response = await fetch(`http://127.0.0.1:${port}/inngest/api`);
         expect(response.ok).toBe(true);
 
         const introspectionData = await response.json();

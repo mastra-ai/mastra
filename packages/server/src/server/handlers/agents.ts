@@ -1,7 +1,6 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -22,6 +21,7 @@ import { stringify } from 'superjson';
 import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
+import { MastraFGAPermissions } from '../fga-permissions';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -221,6 +221,7 @@ export interface SerializedAgent {
   defaultStreamOptionsLegacy?: Record<string, unknown>;
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
+
   source?: 'code' | 'stored';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;

@@ -265,6 +265,185 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(traces.spans.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('listTraces applies scalar prefilter and tag post-filter correctly', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-scalar-a',
+            spanId: 'root-a',
+            parentSpanId: null,
+            name: 'agent-run',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-a',
+            entityName: 'agentA',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc-a',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['keep'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-02T00:00:00Z'),
+            endedAt: new Date('2026-01-02T00:00:02Z'),
+          },
+          {
+            traceId: 'trace-scalar-b',
+            spanId: 'root-b',
+            parentSpanId: null,
+            name: 'agent-run',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-b',
+            entityName: 'agentB',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'staging',
+            source: null,
+            serviceName: 'svc-b',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['skip'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-02T00:00:05Z'),
+            endedAt: new Date('2026-01-02T00:00:06Z'),
+          },
+        ],
+      });
+
+      // Fast path — scalar-only filter (no post-agg).
+      const byEnv = await storage.listTraces({
+        filters: { environment: 'production', startedAt: { start: new Date('2026-01-02T00:00:00Z') } },
+      });
+      const envTraceIds = byEnv.spans.map(s => s.traceId);
+      expect(envTraceIds).toContain('trace-scalar-a');
+      expect(envTraceIds).not.toContain('trace-scalar-b');
+
+      // Slow path — post-agg tag filter combined with scalar startedAt.
+      const byTag = await storage.listTraces({
+        filters: { tags: ['keep'], startedAt: { start: new Date('2026-01-02T00:00:00Z') } },
+      });
+      const tagTraceIds = byTag.spans.map(s => s.traceId);
+      expect(tagTraceIds).toContain('trace-scalar-a');
+      expect(tagTraceIds).not.toContain('trace-scalar-b');
+    });
+
+    it('listTraces intersects startedAt and endedAt upper bounds on the prefilter', async () => {
+      // Span A starts at 12:00 and ends at 12:01 — fits inside both ranges.
+      // Span B starts at 12:30 (outside startedAt) and ends at 12:35 (inside
+      // endedAt). With a buggy partition that overwrites the prefilter end
+      // bound, span B would leak through; with the intersection fix it stays
+      // out.
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-bound-a',
+            spanId: 'root-a',
+            parentSpanId: null,
+            name: 'within-window',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-a',
+            entityName: 'agentA',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-02-01T12:00:00Z'),
+            endedAt: new Date('2026-02-01T12:01:00Z'),
+          },
+          {
+            traceId: 'trace-bound-b',
+            spanId: 'root-b',
+            parentSpanId: null,
+            name: 'started-after-startedAt-end',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-b',
+            entityName: 'agentB',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-02-01T12:30:00Z'),
+            endedAt: new Date('2026-02-01T12:35:00Z'),
+          },
+        ],
+      });
+
+      const filters = {
+        startedAt: { end: new Date('2026-02-01T12:10:00Z') },
+        endedAt: { end: new Date('2026-02-01T13:00:00Z') },
+      };
+      const tightUpperBound = await storage.listTraces({ filters });
+      const traceIds = tightUpperBound.spans.map(s => s.traceId);
+      expect(traceIds).toContain('trace-bound-a');
+      expect(traceIds).not.toContain('trace-bound-b');
+
+      // Same query with keys reversed — JS `Object.entries` iterates insertion
+      // order, so this exercises the other partition path.
+      const filtersReversed = {
+        endedAt: { end: new Date('2026-02-01T13:00:00Z') },
+        startedAt: { end: new Date('2026-02-01T12:10:00Z') },
+      };
+      const reversed = await storage.listTraces({ filters: filtersReversed });
+      const reversedIds = reversed.spans.map(s => s.traceId);
+      expect(reversedIds).toContain('trace-bound-a');
+      expect(reversedIds).not.toContain('trace-bound-b');
+    });
+
     it('batch deletes traces', async () => {
       await storage.createSpan({
         span: {
@@ -603,6 +782,61 @@ describe('ObservabilityStorageDuckDB', () => {
       const allBranches = await storage.listBranches({ pagination: { perPage: 100 } });
       expect(allBranches.branches.every(b => b.spanType === SpanType.TOOL_CALL)).toBe(true);
       expect(allBranches.branches).toHaveLength(5);
+    });
+
+    it('listBranches applies scalar prefilter and tag post-filter correctly', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'br-scalar-a',
+            spanId: 'agent-a',
+            parentSpanId: 'root-a',
+            name: 'nested-agent',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-a',
+            entityName: 'agentA',
+            environment: 'production',
+            serviceName: 'svc-a',
+            tags: ['keep'],
+            startedAt: new Date('2026-04-03T00:00:00Z'),
+            endedAt: new Date('2026-04-03T00:00:02Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-scalar-b',
+            spanId: 'agent-b',
+            parentSpanId: 'root-b',
+            name: 'nested-agent',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-b',
+            entityName: 'agentB',
+            environment: 'staging',
+            serviceName: 'svc-b',
+            tags: ['skip'],
+            startedAt: new Date('2026-04-03T00:00:05Z'),
+            endedAt: new Date('2026-04-03T00:00:06Z'),
+          },
+        ],
+      });
+
+      // Fast path — scalar-only filter (no post-agg).
+      const byEnv = await storage.listBranches({
+        filters: { environment: 'production', startedAt: { start: new Date('2026-04-03T00:00:00Z') } },
+      });
+      const envSpanIds = byEnv.branches.map(b => b.spanId);
+      expect(envSpanIds).toContain('agent-a');
+      expect(envSpanIds).not.toContain('agent-b');
+
+      // Slow path — post-agg tag filter combined with scalar startedAt.
+      const byTag = await storage.listBranches({
+        filters: { tags: ['keep'], startedAt: { start: new Date('2026-04-03T00:00:00Z') } },
+      });
+      const tagSpanIds = byTag.branches.map(b => b.spanId);
+      expect(tagSpanIds).toContain('agent-a');
+      expect(tagSpanIds).not.toContain('agent-b');
     });
 
     it('getSpans batch-fetches a subset of spans within a trace', async () => {

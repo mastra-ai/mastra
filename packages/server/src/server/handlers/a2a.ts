@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type {
   MessageSendParams,
@@ -6,6 +7,8 @@ import type {
   AgentCard,
   TaskStatus,
   TaskState,
+  Task,
+  Artifact,
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -293,6 +296,108 @@ function extractFinalStructuredObject(value: unknown): Record<string, unknown> |
 
   const objectValue = chunk.payload?.object ?? chunk.object;
   return objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : undefined;
+}
+
+function isTerminalTaskState(state: TaskState) {
+  return ['completed', 'failed', 'canceled'].includes(state);
+}
+
+function artifactIdentity(artifact: Artifact) {
+  return artifact.artifactId || artifact.name;
+}
+
+function areArtifactPartsEqual(left: Artifact['parts'], right: Artifact['parts']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((part, index) => {
+    const other = right[index];
+    if (!other || part.kind !== other.kind) {
+      return false;
+    }
+
+    if (part.kind === 'text' && other.kind === 'text') {
+      return part.text === other.text;
+    }
+
+    return part === other;
+  });
+}
+
+function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefined) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.artifactId === right.artifactId &&
+    left.name === right.name &&
+    left.description === right.description &&
+    left.metadata === right.metadata &&
+    areArtifactPartsEqual(left.parts, right.parts)
+  );
+}
+
+function areStatusMessagePartsEqual(
+  left: NonNullable<Task['status']['message']>['parts'],
+  right: NonNullable<Task['status']['message']>['parts'],
+) {
+  return left === right || isDeepStrictEqual(left, right);
+}
+
+function areStatusMessagesEqual(left: Task['status']['message'], right: Task['status']['message']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.messageId === right.messageId &&
+    left.kind === right.kind &&
+    left.role === right.role &&
+    left.contextId === right.contextId &&
+    left.taskId === right.taskId &&
+    isDeepStrictEqual(left.referenceTaskIds, right.referenceTaskIds) &&
+    isDeepStrictEqual(left.extensions, right.extensions) &&
+    isDeepStrictEqual(left.metadata, right.metadata) &&
+    areStatusMessagePartsEqual(left.parts, right.parts)
+  );
+}
+
+function didTaskStatusChange(previous: Task, next: Task) {
+  return (
+    previous.status.state !== next.status.state ||
+    previous.status.timestamp !== next.status.timestamp ||
+    !areStatusMessagesEqual(previous.status.message, next.status.message)
+  );
+}
+
+function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task }) {
+  const previousArtifacts = new Map((previous.artifacts ?? []).map(artifact => [artifactIdentity(artifact), artifact]));
+  const changedArtifacts = (next.artifacts ?? []).filter(artifact => {
+    const priorArtifact = previousArtifacts.get(artifactIdentity(artifact));
+    return !priorArtifact || !areArtifactsEqual(priorArtifact, artifact);
+  });
+
+  return changedArtifacts.map((artifact, index) => ({
+    kind: 'artifact-update' as const,
+    taskId: next.id,
+    contextId: next.contextId,
+    lastChunk: isTerminalTaskState(next.status.state) && index === changedArtifacts.length - 1,
+    artifact: structuredClone(artifact),
+  }));
 }
 
 export async function handleMessageSend({
@@ -622,30 +727,38 @@ export async function* handleTaskResubscribe({
     throw MastraA2AError.taskNotFound(taskId);
   }
 
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
+  yield createSuccessResponse(requestId, snapshot.task);
+
+  if (isTerminalTaskState(snapshot.task.status.state)) {
+    return;
+  }
 
   while (true) {
     const { task, version } = snapshot;
-    const isFinal = finalStates.includes(task.status.state);
-
-    yield createSuccessResponse(requestId, {
-      kind: 'status-update',
-      taskId: task.id,
-      contextId: task.contextId,
-      status: task.status,
-      final: isFinal,
-    });
-
-    if (isFinal) {
-      return;
-    }
-
     const nextUpdate = await taskStore.waitForNextUpdate({
       agentId,
       taskId,
       afterVersion: version,
       signal: abortSignal,
     });
+
+    for (const artifactUpdate of getTaskArtifactUpdates({ previous: task, next: nextUpdate.task })) {
+      yield createSuccessResponse(requestId, artifactUpdate);
+    }
+
+    if (didTaskStatusChange(task, nextUpdate.task)) {
+      yield createSuccessResponse(requestId, {
+        kind: 'status-update',
+        taskId: nextUpdate.task.id,
+        contextId: nextUpdate.task.contextId,
+        status: nextUpdate.task.status,
+        final: isTerminalTaskState(nextUpdate.task.status.state),
+      });
+    }
+
+    if (isTerminalTaskState(nextUpdate.task.status.state)) {
+      return;
+    }
 
     snapshot = nextUpdate;
   }
