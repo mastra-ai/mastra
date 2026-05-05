@@ -1,7 +1,27 @@
 import type { MastraUIMessage } from '@mastra/react';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
 import { useAutoScroll } from './use-auto-scroll';
+
+/**
+ * Returns true only after `flag` has stayed true for `delayMs` continuously.
+ * If `flag` flips back to false before the delay elapses (e.g. data resolved
+ * locally), nothing is shown — preventing a brief skeleton flash.
+ */
+const useDelayedFlag = (flag: boolean, delayMs: number) => {
+  const [delayed, setDelayed] = useState(false);
+  useEffect(() => {
+    if (!flag) {
+      setDelayed(false);
+      return;
+    }
+    const id = setTimeout(() => setDelayed(true), delayMs);
+    return () => clearTimeout(id);
+  }, [flag, delayMs]);
+  return delayed;
+};
+
+const SKELETON_DELAY_MS = 300;
 
 interface MessageListProps {
   messages: MastraUIMessage[];
@@ -38,11 +58,14 @@ export const MessageList = ({
   agentId,
 }: MessageListProps) => {
   const scrollRef = useAutoScroll(messages);
-  const showSkeleton = isLoading && messages.length === 0;
+  const isLoadingEmpty = isLoading && messages.length === 0;
+  // Defer the skeleton by 300ms so it doesn't flash on fast (local) responses.
+  // If `isLoadingEmpty` flips false before the timer elapses, nothing renders.
+  const showSkeleton = useDelayedFlag(isLoadingEmpty, SKELETON_DELAY_MS);
   const showEmpty = !isLoading && messages.length === 0 && emptyState !== undefined;
   const lastMessage = messages[messages.length - 1];
   const showPending =
-    isRunning && !showSkeleton && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
+    isRunning && !isLoadingEmpty && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
 
   return (
     <div
