@@ -1,5 +1,5 @@
 import { IconButton, Skeleton, StatusBadge } from '@mastra/playground-ui';
-import { EyeIcon, PencilIcon } from 'lucide-react';
+import { RefreshCwIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { WorkspaceMode } from './workspace-layout';
@@ -8,7 +8,9 @@ export interface AgentBuilderTitleProps {
   className?: string;
   isLoading?: boolean;
   mode?: WorkspaceMode;
+  /** Called when the user clicks the mode-toggle button next to the badge. */
   onModeToggle?: () => void;
+  /** Disables the mode-toggle button (e.g. while a stream is running). */
   disabled?: boolean;
 }
 
@@ -29,10 +31,7 @@ export const AgentBuilderTitle = ({
 
   const displayName = name && name.trim() ? name : 'Untitled';
   const badge = mode ? MODE_BADGE[mode] : null;
-  const switchToEdit = mode === 'test';
-  const toggleLabel = switchToEdit ? 'Switch to Edit mode' : 'Switch to View mode';
-  const ToggleIcon = switchToEdit ? PencilIcon : EyeIcon;
-  const showToggle = Boolean(badge && onModeToggle);
+  const toggleLabel = mode === 'test' ? 'Switch to Edit mode' : 'Switch to View mode';
 
   return (
     <div className={className} data-testid="agent-builder-title">
@@ -45,20 +44,26 @@ export const AgentBuilderTitle = ({
           )}
         </span>
         {badge && (
-          <StatusBadge variant={badge.variant} size="sm" data-testid={badge.testId}>
+          <StatusBadge
+            variant={badge.variant}
+            size="lg"
+            className="h-form-sm"
+            data-testid={badge.testId}
+          >
             {badge.label}
           </StatusBadge>
         )}
-        {showToggle && (
+        {mode && onModeToggle && (
           <IconButton
             size="sm"
-            variant="ghost"
+            variant="default"
+            tooltip={toggleLabel}
             onClick={onModeToggle}
             disabled={disabled}
-            tooltip={toggleLabel}
+            className="rounded-full"
             data-testid="agent-builder-mode-toggle"
           >
-            <ToggleIcon />
+            <RefreshCwIcon />
           </IconButton>
         )}
       </div>
