@@ -1,6 +1,7 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import type { ToolBackgroundConfig } from './background-tasks';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
@@ -170,6 +171,9 @@ describe('makeCoreTool', () => {
     requestContext: new RequestContext(),
     tracingContext: {},
   };
+
+  const getCoreToolBackgroundConfig = (tool: ReturnType<typeof makeCoreTool>) =>
+    (tool as unknown as { backgroundConfig?: ToolBackgroundConfig }).backgroundConfig;
 
   it('should convert a Vercel tool correctly', async () => {
     const vercelTool = {
@@ -348,6 +352,78 @@ describe('makeCoreTool', () => {
 
     const coreToolWithoutFlag = makeCoreTool(tool, mockOptions);
     expect((coreToolWithoutFlag as any).requireApproval).toBe(false);
+  });
+
+  it('should accept a createTool wrapper without casting and preserve backgroundConfig from options', () => {
+    const onComplete = vi.fn();
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+
+    const backgroundConfig = {
+      enabled: true,
+      waitTimeoutMs: 250,
+      timeoutMs: 1_000,
+      maxRetries: 2,
+      onComplete,
+    } satisfies ToolBackgroundConfig;
+
+    const coreTool = makeCoreTool(wrapperTool, {
+      ...mockOptions,
+      backgroundConfig,
+    });
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBe(backgroundConfig);
+  });
+
+  it('should prefer ToolOptions.backgroundConfig over conflicting tool-level background metadata', () => {
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+    const toolWithConflictingBackground = Object.assign(wrapperTool, {
+      background: { enabled: false, waitTimeoutMs: 1 },
+      backgroundConfig: { enabled: false, waitTimeoutMs: 2 },
+    } satisfies {
+      background: ToolBackgroundConfig;
+      backgroundConfig: ToolBackgroundConfig;
+    });
+    const optionsBackgroundConfig = { enabled: true, waitTimeoutMs: 500 } satisfies ToolBackgroundConfig;
+
+    const coreTool = makeCoreTool(toolWithConflictingBackground, {
+      ...mockOptions,
+      backgroundConfig: optionsBackgroundConfig,
+    });
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBe(optionsBackgroundConfig);
+  });
+
+  it('should not synthesize backgroundConfig from raw tool background fields when options omit it', () => {
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+    const toolWithRawBackground = Object.assign(wrapperTool, {
+      background: { enabled: true, waitTimeoutMs: 100 },
+      backgroundConfig: { enabled: true, waitTimeoutMs: 200 },
+    } satisfies {
+      background: ToolBackgroundConfig;
+      backgroundConfig: ToolBackgroundConfig;
+    });
+
+    const coreTool = makeCoreTool(toolWithRawBackground, mockOptions);
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBeUndefined();
   });
 });
 

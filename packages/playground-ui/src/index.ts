@@ -64,7 +64,6 @@ export * from './ds/components/Sections';
 // DS Components - Migrated Complex Elements
 export * from './ds/components/DateTimePicker';
 export * from './ds/components/EntryList';
-export * from './ds/components/FormFields';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
@@ -72,6 +71,7 @@ export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SectionCard';
 export * from './ds/components/SelectElement';
+export * from './ds/components/SettingsRow';
 export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';

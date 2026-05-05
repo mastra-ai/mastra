@@ -1,6 +1,6 @@
 {
   "name": "@mastra/temporal",
-  "version": "0.1.1",
+  "version": "0.1.2-alpha.0",
   "description": "Mastra Temporal workflows integration - run Mastra workflows on the Temporal durable execution platform",
   "type": "module",
   "main": "dist/index.js",
@@ -64,7 +64,7 @@
     "rollup": "^4.60.2"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.1.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {

@@ -1,5 +1,17 @@
 # mastra
 
+## 1.8.2-alpha.0
+
+### Patch Changes
+
+- Fixed peer dependency ranges so packages that use the Mastra server require a compatible Mastra core version. ([#16208](https://github.com/mastra-ai/mastra/pull/16208))
+
+- Refactored the Mastra version dialog to use the new CodeBlock component and simplified the package versions copy button to an icon-only button with tooltip. ([#16202](https://github.com/mastra-ai/mastra/pull/16202))
+
+- Updated dependencies [[`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60), [`0011a7e`](https://github.com/mastra-ai/mastra/commit/0011a7e2bba6a4fc97a638c3f4089c0e9308b37c)]:
+  - @mastra/core@1.33.0-alpha.0
+  - @mastra/deployer@1.33.0-alpha.0
+
 ## 1.8.1
 
 ### Patch Changes

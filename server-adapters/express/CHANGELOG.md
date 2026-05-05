@@ -1,5 +1,15 @@
 # @mastra/express
 
+## 1.3.19-alpha.0
+
+### Patch Changes
+
+- Fixed peer dependency ranges so packages that use the Mastra server require a compatible Mastra core version. ([#16208](https://github.com/mastra-ai/mastra/pull/16208))
+
+- Updated dependencies [[`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60), [`aefd33b`](https://github.com/mastra-ai/mastra/commit/aefd33b09f7e192639535df2a36129f40d05c046)]:
+  - @mastra/core@1.33.0-alpha.0
+  - @mastra/server@1.33.0-alpha.0
+
 ## 1.3.18
 
 ### Patch Changes

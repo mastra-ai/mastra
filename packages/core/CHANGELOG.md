@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.33.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60))
+
 ## 1.32.1
 
 ### Patch Changes

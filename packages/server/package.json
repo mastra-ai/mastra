@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.32.1",
+  "version": "1.33.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -102,6 +102,7 @@
     "generate:permissions": "pnpx tsx scripts/generate-permissions.ts",
     "generate:route-types": "pnpx tsx scripts/generate-route-types.ts",
     "check:permissions": "pnpx tsx scripts/check-permissions.ts",
+    "check:core-imports": "pnpx tsx scripts/check-core-imports.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -109,7 +110,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=1.13.2-0 <2.0.0-0",
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
