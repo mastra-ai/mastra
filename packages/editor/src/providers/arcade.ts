@@ -18,6 +18,7 @@ import type {
 } from '@arcadeai/arcadejs/resources';
 import { toZodToolSet, executeOrAuthorizeZodTool } from '@arcadeai/arcadejs/lib/index';
 import type { ZodTool, ToolAuthorizationResponse } from '@arcadeai/arcadejs/lib/index';
+import { getProviderUserId } from './identity';
 
 export interface ArcadeToolProviderConfig {
   /** Arcade AI API key */
@@ -308,7 +309,7 @@ export class ArcadeToolProvider implements ToolProvider {
     if (toolSlugs.length === 0) return {};
 
     const client = this.getClient();
-    const userId = (options?.userId as string) ?? 'default';
+    const userId = getProviderUserId(options);
 
     // Fetch tool definitions for the requested slugs
     const toolDefs = await Promise.all(toolSlugs.map(slug => client.tools.get(slug).catch(() => null)));

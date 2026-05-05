@@ -890,8 +890,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
 
-    const userId = requestContext?.get('userId') as string | undefined;
-    const providerOptions = { requestContext: requestContext?.toJSON(), userId };
+    const providerOptions = { requestContext: requestContext?.toJSON() };
 
     for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
       try {

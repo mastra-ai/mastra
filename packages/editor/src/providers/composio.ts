@@ -14,6 +14,7 @@ import { Composio } from '@composio/core';
 import type { Tool as ComposioTool, ToolKitItem, ToolListParams as ComposioToolListParams } from '@composio/core';
 import { MastraProvider } from '@composio/mastra';
 import type { MastraTool, MastraToolCollection } from '@composio/mastra';
+import { getProviderUserId } from './identity';
 
 export interface ComposioToolProviderConfig {
   /** Composio API key */
@@ -153,7 +154,7 @@ export class ComposioToolProvider implements ToolProvider {
   ): Promise<Record<string, ToolAction<unknown, unknown>>> {
     if (toolSlugs.length === 0) return {};
 
-    const userId = options?.userId ?? 'default';
+    const userId = getProviderUserId(options);
     const composio = this.getMastraClient();
 
     // composio.tools.get returns MastraToolCollection = Record<string, MastraTool>

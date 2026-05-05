@@ -12,11 +12,12 @@ import type {
 } from '@mastra/core/tool-provider';
 import type { StorageToolConfig } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraEditor } from './index';
 import { ComposioToolProvider } from './providers/composio';
 import { ArcadeToolProvider } from './providers/arcade';
+import { getProviderUserId } from './providers/identity';
 
 /**
  * A mock tool provider for tests. Implements the full ToolProvider interface.
@@ -171,7 +172,7 @@ describe('Integration Tools (tool providers)', () => {
           GITHUB_CREATE_ISSUE: {},
           SLACK_SEND_MESSAGE: {},
         }),
-        { requestContext: {}, userId: undefined },
+        { requestContext: {} },
       );
     });
 
@@ -248,7 +249,7 @@ describe('Integration Tools (tool providers)', () => {
       expect(mockProvider.resolveTools).toHaveBeenCalledWith(
         expect.arrayContaining(['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS', 'SLACK_SEND_MESSAGE']),
         {},
-        { requestContext: {}, userId: undefined },
+        { requestContext: {} },
       );
       // All 3 tools should be resolved
       expect(Object.keys(tools).length).toBe(3);
@@ -366,12 +367,12 @@ describe('Integration Tools (tool providers)', () => {
       expect(tools['JIRA_CREATE_TICKET']).toBeDefined();
     });
 
-    it('should forward userId from request context to the tool provider', async () => {
+    it('should forward request context to the tool provider for resource-scoped identity resolution', async () => {
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.create({
         agent: {
-          id: 'agent-userid-forwarding',
-          name: 'UserId Forwarding Agent',
+          id: 'agent-request-context-forwarding',
+          name: 'Request Context Forwarding Agent',
           instructions: 'Test',
           model: { provider: 'openai', name: 'gpt-4' },
           integrationTools: {
@@ -382,12 +383,12 @@ describe('Integration Tools (tool providers)', () => {
         },
       });
 
-      const agent = await editor.agent.getById('agent-userid-forwarding');
+      const agent = await editor.agent.getById('agent-request-context-forwarding');
       expect(agent).toBeInstanceOf(Agent);
 
       await agent!.listTools({
         requestContext: new RequestContext([
-          ['userId', 'user-42'],
+          [MASTRA_RESOURCE_ID_KEY, 'resource-42'],
           ['tier', 'premium'],
         ]),
       });
@@ -396,10 +397,43 @@ describe('Integration Tools (tool providers)', () => {
         expect.arrayContaining(['GITHUB_CREATE_ISSUE']),
         expect.any(Object),
         expect.objectContaining({
-          userId: 'user-42',
-          requestContext: expect.objectContaining({ userId: 'user-42', tier: 'premium' }),
+          requestContext: expect.objectContaining({
+            [MASTRA_RESOURCE_ID_KEY]: 'resource-42',
+            tier: 'premium',
+          }),
         }),
       );
+    });
+  });
+
+  describe('Tool provider identity resolution', () => {
+    it('should prefer Mastra resource identity from request context for provider SDK userId', () => {
+      expect(
+        getProviderUserId({
+          requestContext: {
+            [MASTRA_RESOURCE_ID_KEY]: 'auth-resource',
+            resourceId: 'plain-resource',
+            userId: 'legacy-user',
+          },
+          userId: 'explicit-user',
+        }),
+      ).toBe('auth-resource');
+
+      expect(
+        getProviderUserId({
+          requestContext: {
+            resourceId: 'plain-resource',
+            userId: 'legacy-user',
+          },
+          userId: 'explicit-user',
+        }),
+      ).toBe('plain-resource');
+    });
+
+    it('should keep backwards-compatible userId and default fallbacks', () => {
+      expect(getProviderUserId({ requestContext: { userId: 'legacy-user' } })).toBe('legacy-user');
+      expect(getProviderUserId({ userId: 'explicit-user' })).toBe('explicit-user');
+      expect(getProviderUserId()).toBe('default');
     });
   });
 
