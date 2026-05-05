@@ -207,7 +207,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
             <VisuallyHidden asChild>
               <DialogPrimitive.Description>Primary site navigation drawer</DialogPrimitive.Description>
             </VisuallyHidden>
-            <div onClick={closeOnAnchor} className="flex flex-col h-full px-4 py-2 overflow-y-auto overflow-x-hidden">
+            <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
               {children}
             </div>
           </DialogPrimitive.Content>
@@ -221,7 +221,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   return (
     <div
       className={cn(
-        'sidebar-layout relative shrink-0 self-stretch',
+        'sidebar-layout group/sidebar relative shrink-0 self-stretch min-h-0',
         'w-(--sidebar-width)',
         'transition-[width] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)]',
         'motion-reduce:transition-none',
@@ -233,7 +233,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     >
       <div
         className={cn(
-          'flex flex-col h-full overflow-y-auto overflow-x-hidden',
+          'flex flex-col h-full min-h-0 overflow-hidden',
           'transition-opacity duration-200 motion-reduce:transition-none',
           isCollapsed ? 'px-2' : 'px-4',
           isHidden && 'opacity-0 pointer-events-none px-0',
