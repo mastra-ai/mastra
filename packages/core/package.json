@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.32.0-alpha.1",
+  "version": "1.32.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -717,7 +717,7 @@
     "@isaacs/ttlcache": "^2.1.4",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.18.0",

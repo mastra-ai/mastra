@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -7308,7 +7309,7 @@ describe('Model Requirement', () => {
     ).toThrow('Please bump @mastra/core to a newer version');
   });
 
-  it('should throw when no model is provided at all', () => {
+  it('should use the default model when no model is provided', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -7317,19 +7318,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
-    ).toThrow('Observational Memory requires a model to be set');
-  });
-
-  it('should include docs link in model error', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          observation: { messageTokens: 50000 },
-          reflection: { observationTokens: 20000 },
-        }),
-    ).toThrow('https://mastra.ai/docs/memory/observational-memory#models');
+    ).not.toThrow();
   });
 
   it('should accept a top-level model', () => {
@@ -7386,6 +7375,30 @@ describe('Model Requirement', () => {
           reflection: { observationTokens: 20000 },
         }),
     ).not.toThrow();
+  });
+
+  it('should resolve model: "default" using contextual observation and reflection defaults', () => {
+    const originalObservationModel = OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+    const originalReflectionModel = OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+
+    try {
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model = 'test/observer-default';
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model = 'test/reflector-default';
+
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: 'default',
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).observationConfig.model).toBe('test/observer-default');
+      expect((om as any).reflectionConfig.model).toBe('test/reflector-default');
+    } finally {
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model = originalObservationModel;
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model = originalReflectionModel;
+    }
   });
 
   it('should not allow top-level model with observation.model', () => {

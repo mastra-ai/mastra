@@ -221,6 +221,38 @@ Disconnects from all MCP servers and cleans up resources.
 async disconnect(): Promise<void>
 ```
 
+### `toMCPServerProxies()`
+
+Returns a map of `MCPClientServerProxy` instances, one per configured server. Each proxy wraps the underlying client connection as an `MCPServerBase` instance, allowing external (non-Mastra) MCP servers to be registered in `mcpServers` and appear in Studio.
+
+```typescript prettier:false
+async toMCPServerProxies(): Promise<Record<string, MCPClientServerProxy>>
+```
+
+Spread the result into the `mcpServers` config on `Mastra`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MCPClient } from '@mastra/mcp'
+
+const mcpClient = new MCPClient({
+  servers: {
+    'color-mixer': {
+      command: 'node',
+      args: ['path/to/color-mixer-server.js'],
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  mcpServers: {
+    ...(await mcpClient.toMCPServerProxies()),
+  },
+})
+```
+
+This is useful for connecting external MCP servers that implement the MCP Apps extension or other features to Studio without wrapping them in a Mastra `MCPServer`.
+
 ### `resources` Property
 
 The `MCPClient` instance has a `resources` property that provides access to resource-related operations.
