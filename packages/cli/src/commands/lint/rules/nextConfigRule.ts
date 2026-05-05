@@ -1,16 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse } from 'acorn';
-import type {
-  ArrayExpression,
-  AssignmentExpression,
-  Expression,
-  Identifier,
-  Literal,
-  ObjectExpression,
-  Program,
-  Property,
-} from 'acorn';
+import { parse } from '@babel/parser';
+import * as t from '@babel/types';
 import { logger } from '../../../utils/logger.js';
 import type { LintContext, LintRule } from './types.js';
 
@@ -18,55 +9,39 @@ interface NextConfig {
   serverExternalPackages?: string[];
 }
 
-function isIdentifier(node: unknown): node is Identifier {
-  return typeof node === 'object' && node !== null && 'type' in node && node.type === 'Identifier';
-}
-
-function isLiteral(node: unknown): node is Literal {
-  return typeof node === 'object' && node !== null && 'type' in node && node.type === 'Literal';
-}
-
-function isObjectExpression(node: unknown): node is ObjectExpression {
-  return typeof node === 'object' && node !== null && 'type' in node && node.type === 'ObjectExpression';
-}
-
-function isArrayExpression(node: unknown): node is ArrayExpression {
-  return typeof node === 'object' && node !== null && 'type' in node && node.type === 'ArrayExpression';
-}
-
-function unwrapExpression(expression: Expression): Expression {
-  if (expression.type === 'ParenthesizedExpression') {
+function unwrapExpression(expression: t.Expression): t.Expression {
+  if (t.isParenthesizedExpression(expression)) {
     return unwrapExpression(expression.expression);
   }
 
   return expression;
 }
 
-function getPropertyName(property: Property): string | null {
+function getPropertyName(property: t.ObjectProperty): string | null {
   if (property.computed) {
     return null;
   }
 
-  if (isIdentifier(property.key)) {
+  if (t.isIdentifier(property.key)) {
     return property.key.name;
   }
 
-  if (isLiteral(property.key) && typeof property.key.value === 'string') {
+  if (t.isStringLiteral(property.key)) {
     return property.key.value;
   }
 
   return null;
 }
 
-function readStringArray(expression: Expression): string[] | null {
+function readStringArray(expression: t.Expression): string[] | null {
   const arrayExpression = unwrapExpression(expression);
-  if (!isArrayExpression(arrayExpression)) {
+  if (!t.isArrayExpression(arrayExpression)) {
     return null;
   }
 
   const values: string[] = [];
   for (const element of arrayExpression.elements) {
-    if (!isLiteral(element) || typeof element.value !== 'string') {
+    if (!t.isStringLiteral(element)) {
       return null;
     }
 
@@ -76,9 +51,9 @@ function readStringArray(expression: Expression): string[] | null {
   return values;
 }
 
-function readServerExternalPackages(config: ObjectExpression): string[] | undefined {
+function readServerExternalPackages(config: t.ObjectExpression): string[] | undefined {
   for (const property of config.properties) {
-    if (property.type !== 'Property' || property.kind !== 'init' || property.method) {
+    if (!t.isObjectProperty(property) || !t.isExpression(property.value)) {
       continue;
     }
 
@@ -92,31 +67,28 @@ function readServerExternalPackages(config: ObjectExpression): string[] | undefi
   return undefined;
 }
 
-function parseProgram(nextConfigContent: string): Program {
-  const options = { ecmaVersion: 'latest' as const, allowHashBang: true };
-
-  try {
-    return parse(nextConfigContent, { ...options, sourceType: 'module' }) as Program;
-  } catch {
-    return parse(nextConfigContent, { ...options, sourceType: 'script' }) as Program;
-  }
+function parseProgram(nextConfigContent: string): t.Program {
+  return parse(nextConfigContent, {
+    sourceType: 'unambiguous',
+    plugins: ['typescript', 'jsx', 'importAttributes'],
+  }).program;
 }
 
-function collectNextConfigVariables(program: Program): Map<string, ObjectExpression> {
-  const variables = new Map<string, ObjectExpression>();
+function collectNextConfigVariables(program: t.Program): Map<string, t.ObjectExpression> {
+  const variables = new Map<string, t.ObjectExpression>();
 
   for (const node of program.body) {
-    if (node.type !== 'VariableDeclaration') {
+    if (!t.isVariableDeclaration(node)) {
       continue;
     }
 
     for (const declaration of node.declarations) {
-      if (!isIdentifier(declaration.id) || !declaration.init) {
+      if (!t.isIdentifier(declaration.id) || !declaration.init) {
         continue;
       }
 
       const initializer = unwrapExpression(declaration.init);
-      if (isObjectExpression(initializer)) {
+      if (t.isObjectExpression(initializer)) {
         variables.set(declaration.id.name, initializer);
       }
     }
@@ -126,39 +98,39 @@ function collectNextConfigVariables(program: Program): Map<string, ObjectExpress
 }
 
 function resolveObjectExpression(
-  expression: Expression,
-  variables: Map<string, ObjectExpression>,
-): ObjectExpression | null {
+  expression: t.Expression,
+  variables: Map<string, t.ObjectExpression>,
+): t.ObjectExpression | null {
   const unwrappedExpression = unwrapExpression(expression);
 
-  if (isObjectExpression(unwrappedExpression)) {
+  if (t.isObjectExpression(unwrappedExpression)) {
     return unwrappedExpression;
   }
 
-  if (isIdentifier(unwrappedExpression)) {
+  if (t.isIdentifier(unwrappedExpression)) {
     return variables.get(unwrappedExpression.name) ?? null;
   }
 
   return null;
 }
 
-function isModuleExportsAssignment(expression: Expression): expression is AssignmentExpression {
-  if (expression.type !== 'AssignmentExpression' || expression.operator !== '=') {
+function isModuleExportsAssignment(expression: t.Expression): expression is t.AssignmentExpression {
+  if (!t.isAssignmentExpression(expression) || expression.operator !== '=') {
     return false;
   }
 
   const { left } = expression;
   return (
-    left.type === 'MemberExpression' &&
+    t.isMemberExpression(left) &&
     !left.computed &&
-    isIdentifier(left.object) &&
+    t.isIdentifier(left.object) &&
     left.object.name === 'module' &&
-    isIdentifier(left.property) &&
+    t.isIdentifier(left.property) &&
     left.property.name === 'exports'
   );
 }
 
-function findNextConfigObject(program: Program): ObjectExpression | null {
+function findNextConfigObject(program: t.Program): t.ObjectExpression | null {
   const nextConfigVariables = collectNextConfigVariables(program);
   const namedNextConfig = nextConfigVariables.get('nextConfig');
   if (namedNextConfig) {
@@ -166,18 +138,14 @@ function findNextConfigObject(program: Program): ObjectExpression | null {
   }
 
   for (const node of program.body) {
-    if (node.type === 'ExpressionStatement' && isModuleExportsAssignment(node.expression)) {
+    if (t.isExpressionStatement(node) && isModuleExportsAssignment(node.expression)) {
       const moduleExportsConfig = resolveObjectExpression(node.expression.right, nextConfigVariables);
       if (moduleExportsConfig) {
         return moduleExportsConfig;
       }
     }
 
-    if (
-      node.type === 'ExportDefaultDeclaration' &&
-      node.declaration.type !== 'FunctionDeclaration' &&
-      node.declaration.type !== 'ClassDeclaration'
-    ) {
+    if (t.isExportDefaultDeclaration(node) && t.isExpression(node.declaration)) {
       const exportedConfig = resolveObjectExpression(node.declaration, nextConfigVariables);
       if (exportedConfig) {
         return exportedConfig;
