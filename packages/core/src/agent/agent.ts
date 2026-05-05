@@ -5933,6 +5933,14 @@ export class Agent<
     return this.#getThreadStreamRuntime().subscribeToThread<OUTPUT>(this as Agent<any, any, any, any>, options);
   }
 
+  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+    return this.#getThreadStreamRuntime().abortThread(options);
+  }
+
+  abortRunStream(runId: string): boolean {
+    return this.#getThreadStreamRuntime().abortRun(runId);
+  }
+
   sendSignal<OUTPUT = TOutput>(
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
@@ -6301,9 +6309,12 @@ export class Agent<
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
+      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+    );
 
     const result = await this.#execute({
-      ...mergedStreamOptions,
+      ...preparedOptions,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
             ...mergedStreamOptions.structuredOutput,
@@ -6339,6 +6350,12 @@ export class Agent<
         text: 'An unknown error occurred while streaming',
       });
     }
+
+    this.#getThreadStreamRuntime().registerRun(
+      this as Agent<any, any, any, any>,
+      result.result as unknown as MastraModelOutput<OUTPUT>,
+      preparedOptions as AgentExecutionOptions<OUTPUT>,
+    );
 
     return result.result as unknown as MastraModelOutput<OUTPUT>;
   }

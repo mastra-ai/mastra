@@ -103,7 +103,7 @@ describe('Agent signals', () => {
 
     expect(reminderSignal.toLLMMessage()).toEqual([
       {
-        role: 'system',
+        role: 'user',
         content:
           '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
       },
@@ -120,6 +120,29 @@ describe('Agent signals', () => {
       enabled: true,
       ignored: null,
     });
+
+    const fileContents = {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: 'Review this file' },
+        {
+          type: 'file' as const,
+          data: 'data:text/plain;base64,aGVsbG8=',
+          mediaType: 'text/plain',
+          filename: 'note.txt',
+        },
+      ],
+    };
+    const fileSignal = createSignal({
+      id: 'signal-3',
+      type: 'user-message',
+      contents: fileContents,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    expect(fileSignal.toLLMMessage()).toEqual(fileContents);
+    expect(fileSignal.toDataPart().data.contents).toEqual(fileContents);
+    expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
   });
 
   it('subscribes to a future thread run', async () => {
@@ -748,7 +771,7 @@ describe('Agent signals', () => {
     );
   });
 
-  it('starts an idle thread run with a system-reminder signal as a system prompt message', async () => {
+  it('starts an idle thread run with a system-reminder signal as user-role XML context', async () => {
     let capturedPrompt: any[] | undefined;
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
@@ -789,12 +812,17 @@ describe('Agent signals', () => {
     );
 
     expect(stream.accepted).toBe(true);
-    await nextTick();
+    for (let i = 0; i < 10 && !capturedPrompt; i++) {
+      await nextTick();
+    }
     expect(
       capturedPrompt?.some(
         message =>
-          message.role === 'system' &&
-          message.content === '<system-reminder reminderType="test-reminder">continue</system-reminder>',
+          message.role === 'user' &&
+          Array.isArray(message.content) &&
+          message.content.some(
+            (part: any) => part.text === '<system-reminder reminderType="test-reminder">continue</system-reminder>',
+          ),
       ),
     ).toBe(true);
   });

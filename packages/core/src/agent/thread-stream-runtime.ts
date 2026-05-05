@@ -227,7 +227,7 @@ export class AgentThreadStreamRuntime {
       const runId = this.#activeThreadRunIds.get(key);
       if (!runId) return null;
       const record = this.#threadRunsById.get(runId);
-      if (!record) return runId;
+      if (!record) return null;
       return record.output.status === 'running' ? runId : null;
     };
 
