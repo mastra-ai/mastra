@@ -1,8 +1,6 @@
 import { Breadcrumb, Crumb, Icon, Skeleton } from '@mastra/playground-ui';
 import { MessageCircleIcon, SlidersHorizontalIcon } from 'lucide-react';
-import type { ComponentProps } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { Link } from 'react-router';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { WorkspaceMode } from './workspace-layout';
 
@@ -25,8 +23,6 @@ const MODE_META: Record<WorkspaceMode, { label: string; Icon: typeof MessageCirc
     iconTestId: 'agent-builder-mode-icon-test',
   },
 };
-
-const AgentsLink = (props: ComponentProps<typeof Link>) => <Link {...props} viewTransition />;
 
 export const AgentBuilderBreadcrumb = ({
   className,
@@ -72,9 +68,6 @@ export const AgentBuilderBreadcrumb = ({
       </span>
       <div className="hidden lg:block" data-testid="agent-builder-breadcrumb-desktop">
         <Breadcrumb label="Agent builder">
-          <Crumb as={AgentsLink} to="/agent-builder/agents">
-            Agents
-          </Crumb>
           <Crumb as="span" isCurrent={!mode}>
             {isLoading ? (
               <Skeleton
