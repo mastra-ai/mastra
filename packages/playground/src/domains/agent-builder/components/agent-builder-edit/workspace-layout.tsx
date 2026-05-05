@@ -3,7 +3,7 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { AgentBuilderBreadcrumb } from './agent-builder-breadcrumb';
+import { AgentBuilderTitle } from './agent-builder-title';
 
 export type WorkspaceMode = 'build' | 'test';
 
@@ -89,7 +89,7 @@ export const WorkspaceLayout = ({
               <ArrowLeftIcon />
             </Button>
           </div>
-          <AgentBuilderBreadcrumb
+          <AgentBuilderTitle
             className="min-w-0 justify-self-start"
             isLoading={isLoading}
             mode={mode}
