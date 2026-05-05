@@ -284,7 +284,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
-          requestContext,
         );
         fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
       }

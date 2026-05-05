@@ -407,31 +407,16 @@ describe('Integration Tools (tool providers)', () => {
   });
 
   describe('Tool provider identity resolution', () => {
-    it('should prefer Mastra resource identity from request context for provider SDK userId', () => {
+    it('should prefer Mastra resource identity from request context over options.userId', () => {
       expect(
         getProviderUserId({
-          requestContext: {
-            [MASTRA_RESOURCE_ID_KEY]: 'auth-resource',
-            resourceId: 'plain-resource',
-            userId: 'legacy-user',
-          },
+          requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'auth-resource' },
           userId: 'explicit-user',
         }),
       ).toBe('auth-resource');
-
-      expect(
-        getProviderUserId({
-          requestContext: {
-            resourceId: 'plain-resource',
-            userId: 'legacy-user',
-          },
-          userId: 'explicit-user',
-        }),
-      ).toBe('plain-resource');
     });
 
-    it('should keep backwards-compatible userId and default fallbacks', () => {
-      expect(getProviderUserId({ requestContext: { userId: 'legacy-user' } })).toBe('legacy-user');
+    it('should fall back to options.userId, then "default"', () => {
       expect(getProviderUserId({ userId: 'explicit-user' })).toBe('explicit-user');
       expect(getProviderUserId()).toBe('default');
     });
