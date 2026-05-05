@@ -383,7 +383,7 @@ describe('fetchWithRetry', () => {
     vi.unstubAllGlobals();
   });
 
-  it('should use exponential backoff delays capped at 10 seconds', async () => {
+  function mockRetryDelays() {
     const delays: number[] = [];
 
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
@@ -395,6 +395,104 @@ describe('fetchWithRetry', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as typeof setTimeout);
 
+    return delays;
+  }
+
+  it('should return a successful response without retrying', async () => {
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', { method: 'POST' }, 3)).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith('https://example.com', { method: 'POST' });
+  });
+
+  it('should retry a failed response and return a later success', async () => {
+    const delays = mockRetryDelays();
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('error', { status: 500, statusText: 'Server Error' }))
+      .mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should retry network failures until retries are exhausted', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).rejects.toThrow('Network error');
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(delays).toEqual([2000, 4000]);
+  });
+
+  it.each([404, 408, 429])('should preserve public retry behavior for %s responses by default', async status => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockResolvedValue(new Response('error', { status }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com/missing', {}, 2)).rejects.toThrow(`status: ${status}`);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should not retry a response when shouldRetryResponse returns false', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockResolvedValue(new Response('not found', { status: 404, statusText: 'Not Found' }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      fetchWithRetry('https://example.com/missing', {}, 3, {
+        shouldRetryResponse: response => response.status >= 500,
+      }),
+    ).rejects.toThrow('status: 404 Not Found');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([]);
+  });
+
+  it('should retry network errors even when the error message contains a 4xx status', async () => {
+    const delays = mockRetryDelays();
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi.fn().mockRejectedValueOnce(new Error('upstream status: 404')).mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      fetchWithRetry('https://example.com/transient', {}, 3, {
+        shouldRetryResponse: response => response.status >= 500,
+      }),
+    ).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should throw the last response error after exhausting retries', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('first', { status: 500, statusText: 'First Error' }))
+      .mockResolvedValueOnce(new Response('second', { status: 503, statusText: 'Second Error' }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com/flaky', {}, 2)).rejects.toThrow('status: 503 Second Error');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should use exponential backoff delays capped at 10 seconds', async () => {
+    const delays = mockRetryDelays();
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
     vi.stubGlobal('fetch', mockFetch);
 
