@@ -12,7 +12,7 @@ export interface BadgeProps {
 }
 
 const variantClasses = {
-  default: 'text-neutral3 bg-surface4 border-border1',
+  default: 'text-neutral5 bg-surface4 border-border1',
   success: 'text-notice-success-fg bg-notice-success/20 border-notice-success/20',
   error: 'text-notice-destructive-fg bg-notice-destructive/20 border-notice-destructive/20',
   info: 'text-notice-info-fg bg-notice-info/20 border-notice-info/20',
@@ -26,7 +26,7 @@ export const Badge = ({ icon, variant = 'default', className, children, ...props
         'font-mono text-ui-sm gap-1 h-badge-default inline-flex items-center rounded-full border shrink-0',
         transitions.colors,
         icon ? 'pl-2 pr-2.5' : 'px-2.5',
-        variant === 'default' && icon ? 'bg-surface4 text-neutral5 border-border1' : variantClasses[variant],
+        variantClasses[variant],
         className,
       )}
       {...props}
