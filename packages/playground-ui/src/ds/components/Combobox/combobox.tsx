@@ -2,7 +2,8 @@ import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import { comboboxStyles } from './combobox-styles';
-import { formElementSizes, type FormElementSize } from '@/ds/primitives/form-element';
+import { formElementSizes } from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {

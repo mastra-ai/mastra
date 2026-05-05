@@ -55,9 +55,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
             <span className="flex h-[1lh] shrink-0 items-center [&>svg]:size-4">{resolvedIcon}</span>
             {children && <div className="flex-1">{children}</div>}
           </div>
-          {action && (
-            <div className="@md:-my-1 [&>button]:w-full @md:[&>button]:w-auto">{action}</div>
-          )}
+          {action && <div className="@md:-my-1 [&>button]:w-full @md:[&>button]:w-auto">{action}</div>}
         </div>
       </div>
     );

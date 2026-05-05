@@ -3,7 +3,8 @@ import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
 import type { ButtonProps } from '../Button';
-import { formElementSizes, type FormElementSize } from '@/ds/primitives/form-element';
+import { formElementSizes } from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
