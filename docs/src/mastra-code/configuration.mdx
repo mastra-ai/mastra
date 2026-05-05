@@ -363,3 +363,19 @@ Resource IDs determine how threads are grouped. By default, Mastra Code generate
 ```
 
 You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.
+
+## Telemetry
+
+By default, Mastra Code collects anonymous product analytics about how the TUI is used. Each event includes your OS, Mastra Code version, Node.js version, CPU architecture, and a hostname-derived distinct ID. Tracked events cover session start, prompt submission, thread and model changes, slash command usage, and interactive prompts. Prompt text, message content, file paths, and tool inputs are not collected. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/mastracode/src/analytics.ts) to check what's collected.
+
+You can opt out of analytics by setting an environment variable:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+You can also set this when launching Mastra Code:
+
+```sh npm2yarn
+MASTRA_TELEMETRY_DISABLED=1 npx mastracode
+```
