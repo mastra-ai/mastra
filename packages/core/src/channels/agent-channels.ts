@@ -1100,10 +1100,14 @@ export class AgentChannels {
     };
 
     // Stream the agent response.
+    // Use streamUntilIdle so the channel waits for all background tasks
+    // launched via agent.backgroundTask() to complete before closing the
+    // stream. Without this, background tasks are abandoned as soon as the
+    // first turn's text chunks are flushed (see #16163).
 
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
-    const stream = await agent.stream(streamInput, {
+    const stream = await agent.streamUntilIdle(streamInput, {
       requestContext,
       memory: {
         thread: mastraThread,
