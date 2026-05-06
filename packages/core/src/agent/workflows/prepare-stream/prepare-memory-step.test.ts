@@ -93,6 +93,10 @@ describe('createPrepareMemoryStep — threadExists flag (#16216)', () => {
     const step = buildStep(memory, 't-merge');
     const stepResult = (await step.execute({} as any)) as any;
 
+    // Root-cause assertion: localizes a regression to the flag itself rather
+    // than the downstream metadata effect.
+    expect(stepResult.threadExists).toBe(true);
+
     // 2) A processor writes metadata mid-run via the merging updateThread API.
     await memoryStore!.updateThread({
       id: 't-merge',
