@@ -290,6 +290,12 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
   responseModel?: string;
   /** Unique identifier for the response */
   responseId?: string;
+  /** Model parameters sent on the request (temperature, maxOutputTokens, topP, etc.) */
+  parameters?: Record<string, unknown>;
+  /** Provider-specific options forwarded on the request */
+  providerOptions?: Record<string, unknown>;
+  /** Names of tools made available to the model on this inference call */
+  availableTools?: string[];
 }
 
 /**
