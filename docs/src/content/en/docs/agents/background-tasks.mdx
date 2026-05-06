@@ -259,7 +259,8 @@ export const reviewTool = createTool({
   inputSchema: z.object({ draft: z.string() }),
   outputSchema: z.object({ approvedBy: z.string(), edits: z.string().optional() }),
   background: { enabled: true },
-  execute: async ({ draft }, { suspend, resumeData }) => {
+  execute: async ({ draft }, context) => {
+    const { suspend, resumeData } = context.agent
     if (!resumeData) {
       await suspend?.({ awaiting: 'approval', draft })
       return { approvedBy: '', edits: undefined }
@@ -281,13 +282,9 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 })
 ```
 
-:::note
-Suspending requires `engine: 'workflow'` on the manager (the default). Calling `resume()` with `engine: 'legacy'` throws.
-:::
-
 ### What happens to the agent loop
 
-When a task suspends mid-`streamUntilIdle()`, the loop treats it as terminal for the current iteration and the response ends. The eventual completion (post-resume) writes its tool result into the message list, so the next user turn picks up where it left off.
+When a task suspends mid-`streamUntilIdle()`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStreamUntilIdle(resumeData, { runId, toolCallId, memory })`: the resumed bg task runs to completion, its result lands in the message list, and the agent runs a follow-up turn — all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
 
 ### Re-registering the executor on resume
 

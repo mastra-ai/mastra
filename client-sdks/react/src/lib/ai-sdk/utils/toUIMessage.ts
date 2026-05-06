@@ -733,7 +733,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'background-task-suspended': {
       const isBgTaskEvent = chunk.type === 'background-task-suspended';
 
-      const location = locateToolPart(result, chunk.payload.toolCallId, isBgTaskEvent);
+      const location = isBgTaskEvent
+        ? locateToolPart(result, chunk.payload.toolCallId, isBgTaskEvent)
+        : { messageIndex: result.length - 1 };
       if (!location) return result;
       const { messageIndex } = location;
       const targetMessage = result[messageIndex];

@@ -13,12 +13,11 @@ const outputSchema = z.object({ result: z.unknown() });
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
- * Builds the per-task evented workflow that owns executor + retries when the
- * manager is configured with `engine: 'workflow'`.
+ * Builds the per-task evented workflow that owns executor + retries.
  *
  * Single step (`execute`) with an in-body for-loop for retries. We had a go
  * at decomposing into `[execute, handle-result]` steps in a `dountil` loop,
- * but the evented engine's nested-workflow-as-loop-body path doesn't
+ * but the evented runtime's nested-workflow-as-loop-body path doesn't
  * re-evaluate the predicate cleanly when the body completes (the only loop
  * predicate evaluation lives in `processWorkflowStepRun`, and that branch
  * returns early when the body is itself a workflow). Until that gap is
@@ -75,7 +74,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // In-step retry loop. We don't use `step.retries` because it's a static
       // workflow-definition value but `task.maxRetries` is per-task. The
       // engine-level retry features (backoff, retryableErrors predicate) are
-      // intentionally dropped in v1 of the workflow engine path.
+      // intentionally dropped in v1.
       //
       // Seed `attempt` from `task.retryCount` so retries are durable across
       // suspend/resume — the workflow runtime restarts the step from the top
@@ -139,7 +138,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
             return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
           }
 
-          // Success path — same ordering as legacy handleDispatch: persist
+          // Success path: persist
           // completed, run hooks, then publish terminal pubsub.
           const currentTask = await storage.getTask(taskId);
           if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {

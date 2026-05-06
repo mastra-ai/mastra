@@ -1988,12 +1988,6 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
@@ -2010,6 +2004,18 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         ...rest
       } = params;
 
+      // Honor body-scoped `requestContext.agentVersionId` so callers
+      // resuming a suspended draft / versioned agent get the right one.
+      // Mirrors RESUME_STREAM_ROUTE.
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
+
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
           if (serverRequestContext.get(key) === undefined) {
@@ -2025,11 +2031,23 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-      if (effectiveThreadId && effectiveResourceId) {
+      // Use the same FGA-aware ownership gate as RESUME_STREAM_ROUTE — the
+      // older `validateThreadOwnership` only compared resource ids and
+      // skipped the FGA check entirely when either id was missing.
+      if (effectiveThreadId) {
         const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
         if (memoryInstance) {
           const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext: serverRequestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+          }
         }
       }
 

@@ -104,7 +104,6 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
         toolCallId: payload.toolCallId as string,
         toolName: payload.toolName as string,
         isSuspended: !!payload.suspendedAt,
-        suspendPayload: payload.suspendPayload as unknown,
       };
     })
     .filter(e => !!e.toolCallId);
@@ -114,9 +113,13 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
     .map(e => `${e.toolCallId} (${e.toolName})`)
     .join(', ');
 
+  // Suspend payloads are tool-controlled and may carry secrets, PII, or
+  // large opaque blobs — never serialize them into the continuation
+  // prompt. Just name the suspended tool-call IDs; the agent already has
+  // the full chunk via `streamUntilIdle().fullStream` if it needs more.
   const suspendedIdList = entries
     .filter(e => e.isSuspended)
-    .map(e => `${e.toolCallId} (${e.toolName}); suspendPayload: ${JSON.stringify(e.suspendPayload)}`)
+    .map(e => `${e.toolCallId} (${e.toolName})`)
     .join(', ');
 
   return (
@@ -125,8 +128,7 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
     `Use these result(s) to answer the user's original question.` +
-    `IMPORTANT: The following tool-call IDs were suspended (their suspendPayload is provided): ${suspendedIdList}, do not attempt to resume them, let the user know that they are suspended, ` +
-    `the user will decide when to resume them.`
+    `IMPORTANT: The following tool-call IDs are suspended: ${suspendedIdList}. Do not attempt to resume them; let the user know they are waiting for explicit resume input.`
   );
 }
 
@@ -240,7 +242,12 @@ async function runWithIdleWrapper<OUTPUT>(
   // in-process path each terminal event arrives once per subscriber, but
   // this guard also absorbs pathological cases where a completion is
   // redelivered while a continuation is still running.
-  const processedCompletionIds = new Set<string>();
+  // Keyed by `${taskId}:${chunkType}` so a task that suspends + later
+  // resumes + completes doesn't see its `background-task-completed`
+  // dropped as a "duplicate" of the earlier `background-task-suspended`
+  // (both are terminal-for-this-iteration and would collide on bare
+  // taskId).
+  const processedTerminalKeys = new Set<string>();
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -337,7 +344,8 @@ async function runWithIdleWrapper<OUTPUT>(
       // filters it out rather than queueing another continuation.
       for (const chunk of batch) {
         const tid = (chunk as { payload?: { taskId?: string } }).payload?.taskId;
-        if (tid) processedCompletionIds.add(tid);
+        const ctype = (chunk as { type?: string }).type;
+        if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
       const inner = await (agent.stream as any)([], continuationOpts);
@@ -400,11 +408,13 @@ async function runWithIdleWrapper<OUTPUT>(
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
-        // Dedup guard: skip terminal events for tasks already handled on
-        // a prior continuation (or about to be). Dropping both the
-        // forward AND the state update so duplicates don't double-render
-        // on the UI and don't queue redundant continuation turns.
-        if (taskId && TERMINAL_BG_CHUNKS.has(chunk.type) && processedCompletionIds.has(taskId)) {
+        // Dedup guard: skip terminal events already handled on a prior
+        // continuation (or about to be). Dedupe key includes chunk type
+        // so a suspend → resume → complete cycle doesn't drop the final
+        // `background-task-completed` as a duplicate of the earlier
+        // `background-task-suspended`.
+        const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
+        if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
         }
 

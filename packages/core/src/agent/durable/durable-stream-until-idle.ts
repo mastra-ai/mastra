@@ -70,7 +70,6 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
         toolCallId: payload.toolCallId as string | undefined,
         toolName: payload.toolName as string | undefined,
         isSuspended: !!payload.suspendedAt,
-        suspendPayload: payload.suspendPayload as unknown,
       };
     })
     .filter(e => !!e.toolCallId);
@@ -80,9 +79,12 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
     .map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId))
     .join(', ');
 
+  // Suspend payloads are tool-controlled and may carry secrets, PII, or
+  // large opaque blobs — never serialize them into the continuation
+  // prompt. Just name the suspended tool-call IDs.
   const suspendedIdList = entries
     .filter(e => e.isSuspended)
-    .map(e => `${e.toolCallId} (${e.toolName}); suspendPayload: ${JSON.stringify(e.suspendPayload)}`)
+    .map(e => `${e.toolCallId} (${e.toolName})`)
     .join(', ');
 
   return (
@@ -91,8 +93,7 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
     `Use these result(s) to answer the user's original question.` +
-    `IMPORTANT: The following tool-call IDs were suspended (their suspendPayload is provided): ${suspendedIdList}, do not attempt to resume them, let the user know that they are suspended, ` +
-    `the user will decide when to resume them.`
+    `IMPORTANT: The following tool-call IDs are suspended: ${suspendedIdList}. Do not attempt to resume them; let the user know they are waiting for explicit resume input.`
   );
 }
 
@@ -161,7 +162,10 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
   // --- State ---
   const runningTaskIds = new Set<string>();
   const pendingCompletions: Array<Record<string, unknown>> = [];
-  const processedCompletionIds = new Set<string>();
+  // Keyed by `${taskId}:${chunkType}` so a task that suspends + later
+  // resumes + completes doesn't see its `background-task-completed`
+  // dropped as a "duplicate" of the earlier `background-task-suspended`.
+  const processedTerminalKeys = new Set<string>();
   const innerCleanups: Array<() => void> = [];
   let isProcessing = false;
   let closed = false;
@@ -249,7 +253,8 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
         const tid = (chunk as { payload?: { taskId?: string } }).payload?.taskId;
-        if (tid) processedCompletionIds.add(tid);
+        const ctype = (chunk as { type?: string }).type;
+        if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
       const inner = await (agent as any).stream([], continuationOpts);
@@ -309,7 +314,8 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
-        if (taskId && TERMINAL_BG_CHUNKS.has(chunk.type) && processedCompletionIds.has(taskId)) {
+        const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
+        if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
         }
 

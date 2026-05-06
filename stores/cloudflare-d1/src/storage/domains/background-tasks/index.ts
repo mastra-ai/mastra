@@ -286,6 +286,10 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
       conditions.push('run_id = ?');
       params.push(filter.runId);
     }
+    if (filter.toolCallId) {
+      conditions.push('tool_call_id = ?');
+      params.push(filter.toolCallId);
+    }
     if (conditions.length === 0) return;
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     await this.#db.executeQuery({

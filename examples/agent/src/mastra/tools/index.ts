@@ -353,43 +353,26 @@ export const cryptoResearchTool = createTool({
     await new Promise(resolve => setTimeout(resolve, 30000));
     const { suspend, resumeData } = context.agent ?? {};
     if (!resumeData) {
-      // First invocation — pause until an analyst approves the research run.
-      // The bg-task workflow picks this up and persists `status: 'suspended'`
-      // with the suspendData below; resume the task with
+      // First invocation — pause IMMEDIATELY until an analyst approves
+      // the research run. Suspend has to fire before any latency so the
+      // wrapping `streamUntilIdle` / `resumeStreamUntilIdle` window picks
+      // up the `background-task-suspended` lifecycle event in time. The
+      // bg-task workflow persists `status: 'suspended'` + `suspendPayload`
+      // and the task is resumed with
       // `mastra.backgroundTaskManager?.resume(taskId, { approved: true })`.
       return suspend?.({
         awaiting: 'analyst-approval',
         coinId,
         message: `Approve deep research on "${coinId}"? Optionally pass a different coinId on resume.`,
       });
-      // Stub return — the workflow runtime captures this but marks the step
-      // suspended, so the bg-task layer ignores the value.
-      // return {
-      //   name: coinId,
-      //   symbol: '',
-      //   description: '',
-      //   marketCapRank: null,
-      //   currentPrice: null,
-      //   marketCap: null,
-      //   totalVolume: null,
-      //   high24h: null,
-      //   low24h: null,
-      //   priceChangePercentage24h: null,
-      //   priceChangePercentage7d: null,
-      //   priceChangePercentage30d: null,
-      //   allTimeHigh: null,
-      //   allTimeHighDate: null,
-      //   circulatingSupply: null,
-      //   totalSupply: null,
-      //   categories: [],
-      //   homepage: null,
-      //   subreddit: null,
-      // };
     }
 
     if (resumeData.approved !== true) {
       throw new Error(`Research on "${coinId}" was declined by the analyst.`);
     }
+
+    // Simulate the long-running research call after approval lands.
+    await new Promise(resolve => setTimeout(resolve, 30000));
 
     const finalCoinId = resumeData.coinId ?? coinId;
     const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(finalCoinId)}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;

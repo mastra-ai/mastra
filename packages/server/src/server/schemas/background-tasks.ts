@@ -18,7 +18,7 @@ export const backgroundTaskStreamQuerySchema = z.object({
   taskId: z.string().optional(),
 });
 
-export const backgroundTaskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'completedAt']);
+export const backgroundTaskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'suspendedAt', 'completedAt']);
 
 export const listBackgroundTasksQuerySchema = z.object({
   agentId: z.string().optional(),

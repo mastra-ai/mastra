@@ -15,6 +15,19 @@ function serializeJson(v: unknown): any {
   return v ?? '';
 }
 
+// ClickHouse `DateTime` columns can't be NULL, so the adapter stores
+// "no value" as the epoch sentinel (see `createTask` below). Reading
+// back must convert the sentinel into `undefined` — otherwise an
+// updateTask({ suspendedAt: undefined }) flows in as the sentinel and
+// reads back as `new Date(0)` instead of `undefined`, breaking
+// callers that distinguish "never set" from "set to epoch".
+function readNullableDate(val: unknown): Date | undefined {
+  if (val == null || val === '') return undefined;
+  const d = new Date(val as string | number | Date);
+  if (Number.isNaN(d.getTime()) || d.getTime() === 0) return undefined;
+  return d;
+}
+
 function rowToTask(row: Record<string, any>): BackgroundTask {
   const parseJson = (val: unknown): any => {
     if (val == null || val === '') return undefined;
@@ -44,9 +57,9 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
     createdAt: new Date(row.createdAt),
-    startedAt: row.startedAt ? new Date(row.startedAt) : undefined,
-    suspendedAt: row.suspendedAt ? new Date(row.suspendedAt) : undefined,
-    completedAt: row.completedAt ? new Date(row.completedAt) : undefined,
+    startedAt: readNullableDate(row.startedAt),
+    suspendedAt: readNullableDate(row.suspendedAt),
+    completedAt: readNullableDate(row.completedAt),
   };
 }
 

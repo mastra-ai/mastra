@@ -149,17 +149,6 @@ export interface CleanupConfig {
 export interface BackgroundTaskManagerConfig {
   /** Whether background tasks are enabled. Default: false */
   enabled: boolean;
-  /**
-   * Which execution engine drives background tasks.
-   * - 'workflow' (default): dispatch + execute run inside a one-per-task
-   *   evented workflow registered on Mastra. Pubsub event topics, lifecycle
-   *   event shapes, concurrency gates, and the `stream()` contract are all
-   *   identical to the legacy path.
-   * - 'legacy': the original in-manager dispatch + executor + retry loop on
-   *   the `background-tasks` pubsub topic. Retained as an opt-out while the
-   *   workflow engine bakes in.
-   */
-  engine?: 'legacy' | 'workflow';
   /** Global concurrency limit across all agents. Default: 10 */
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */
@@ -310,10 +299,8 @@ export interface ToolExecutor {
        * publishes a `task.suspended` lifecycle event, and signals the workflow
        * runtime so the run snapshot is preserved. The tool should return
        * shortly after `await suspend(data)` — its return value is discarded
-       * on the suspend path.
-       *
-       * Only available when the manager is configured with `engine: 'workflow'`.
-       * Resume the task with `manager.resume(taskId, resumeData)`.
+       * on the suspend path. Resume the task with
+       * `manager.resume(taskId, resumeData)`.
        */
       suspend?: (data?: unknown) => Promise<void>;
       /**

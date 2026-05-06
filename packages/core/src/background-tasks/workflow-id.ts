@@ -1,5 +1,5 @@
 /**
- * Workflow id used when `BackgroundTaskManagerConfig.engine === 'workflow'`.
+ * Workflow id used by the bg-task workflow registered on Mastra.
  * Double-underscore prefix marks it as internal — same convention as
  * `__batch-scoring-traces`.
  *

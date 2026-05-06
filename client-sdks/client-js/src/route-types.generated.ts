@@ -74470,8 +74470,8 @@ export type GetBackgroundTasks_QueryParams = {
   toolCallId?: string | undefined;
   fromDate?: Date | undefined;
   toDate?: Date | undefined;
-  dateFilterBy?: ('createdAt' | 'startedAt' | 'completedAt') | undefined;
-  orderBy?: ('createdAt' | 'startedAt' | 'completedAt') | undefined;
+  dateFilterBy?: ('createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt') | undefined;
+  orderBy?: ('createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt') | undefined;
   orderDirection?: ('asc' | 'desc') | undefined;
   page?: number | undefined;
   perPage?: number | undefined;
@@ -74503,7 +74503,7 @@ export type GetBackgroundTasks_Response = {
     retryCount: number;
     maxRetries: number;
     timeoutMs: number;
-    suspendData?: unknown | undefined;
+    suspendPayload?: unknown | undefined;
   }[];
   total: number;
 };
@@ -74559,7 +74559,7 @@ export type GetBackgroundTasksBackgroundTaskId_Response = {
   retryCount: number;
   maxRetries: number;
   timeoutMs: number;
-  suspendData?: unknown | undefined;
+  suspendPayload?: unknown | undefined;
 };
 
 export type GetBackgroundTasksBackgroundTaskId_Request = Simplify<
