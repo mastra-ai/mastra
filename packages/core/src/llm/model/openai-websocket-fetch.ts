@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 
 export interface CreateOpenAIWebSocketFetchOptions {
@@ -48,7 +47,20 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
   let ws: WebSocket | null = null;
   let connecting: Promise<WebSocket> | null = null;
   let connectionKey: string | null = null;
+  let nextQueryCredentialId = 0;
+  const queryCredentialIds = new Map<string, string>();
   let busy = false;
+
+  function getQueryCredentialCacheId(value?: string): string {
+    if (!value) return '';
+
+    const existing = queryCredentialIds.get(value);
+    if (existing) return existing;
+
+    const id = String(++nextQueryCredentialId);
+    queryCredentialIds.set(value, id);
+    return id;
+  }
 
   function getConnection(
     authorization: string,
@@ -66,7 +78,7 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     if (options?.apiKeyAsBearer || apiKeyQueryParam) {
       delete normalizedHeaders['api-key'];
     }
-    const queryCredential = apiKeyQueryParam ? `${apiKeyQueryParam}:${hashCredential(apiKey)}` : '';
+    const queryCredential = apiKeyQueryParam ? `${apiKeyQueryParam}:${getQueryCredentialCacheId(apiKey)}` : '';
     const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders, queryCredential);
 
     if (ws?.readyState === WebSocket.OPEN && connectionKey === nextConnectionKey) {
@@ -221,7 +233,7 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
 
         function onMessage(data: WebSocket.RawData) {
           const text = data.toString();
-          controller.enqueue(encoder.encode(`data: ${text}\n\n`));
+          controller.enqueue(encoder.encode(formatSSEData(text)));
 
           try {
             const event = JSON.parse(text);
@@ -313,17 +325,19 @@ function getWebSocketUrl(url: string, apiKeyQueryParam: string | false, apiKey?:
   return parsedUrl.toString();
 }
 
+function formatSSEData(text: string): string {
+  return `${text
+    .split(/\r?\n/)
+    .map(line => `data: ${line}`)
+    .join('\n')}\n\n`;
+}
+
 function buildConnectionKey(authorization: string, headers: Record<string, string>, queryCredential = ''): string {
   return JSON.stringify({
     authorization,
     queryCredential,
     headers: Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)),
   });
-}
-
-function hashCredential(value?: string): string {
-  if (!value) return '';
-  return createHash('sha256').update(value).digest('hex');
 }
 
 function isTerminalWebSocketEvent(event: unknown): event is { type: string } {

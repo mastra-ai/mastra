@@ -7,7 +7,7 @@ const { sockets, nextServerEvents } = vi.hoisted(() => ({
     sent: Array<Record<string, unknown>>;
     close: () => void;
   }>,
-  nextServerEvents: [] as Array<Record<string, unknown>>,
+  nextServerEvents: [] as Array<Record<string, unknown> | string>,
 }));
 
 vi.mock('ws', async () => {
@@ -33,7 +33,7 @@ vi.mock('ws', async () => {
       const events = nextServerEvents.length > 0 ? nextServerEvents.splice(0) : [{ type: 'response.completed' }];
       queueMicrotask(() => {
         for (const event of events) {
-          this.emit('message', JSON.stringify(event));
+          this.emit('message', typeof event === 'string' ? event : JSON.stringify(event));
         }
       });
     }
@@ -253,6 +253,27 @@ describe('createOpenAIWebSocketFetch', () => {
     });
 
     await expect(incompleteResponse.text()).resolves.toContain('data: [DONE]');
+  });
+
+  it('formats multiline WebSocket frames as valid SSE data lines', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch();
+    nextServerEvents.push(
+      `{
+  "type": "error",
+  "status": 400,
+  "error": {
+    "code": "invalid_request_error"
+  }
+}`,
+    );
+
+    const response = await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer openai-key' },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
+    });
+
+    await expect(response.text()).resolves.toContain('data:   "type": "error",');
   });
 
   it('closes the socket when the service reports the WebSocket connection limit', async () => {
