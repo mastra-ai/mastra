@@ -372,7 +372,7 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
         mutated = true;
       }
     }
-    return mutated ? current : undefined;
+    return mutated ? { prompt: current } : undefined;
   }
 
   async processAPIError({

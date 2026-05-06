@@ -1298,8 +1298,8 @@ export class ProcessorRunner {
           ...createObservabilityContext(args.tracingContext),
         });
 
-        if (Array.isArray(result)) {
-          currentPrompt = result;
+        if (result && typeof result === 'object' && result.prompt) {
+          currentPrompt = result.prompt;
         }
       } catch (error) {
         if (error instanceof TripWire) {

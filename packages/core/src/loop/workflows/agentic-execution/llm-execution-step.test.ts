@@ -782,8 +782,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 
   it('runs processLLMRequest before invoking the model without persisting prompt changes', async () => {
-    const processLLMRequest = vi.fn(async ({ prompt }: any) =>
-      prompt.map((message: any) =>
+    const processLLMRequest = vi.fn(async ({ prompt }: any) => ({
+      prompt: prompt.map((message: any) =>
         message.role === 'user'
           ? {
               ...message,
@@ -791,7 +791,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
             }
           : message,
       ),
-    );
+    }));
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([
         {
@@ -879,8 +879,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   it('runs processLLMRequest from both request-specific and direct input processor lists', async () => {
     const appendToUserRequestPrompt =
       (suffix: string) =>
-      async ({ prompt }: any) =>
-        prompt.map((message: any) => {
+      async ({ prompt }: any) => ({
+        prompt: prompt.map((message: any) => {
           if (message.role !== 'user') return message;
           const text = Array.isArray(message.content)
             ? message.content.find((part: any) => part.type === 'text')?.text
@@ -889,7 +889,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
             ...message,
             content: [{ type: 'text' as const, text: `${text} ${suffix}` }],
           };
-        });
+        }),
+      });
     const llmRequestProcessor = vi.fn(appendToUserRequestPrompt('from request list'));
     const inputProcessor = vi.fn(appendToUserRequestPrompt('from input list'));
     const doStream = vi.fn(async () => ({

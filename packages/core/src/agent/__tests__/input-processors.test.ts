@@ -187,14 +187,16 @@ function inputProcessorTests(version: 'v1' | 'v2') {
           },
         };
         const processLLMRequest = vi.fn(async ({ prompt }) => {
-          return prompt.map(message =>
-            message.role === 'user'
-              ? {
-                  ...message,
-                  content: [{ type: 'text', text: 'Request processor was here' }],
-                }
-              : message,
-          );
+          return {
+            prompt: prompt.map(message =>
+              message.role === 'user'
+                ? {
+                    ...message,
+                    content: [{ type: 'text', text: 'Request processor was here' }],
+                  }
+                : message,
+            ),
+          };
         });
         const processor2 = {
           id: 'request-processor',

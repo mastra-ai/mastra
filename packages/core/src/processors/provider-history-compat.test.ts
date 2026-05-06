@@ -530,8 +530,8 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
 
     const result = await handler.processLLMRequest(args);
 
-    expect(Array.isArray(result)).toBe(true);
-    const assistant = (result as LanguageModelV2Prompt).find(m => m.role === 'assistant')!;
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
@@ -544,8 +544,8 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
 
     const result = await handler.processLLMRequest(args);
 
-    expect(Array.isArray(result)).toBe(true);
-    const assistant = (result as LanguageModelV2Prompt).find(m => m.role === 'assistant')!;
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
@@ -587,8 +587,8 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
 
     const result = await handler.processLLMRequest(args);
 
-    expect(Array.isArray(result)).toBe(true);
-    const assistant = (result as LanguageModelV2Prompt).find(m => m.role === 'assistant')!;
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 });

@@ -564,7 +564,7 @@ Returned prompt changes are forwarded to the model for the current call only. Th
 ```typescript prettier:false
 processLLMRequest?(
   args: ProcessLLMRequestArgs,
-): Promise<LanguageModelV2Prompt | undefined | void> | LanguageModelV2Prompt | undefined | void;
+): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult;
 ```
 
 #### `ProcessLLMRequestArgs`
@@ -645,9 +645,9 @@ processLLMRequest?(
 
 #### Return value
 
-`processLLMRequest` returns `LanguageModelV2Prompt | undefined | void`.
+`processLLMRequest` returns `ProcessLLMRequestResult`, which is `{ prompt?: LanguageModelV2Prompt } | undefined | void`.
 
-- Return a `LanguageModelV2Prompt` to replace the outbound prompt for the current provider call.
+- Return `{ prompt }` to replace the outbound prompt for the current provider call.
 - Return `undefined` or `void` to forward the original prompt unchanged.
 
 #### Use cases

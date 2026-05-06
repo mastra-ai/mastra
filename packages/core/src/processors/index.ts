@@ -257,7 +257,13 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
  * Result from processLLMRequest method. Returning `undefined` (or `void`)
  * indicates no changes — the original prompt is forwarded as-is.
  */
-export type ProcessLLMRequestResult = LanguageModelV2Prompt | undefined | void;
+export type ProcessLLMRequestResult =
+  | {
+      /** The prompt to forward to the provider for this call. */
+      prompt?: LanguageModelV2Prompt;
+    }
+  | undefined
+  | void;
 
 /**
  * Arguments for processOutputStream method
@@ -436,7 +442,7 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * - Re-shaping tool-result formats when switching between providers mid-loop.
    * - Trimming or coalescing roles to match per-provider input requirements.
    *
-   * Return the modified prompt to forward your version, or `undefined`/`void`
+   * Return `{ prompt }` to forward your modified prompt, or `undefined`/`void`
    * to pass the original prompt through unchanged.
    */
   processLLMRequest?(
