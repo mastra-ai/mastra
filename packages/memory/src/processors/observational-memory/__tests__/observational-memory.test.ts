@@ -2210,6 +2210,56 @@ describe('Observer Agent Helpers', () => {
     });
   });
 
+  describe('Reflector compression retries', () => {
+    it('returns the smallest non-degenerate reflection after exhausting compression levels', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: {
+          model: 'openai/gpt-4o-mini',
+          messageTokens: 1,
+          bufferTokens: false,
+        },
+        reflection: {
+          model: 'openai/gpt-4o-mini',
+          observationTokens: 1,
+        },
+      });
+
+      const outputs = [
+        `<observations>\n- ${'large '.repeat(200)}\n</observations>`,
+        `<observations>\n- smallest candidate\n</observations>`,
+        `<observations>\n- ${'medium '.repeat(40)}\n</observations>`,
+        `<observations>\n- ${'largest '.repeat(300)}\n</observations>`,
+      ];
+      let callCount = 0;
+
+      vi.spyOn((om as any).reflector, 'createAgent').mockReturnValue({
+        stream: async () => {
+          const text = outputs[callCount++]!;
+          return {
+            getFullOutput: async () => ({
+              text,
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            }),
+          };
+        },
+      } as any);
+
+      const result = await (om as any).reflector.call(
+        '- source observations',
+        undefined,
+        undefined,
+        0,
+        undefined,
+        undefined,
+        1,
+      );
+
+      expect(callCount).toBe(4);
+      expect(result.observations).toBe('- smallest candidate');
+    });
+  });
+
   describe('buildObserverHistoryMessage', () => {
     it('should preserve placeholders and attachments in order', () => {
       const msg = createTestMessage('ignored', 'user');

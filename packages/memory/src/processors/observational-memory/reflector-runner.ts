@@ -267,6 +267,9 @@ export class ReflectorRunner {
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
+    let bestParsed: ReturnType<typeof parseReflectorOutput> | undefined;
+    let bestReflectedTokens = Number.POSITIVE_INFINITY;
+    let exhaustedCompressionRetries = false;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -358,17 +361,24 @@ export class ReflectorRunner {
         reflectedTokens = originalTokens;
       } else {
         reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+        if (reflectedTokens < bestReflectedTokens) {
+          bestParsed = parsed;
+          bestReflectedTokens = reflectedTokens;
+        }
       }
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
       );
 
       if (!parsed.degenerate && (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)) {
+        exhaustedCompressionRetries =
+          !validateCompression(reflectedTokens, targetThreshold) && currentLevel >= maxLevel;
         break;
       }
 
       if (parsed.degenerate && currentLevel >= maxLevel) {
         omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
+        exhaustedCompressionRetries = true;
         break;
       }
 
@@ -406,6 +416,13 @@ export class ReflectorRunner {
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
+    }
+
+    if (exhaustedCompressionRetries && bestParsed && bestParsed !== parsed) {
+      omDebug(
+        `[OM:callReflector] exhausted compression retries; returning smallest candidate with tokens=${bestReflectedTokens} instead of final attempt tokens=${reflectedTokens}`,
+      );
+      parsed = bestParsed;
     }
 
     return {
