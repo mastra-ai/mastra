@@ -1,5 +1,14 @@
 # @mastra/datadog
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Fixed double-encoded JSON on span input in Datadog. ([#16256](https://github.com/mastra-ai/mastra/pull/16256))
+
+- Updated dependencies [[`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d)]:
+  - @mastra/core@1.33.0-alpha.1
+
 ## 1.1.0
 
 ### Minor Changes
