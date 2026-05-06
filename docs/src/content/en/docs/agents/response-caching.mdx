@@ -68,7 +68,7 @@ Pass `scope: null` to deliberately share entries across all callers — only use
 
 ## Provide a custom cache backend
 
-If you don't pass `cache`, the agent uses the cache registered on its `Mastra` instance via `new Mastra({ cache })`. Pass any [`MastraCache`](/reference/core/MastraCache) implementation to override:
+If you don't pass `cache`, the agent uses the cache registered on its `Mastra` instance via `new Mastra({ cache })`. Pass any `MastraCache` implementation to override:
 
 ```typescript title="src/mastra/agents/cached-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -106,12 +106,12 @@ Cache writes happen after the response completes. Failed runs (errors, tripwire 
 Provider-level caching like [OpenRouter response caching](https://openrouter.ai/announcements/response-caching) lives at the API layer and is scoped to your provider account. Mastra's response cache is at the agent layer, so it works with any model, runs in your own infrastructure (latency is a few ms instead of a network round-trip), and can share entries across providers if you set the same `key`. The two are complementary.
 
 :::note
-Visit [Agent.stream() reference](/reference/agents/stream) and [Agent.generate() reference](/reference/agents/generate) for the full options.
+Visit [Agent.stream() reference](/reference/streaming/agents/stream) and [Agent.generate() reference](/reference/agents/generate) for the full options.
 :::
 
 ## Related
 
 - [Processors](/docs/agents/processors)
 - [Guardrails](/docs/agents/guardrails)
-- [Agent.stream()](/reference/agents/stream)
+- [Agent.stream()](/reference/streaming/agents/stream)
 - [Agent.generate()](/reference/agents/generate)
