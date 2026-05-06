@@ -882,9 +882,21 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Cast needed because chunk.payload.response is typed with default OUTPUT=undefined
                   (chunk.payload as { response?: LLMStepResult<OUTPUT>['response'] }).response = response;
                 } else if (!self.#options.isLLMExecutionStep) {
-                  // No processor runner, not in LLM execution step - resolve with buffered text
+                  const finishOutput = chunk.payload.output as { steps?: LLMStepResult<OUTPUT>[]; text?: string };
+                  const finalText = finishOutput.text ?? self.#bufferedText.join('');
+                  if (finishOutput.steps?.length) {
+                    self.#bufferedSteps = finishOutput.steps;
+                  }
+                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+
+                  self.#bufferedText = [finalText];
+                  if (lastStep) {
+                    lastStep.text = finalText;
+                  }
+
+                  // No processor runner, not in LLM execution step - resolve with durable finish text when available
                   this.resolvePromises({
-                    text: (chunk.payload.output as { text?: string }).text ?? self.#bufferedText.join(''),
+                    text: finalText,
                     finishReason: self.#finishReason,
                   });
                 }

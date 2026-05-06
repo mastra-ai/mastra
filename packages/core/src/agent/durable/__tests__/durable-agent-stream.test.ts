@@ -272,12 +272,24 @@ describe('DurableAgent streaming execution', () => {
 
       cleanup();
 
+      const dataIndex = chunks.findIndex(chunk => chunk.type === 'data-durable-output');
+      const finishIndex = chunks.findIndex(chunk => chunk.type === 'finish');
+      const dataChunk = chunks[dataIndex];
       const finishChunk = chunks.find(chunk => chunk.type === 'finish');
 
       expect(writerWasProvided).toBe(true);
-      expect(chunks.some(chunk => chunk.type === 'data-durable-output')).toBe(true);
+      expect(dataChunk).toBeDefined();
+      expect(finishChunk).toBeDefined();
+      expect(dataIndex).toBeLessThan(finishIndex);
       expect(finishChunk?.payload.output.text).toBe('processed response');
       await expect(output.text).resolves.toBe('processed response');
+
+      const steps = await output.steps;
+      const fullOutput = await output.getFullOutput();
+
+      expect(steps.at(-1)?.text).toBe('processed response');
+      expect(fullOutput.text).toBe('processed response');
+      expect(fullOutput.steps.at(-1)?.text).toBe('processed response');
     });
   });
 
