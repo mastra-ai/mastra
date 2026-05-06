@@ -93,10 +93,14 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
       getCurrentThreadId: vi.fn(() => 'thread-1'),
+      pendingNewThread: false,
       allSlashCommandComponents: [],
       chatContainer: { addChild: vi.fn() },
       ui: { requestRender: vi.fn() },
-      harness: { sendMessage: vi.fn().mockResolvedValue(undefined) },
+      harness: {
+        createThread: vi.fn().mockResolvedValue(undefined),
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+      },
     } as any;
 
     const handled = await dispatchSlashCommand('//deploy', state, () => ({}) as any);
@@ -104,7 +108,32 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
     expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
+    expect(state.harness.createThread).not.toHaveBeenCalled();
     expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
+  it('creates the pending new thread before sending a custom slash command', async () => {
+    const state = {
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+      pendingNewThread: true,
+      allSlashCommandComponents: [],
+      chatContainer: { addChild: vi.fn() },
+      ui: { requestRender: vi.fn() },
+      harness: {
+        createThread: vi.fn().mockResolvedValue(undefined),
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('//deploy', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(state.harness.createThread).toHaveBeenCalledTimes(1);
+    expect(state.harness.sendMessage).toHaveBeenCalledTimes(1);
+    expect(state.harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
+      state.harness.sendMessage.mock.invocationCallOrder[0],
+    );
+    expect(state.pendingNewThread).toBe(false);
   });
 
   it('keeps /new routed to the built-in command when a custom command has the same name', async () => {

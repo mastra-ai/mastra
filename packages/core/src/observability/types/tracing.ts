@@ -12,7 +12,15 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
+import type {
+  CustomSamplerOptions,
+  ObservabilityInstance,
+  CorrelationContext,
+  DefinitionSource,
+  ScorerScoreSource,
+  ScorerStepType,
+  ScorerTargetScope,
+} from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -26,6 +34,10 @@ import type { ScoreInput } from './scores';
 export enum SpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
+  /** Scorer execution */
+  SCORER_RUN = 'scorer_run',
+  /** Individual scorer pipeline step */
+  SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
   GENERIC = 'generic',
   /** Model generation with model calls, token usage, prompts, completions */
@@ -56,6 +68,20 @@ export enum SpanType {
   WORKFLOW_SLEEP = 'workflow_sleep',
   /** Workflow wait for event operation */
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
+  /** Memory operation (recall, save, delete, update working memory) */
+  MEMORY_OPERATION = 'memory_operation',
+  /** Workspace action (filesystem, sandbox, search, skill, mount operations) */
+  WORKSPACE_ACTION = 'workspace_action',
+  /** RAG ingestion - root span for an ingestion pipeline run (load → chunk → extract → embed → upsert) */
+  RAG_INGESTION = 'rag_ingestion',
+  /** Embedding call (used by both RAG ingestion and query) */
+  RAG_EMBEDDING = 'rag_embedding',
+  /** Vector store I/O (query / upsert / delete / fetch) */
+  RAG_VECTOR_OPERATION = 'rag_vector_operation',
+  /** RAG-specific actions: chunk, extract_metadata, rerank */
+  RAG_ACTION = 'rag_action',
+  /** Graph operations (build / traverse) - not RAG-specific */
+  GRAPH_ACTION = 'graph_action',
 }
 
 export { EntityType };
@@ -83,6 +109,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** The resolved agent version ID used for this execution */
+  resolvedVersionId?: string;
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */
@@ -94,6 +122,28 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+}
+
+/**
+ * Scorer Run attributes
+ */
+export interface ScorerRunAttributes extends AIBaseAttributes {
+  scorerId?: string;
+  scorerName?: string;
+  scoreSource?: ScorerScoreSource;
+  targetScope?: ScorerTargetScope;
+  targetEntityType?: EntityType;
+  scorerDefinition?: DefinitionSource;
+}
+
+/**
+ * Scorer Step attributes
+ */
+export interface ScorerStepAttributes extends AIBaseAttributes {
+  step?: string;
+  stepType?: ScorerStepType;
+  prompt?: string;
+  judgeModel?: string;
 }
 
 /**
@@ -353,10 +403,170 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Memory operation attributes
+ */
+export interface MemoryOperationAttributes extends AIBaseAttributes {
+  operationType?: 'recall' | 'save' | 'delete' | 'update';
+  messageCount?: number;
+  embeddingTokens?: number;
+  semanticRecallEnabled?: boolean;
+  vectorResultCount?: number;
+  workingMemoryEnabled?: boolean;
+  lastMessages?: number | false;
+}
+
+/**
+ * Workspace Action attributes — metadata about the span context.
+ * Operation-specific inputs/outputs are recorded via span input/output,
+ * not as attributes.
+ */
+export interface WorkspaceActionAttributes extends AIBaseAttributes {
+  /** Workspace identifier */
+  workspaceId?: string;
+  /** Human-readable workspace name */
+  workspaceName?: string;
+  /** Action category */
+  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount';
+  /** Sandbox provider name (e.g. 'e2b', 'docker', 'local') */
+  sandboxProvider?: string;
+  /** Filesystem provider name (e.g. 'local', 'agentfs', 's3') */
+  filesystemProvider?: string;
+  /** Whether the operation succeeded */
+  success?: boolean;
+}
+
+/**
+ * RAG Ingestion attributes (root span for an ingestion pipeline run).
+ *
+ * Attributes are stable, low-cardinality dimensions describing the run.
+ * Per-run results (final chunk count, etc.) belong on the span's `output`.
+ *
+ * Note: token usage / cost lives ONLY on `RAG_EMBEDDING` child spans.
+ * Aggregating at the root would double-count when an exporter sums child
+ * spans. Mirrors how `AGENT_RUN` does not carry aggregated `MODEL_GENERATION`
+ * usage.
+ */
+export interface RagIngestionAttributes extends AIBaseAttributes {
+  /** User-supplied pipeline name */
+  pipelineName?: string;
+  /** Number of source documents being ingested */
+  sourceCount?: number;
+  /** Vector store name */
+  vectorStore?: string;
+  /** Index/collection name being written to */
+  indexName?: string;
+  /** Embedding model id */
+  embeddingModel?: string;
+  /** Embedding model provider */
+  embeddingProvider?: string;
+}
+
+/**
+ * RAG Embedding attributes (single embed call, batch).
+ *
+ * The texts being embedded belong on the span's `input`. Returned vectors
+ * are summarized via `output` (count + dims) rather than dumped wholesale.
+ * Token usage uses the same `UsageStats` shape as `MODEL_GENERATION` so
+ * cost-extraction pipelines work uniformly across LLM and embedding spans.
+ */
+export interface RagEmbeddingAttributes extends AIBaseAttributes {
+  /** Embedding model id */
+  model?: string;
+  /** Embedding model provider */
+  provider?: string;
+  /** Embedding vector dimensions */
+  dimensions?: number;
+  /** Number of inputs in this batch (cardinality of the input array) */
+  inputCount?: number;
+  /** Whether this embed call is part of ingestion or query */
+  mode?: 'ingest' | 'query';
+  /** Token usage for this embed call. Drives cost metrics. */
+  usage?: UsageStats;
+}
+
+/**
+ * RAG Vector Operation attributes (vector store I/O).
+ *
+ * Query vectors / filters belong on `input`. Result counts belong on
+ * `output`.
+ */
+export interface RagVectorOperationAttributes extends AIBaseAttributes {
+  /** Vector store operation kind */
+  operation: 'query' | 'upsert' | 'delete' | 'fetch';
+  /** Vector store name */
+  store?: string;
+  /** Index/collection name */
+  indexName?: string;
+  /** Top-K parameter (query) */
+  topK?: number;
+  /** Vector dimensions */
+  dimensions?: number;
+}
+
+/**
+ * RAG Action attributes - chunk / extract_metadata / rerank.
+ *
+ * Per-call result counts (chunk count, etc.) belong on `output`.
+ */
+export interface RagChunkAction extends AIBaseAttributes {
+  /** RAG action kind */
+  action: 'chunk';
+  /** Chunking strategy / transformer name */
+  strategy?: string;
+  chunkSize?: number;
+  chunkOverlap?: number;
+}
+
+export interface RagExtractMetadataAction extends AIBaseAttributes {
+  /** RAG action kind */
+  action: 'extract_metadata';
+  /** Metadata extractor name */
+  extractor?: string;
+  model?: string;
+  provider?: string;
+}
+
+export interface RagRerankAction extends AIBaseAttributes {
+  /** RAG action kind */
+  action: 'rerank';
+  /** Number of candidates fed into rerank (input array length) */
+  candidateCount?: number;
+  /** Configured top-N to keep after reranking */
+  topN?: number;
+  /** Scorer/provider name */
+  scorer?: string;
+}
+
+export type RagActionAttributes = RagChunkAction | RagExtractMetadataAction | RagRerankAction;
+
+/**
+ * Graph Action attributes - non-RAG, used for any graph operation.
+ *
+ * Per-call traversal results (visited count, returned count) belong on
+ * `output`. `nodeCount` / `edgeCount` describe the graph itself.
+ */
+export interface GraphActionAttributes extends AIBaseAttributes {
+  /** Graph action kind */
+  action: 'build' | 'traverse' | 'update' | 'prune';
+  /** Number of nodes in the graph */
+  nodeCount?: number;
+  /** Number of edges in the graph */
+  edgeCount?: number;
+  /** Threshold parameter (build) */
+  threshold?: number;
+  /** Number of starting nodes (traverse) */
+  startNodes?: number;
+  /** Maximum traversal depth */
+  maxDepth?: number;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
+  [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
   [SpanType.MODEL_STEP]: ModelStepAttributes;
@@ -371,7 +581,14 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
   [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
   [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
+  [SpanType.WORKSPACE_ACTION]: WorkspaceActionAttributes;
   [SpanType.GENERIC]: AIBaseAttributes;
+  [SpanType.MEMORY_OPERATION]: MemoryOperationAttributes;
+  [SpanType.RAG_INGESTION]: RagIngestionAttributes;
+  [SpanType.RAG_EMBEDDING]: RagEmbeddingAttributes;
+  [SpanType.RAG_VECTOR_OPERATION]: RagVectorOperationAttributes;
+  [SpanType.RAG_ACTION]: RagActionAttributes;
+  [SpanType.GRAPH_ACTION]: GraphActionAttributes;
 }
 
 /**
@@ -387,6 +604,10 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 export interface SpanErrorInfo {
   message: string;
   id?: string;
+  /** Error class name (e.g. "TypeError", "ValidationError") */
+  name?: string;
+  /** Stack trace string */
+  stack?: string;
   domain?: string;
   category?: string;
   details?: Record<string, any>;
@@ -438,6 +659,8 @@ interface BaseSpan<TType extends SpanType> {
 export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean;
+  /** Tracing policy for this span (inherited from parent or explicitly set) */
+  tracingPolicy?: TracingPolicy;
   /** Parent span reference (undefined for root spans) */
   parent?: AnySpan;
   /** Pointer to the ObservabilityInstance instance */
@@ -616,8 +839,40 @@ export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
+  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
+  updateStep?(payload?: StepStartPayload): void;
+
+  /**
+   * Enable or disable deferred step closing for durable execution.
+   * When enabled, step-finish chunks won't automatically close the step span.
+   * Use exportCurrentStep() to get the span data, then endDeferredStep() to close later.
+   */
+  setDeferStepClose(defer: boolean): void;
+
+  /**
+   * Export the current step span for later rebuilding (durable execution).
+   * Returns undefined if no step span is active.
+   */
+  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+
+  /**
+   * Get the pending step finish payload (captured when defer mode is enabled).
+   * This contains usage, finishReason, etc. for closing the step later.
+   */
+  getPendingStepFinishPayload(): unknown;
+
+  /**
+   * Set the starting step index for durable execution.
+   * Used when resuming across agentic loop iterations to maintain step continuity.
+   */
+  setStepIndex(index: number): void;
+
+  /**
+   * Get the current step index.
+   */
+  getStepIndex(): number;
 }
 
 /**
@@ -646,6 +901,10 @@ export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
  * - Spans loaded from storage for evaluation
  * - Spans from completed traces being annotated
  * - Post-hoc quality scoring and user feedback
+ *
+ * RecordedSpan objects are hydrated runtime wrappers and should not be treated as
+ * durable serialized state. Persist `traceId` / `spanId` and rehydrate, or use
+ * top-level observability annotation APIs after resume.
  */
 export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Parent span reference (undefined for root spans) */
@@ -658,13 +917,13 @@ export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
    * Add a quality score to this recorded span.
    * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add user feedback to this recorded span.
    * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 /**
@@ -677,7 +936,10 @@ export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
  * Provides both tree access (via rootSpan) and flat access (via spans).
  * All references point to the same span objects - no memory duplication.
  *
- * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ * Obtained via mastra.observability.getRecordedTrace({ traceId }) for post-execution annotation.
+ * RecordedTrace objects are hydrated runtime wrappers and should not be stored
+ * across durable workflow serialization boundaries. Persist identifiers instead
+ * and rehydrate, or use top-level observability annotation APIs after resume.
  */
 export interface RecordedTrace {
   /** The trace identifier */
@@ -700,13 +962,13 @@ export interface RecordedTrace {
    * Add a score at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addScore(score: ScoreInput): void;
+  addScore(score: ScoreInput): Promise<void>;
 
   /**
    * Add feedback at the trace level.
    * Uses root span's metadata for context inheritance.
    */
-  addFeedback(feedback: FeedbackInput): void;
+  addFeedback(feedback: FeedbackInput): Promise<void>;
 }
 
 // ============================================================================
@@ -820,6 +1082,8 @@ export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOption
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
 export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Span name override */
+  name?: string;
   /** Input data */
   input?: any;
   /** Output data */

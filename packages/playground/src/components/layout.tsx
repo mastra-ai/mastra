@@ -1,49 +1,66 @@
 import {
-  AuthRequired,
+  ErrorBoundary,
+  LogoWithoutText,
+  MainSidebar,
   MainSidebarProvider,
-  NavigationCommand,
+  ThemeProvider,
   Toaster,
   TooltipProvider,
-  useAuthCapabilities,
-  isAuthenticated,
 } from '@mastra/playground-ui';
-import { ExperimentalUIProvider, useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
-import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
-import { ThemeProvider } from './ui/theme-provider';
+import { AuthRequired } from '@/domains/auth/components/auth-required';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
+import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { NavigationCommand } from '@/lib/command';
+import { cn } from '@/lib/utils';
+
+function MobileNavbar() {
+  return (
+    <header className="lg:hidden sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border1 bg-surface1 px-3">
+      <MainSidebar.MobileTrigger />
+      <span className="flex items-center gap-2">
+        <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+        <span className="font-serif text-sm whitespace-nowrap">Mastra Studio</span>
+      </span>
+    </header>
+  );
+}
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
+  const { pathname } = useLocation();
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
-  const { pathname } = useLocation();
-  const isMetricsDashboardPage = pathname === '/metrics';
-  const { variant } = useExperimentalUI('entity-list-page');
 
-  const agentListExperiment = UI_EXPERIMENTS.find(e => e.key === 'entity-list-page');
-  const experimentPaths: string[] = Array.isArray(agentListExperiment?.path)
-    ? agentListExperiment.path
-    : agentListExperiment?.path
-      ? [agentListExperiment.path]
-      : [];
-  const isPageListNewUIProposal = variant === 'new-proposal' && experimentPaths.includes(pathname);
+  const content = (
+    <AuthRequired>
+      <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+    </AuthRequired>
+  );
 
   return (
     <>
       <NavigationCommand />
-      <div className={shouldShowSidebar ? 'grid h-full grid-cols-[auto_1fr]' : 'h-full'}>
+      <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
         {shouldShowSidebar && <AppSidebar />}
-        <div
-          className={cn('bg-surface2 my-3 rounded-lg border border-border1 overflow-y-auto mr-3', {
-            'h-[calc(100%-1.5rem)] mx-3': shouldHideSidebar,
-            'bg-transparent my-0 mr-0': isPageListNewUIProposal || isMetricsDashboardPage,
-          })}
-        >
-          <AuthRequired>{children}</AuthRequired>
-        </div>
+        {shouldShowSidebar ? (
+          <div className="flex flex-col h-full min-h-0">
+            <MobileNavbar />
+            <div className="flex-1 min-h-0 bg-transparent overflow-y-auto">{content}</div>
+          </div>
+        ) : (
+          <div
+            className={cn('bg-transparent overflow-y-auto', {
+              'h-[calc(100%-1.5rem)]': shouldHideSidebar,
+            })}
+          >
+            {content}
+          </div>
+        )}
       </div>
     </>
   );
@@ -55,7 +72,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="bg-surface1 font-sans h-screen">
       <Toaster position="bottom-right" />
-      <ThemeProvider defaultTheme="dark" attribute="class">
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>

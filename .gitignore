@@ -15,15 +15,22 @@ test-outputs/
 .dev/db/*
 
 .env
+.env.local
+.env.*.local
 
 **/tsconfig.tsbuildinfo
 
 .turbo
+.next
 
 openapi-ts-error*
 
 .mastra
 *.db*
+*.duckdb
+*.duckdb.wal
+*.duckdb*
+*.sqlite*
 memory.db
 memory.db-*
 
@@ -59,4 +66,5 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
+.mastracode/
 /packages/core/__recordings__

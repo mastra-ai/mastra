@@ -1,27 +1,97 @@
+import { builtinModules } from 'node:module';
 import { join } from 'node:path';
 import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
+import type { analyzeBundle } from '@mastra/deployer/analyze';
+import type { BundlerOptions } from '@mastra/deployer/bundler';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
 
+/** Bare Node.js built-in module names (excludes internal `_`-prefixed ones). */
+const builtins = new Set(builtinModules.filter(m => !m.startsWith('_')));
+
+/**
+ * Rollup plugin that adds the `node:` prefix to bare Node.js built-in imports.
+ * Deno requires `node:events` instead of `events`, `node:fs` instead of `fs`, etc.
+ */
+function nodeBuiltinPrefix() {
+  return {
+    name: 'node-builtin-prefix',
+    resolveId(source: string) {
+      const base = source.split('/')[0]!;
+      if (builtins.has(base) && !source.startsWith('node:')) {
+        return { id: `node:${source}`, external: true };
+      }
+      return null;
+    },
+  };
+}
+
+/** Modules that Netlify's Edge bundler cannot resolve: native Node addons (`bufferutil`, `utf-8-validate`) and `typescript`. */
+const EDGE_INCOMPATIBLE_MODULES = ['bufferutil', 'utf-8-validate', 'typescript'];
+
+/**
+ * Rollup plugin that replaces edge-incompatible modules with an empty stub so
+ * they do not appear as external imports in the bundle.
+ */
+function stubEdgeIncompatibleModules() {
+  const stubs = new Set(EDGE_INCOMPATIBLE_MODULES);
+  const STUB_ID = '\0mastra-netlify-edge-stub';
+  return {
+    name: 'stub-edge-incompatible-modules',
+    resolveId(source: string) {
+      return stubs.has(source) ? STUB_ID : null;
+    },
+    load(id: string) {
+      if (id === STUB_ID) {
+        return 'export default undefined;';
+      }
+      return null;
+    },
+  };
+}
+
+export interface NetlifyDeployerOptions {
+  /**
+   * Deploy target for Netlify.
+   *
+   * - `'serverless'` — Standard Netlify Functions (Node.js runtime, 60s default timeout).
+   * - `'edge'` — Netlify Edge Functions (Deno-based runtime, no hard timeout, runs at the edge).
+   *
+   * @default 'serverless'
+   */
+  target?: 'serverless' | 'edge';
+}
+
 export class NetlifyDeployer extends Deployer {
-  constructor() {
+  readonly target: 'serverless' | 'edge';
+
+  constructor(options: NetlifyDeployerOptions = {}) {
     super({ name: 'NETLIFY' });
-    this.outputDir = join('.netlify', 'v1', 'functions', 'api');
+
+    this.target = options.target ?? 'serverless';
+
+    this.outputDir =
+      this.target === 'edge' ? join('.netlify', 'v1', 'edge-functions') : join('.netlify', 'v1', 'functions', 'api');
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({
-      dir: join(outputDirectory, this.outputDir),
-      architecture: {
-        os: ['linux'],
-        cpu: ['x64'],
-        libc: ['gnu'],
-      },
-    });
+    if (this.target === 'edge') {
+      // Edge functions run on Deno — no platform-specific architecture constraints
+      await deps.install({ dir: join(outputDirectory, this.outputDir) });
+    } else {
+      await deps.install({
+        dir: join(outputDirectory, this.outputDir),
+        architecture: {
+          os: ['linux'],
+          cpu: ['x64'],
+          libc: ['gnu'],
+        },
+      });
+    }
   }
 
   async deploy(): Promise<void> {
@@ -32,6 +102,31 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
+  protected async getBundlerOptions(
+    serverFile: string,
+    mastraEntryFile: string,
+    analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+    toolsPaths: (string | string[])[],
+    bundlerOptions: BundlerOptions,
+  ) {
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
+      ...bundlerOptions,
+      enableEsmShim: this.target !== 'edge',
+    });
+
+    if (this.target === 'edge' && Array.isArray(inputOptions.plugins)) {
+      // Run before subpathExternalsResolver so the resolveId hooks win.
+      inputOptions.plugins.unshift(nodeBuiltinPrefix(), stubEdgeIncompatibleModules());
+
+      // Drop edge-incompatible modules from Rollup's external list so the stub plugin can redirect them.
+      if (Array.isArray(inputOptions.external)) {
+        inputOptions.external = inputOptions.external.filter(id => !EDGE_INCOMPATIBLE_MODULES.includes(id as string));
+      }
+    }
+
+    return inputOptions;
+  }
+
   async bundle(
     entryFile: string,
     outputDirectory: string,
@@ -40,28 +135,39 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot, enableEsmShim: true },
+      { outputDirectory, projectRoot, enableEsmShim: this.target !== 'edge' },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
 
     // Use Netlify Frameworks API config.json
     // https://docs.netlify.com/build/frameworks/frameworks-api/
-    await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
-      functions: {
-        directory: '.netlify/v1/functions',
-        node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
-        included_files: ['.netlify/v1/functions/**'],
-      },
-      redirects: [
-        {
-          force: true,
-          from: '/*',
-          to: '/.netlify/functions/api/:splat',
-          status: 200,
+    if (this.target === 'edge') {
+      await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+        edge_functions: [
+          {
+            function: 'index',
+            path: '/*',
+          },
+        ],
+      });
+    } else {
+      await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+        functions: {
+          directory: '.netlify/v1/functions',
+          node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
+          included_files: ['.netlify/v1/functions/**'],
         },
-      ],
-    });
+        redirects: [
+          {
+            force: true,
+            from: '/*',
+            to: '/.netlify/functions/api/:splat',
+            status: 200,
+          },
+        ],
+      });
+    }
 
     await move(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'), {
       overwrite: true,
@@ -91,13 +197,13 @@ export class NetlifyDeployer extends Deployer {
   async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
-    // Check for LibSQL dependency which is not supported in Netlify Functions
+    // LibSQL uses native Node.js bindings — incompatible with both serverless and edge environments
     const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
 
     if (hasLibsql) {
       this.logger?.error(
         `Netlify Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency.
-        LibSQL with file URLs uses native Node.js bindings that cannot run in serverless environments. Use other Mastra Storage options instead.`,
+        LibSQL with file URLs uses native Node.js bindings that cannot run in Netlify serverless or edge environments. Use other Mastra Storage options instead.`,
       );
       process.exit(1);
     }

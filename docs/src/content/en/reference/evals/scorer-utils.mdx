@@ -22,7 +22,19 @@ import {
   extractToolCalls,
   extractInputMessages,
   extractAgentResponseMessages,
+  compareTrajectories,
+  createTrajectoryTestRun,
 } from '@mastra/evals/scorers/utils'
+```
+
+Trajectory extraction functions are available from `@mastra/core/evals`:
+
+```typescript
+import {
+  extractTrajectory,
+  extractWorkflowTrajectory,
+  extractTrajectoryFromTrace,
+} from '@mastra/core/evals'
 ```
 
 ## Message extraction
@@ -300,6 +312,182 @@ const result = await myScorer.run({
   output: testRun.output,
 })
 ```
+
+## Trajectory utilities
+
+### `extractTrajectory`
+
+Extracts a `Trajectory` from agent output messages (`MastraDBMessage[]`). Converts tool invocations into `ToolCallStep` objects. The `runEvals` pipeline calls this automatically for trajectory scorers — you only need it for direct testing.
+
+Available from `@mastra/core/evals`.
+
+```typescript
+import { extractTrajectory } from '@mastra/core/evals'
+
+const trajectory = extractTrajectory(agentOutputMessages)
+// trajectory.steps — ToolCallStep[] extracted from toolInvocations
+// trajectory.rawOutput — the original MastraDBMessage[] array
+```
+
+**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
+
+### `extractWorkflowTrajectory`
+
+Extracts a `Trajectory` from workflow step results. Converts `StepResult` records into `WorkflowStepStep` objects, respecting the execution path ordering.
+
+Available from `@mastra/core/evals`.
+
+```typescript
+import { extractWorkflowTrajectory } from '@mastra/core/evals'
+
+const trajectory = extractWorkflowTrajectory(
+  workflowResult.steps, // Record<string, StepResult>
+  workflowResult.stepExecutionPath, // string[] (optional)
+)
+// trajectory.steps — WorkflowStepStep[] in execution order
+```
+
+**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
+
+### `extractTrajectoryFromTrace`
+
+Builds a hierarchical `Trajectory` from observability trace spans (`SpanRecord[]`). Reconstructs the parent-child span tree and maps each span to the appropriate `TrajectoryStep` discriminated union type with nested `children`.
+
+This is the preferred extraction method when storage is available. The `runEvals` pipeline calls this automatically when the target's `Mastra` instance has a configured storage backend. It produces richer trajectories than `extractTrajectory` or `extractWorkflowTrajectory` because it captures the full execution tree, including nested agent runs, tool calls, and model generations.
+
+Available from `@mastra/core/evals`.
+
+```typescript
+import { extractTrajectoryFromTrace } from '@mastra/core/evals'
+
+// After fetching a trace from the observability store
+const traceData = await observabilityStore.getTrace({ traceId })
+const trajectory = extractTrajectoryFromTrace(traceData.spans, rootSpanId)
+// trajectory.steps — hierarchical TrajectoryStep[] with children
+```
+
+**Parameters:**
+
+- `spans` (`SpanRecord[]`): Array of span records from a trace query.
+- `rootSpanId` (`string`, optional): Span ID to use as the starting point. When omitted, uses spans with no parent.
+
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]` with recursive `children` and `totalDurationMs`.
+
+#### Span type mapping
+
+| Span type | Trajectory step type | Key fields extracted |
+| - | - | - |
+| `TOOL_CALL` | `tool_call` | `toolArgs`, `toolResult`, `success` |
+| `MCP_TOOL_CALL` | `mcp_tool_call` | `toolArgs`, `toolResult`, `mcpServer`, `success` |
+| `MODEL_GENERATION` | `model_generation` | `modelId`, `promptTokens`, `completionTokens`, `finishReason` |
+| `AGENT_RUN` | `agent_run` | `agentId` (from entity ID) |
+| `WORKFLOW_RUN` | `workflow_run` | `workflowId` (from entity ID) |
+| `WORKFLOW_STEP` | `workflow_step` | `output` |
+| `WORKFLOW_CONDITIONAL` | `workflow_conditional` | `conditionCount`, `selectedSteps` |
+| `WORKFLOW_PARALLEL` | `workflow_parallel` | `branchCount`, `parallelSteps` |
+| `WORKFLOW_LOOP` | `workflow_loop` | `loopType`, `totalIterations` |
+| `WORKFLOW_SLEEP` | `workflow_sleep` | `sleepDurationMs`, `sleepType` |
+| `WORKFLOW_WAIT_EVENT` | `workflow_wait_event` | `eventName`, `eventReceived` |
+| `PROCESSOR_RUN` | `processor_run` | `processorId` |
+
+Spans with types `GENERIC`, `MODEL_STEP`, `MODEL_CHUNK`, and `WORKFLOW_CONDITIONAL_EVAL` are skipped as noise.
+
+### `compareTrajectories`
+
+Compares an actual trajectory against an expected trajectory and returns a detailed comparison result. Used internally by `createTrajectoryAccuracyScorerCode`.
+
+The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{ steps: ExpectedStep[] }`. When using `ExpectedStep[]`, you can match by name only, name + stepType, or include data for comparison. See [Expected steps](/reference/evals/trajectory-accuracy#expected-steps) for details.
+
+```typescript
+import { compareTrajectories } from '@mastra/evals/scorers/utils'
+
+// Using ExpectedStep[] (recommended for expectations)
+// Data fields (e.g. toolArgs) are auto-compared when present on expected steps
+const result = compareTrajectories(
+  actualTrajectory,
+  { steps: [{ name: 'search' }, { name: 'summarize', stepType: 'tool_call' }] },
+  { allowRepeatedSteps: true },
+)
+// result.score — 0.0 to 1.0
+// result.missingSteps — step names not found
+// result.extraSteps — unexpected step names
+// result.outOfOrderSteps — steps found but in wrong order
+```
+
+**Returns:** `TrajectoryComparisonResult`
+
+### `createTrajectoryTestRun`
+
+Creates a test run object for trajectory scorers. Wraps a `Trajectory` into the expected `ScorerRun` format.
+
+```typescript
+import { createTrajectoryTestRun } from '@mastra/evals/scorers/utils'
+
+const run = createTrajectoryTestRun({
+  steps: [
+    { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
+    { stepType: 'tool_call', name: 'summarize' },
+  ],
+})
+
+const result = await trajectoryScorer.run(run)
+```
+
+### `checkTrajectoryEfficiency`
+
+Evaluates trajectory efficiency against step, token, and duration budgets. Also detects redundant calls (same tool with same arguments).
+
+```typescript
+import { checkTrajectoryEfficiency } from '@mastra/evals/scorers/utils'
+
+const result = checkTrajectoryEfficiency(trajectory, {
+  maxSteps: 5,
+  maxTotalTokens: 2000,
+  maxTotalDurationMs: 5000,
+  noRedundantCalls: true,
+})
+// result.score — 1.0 if within all budgets, lower with penalties
+// result.redundantCalls — duplicate tool+args combos
+// result.overStepBudget — true if maxSteps exceeded
+// result.overTokenBudget — true if maxTotalTokens exceeded
+// result.overDurationBudget — true if maxTotalDurationMs exceeded
+```
+
+**Returns:** `TrajectoryEfficiencyResult`
+
+### `checkTrajectoryBlacklist`
+
+Checks whether a trajectory contains forbidden tools or tool call sequences.
+
+```typescript
+import { checkTrajectoryBlacklist } from '@mastra/evals/scorers/utils'
+
+const result = checkTrajectoryBlacklist(trajectory, {
+  blacklistedTools: ['deleteAll', 'admin-override'],
+  blacklistedSequences: [['escalate', 'admin-override']],
+})
+// result.score — 1.0 if no violations, 0.0 if any found
+// result.violatedTools — blacklisted tools that were called
+// result.violatedSequences — blacklisted sequences that were detected
+```
+
+**Returns:** `TrajectoryBlacklistResult`
+
+### `analyzeToolFailures`
+
+Detects tool failure patterns including retries, fallbacks, and argument corrections.
+
+```typescript
+import { analyzeToolFailures } from '@mastra/evals/scorers/utils'
+
+const result = analyzeToolFailures(trajectory, {
+  maxRetriesPerTool: 2,
+})
+// result.score — 1.0 if no failure patterns, lower if patterns detected
+// result.patterns — detected patterns (retry, fallback, arg_correction)
+```
+
+**Returns:** `ToolFailureAnalysisResult`
 
 ## Complete example
 

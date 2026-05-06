@@ -412,22 +412,22 @@
     },
     {
       "source": "/docs/deployment/mastra-cloud/overview",
-      "destination": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/mastra-cloud/setting-up",
-      "destination": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/mastra-cloud/studio",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/mastra-cloud/observability",
-      "destination": "/docs/mastra-cloud/observability",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
@@ -517,12 +517,12 @@
     },
     {
       "source": "/docs/mastra-cloud/setting-up",
-      "destination": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/mastra-cloud/dashboard",
-      "destination": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
@@ -663,6 +663,66 @@
     {
       "source": "/docs/agents/agent-memory",
       "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/studio",
+      "destination": "/docs/studio/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/studio",
+      "destination": "/docs/studio/deployment",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/studio",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/overview",
+      "destination": "/docs/evals/datasets/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/running-experiments",
+      "destination": "/docs/evals/datasets/running-experiments",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/listStoredAgents",
+      "destination": "/reference",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getStoredAgentById",
+      "destination": "/reference",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/deployment",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/observability",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/publishing-mcp-server",
+      "destination": "/guides/guide/publishing-mcp-server",
       "permanent": true
     }
   ]

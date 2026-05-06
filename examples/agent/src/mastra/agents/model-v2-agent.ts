@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai-v5';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
@@ -12,6 +11,7 @@ import {
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
+import { cryptoResearchTool, cryptoPriceTool } from '../tools';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
 import {
   createSubscription,
@@ -27,6 +27,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
+  skills: ['.agents/skills'],
 });
 
 const memory = new Memory({
@@ -50,11 +51,11 @@ export const errorAgent = new Agent({
   id: 'error-agent',
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
 });
 
 export const moderationProcessor = new ModerationProcessor({
-  model: openai('gpt-4.1-nano'),
+  model: 'openai/gpt-4.1-nano',
   categories: ['hate', 'harassment', 'violence'],
   threshold: 0.7,
   strategy: 'block',
@@ -107,7 +108,7 @@ const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     weatherInfo,
   },
@@ -124,7 +125,7 @@ export const networkAgent = new Agent({
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
   instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     weatherAgent,
   },
@@ -179,7 +180,7 @@ export const agentWithAdvancedModeration = new Agent({
   name: 'Agent with Advanced Moderation',
   description: 'A helpful assistant with advanced content moderation using parallel processor checks.',
   instructions: `You are a helpful assistant. Always provide detailed, thoughtful responses.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   inputProcessors: [advancedModerationWorkflow],
   outputProcessors: [responseQualityProcessor, stepLoggerProcessor],
   maxProcessorRetries: 2,
@@ -195,7 +196,7 @@ export const agentWithBranchingModeration = new Agent({
   name: 'Agent with Branching Moderation',
   description: 'A helpful assistant with smart content moderation that branches based on message content.',
   instructions: `You are a helpful assistant.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   inputProcessors: [branchingModerationWorkflow],
   outputProcessors: [stepLoggerProcessor],
   maxProcessorRetries: 2,
@@ -211,7 +212,7 @@ export const agentWithSequentialModeration = new Agent({
   name: 'Agent with Sequential Moderation',
   description: 'A helpful assistant with sequential content moderation checks.',
   instructions: `You are a helpful assistant.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   inputProcessors: [contentModerationWorkflow],
   outputProcessors: [responseQualityProcessor],
   maxProcessorRetries: 2,
@@ -236,7 +237,7 @@ export const researchAgent = new Agent({
     - Multiple perspectives
     - Relevant sources
     Be thorough but concise.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     weatherInfo, // Example tool for demonstration
   },
@@ -252,7 +253,7 @@ export const alternativeResearchAgent = new Agent({
   name: 'Alternative Research Agent',
   description: 'Alternative research agent (deprecated - use research-agent instead)',
   instructions: `You are a secondary research specialist. Note: This agent is deprecated in favor of the primary research-agent.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     weatherInfo,
   },
@@ -272,7 +273,7 @@ export const analysisAgent = new Agent({
     - Key insights
     - Actionable recommendations
     Focus on quality over quantity.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
 });
 
 /**
@@ -298,7 +299,7 @@ export const supervisorAgent = new Agent({
     4. Synthesize results into a comprehensive response
 
     Use the subagents effectively and iterate until the task is complete.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     researchAgent,
     alternativeResearchAgent,
@@ -494,7 +495,7 @@ const subscriptionSubAgent = new Agent({
     When creating a subscription, always confirm the details back to the user including the subscription ID.
     When updating, always confirm what was changed.
     Always be precise with subscription IDs.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     createSubscription,
     getSubscription,
@@ -511,7 +512,62 @@ const generalSubAgent = new Agent({
   instructions: `You are a helpful assistant that answers general questions about subscription services.
     You can explain different plan tiers, pricing structures, and policies.
     You do NOT have access to actual subscription data - for that, the user should be routed to the subscription management agent.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
+});
+
+/**
+ * Crypto Research Agent with Background Tasks
+ *
+ * This agent demonstrates the background tasks feature with a real-world use case:
+ * - `crypto-research` runs in the background — fetches comprehensive coin data from
+ *   CoinGecko (description, market stats, price history, links). The agent dispatches
+ *   it and continues the conversation while the data loads.
+ * - `crypto-price` runs in the foreground — quick price lookup via CoinGecko's
+ *   /simple/price endpoint, returns instantly.
+ *
+ * Example conversation flow:
+ *   User: "Research Solana for me, and also what's the current price of Bitcoin?"
+ *   Agent: dispatches crypto-research for Solana (background), calls crypto-price
+ *          for Bitcoin (foreground), responds with Bitcoin's price immediately and
+ *          tells the user Solana research is running.
+ *   User: "Thanks, what about Ethereum's price?"
+ *   Agent: calls crypto-price for Ethereum (foreground) — meanwhile the Solana
+ *          research completes in the background and the result is available for
+ *          the next turn.
+ */
+export const cryptoResearchAgent = new Agent({
+  id: 'crypto-research-agent',
+  name: 'Crypto Research Agent',
+  description:
+    'A crypto-focused agent that can research coins in depth (background) or quickly check prices (foreground).',
+  instructions: `You are a cryptocurrency research assistant. You have two tools:
+
+1. **cryptoResearchTool**: Fetches comprehensive data on a cryptocurrency — description, market stats,
+   price changes, all-time highs, supply info, categories, and links. This tool runs in the
+   background because it takes a moment to fetch all the data. When you use it, let the user know
+   the research has started and they'll get the full results shortly.
+
+2. **cryptoPriceTool**: Quickly looks up the current price, market cap, 24h volume, and 24h change
+   for one or more coins. This runs instantly.
+
+Use CoinGecko coin IDs (lowercase, hyphenated): "bitcoin", "ethereum", "solana", "dogecoin",
+"cardano", "polkadot", "avalanche-2", "chainlink", etc.
+
+When the user asks to "research" or "analyze" a coin, use crypto-research.
+When they just want a price or quick stats, use crypto-price.
+You can handle both at the same time — start a background research while answering a quick price check.`,
+  model: 'openai/gpt-5.4-mini',
+  tools: {
+    cryptoResearchTool,
+    cryptoPriceTool,
+  },
+  memory: new Memory(),
+  backgroundTasks: {
+    tools: {
+      cryptoResearchTool: true,
+    },
+    waitTimeoutMs: 10000,
+  },
 });
 
 export const subscriptionOrchestratorAgent = new Agent({
@@ -523,14 +579,21 @@ export const subscriptionOrchestratorAgent = new Agent({
     You have two sub-agents:
     1. subscriptionAgent - Use this for any CRUD operations on subscriptions (create, read, update, delete, list)
     2. generalAgent - Use this for general questions about plans, pricing, or policies
+    3. cryptoResearchAgent - Use this for cryptocurrency research
 
     Route user requests to the appropriate sub-agent. For follow-up actions on the same subscription
     (e.g., "create a subscription" then "now upgrade it"), make sure to include relevant context
     like the subscription ID in your delegation prompt.`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     subscriptionAgent: subscriptionSubAgent,
     generalAgent: generalSubAgent,
+    cryptoResearchAgent,
+  },
+  backgroundTasks: {
+    tools: {
+      cryptoResearchAgent: true,
+    },
   },
   memory: new Memory(),
   defaultOptions: {

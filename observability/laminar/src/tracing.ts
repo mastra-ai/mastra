@@ -673,8 +673,12 @@ function getSpanKind(type: SpanType): SpanKind {
   }
 }
 
-function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/g, '');
+export function stripTrailingSlash(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
+    end--;
+  }
+  return end === url.length ? url : url.slice(0, end);
 }
 
 function normalizeTraceId(traceId: string): string {

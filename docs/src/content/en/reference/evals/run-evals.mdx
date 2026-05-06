@@ -54,9 +54,9 @@ console.log(`Processed ${result.summary.totalItems} items`)
   },
   {
     name: 'scorers',
-    type: 'MastraScorer[] | WorkflowScorerConfig',
+    type: 'MastraScorer[] | AgentScorerConfig | WorkflowScorerConfig',
     description:
-      'Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.',
+      'Scorers to use. A flat array applies all scorers to the raw output. For agents, an `AgentScorerConfig` object separates agent-level and trajectory scorers. For workflows, a `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory.',
     isOptional: false,
   },
   {
@@ -100,6 +100,13 @@ console.log(`Processed ${result.summary.totalItems} items`)
     isOptional: true,
   },
   {
+    name: 'expectedTrajectory',
+    type: 'TrajectoryExpectation',
+    description:
+      'Expected trajectory configuration for trajectory scoring. Includes expected steps, ordering, efficiency budgets, blacklists, and tool failure tolerance. Passed to trajectory scorers as `run.expectedTrajectory`. Overrides the static defaults in scorer constructors.',
+    isOptional: true,
+  },
+  {
     name: 'requestContext',
     type: 'RequestContext',
     description: 'Request Context to pass to the target during execution.',
@@ -121,22 +128,52 @@ console.log(`Processed ${result.summary.totalItems} items`)
 ]}
 />
 
+## Agent scorer configuration
+
+For agents, use `AgentScorerConfig` to separate agent-level scorers from trajectory scorers:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'MastraScorer[]',
+    description:
+      'Scorers that receive the raw agent output (MastraDBMessage[]). Use for evaluating response quality, content, etc.',
+    isOptional: true,
+  },
+  {
+    name: 'trajectory',
+    type: 'MastraScorer[]',
+    description:
+      'Scorers that receive a pre-extracted Trajectory object. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested tool calls and model generations). Otherwise, it falls back to extracting tool calls from agent messages.',
+    isOptional: true,
+  },
+]}
+/>
+
 ## Workflow scorer configuration
 
-For workflows, you can specify scorers at different levels using `WorkflowScorerConfig`:
+For workflows, use `WorkflowScorerConfig` to specify scorers at different levels:
 
 <PropertiesTable
   content={[
   {
     name: 'workflow',
     type: 'MastraScorer[]',
-    description: 'Array of scorers to evaluate the entire workflow output.',
+    description: 'Scorers to evaluate the entire workflow output.',
     isOptional: true,
   },
   {
     name: 'steps',
     type: 'Record<string, MastraScorer[]>',
     description: 'Object mapping step IDs to arrays of scorers for evaluating individual step outputs.',
+    isOptional: true,
+  },
+  {
+    name: 'trajectory',
+    type: 'MastraScorer[]',
+    description:
+      'Scorers that receive a pre-extracted Trajectory from the workflow execution. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested agent runs and tool calls within workflow steps). Otherwise, it falls back to extracting step results from the workflow output.',
     isOptional: true,
   },
 ]}
@@ -198,6 +235,36 @@ const result = await runEvals({
 })
 ```
 
+### Agent trajectory evaluation
+
+Use `AgentScorerConfig` to evaluate both the agent response and its tool-calling trajectory:
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/code/trajectory'
+
+const trajectoryScorer = createTrajectoryAccuracyScorerCode()
+
+const result = await runEvals({
+  target: chatAgent,
+  data: [
+    {
+      input: 'What is the weather in London?',
+      expectedTrajectory: {
+        steps: [{ stepType: 'tool_call', name: 'weatherTool' }],
+      },
+    },
+  ],
+  scorers: {
+    // agent: [responseQualityScorer], // Optional: add agent-level scorers
+    trajectory: [trajectoryScorer],
+  },
+})
+
+// result.scores.agent — average agent-level scores
+// result.scores.trajectory — average trajectory scores
+```
+
 ### Agent with `targetOptions`
 
 Pass execution options like `maxSteps` or `modelSettings` to customize agent behavior during evaluation:
@@ -242,6 +309,37 @@ const workflowResult = await runEvals({
 })
 ```
 
+### Workflow trajectory evaluation
+
+Add trajectory scoring to workflow evaluations to validate step execution order:
+
+```typescript
+const workflowResult = await runEvals({
+  target: myWorkflow,
+  data: [
+    {
+      input: { query: 'Process this data' },
+      expectedTrajectory: {
+        steps: [
+          { stepType: 'workflow_step', name: 'validate' },
+          { stepType: 'workflow_step', name: 'process' },
+          { stepType: 'workflow_step', name: 'output' },
+        ],
+      },
+    },
+  ],
+  scorers: {
+    workflow: [outputQualityScorer],
+    steps: {
+      validate: [validationScorer],
+    },
+    trajectory: [trajectoryScorer],
+  },
+})
+
+// result.scores.trajectory — workflow trajectory scores
+```
+
 ### Workflow with per-item `startOptions`
 
 Use `startOptions` on individual data items to customize each workflow run. Per-item values take precedence over `targetOptions`:
@@ -266,7 +364,9 @@ const result = await runEvals({
 
 ## Related
 
-- [createScorer()](/reference/evals/create-scorer) - Create custom scorers for experiments
-- [MastraScorer](/reference/evals/mastra-scorer) - Learn about scorer structure and methods
-- [Custom Scorers](/docs/evals/custom-scorers) - Guide to building evaluation logic
-- [Scorers Overview](/docs/evals/overview) - Understanding scorer concepts
+- [createScorer()](/reference/evals/create-scorer): Create custom scorers for experiments
+- [MastraScorer](/reference/evals/mastra-scorer): Learn about scorer structure and methods
+- [Trajectory Accuracy](/reference/evals/trajectory-accuracy): Built-in trajectory evaluation scorers
+- [Scorer Utilities](/reference/evals/scorer-utils): Helper functions for extracting trajectory data
+- [Custom Scorers](/docs/evals/custom-scorers): Guide to building evaluation logic
+- [Scorers Overview](/docs/evals/overview): Understanding scorer concepts

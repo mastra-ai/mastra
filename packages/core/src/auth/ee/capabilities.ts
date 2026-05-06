@@ -5,6 +5,7 @@
 import type { MastraAuthProvider } from '../../server';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
 import type { IACLProvider } from './interfaces/acl';
+import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
 import { isLicenseValid, isDevEnvironment } from './license';
@@ -22,6 +23,8 @@ export interface PublicAuthCapabilities {
     type: 'sso' | 'credentials' | 'both';
     /** Whether sign-up is enabled (defaults to true) */
     signUpEnabled?: boolean;
+    /** Optional description explaining the auth requirement and what credentials to use */
+    description?: string;
     /** SSO configuration */
     sso?: {
       /** Provider name */
@@ -30,6 +33,8 @@ export interface PublicAuthCapabilities {
       text: string;
       /** Icon URL */
       icon?: string;
+      /** Description of the auth requirement */
+      description?: string;
       /** Login URL */
       url: string;
     };
@@ -64,6 +69,8 @@ export interface CapabilityFlags {
   rbac: boolean;
   /** IACLProvider is implemented and licensed */
   acl: boolean;
+  /** IFGAProvider is implemented and licensed */
+  fga: boolean;
 }
 
 /**
@@ -144,6 +151,12 @@ export interface BuildCapabilitiesOptions {
   rbac?: IRBACProvider<EEUser>;
 
   /**
+   * FGA provider for fine-grained authorization (EE feature).
+   * Separate from the auth provider to allow mixing different providers.
+   */
+  fga?: IFGAProvider<EEUser>;
+
+  /**
    * API route prefix used to construct SSO login URLs.
    * Defaults to `/api` when not provided.
    *
@@ -207,6 +220,7 @@ export async function buildCapabilities(
     login = {
       type: 'both',
       signUpEnabled,
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -216,6 +230,7 @@ export async function buildCapabilities(
     const ssoConfig = (auth as ISSOProvider).getLoginButtonConfig();
     login = {
       type: 'sso',
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -249,6 +264,9 @@ export async function buildCapabilities(
   const rbacProvider = options?.rbac;
   const hasRBAC = !!rbacProvider && isLicensedOrCloud;
 
+  // Get FGA provider from options (if configured)
+  const hasFGA = !!options?.fga && isLicensedOrCloud;
+
   // Build capability flags
   const capabilities: CapabilityFlags = {
     user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud,
@@ -256,6 +274,7 @@ export async function buildCapabilities(
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
+    fga: hasFGA,
   };
 
   // Get roles/permissions from RBAC provider (if available)

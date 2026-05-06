@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
@@ -21,6 +22,7 @@ export interface ObservationRunOpts {
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
   requestContext?: RequestContext;
+  observabilityContext?: ObservabilityContext;
 }
 
 /** Output from calling the observer agent. */
@@ -29,6 +31,12 @@ export interface ObserverOutput {
   currentTask?: string;
   suggestedContinuation?: string;
   threadTitle?: string;
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+}
+
+/** Result returned from ObservationStrategy.run(). */
+export interface ObservationRunResult {
+  observed: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 

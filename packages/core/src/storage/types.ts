@@ -981,6 +981,8 @@ export interface BufferedObservationChunk {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1018,6 +1020,17 @@ export interface BufferedObservationChunkInput {
  * - lastReflectionAt: createdAt of most recent reflection record
  * - previousGeneration: record with next-oldest createdAt
  */
+
+/** Options for filtering observational memory history queries. */
+export interface ObservationalMemoryHistoryOptions {
+  /** Only return records created at or after this date */
+  from?: Date;
+  /** Only return records created at or before this date */
+  to?: Date;
+  /** Number of records to skip (for pagination) */
+  offset?: number;
+}
+
 export interface ObservationalMemoryRecord {
   // Identity
   /** Unique record ID */
@@ -1307,6 +1320,15 @@ export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+}
+
+/**
+ * Input for updating the config of an existing observational memory record.
+ * The provided config is deep-merged into the record's existing config.
+ */
+export interface UpdateObservationalMemoryConfigInput {
+  id: string;
+  config: Record<string, unknown>;
 }
 
 // ============================================
@@ -2154,6 +2176,7 @@ export interface DatasetRecord {
   tags?: string[] | null;
   targetType?: TargetType | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -2170,6 +2193,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2185,6 +2209,7 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2210,6 +2235,7 @@ export interface CreateDatasetInput {
   requestContextSchema?: Record<string, unknown> | null;
   targetType?: TargetType;
   targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2223,12 +2249,14 @@ export interface UpdateDatasetInput {
   tags?: string[] | null;
   targetType?: TargetType | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2239,6 +2267,7 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2280,6 +2309,7 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2392,6 +2422,10 @@ export interface AddExperimentResultInput {
 
 export interface ListExperimentsInput {
   datasetId?: string;
+  targetType?: TargetType;
+  targetId?: string;
+  agentVersion?: string;
+  status?: ExperimentStatus;
   pagination: StoragePagination;
 }
 
@@ -2402,10 +2436,20 @@ export interface ListExperimentsOutput {
 
 export interface ListExperimentResultsInput {
   experimentId: string;
+  traceId?: string;
+  status?: ExperimentResultStatus;
   pagination: StoragePagination;
 }
 
 export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

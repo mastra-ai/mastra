@@ -1,14 +1,21 @@
 services:
   mssql:
-    image: mcr.microsoft.com/mssql/server:2025-latest
+    image: mcr.microsoft.com/mssql/server:2025-CU3-ubuntu-24.04
     environment:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=Your_password123
     ports:
       - '1433:1433'
     healthcheck:
-      test: ['CMD-SHELL', 'echo > /dev/tcp/localhost/1433']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      # sqlcmd verifies SQL Server is query-ready, not just that the port is open.
+      # This replaces the TCP-only check (echo > /dev/tcp/...) which passes ~20s
+      # before the engine can accept connections, enabling tighter poll intervals.
+      test:
+        [
+          'CMD-SHELL',
+          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Your_password123" -C -Q "SELECT 1" -b -o /dev/null',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s

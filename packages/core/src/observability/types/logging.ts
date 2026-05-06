@@ -31,11 +31,21 @@ export interface LoggerContext {
  * Log data transported via the event bus.
  * Must be JSON-serializable (Date serializes via toJSON()).
  *
- * Canonical correlation fields travel in `correlationContext`.
+ * Descriptive correlation metadata travels in `correlationContext`.
+ * Signal identity stays on the top-level `traceId` / `spanId` fields.
  */
 export interface ExportedLog {
+  /** Unique identifier for this log event, generated at emission time */
+  logId: string;
+
   /** When the log was emitted */
   timestamp: Date;
+
+  /** Trace associated with this log (undefined = not tied to a trace) */
+  traceId?: string;
+
+  /** Specific span associated with this log */
+  spanId?: string;
 
   /** Log severity level */
   level: LogLevel;
@@ -45,16 +55,6 @@ export interface ExportedLog {
 
   /** Structured data associated with this log */
   data?: Record<string, unknown>;
-
-  /**
-   * @deprecated Use `correlationContext.traceId` instead.
-   */
-  traceId?: string;
-
-  /**
-   * @deprecated Use `correlationContext.spanId` instead.
-   */
-  spanId?: string;
 
   /**
    * @deprecated Use `correlationContext.tags` instead.

@@ -6,11 +6,12 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { MaskedInput } from './masked-input.js';
 import { getThinkingLevelsForModel } from './thinking-settings.js';
 
 // =============================================================================
@@ -35,6 +36,7 @@ export interface SettingsCallbacks {
   onEscapeAsCancelChange: (enabled: boolean) => void;
   onQuietModeChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
+  onApiKeys?: () => void;
   onClose: () => void;
 }
 
@@ -66,7 +68,7 @@ class StorageBackendSubmenu extends Container {
   private phase: 'select' | 'connection' = 'select';
   private pendingBackend: StorageBackend = 'libsql';
   private selectList: SelectList;
-  private input!: Input;
+  private input!: MaskedInput;
   private onDone: (backend: StorageBackend, connectionUrl?: string) => void;
   private onBack: () => void;
   private currentPgConnectionString: string;
@@ -129,7 +131,7 @@ class StorageBackendSubmenu extends Container {
     }
     this.addChild(new Spacer(1));
 
-    this.input = new Input();
+    this.input = new MaskedInput();
     const currentValue = this.pendingBackend === 'pg' ? this.currentPgConnectionString : this.currentLibsqlUrl;
     if (currentValue) {
       this.input.setValue(currentValue);
@@ -147,7 +149,7 @@ class StorageBackendSubmenu extends Container {
     }
 
     // Connection string input phase
-    if (data === '\r' || data === '\n') {
+    if (matchesKey(data, 'enter') || data === '\r' || data === '\n') {
       const value = this.input.getValue().trim();
       if (this.pendingBackend === 'pg') {
         // PG requires a connection string
@@ -161,7 +163,7 @@ class StorageBackendSubmenu extends Container {
       return;
     }
 
-    if (data === '\x1b' || data === '\x1b\x1b') {
+    if (matchesKey(data, 'escape') || data === '\x1b' || data === '\x1b\x1b') {
       this.onBack();
       return;
     }
@@ -375,6 +377,20 @@ export class SettingsComponent extends Box implements Focusable {
           ),
       },
     ];
+
+    if (callbacks.onApiKeys) {
+      items.push({
+        id: 'apiKeys',
+        label: 'API Keys',
+        description: 'Add, update, or remove API keys for model providers',
+        currentValue: 'Manage →',
+        submenu: (_currentValue, done) => {
+          done();
+          callbacks.onApiKeys!();
+          return new Text('', 0, 0);
+        },
+      });
+    }
 
     this.settingsList = new SettingsList(
       items,

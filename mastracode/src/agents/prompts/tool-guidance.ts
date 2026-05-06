@@ -66,6 +66,18 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Bad: Running \`cat file.txt\` — use the ${MC_TOOLS.VIEW} tool instead.`);
   }
 
+  if (!denied.has(MC_TOOLS.LSP_INSPECT)) {
+    readTools.push(`
+**${MC_TOOLS.LSP_INSPECT}** — Inspect code using Language Server Protocol
+- Use this for type information, hover docs, go-to-definition, and finding implementations for a symbol.
+- Best when you already know the file and line and need semantic code intelligence rather than raw file contents.
+- Input: \`path\` (absolute file path), \`line\` (1-indexed line number), \`match\` (the exact line content with exactly one \`<<<\` cursor marker).
+- Output includes: \`hover\`, \`definition\` (compact location with preview), and \`implementation\` (compact usage/implementation locations).
+- Example: \`{ path: "/abs/path/src/foo.ts", line: 10, match: "const foo = <<<bar()" }\` — inspect the symbol at the \`<<<\` position.
+- Use \`${MC_TOOLS.VIEW}\` when you need to read the implementation or surrounding code.
+- Use \`${MC_TOOLS.SEARCH_CONTENT}\` or \`${MC_TOOLS.FIND_FILES}\` first if you do not yet know where the symbol is.`);
+  }
+
   if (readTools.length > 0) {
     sections.push(readTools.join('\n'));
   }

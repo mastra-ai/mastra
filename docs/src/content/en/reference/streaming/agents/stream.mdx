@@ -362,9 +362,9 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'schema',
-                    type: 'z.ZodSchema<S>',
+                    type: 'StandardJSONSchemaV1',
                     isOptional: false,
-                    description: 'Zod schema defining the expected output structure.',
+                    description: 'Standard JSON Schema defining the expected output structure.',
                   },
                 ],
               },
@@ -509,7 +509,7 @@ const stream = await agent.stream('message for agent')
                     type: 'MemoryConfig',
                     isOptional: true,
                     description:
-                      'Configuration for memory behavior including lastMessages, readOnly, semanticRecall, and workingMemory.',
+                      'Configuration for memory behavior including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
                   },
                 ],
               },
@@ -803,6 +803,49 @@ const stream = await agent.stream('message for agent')
                     type: 'string[]',
                     isOptional: true,
                     description: 'Tags to apply to this trace. String labels for categorizing and filtering traces.',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'versions',
+            type: 'VersionOverrides',
+            isOptional: true,
+            description:
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+            properties: [
+              {
+                type: 'VersionOverrides',
+                parameters: [
+                  {
+                    name: 'agents',
+                    type: 'Record<string, VersionSelector>',
+                    isOptional: true,
+                    description: 'A map of agent IDs to their version selectors.',
+                    properties: [
+                      {
+                        type: 'VersionSelector',
+                        parameters: [
+                          {
+                            name: 'versionId',
+                            type: 'string',
+                            isOptional: true,
+                            description: 'Target a specific version by ID.',
+                          },
+                        ],
+                      },
+                      {
+                        parameters: [
+                          {
+                            name: 'status',
+                            type: "'draft' | 'published'",
+                            isOptional: true,
+                            description: 'Target the latest version with this publication status.',
+                          },
+                        ],
+                      },
+                    ],
                   },
                 ],
               },

@@ -73,7 +73,14 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
-    return this.pricingModels.get(makePricingKey(args)) ?? null;
+    // Try all model name variants in order of preference
+    const variants = getModelVariants(args.model);
+    for (const variant of variants) {
+      const key = makePricingKey({ provider: args.provider, model: variant });
+      const match = this.pricingModels.get(key);
+      if (match) return match;
+    }
+    return null;
   }
 }
 
@@ -164,9 +171,53 @@ function getPackageRoot(): string {
 }
 
 function makePricingKey(args: { provider: string; model: string }): string {
-  return `${normalizeKeyPart(args.provider)}::${normalizeKeyPart(args.model)}`;
+  return `${normalizeProvider(args.provider)}::${normalizeKeyPart(args.model)}`;
 }
 
 function normalizeKeyPart(value: string): string {
   return value.trim().toLowerCase();
+}
+
+/**
+ * Normalize a provider string by stripping AI SDK capability suffixes
+ * (e.g. "openai.chat" → "openai", "anthropic.messages" → "anthropic").
+ * The pricing data uses bare provider names without these suffixes.
+ */
+function normalizeProvider(provider: string): string {
+  const normalized = provider.trim().toLowerCase();
+  const dotIndex = normalized.indexOf('.');
+  return dotIndex !== -1 ? normalized.substring(0, dotIndex) : normalized;
+}
+
+/**
+ * Generate model name variants to try during lookup, in priority order:
+ * 1. Original model name
+ * 2. Dots converted to dashes (e.g., "gpt-5.4" → "gpt-5-4")
+ * 3. Date suffix stripped from original
+ * 4. Date suffix stripped from dashed version
+ */
+function getModelVariants(model: string): string[] {
+  const dashed = model.replace(/\./g, '-');
+  return [model, dashed, stripDateSuffix(model), stripDateSuffix(dashed)];
+}
+
+/**
+ * Strip date suffix from model names.
+ * Handles multiple date formats used by different providers:
+ * - OpenAI: YYYY-MM-DD at end (e.g., "gpt-5-4-mini-2026-03-17" → "gpt-5-4-mini")
+ * - Anthropic: YYYYMMDD with optional suffix (e.g., "claude-sonnet-4-5-20250929-thinking" → "claude-sonnet-4-5-thinking")
+ * - Cohere/Gemini: MM-YYYY at end (e.g., "command-r-08-2024" → "command-r")
+ */
+function stripDateSuffix(model: string): string {
+  // OpenAI format: -YYYY-MM-DD at end
+  let stripped = model.replace(/-20\d{2}-\d{2}-\d{2}$/, '');
+  if (stripped !== model) return stripped;
+
+  // Anthropic format: -YYYYMMDD, possibly followed by suffix like -thinking
+  stripped = model.replace(/-20\d{6}(-[a-z]+)?$/, '$1');
+  if (stripped !== model) return stripped;
+
+  // Cohere/Gemini format: -MM-YYYY at end
+  stripped = model.replace(/-\d{2}-20\d{2}$/, '');
+  return stripped;
 }

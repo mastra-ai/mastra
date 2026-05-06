@@ -69,7 +69,6 @@ LanceDB
 LLM
 (?i)MAP
 (?i)Mastra
-Mastra Cloud
 (?i)MCP
 MinIO
 MLflow

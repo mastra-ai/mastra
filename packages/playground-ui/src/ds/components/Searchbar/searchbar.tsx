@@ -80,7 +80,7 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-none',
+            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-hidden',
             searchbarSizeClasses[size],
           )}
           name={id}

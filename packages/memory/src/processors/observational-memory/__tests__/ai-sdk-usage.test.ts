@@ -6,6 +6,8 @@
  * calls with mock models, OM primitives wired into onStepFinish/prepareStep hooks.
  */
 
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { generateText, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
@@ -457,6 +459,46 @@ describe('AI SDK: buffer in one turn, activate + generateText in next', () => {
         messages: [{ role: 'user' as const, content: 'Continue' }],
       });
       expect(result.text).toBe('Continuing with buffered context');
+    }
+  });
+
+  it('writes observer-exchange repro captures for buffering', async () => {
+    const reproDir = mkdtempSync('.tmp-om-repro-');
+    const previousCapture = process.env.OM_REPRO_CAPTURE;
+    const previousCaptureDir = process.env.OM_REPRO_CAPTURE_DIR;
+    process.env.OM_REPRO_CAPTURE = '1';
+    process.env.OM_REPRO_CAPTURE_DIR = reproDir;
+
+    try {
+      await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
+      const bufResult = await om.buffer({ threadId });
+
+      expect(bufResult.buffered).toBe(true);
+
+      const threadCaptureDir = join(process.cwd(), reproDir, threadId);
+      const runDir = readdirSync(threadCaptureDir).find(name => name.includes('buffer-buffer-obs-'));
+      expect(runDir).toBeTruthy();
+
+      const observerExchange = JSON.parse(
+        readFileSync(join(threadCaptureDir, runDir!, 'observer-exchange.json'), 'utf8'),
+      );
+      expect(observerExchange.systemPrompt).toBeTruthy();
+      expect(observerExchange.observerMessages).toHaveLength(2);
+      expect(observerExchange.rawOutput).toContain('<observations>');
+    } finally {
+      if (previousCapture === undefined) {
+        delete process.env.OM_REPRO_CAPTURE;
+      } else {
+        process.env.OM_REPRO_CAPTURE = previousCapture;
+      }
+
+      if (previousCaptureDir === undefined) {
+        delete process.env.OM_REPRO_CAPTURE_DIR;
+      } else {
+        process.env.OM_REPRO_CAPTURE_DIR = previousCaptureDir;
+      }
+
+      rmSync(reproDir, { recursive: true, force: true });
     }
   });
 });

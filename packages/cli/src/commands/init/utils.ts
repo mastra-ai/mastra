@@ -3,10 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
-import type { ModelRouterModelId } from '@mastra/core/llm/model';
+import type { ModelRouterModelId } from '@mastra/core/llm';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
-import prettier from 'prettier';
 import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
@@ -67,35 +66,27 @@ export async function writeAgentSample(
 ) {
   const modelString = getModelIdentifier(llmProvider);
 
-  const instructions = `
-      You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
+  const instructions = `You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-      - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
-      - If the user asks for activities, respond in the format they request.
-
-      ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
-`;
-  const content = `
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
-${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
-
-export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  instructions: \`${instructions}\`,
-  model: '${modelString}',
-  ${addExampleTool ? 'tools: { weatherTool },' : ''}
-  ${
-    addScorers
-      ? `scorers: {
+Your primary function is to help users get weather details for specific locations. When responding:
+- Always ask for a location if none is provided
+- If the location name isn't in English, please translate it
+- If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+- Include relevant details like humidity, wind conditions, and precipitation
+- Keep responses concise but informative
+- If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
+- If the user asks for activities, respond in the format they request.${addExampleTool ? '\n\nUse the weatherTool to fetch current weather data.' : ''}`;
+  const imports = [
+    `import { Agent } from '@mastra/core/agent';`,
+    `import { Memory } from '@mastra/memory';`,
+    addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : undefined,
+    addScorers ? `import { scorers } from '../scorers/weather-scorer';` : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const toolsConfig = addExampleTool ? `  tools: { weatherTool },\n` : '';
+  const scorersConfig = addScorers
+    ? `  scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
       sampling: {
@@ -117,19 +108,21 @@ export const weatherAgent = new Agent({
         rate: 1,
       },
     },
-  },`
-      : ''
-  }
-  memory: new Memory()
-});
-    `;
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    singleQuote: true,
-  });
+  },
+`
+    : '';
+  const content = `${imports}
 
-  await fs.writeFile(destPath, '');
-  await fs.writeFile(destPath, formattedContent);
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: \`${instructions}\`,
+  model: '${modelString}',
+${toolsConfig}${scorersConfig}  memory: new Memory(),
+});
+`;
+
+  await fs.writeFile(destPath, content);
 }
 
 export async function writeWorkflowSample(destPath: string) {
@@ -319,13 +312,7 @@ weatherWorkflow.commit();
 
 export { weatherWorkflow };`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    semi: true,
-    singleQuote: true,
-  });
-
-  await fs.writeFile(destPath, formattedContent);
+  await fs.writeFile(destPath, content);
 }
 
 export async function writeToolSample(destPath: string) {
@@ -416,12 +403,7 @@ export const scorers = {
   translationScorer,
 };`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    singleQuote: true,
-  });
-
-  await fs.writeFile(destPath, formattedContent);
+  await fs.writeFile(destPath, content);
 }
 
 export async function writeCodeSampleForComponents(
@@ -495,6 +477,8 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { DuckDBStore } from "@mastra/duckdb";
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
@@ -502,10 +486,15 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    // stores observability, scores, ... into persistent file storage
-    url: "file:./mastra.db",
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: "mastra-storage",
+      url: "file:./mastra.db",
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    }
   }),
   logger: new PinoLogger({
     name: 'Mastra',
@@ -517,7 +506,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -712,9 +701,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         });
 
         if (keyChoice === 'enter') {
-          return p.text({
+          return p.password({
             message: 'Enter your API key:',
-            placeholder: 'sk-...',
+            mask: '*',
+            clearOnError: true,
             validate: value => {
               if (!value || value.length === 0) return 'API key cannot be empty';
             },
@@ -1057,12 +1047,8 @@ Learn more in the [MCP Documentation](https://mastra.ai/docs/mcp/overview).
  */
 export async function writeAgentsMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
   const content = generateAgentsMarkdown(options);
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
   const filePath = path.join(process.cwd(), 'AGENTS.md');
-  await fs.writeFile(filePath, formattedContent);
+  await fs.writeFile(filePath, content);
 }
 
 /**

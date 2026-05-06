@@ -221,6 +221,64 @@ describe('ProcessorRunner', () => {
       expect(executionOrder).toEqual(['processor1']);
     });
 
+    it('should call onViolation when a processor triggers abort()', async () => {
+      const onViolation = vi.fn();
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Cost exceeded', { metadata: { limit: 5, usage: 7 } });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'guard-processor',
+        message: 'Cost exceeded',
+        detail: { limit: 5, usage: 7 },
+      });
+    });
+
+    it('should not fail if onViolation throws', async () => {
+      const onViolation = vi.fn().mockRejectedValue(new Error('callback error'));
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Blocked');
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalled();
+    });
+
     it('should skip processors that do not implement processInput', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
@@ -1081,6 +1139,58 @@ describe('ProcessorRunner', () => {
       expect(chunks[1]).toEqual({ type: 'tool-call', toolCallId: '123' });
       expect(chunks[2]).toEqual({ type: 'finish' });
     });
+
+    it('should not enqueue undefined into the stream when a processor returns undefined', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'returnUndefined',
+          name: 'Return Undefined',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta' && part.payload.text === 'bad') {
+              // Simulate a processor that forgets to `return part`
+              return undefined as unknown as ChunkType;
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const mockStream = {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.enqueue({ type: 'text-delta', payload: { text: 'bad' } });
+            controller.enqueue({ type: 'text-delta', payload: { text: 'world' } });
+            controller.enqueue({ type: 'finish' });
+            controller.close();
+          },
+        }),
+      };
+
+      const processedStream = await runner.runOutputProcessorsForStream(mockStream as any);
+      const reader = processedStream.getReader();
+      const chunks: Array<ChunkType | undefined> = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // Consumer should never see an `undefined` chunk.
+      expect(chunks.some(c => c === undefined)).toBe(false);
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'hello' } });
+      expect(chunks[1]).toEqual({ type: 'text-delta', payload: { text: 'world' } });
+      expect(chunks[2]).toEqual({ type: 'finish' });
+    });
   });
 
   /**
@@ -1809,6 +1919,83 @@ describe('ProcessorRunner', () => {
       expect(allMessages).toHaveLength(2);
       expect(allMessages[1].role).toBe('assistant');
     });
+
+    it('should receive usage data in processOutputStep', async () => {
+      let receivedUsage: unknown = undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'usage-processor',
+          name: 'Usage Processor',
+          processOutputStep: async ({ messages, usage }) => {
+            receivedUsage = usage;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      };
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        usage,
+      });
+
+      expect(receivedUsage).toEqual(usage);
+    });
+
+    it('should provide default usage when not supplied', async () => {
+      let receivedUsage: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'usage-default-processor',
+          name: 'Usage Default Processor',
+          processOutputStep: async ({ messages, usage }) => {
+            receivedUsage = usage;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+      });
+
+      expect(receivedUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    });
   });
 
   describe('writer availability in output processors', () => {
@@ -2043,6 +2230,199 @@ describe('ProcessorRunner', () => {
 
       // State set in inner runner's processOutputStream should be accessible in outer runner's processOutputResult
       expect(stateInOutputResult.errorInfo).toEqual({ toolName: 'myTool', error: 'something broke' });
+    });
+  });
+
+  describe('runProcessAPIError', () => {
+    it('should call processAPIError on processors that implement it', async () => {
+      const processAPIError = vi.fn().mockReturnValue({ retry: true });
+      const processor: Processor = {
+        id: 'error-handler',
+        name: 'Error Handler',
+        processAPIError,
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+      const error = new Error('Some API error');
+
+      const abortSignal = new AbortController().signal;
+      const result = await runner.runProcessAPIError({
+        error,
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+        abortSignal,
+      });
+
+      expect(processAPIError).toHaveBeenCalledTimes(1);
+      expect(processAPIError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error,
+          stepNumber: 0,
+          retryCount: 0,
+          abortSignal,
+        }),
+      );
+      expect(result).toEqual({ retry: true });
+    });
+
+    it('should skip processors that do not implement processAPIError', async () => {
+      const processAPIError = vi.fn().mockReturnValue({ retry: true });
+      const skippedProcessor: Processor = {
+        id: 'input-only',
+        name: 'Input Only',
+        processInput: vi.fn(),
+      };
+      const errorProcessor: Processor = {
+        id: 'error-handler',
+        name: 'Error Handler',
+        processAPIError,
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [skippedProcessor, errorProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(processAPIError).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ retry: true });
+    });
+
+    it('should return { retry: false } when no processors handle the error', async () => {
+      const processAPIError = vi.fn().mockReturnValue(undefined);
+      const processor: Processor = {
+        id: 'noop-handler',
+        name: 'Noop Handler',
+        processAPIError,
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(result).toEqual({ retry: false });
+    });
+
+    it('should stop at the first processor that signals retry', async () => {
+      const processAPIError1 = vi.fn().mockReturnValue({ retry: true });
+      const processAPIError2 = vi.fn().mockReturnValue({ retry: true });
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          { id: 'handler1', processAPIError: processAPIError1 },
+          { id: 'handler2', processAPIError: processAPIError2 },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(processAPIError1).toHaveBeenCalledTimes(1);
+      expect(processAPIError2).not.toHaveBeenCalled();
+      expect(result).toEqual({ retry: true });
+    });
+
+    it('should check both input and output processors', async () => {
+      const inputHandler = vi.fn().mockReturnValue(undefined);
+      const outputHandler = vi.fn().mockReturnValue({ retry: true });
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'input-handler', processAPIError: inputHandler }],
+        outputProcessors: [{ id: 'output-handler', processAPIError: outputHandler }],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(inputHandler).toHaveBeenCalledTimes(1);
+      expect(outputHandler).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ retry: true });
+    });
+
+    it('should not throw if a processAPIError handler itself fails', async () => {
+      const failingHandler = vi.fn().mockRejectedValue(new Error('Handler crashed'));
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'failing-handler', processAPIError: failingHandler }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      // Reset mockLogger.error to avoid false positives from earlier tests
+      vi.mocked(mockLogger.error).mockClear();
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      // Should swallow the error and return retry: false
+      expect(result).toEqual({ retry: false });
+      expect(mockLogger.error).toHaveBeenCalled();
     });
   });
 });

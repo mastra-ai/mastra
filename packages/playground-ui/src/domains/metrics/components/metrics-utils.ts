@@ -4,6 +4,13 @@ export function formatCompact(n: number): string {
   return n.toLocaleString();
 }
 
+export function formatCost(value: number, unit?: string | null): string {
+  if (unit?.toLowerCase() === 'usd' || !unit) {
+    return `$${value < 0.01 && value > 0 ? value.toFixed(4) : value.toFixed(2)}`;
+  }
+  return `${value.toFixed(4)} ${unit}`;
+}
+
 export const CHART_COLORS = {
   green: '#22c55e',
   orange: '#fb923c',
