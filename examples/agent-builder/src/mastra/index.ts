@@ -85,6 +85,7 @@ export const mastra = new Mastra({
           stars: true,
           model: true,
           browser: true,
+          avatarUpload: true,
         },
       },
       configuration: {
