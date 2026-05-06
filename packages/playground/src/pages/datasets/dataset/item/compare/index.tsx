@@ -14,7 +14,11 @@ import {
   MainContentLayout,
   MainHeader,
   PermissionDenied,
-  SelectField,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SessionExpired,
   TextAndIcon,
   is401UnauthorizedError,
@@ -223,15 +227,18 @@ function CompareItemColumn({
   return (
     <Column>
       <Column.Toolbar className="flex gap-4">
-        <SelectField
-          label="Item"
-          name={`compare-item-${idx}`}
-          value={itemId}
-          onValueChange={onItemChange}
-          options={options}
-          placeholder="Select item"
-          labelIsHidden={true}
-        />
+        <Select name={`compare-item-${idx}`} value={itemId} onValueChange={onItemChange}>
+          <SelectTrigger aria-label="Item">
+            <SelectValue placeholder="Select item" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(option => (
+              <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
           <History />
           Versions

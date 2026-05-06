@@ -33,6 +33,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 type SidebarLink = NavLink & {
+  isOnMastraPlatform: boolean;
   requiredPermission?: string;
   requiredAnyPermission?: string[];
   requiresExperimentalFeatures?: boolean;

@@ -14,7 +14,11 @@ import {
   MainContentLayout,
   MainHeader,
   PermissionDenied,
-  SelectField,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SessionExpired,
   TextAndIcon,
   is401UnauthorizedError,
@@ -291,16 +295,22 @@ function CompareVersionColumn({
     <Column>
       <Column.Toolbar className="grid gap-4 grid-cols-[auto_1fr]">
         <HistoryIcon className="w-6 h-6 opacity-50" />
-        <SelectField
-          label="Version"
+        <Select
           name={`compare-version-${idx}`}
           value={String(datasetVersion)}
           onValueChange={(val: string) => onVersionChange(Number(val))}
-          options={options}
-          placeholder="Select version"
-          labelIsHidden={true}
-          className="w-full"
-        />
+        >
+          <SelectTrigger aria-label="Version" className="w-full">
+            <SelectValue placeholder="Select version" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(option => (
+              <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Column.Toolbar>
 
       {showContent && (
