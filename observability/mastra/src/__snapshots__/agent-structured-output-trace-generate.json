@@ -182,6 +182,10 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
+                      "parameters": {},
+                      "availableTools": [],
+                      "toolChoice": "auto",
+                      "responseFormat": "json_schema",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -462,6 +466,10 @@
                               "model": "mock-model-id",
                               "provider": "mock-provider",
                               "streaming": true,
+                              "parameters": {},
+                              "availableTools": [],
+                              "toolChoice": "auto",
+                              "responseFormat": "json_schema",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,

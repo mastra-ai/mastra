@@ -182,6 +182,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
+                      "parameters": {},
+                      "availableTools": ["calculator"],
+                      "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 10,
                         "outputTokens": 15,
@@ -410,6 +413,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
+                      "parameters": {},
+                      "availableTools": ["calculator"],
+                      "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 20,
                         "outputTokens": 10,

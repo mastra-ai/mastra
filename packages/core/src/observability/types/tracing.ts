@@ -892,6 +892,19 @@ export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENE
   providerMetadata?: ProviderMetadata;
 }
 
+/**
+ * Static request-side context applied to every MODEL_INFERENCE span the
+ * tracker creates. These fields describe what was sent to the model and
+ * are constant across the steps of a single generation in the common case.
+ */
+export interface ModelInferenceContext {
+  parameters?: ModelInferenceAttributes['parameters'];
+  providerOptions?: ModelInferenceAttributes['providerOptions'];
+  availableTools?: ModelInferenceAttributes['availableTools'];
+  toolChoice?: ModelInferenceAttributes['toolChoice'];
+  responseFormat?: ModelInferenceAttributes['responseFormat'];
+}
+
 /** Tracks model execution steps and streaming chunks within a MODEL_GENERATION span. */
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
@@ -901,6 +914,13 @@ export interface IModelSpanTracker {
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
+
+  /**
+   * Set the request-side context applied to subsequent MODEL_INFERENCE spans
+   * (parameters, providerOptions, availableTools, toolChoice, responseFormat).
+   * Call once after creating the tracker; later calls overwrite.
+   */
+  setInferenceContext?(context: ModelInferenceContext): void;
 
   /**
    * Enable or disable deferred step closing for durable execution.

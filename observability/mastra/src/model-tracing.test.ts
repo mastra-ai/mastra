@@ -1449,6 +1449,49 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan!.attributes.usage).toBeDefined();
     });
 
+    it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.setInferenceContext({
+        parameters: { temperature: 0.7, maxOutputTokens: 1024 },
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        availableTools: ['weather', 'calculator'],
+        toolChoice: 'auto',
+        responseFormat: 'json_schema',
+      });
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes).toMatchObject({
+        parameters: { temperature: 0.7, maxOutputTokens: 1024 },
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        availableTools: ['weather', 'calculator'],
+        toolChoice: 'auto',
+        responseFormat: 'json_schema',
+      });
+    });
+
     describe('feature-flag fallback for older @mastra/core', () => {
       afterEach(() => {
         // Restore the flag for subsequent tests in the suite

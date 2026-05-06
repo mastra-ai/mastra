@@ -187,6 +187,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
+                      "parameters": {},
+                      "availableTools": ["calculator", "apiCall", "workflowExecutor"],
+                      "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 10,
@@ -398,6 +401,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
+                      "parameters": {},
+                      "availableTools": ["calculator", "apiCall", "workflowExecutor"],
+                      "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,

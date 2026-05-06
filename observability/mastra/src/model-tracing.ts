@@ -19,6 +19,7 @@ import type {
   Span,
   EndGenerationOptions,
   ErrorSpanOptions,
+  ModelInferenceContext,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
@@ -268,9 +269,19 @@ export class ModelSpanTracker {
   #deferStepClose: boolean = false;
   /** Stored step-finish payload when defer mode is enabled */
   #pendingStepFinishPayload?: StepFinishPayload<any, any>;
+  /** Static request-side context applied to every MODEL_INFERENCE span */
+  #inferenceContext?: ModelInferenceContext;
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
+  }
+
+  /**
+   * Set request-side context applied to subsequent MODEL_INFERENCE spans.
+   * No-op when paired with an older @mastra/core that lacks the feature flag.
+   */
+  setInferenceContext(context: ModelInferenceContext): void {
+    this.#inferenceContext = context;
   }
 
   /**
@@ -439,6 +450,7 @@ export class ModelSpanTracker {
     }
 
     const generationAttrs = this.#modelSpan?.attributes;
+    const ctx = this.#inferenceContext;
     this.#currentInferenceSpan = this.#currentStepSpan.createChildSpan({
       name: `inference: ${this.#stepIndex}`,
       type: SpanType.MODEL_INFERENCE,
@@ -447,6 +459,11 @@ export class ModelSpanTracker {
         model: generationAttrs?.model,
         provider: generationAttrs?.provider,
         streaming: generationAttrs?.streaming,
+        ...(ctx?.parameters !== undefined ? { parameters: ctx.parameters } : {}),
+        ...(ctx?.providerOptions !== undefined ? { providerOptions: ctx.providerOptions } : {}),
+        ...(ctx?.availableTools !== undefined ? { availableTools: ctx.availableTools } : {}),
+        ...(ctx?.toolChoice !== undefined ? { toolChoice: ctx.toolChoice } : {}),
+        ...(ctx?.responseFormat !== undefined ? { responseFormat: ctx.responseFormat } : {}),
       },
       input,
     });

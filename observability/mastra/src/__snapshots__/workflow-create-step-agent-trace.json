@@ -248,6 +248,9 @@
                               "model": "mock-model-id",
                               "provider": "mock-provider",
                               "streaming": true,
+                              "parameters": {},
+                              "availableTools": [],
+                              "toolChoice": "auto",
                               "usage": {
                                 "inputTokens": 10,
                                 "outputTokens": 20,
