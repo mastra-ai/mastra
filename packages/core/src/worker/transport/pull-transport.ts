@@ -1,5 +1,6 @@
 import type { PubSub } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
+import type { IMastraLogger } from '../../logger';
 import type { EventRouter, WorkerTransport } from './transport';
 
 const TOPIC_WORKFLOWS = 'workflows';
@@ -7,11 +8,13 @@ const TOPIC_WORKFLOWS = 'workflows';
 export class PullTransport implements WorkerTransport {
   #pubsub: PubSub;
   #group: string;
+  #logger?: IMastraLogger;
   #callbacks: Array<{ topic: string; cb: EventCallback }> = [];
 
-  constructor({ pubsub, group }: { pubsub: PubSub; group: string }) {
+  constructor({ pubsub, group, logger }: { pubsub: PubSub; group: string; logger?: IMastraLogger }) {
     this.#pubsub = pubsub;
     this.#group = group;
+    this.#logger = logger;
   }
 
   async start(router: EventRouter): Promise<void> {
@@ -27,7 +30,7 @@ export class PullTransport implements WorkerTransport {
             void nack();
           }
         } finally {
-          console.error('[PullTransport] router.route rejected:', err);
+          this.#logger?.error('[PullTransport] router.route rejected', { err });
         }
       });
     };

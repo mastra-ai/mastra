@@ -156,4 +156,9 @@ describe('BackgroundTaskWorker', () => {
     await worker.stop();
     expect(worker.isRunning).toBe(false);
   });
+
+  it('start() before init() throws', async () => {
+    const worker = new BackgroundTaskWorker();
+    await expect(worker.start()).rejects.toThrow('call init() before start()');
+  });
 });

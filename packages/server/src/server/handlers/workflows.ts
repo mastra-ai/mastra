@@ -1226,19 +1226,18 @@ interface StepExecutionHandlerArgs extends StepExecutionBody {
 // The strategy is stateless beyond its mastra reference, but allocating it
 // per request triggers a dynamic import on the hot path.
 //
-// The dynamic import is intentional: `@mastra/core/worker` is a new subpath
-// added on this branch, and using a static import would fail
-// `pnpm --filter ./packages/server check:core-imports` until peer-dep
-// floors are bumped. Once they are, this can become a static import.
-const strategyByMastra = new WeakMap<object, { executeStep: (p: unknown) => Promise<unknown> }>();
+// The dynamic import is required by `pnpm --filter ./packages/server
+// check:core-imports`: `@mastra/core/worker` is a new subpath that older
+// peer-dep floors don't expose, so a static import would fail the check.
+// Once the floor is bumped, this can become a static import.
+type StepStrategy = { executeStep: (p: unknown) => Promise<unknown> };
+const strategyByMastra = new WeakMap<Mastra, StepStrategy>();
 
-async function getStepStrategy(mastra: object) {
+async function getStepStrategy(mastra: Mastra): Promise<StepStrategy> {
   let cached = strategyByMastra.get(mastra);
   if (!cached) {
     const { InProcessStrategy } = await import('@mastra/core/worker');
-    cached = new InProcessStrategy({ mastra: mastra as any }) as unknown as {
-      executeStep: (p: unknown) => Promise<unknown>;
-    };
+    cached = new InProcessStrategy({ mastra }) as unknown as StepStrategy;
     strategyByMastra.set(mastra, cached);
   }
   return cached;

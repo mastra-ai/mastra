@@ -68,7 +68,7 @@ export class OrchestrationWorker extends MastraWorker {
     if (!this.deps) throw new Error('OrchestrationWorker: call init() before start()');
 
     const group = this.#config.group ?? DEFAULT_GROUP;
-    this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group });
+    this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group, logger: this.deps.logger });
 
     await this.#transport.start({
       route: (event, ack, nack) => this.#processEvent(event, ack, nack),
