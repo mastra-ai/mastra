@@ -156,8 +156,6 @@ export interface SerializableDurableOptions {
   hasErrorProcessors?: boolean;
   /** Structured output configuration */
   structuredOutput?: SerializableStructuredOutput;
-  /** Provider-specific options forwarded on the model request (e.g. openai.reasoningEffort) */
-  providerOptions?: Record<string, unknown>;
   /** When true, the background task check step skips its in-loop wait (external driver handles continuation) */
   skipBgTaskWait?: boolean;
 }

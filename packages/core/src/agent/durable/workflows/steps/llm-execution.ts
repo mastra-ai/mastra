@@ -218,7 +218,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // without the method gracefully no-op.
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
-              providerOptions: execOptions.providerOptions,
               availableTools: currentTools ? Object.keys(currentTools) : undefined,
               toolChoice: currentToolChoice as any,
               responseFormat: execOptions.structuredOutput ? 'json_schema' : undefined,
