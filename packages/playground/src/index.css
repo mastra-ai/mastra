@@ -1,8 +1,7 @@
-@import 'tailwindcss';
+@import '../../playground-ui/src/index.css';
 
-/* Scan playground-ui package for Tailwind classes */
+/* Scan playground-ui dist for Tailwind classes used by consumed components */
 @source '../../node_modules/@mastra/playground-ui';
-@custom-variant dark (&:is(.dark *));
 
 @font-face {
   font-family: 'TasaExplorer';
@@ -16,7 +15,6 @@
     local('Inter'),
     url('./assets/fonts/InterVariable.ttf') format('truetype');
 }
-
 @font-face {
   font-family: 'GeistMonoVF';
   src:
@@ -24,178 +22,47 @@
     url('./assets/fonts/GeistMonoVF.woff') format('woff');
 }
 
-:root {
-  --font-inter: 'Inter', sans-serif;
-  --tasa-explorer: 'TasaExplorer', sans-serif;
-  --geist-mono: 'GeistMonoVF', monospace;
-
-  /* Dark theme (default) */
-  --surface1: #09090b;
-  --surface2: #111113;
-  --surface3: #18181b;
-  --surface4: #212124;
-  --surface5: rgba(39, 39, 42, 0.9);
-  --surface6: #3b3b40;
-
-  --accent1: #22c55e;
-  --accent2: #ef4444;
-  --accent3: #3b82f6;
-  --accent5: #60a5fa;
-  --accent6: #f59e0b;
-
-  --accent1Dark: #0d2818;
-  --accent2Dark: #2a1515;
-  --accent3Dark: #152036;
-  --accent5Dark: #15202a;
-  --accent6Dark: #261d0d;
-
-  --accent1Darker: #0a1a10;
-  --accent2Darker: #1a1010;
-  --accent3Darker: #0f1520;
-  --accent5Darker: #0f151a;
-  --accent6Darker: #1a140a;
-
-  --neutral1: #52525b;
-  --neutral2: #71717a;
-  --neutral3: #a1a1aa;
-  --neutral4: #d4d4d8;
-  --neutral5: #e4e4e7;
-  --neutral6: #fafafa;
-
-  --error: #ef4444;
-  --overlay: rgba(0, 0, 0, 0.75);
-  --border1: rgba(255, 255, 255, 0.08);
-  --border2: rgba(255, 255, 255, 0.12);
-}
-
-html.light {
-  --surface1: #ffffff;
-  --surface2: #f8fafc;
-  --surface3: #f1f5f9;
-  --surface4: #e2e8f0;
-  --surface5: rgba(226, 232, 240, 0.9);
-  --surface6: #cbd5e1;
-
-  --accent1: #16a34a;
-  --accent2: #dc2626;
-  --accent3: #2563eb;
-  --accent5: #3b82f6;
-  --accent6: #d97706;
-
-  --accent1Dark: #dcfce7;
-  --accent2Dark: #fee2e2;
-  --accent3Dark: #dbeafe;
-  --accent5Dark: #dbeafe;
-  --accent6Dark: #fef3c7;
-
-  --accent1Darker: #bbf7d0;
-  --accent2Darker: #fecaca;
-  --accent3Darker: #bfdbfe;
-  --accent5Darker: #bfdbfe;
-  --accent6Darker: #fde68a;
-
-  --neutral1: #64748b;
-  --neutral2: #475569;
-  --neutral3: #334155;
-  --neutral4: #1e293b;
-  --neutral5: #0f172a;
-  --neutral6: #020617;
-
-  --error: #dc2626;
-  --overlay: rgba(15, 23, 42, 0.45);
-  --border1: rgba(15, 23, 42, 0.12);
-  --border2: rgba(15, 23, 42, 0.2);
-
-  --color-thumb: #e2e8f0;
-  --color-thumb-hover: #d2d7df;
-}
-
-/* width */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 8px;
-}
-
-/* Track */
-::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 5px;
-}
-
-html.light::-webkit-scrollbar-thumb {
-  background: var(--color-thumb);
-}
-
-html.light::-webkit-scrollbar-thumb:hover {
-  background: var(--color-thumb-hover);
-}
-
-/* Handle */
-html::-webkit-scrollbar-thumb {
-  background: var(--color-thumb);
-  border-radius: 4px;
-}
-
-/* Handle on hover */
-html::-webkit-scrollbar-thumb:hover {
-  background: var(--color-thumb-hover);
-}
-
-@theme {
-  --font-sans:
-    var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-    'Noto Color Emoji';
-  --font-serif: var(--tasa-explorer), ui-serif, georgia, cambria, 'Times New Roman', times, serif;
-  --font-mono:
-    var(--geist-mono), ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New',
-    monospace;
-}
-
 @layer base {
   :root {
-    --radius: 0.5rem;
     --top-bar-height: 40px;
-    --color-thumb: #404040;
-    --color-thumb-hover: #606060;
+    --color-thumb: var(--surface4);
+    --color-thumb-hover: var(--surface6);
     --color-track: transparent;
-  }
-}
-
-@layer base {
-  * {
-    border-color: var(--border1);
-  }
-  body {
-    background-color: var(--surface1);
-    color: var(--neutral6);
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
-
   *:focus,
   *:focus-visible {
     outline: 2px solid transparent;
     outline-offset: 2px;
   }
-
   *:focus-visible {
     outline-style: solid;
     outline-color: var(--accent1);
   }
 }
 
-.react-flow__controls-button {
-  color: var(--neutral5) !important;
-  background-color: var(--surface2) !important;
-  border: none !important;
+::-webkit-scrollbar {
+  width: 5px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 5px;
+}
+html::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
+  border-radius: 4px;
+}
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
 }
 
 .scorerListItem:has(+ .expanded) {
   border-bottom: none;
 }
-
 .scorerListItem.expanded:has(+ .expanded) {
   margin-bottom: 5px;
 }
@@ -226,5 +93,5 @@ code[class^='language-'] {
 
 th:has(header) {
   height: var(--top-bar-height) !important;
-  padding-block: 0 !important ;
+  padding-block: 0 !important;
 }

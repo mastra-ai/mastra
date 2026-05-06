@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 26.1.0-alpha.1
+
+### Patch Changes
+
+- Improved Studio's Traces page to scale smoothly to many traces. The list now renders only the visible window, so scrolling stays responsive and memory usage stays bounded regardless of how many traces are loaded. ([#16262](https://github.com/mastra-ai/mastra/pull/16262))
+
+- Improved Studio's Logs page to scale smoothly to many log records. The list now renders only the visible window, so scrolling stays responsive and memory usage stays bounded regardless of how many logs are loaded. ([#16263](https://github.com/mastra-ai/mastra/pull/16263))
+
+- Updated dependencies [[`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d)]:
+  - @mastra/core@1.33.0-alpha.1
+  - @mastra/client-js@1.17.2-alpha.1
+  - @mastra/react@0.2.36-alpha.1
+
 ## 26.1.0-alpha.0
 
 ### Minor Changes
