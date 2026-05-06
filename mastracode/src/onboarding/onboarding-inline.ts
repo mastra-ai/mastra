@@ -189,7 +189,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private makeBox(): Box {
     this.clearStep();
-    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => theme.bg('overlayBg', text));
+    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => text);
     // Add a spacer between steps, but not before the very first one
     if (this.stepCount > 0) {
       this.addChild(new Spacer(1));
@@ -630,7 +630,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
   private collapseStep(summary: string): void {
     if (!this.stepBox) return;
     this.stepBox.clear();
-    this.stepBox.setBgFn((text: string) => theme.bg('overlayBg', text));
+    this.stepBox.setBgFn((text: string) => text);
     this.stepBox.addChild(new Text(`${theme.fg('success', '✓')} ${theme.fg('text', summary)}`, 0, 0));
     this.selectList = undefined;
     this.activeInlineQuestion = undefined;
