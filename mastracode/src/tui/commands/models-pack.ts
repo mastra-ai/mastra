@@ -12,9 +12,10 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '../../onboarding/settings.js';
 import type { GlobalSettings } from '../../onboarding/settings.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
 import { getSelectListTheme, mastra, theme } from '../theme.js';
@@ -95,44 +96,33 @@ async function selectModel(
       },
     });
 
-    ctx.state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, selector, { maxHeight: '75%' });
     selector.focused = true;
   });
 }
 
 async function askCustomPackName(ctx: SlashCommandContext, defaultName?: string): Promise<string | null> {
   return new Promise(resolve => {
-    const question = new AskQuestionInlineComponent(
-      {
-        question: 'Name this custom pack',
-        formatResult: answer => `Custom pack: ${answer}`,
-        onSubmit: answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve(null);
-        },
+    const question = new AskQuestionDialogComponent({
+      question: 'Name this custom pack',
+      tui: ctx.state.ui,
+      onSubmit: answer => {
+        ctx.state.ui.hideOverlay();
+        const trimmed = answer.trim();
+        resolve(trimmed.length > 0 ? trimmed : null);
       },
-      ctx.state.ui,
-    );
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        resolve(null);
+      },
+    });
 
     if (defaultName) {
       (question as any).input?.setValue?.(defaultName);
     }
 
-    ctx.state.activeInlineQuestion = question;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(question);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, question, { maxHeight: '50%' });
+    question.focused = true;
   });
 }
 
@@ -148,7 +138,7 @@ async function askCustomPackAction(
   ] as const;
 
   return new Promise(resolve => {
-    const container = new Box(1, 1);
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Custom pack: ${pack.name}`)), 0, 0));
     container.addChild(new Spacer(1));
 
@@ -166,26 +156,23 @@ async function askCustomPackAction(
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
     };
 
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
     selectList.onSelectionChange = item => {
       detailText.setText(detailById[item.value] ?? '');
       ctx.state.ui.requestRender();
     };
 
     selectList.onSelect = item => {
-      ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      container.addChild(
-        new Text(theme.fg('text', `${theme.fg('success', '✓')} ${pack.name} → ${theme.bold(item.value)}`), 0, 0),
-      );
-      ctx.state.ui.requestRender();
+      closeOverlay();
       resolve(item.value as 'activate' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
-      ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} ${pack.name} (cancelled)`), 0, 0));
-      ctx.state.ui.requestRender();
+      closeOverlay();
       resolve(null);
     };
 
@@ -195,12 +182,10 @@ async function askCustomPackAction(
     container.addChild(detailText);
     container.addChild(new Spacer(1));
     container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
 
-    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
-    ctx.state.activeInlineQuestion = inputShim;
-    ctx.state.chatContainer.addChild(container);
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
   });
 }
 
@@ -209,7 +194,7 @@ async function askCustomPackEditTarget(
   pack: ModePack,
 ): Promise<'rename' | 'plan' | 'build' | 'fast' | 'save' | null> {
   return new Promise(resolve => {
-    const container = new Box(1, 1);
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
     container.addChild(new Spacer(1));
 
@@ -225,35 +210,28 @@ async function askCustomPackEditTarget(
       getSelectListTheme(),
     );
 
-    const cleanup = () => {
-      if (ctx.state.chatContainer.children.includes(container as any)) {
-        ctx.state.chatContainer.removeChild(container as any);
-      }
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
       ctx.state.ui.requestRender();
-      ctx.state.chatContainer.invalidate();
     };
 
     selectList.onSelect = item => {
-      ctx.state.activeInlineQuestion = undefined;
-      cleanup();
+      closeOverlay();
       resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'save');
     };
 
     selectList.onCancel = () => {
-      ctx.state.activeInlineQuestion = undefined;
-      cleanup();
+      closeOverlay();
       resolve(null);
     };
 
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
 
-    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
-    ctx.state.activeInlineQuestion = inputShim;
-    ctx.state.chatContainer.addChild(container);
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
   });
 }
 
@@ -530,29 +508,22 @@ function sharePack(ctx: SlashCommandContext, pack: ModePack): void {
 
 async function askImportPackString(ctx: SlashCommandContext): Promise<string | null> {
   return new Promise(resolve => {
-    const question = new AskQuestionInlineComponent(
-      {
-        question: 'Paste the shared model pack string',
-        formatResult: answer => `Import: ${answer.slice(0, 40)}${answer.length > 40 ? '…' : ''}`,
-        onSubmit: answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve(null);
-        },
+    const question = new AskQuestionDialogComponent({
+      question: 'Paste the shared model pack string',
+      tui: ctx.state.ui,
+      onSubmit: answer => {
+        ctx.state.ui.hideOverlay();
+        const trimmed = answer.trim();
+        resolve(trimmed.length > 0 ? trimmed : null);
       },
-      ctx.state.ui,
-    );
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        resolve(null);
+      },
+    });
 
-    ctx.state.activeInlineQuestion = question;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(question);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, question, { maxHeight: '50%' });
+    question.focused = true;
   });
 }
 
@@ -567,7 +538,7 @@ async function askImportCollision(
   ] as const;
 
   return new Promise(resolve => {
-    const container = new Box(1, 1);
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `A pack named "${existingName}" already exists`)), 0, 0));
     container.addChild(new Spacer(1));
 
@@ -578,30 +549,26 @@ async function askImportCollision(
 
     const selectList = new SelectList(items, items.length, getSelectListTheme());
 
-    selectList.onSelect = (selected: SelectItem) => {
-      ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      container.addChild(new Text(theme.fg('dim', `${existingName}: ${selected.value}`), 0, 0));
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
       ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelect = (selected: SelectItem) => {
+      closeOverlay();
       resolve(selected.value as 'overwrite' | 'rename' | 'cancel');
     };
 
     selectList.onCancel = () => {
-      ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      container.addChild(new Text(theme.fg('dim', `${existingName}: cancelled`), 0, 0));
-      ctx.state.ui.requestRender();
+      closeOverlay();
       resolve('cancel');
     };
 
     container.addChild(selectList);
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
 
-    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
-    ctx.state.activeInlineQuestion = inputShim;
-    ctx.state.chatContainer.addChild(container);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
   });
 }
 
@@ -657,12 +624,17 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
   });
 
   return new Promise<void>(resolve => {
-    const container = new Box(1, 1);
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', 'Switch model pack')), 0, 0));
     container.addChild(new Spacer(1));
 
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
 
     const updateDetail = (packId: string) => {
       if (packId === '__import__') {
@@ -676,30 +648,17 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       ctx.state.ui.requestRender();
     };
 
-    const collapseResult = (result: string | null) => {
-      container.clear();
-      if (result === 'cancelled') {
-        container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} Model pack (cancelled)`), 0, 0));
-      } else if (result) {
-        container.addChild(new Text(theme.fg('text', `${theme.fg('success', '✓')} ${result}`), 0, 0));
-      }
-      ctx.state.ui.requestRender();
-    };
-
     selectList.onSelect = async (item: SelectItem) => {
-      ctx.state.activeInlineQuestion = undefined;
+      closeOverlay();
 
       if (item.value === '__import__') {
-        collapseResult(null);
         const importStr = await askImportPackString(ctx);
         if (!importStr) {
-          collapseResult('cancelled');
           resolve();
           return;
         }
         const imported = deserializePack(importStr);
         if (!imported) {
-          collapseResult('cancelled');
           ctx.showInfo('Invalid pack string. Expected a mastra-pack:... value.');
           resolve();
           return;
@@ -711,7 +670,6 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           .filter(([, modelId]) => !availableModelIds.has(modelId))
           .map(([mode, modelId]) => `${mode}: ${modelId}`);
         if (unavailable.length > 0) {
-          collapseResult('cancelled');
           ctx.showInfo(`Can't import — these models aren't available:\n${unavailable.join('\n')}`);
           resolve();
           return;
@@ -723,19 +681,16 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         if (existing) {
           const collision = await askImportCollision(ctx, imported.name);
           if (collision === 'cancel') {
-            collapseResult('cancelled');
             resolve();
             return;
           }
           if (collision === 'rename') {
             const newName = await askCustomPackName(ctx, imported.name);
             if (!newName) {
-              collapseResult('cancelled');
               resolve();
               return;
             }
             if (s.customModelPacks.some(p => p.name === newName)) {
-              collapseResult('cancelled');
               ctx.showInfo(`A custom pack named "${newName}" already exists. Rename or delete it first.`);
               resolve();
               return;
@@ -747,7 +702,6 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         }
 
         await applyPack(ctx, imported);
-        collapseResult(`Imported pack → ${theme.bold(imported.name)}`);
         ctx.showInfo(`Imported and activated ${imported.name} pack`);
         resolve();
         return;
@@ -756,26 +710,23 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       let pack: ModePack | null | undefined = packs.find(p => p.id === item.value);
       let previousPackId: string | undefined;
       if (!pack) {
-        collapseResult('cancelled');
         resolve();
         return;
       }
 
       if (pack.id === 'custom') {
-        collapseResult(null);
         pack = await runCustomFlow(ctx);
       } else if (pack.id.startsWith('custom:')) {
         while (true) {
           const action = await askCustomPackAction(ctx, pack);
           if (action === null) {
-            collapseResult('cancelled');
+            await handleModelsPackCommand(ctx);
             resolve();
             return;
           }
 
           if (action === 'delete') {
             await deleteCustomPack(ctx, pack);
-            collapseResult(`Deleted custom pack → ${theme.bold(pack.name)}`);
             ctx.showInfo(`Deleted custom pack: ${pack.name}`);
             resolve();
             return;
@@ -804,20 +755,17 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       }
 
       if (!pack) {
-        collapseResult('cancelled');
         resolve();
         return;
       }
 
       await applyPack(ctx, pack, previousPackId);
-      collapseResult(`Model pack → ${theme.bold(pack.name)}`);
       ctx.showInfo(`Switched to ${pack.name} pack`);
       resolve();
     };
 
     selectList.onCancel = () => {
-      ctx.state.activeInlineQuestion = undefined;
-      collapseResult('cancelled');
+      closeOverlay();
       resolve();
     };
 
@@ -835,14 +783,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     const initialIdx = currentIdx >= 0 ? currentIdx : 0;
     if (initialIdx > 0) selectList.setSelectedIndex(initialIdx);
     updateDetail(packs[initialIdx]!.id);
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
 
-    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
-    ctx.state.activeInlineQuestion = inputShim;
-
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(container);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '80%' });
   });
 }

@@ -988,18 +988,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 64000,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
     "inputCost": 0.1,
     "outputCost": 0.3
   },
   {
     "model": "zenmux/xiaomi/mimo-v2-omni",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 265000,
     "maxOutput": 265000,
     "inputCost": 0.4,
@@ -1007,15 +1007,15 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "zenmux/xiaomi/mimo-v2-pro",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 256000,
-    "inputCost": 1.5,
-    "outputCost": 4.5
+    "inputCost": 1,
+    "outputCost": 3
   },
   {
     "model": "zenmux/xiaomi/mimo-v2.5",
