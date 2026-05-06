@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.33.0-alpha.1
+
+### Patch Changes
+
+- Fixed an issue where trajectory and step scorer results from `runEvals` were not saved to storage. These scores now persist correctly and appear alongside agent and workflow scores in Studio's observability section. ([#16249](https://github.com/mastra-ai/mastra/pull/16249))
+
 ## 1.33.0-alpha.0
 
 ### Patch Changes
