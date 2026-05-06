@@ -1,6 +1,13 @@
 export { TripWire } from './trip-wire';
-export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDetector } from './message-list';
-export type { OutputFormat } from './message-list';
+export {
+  MessageList,
+  convertMessages,
+  aiV5ModelMessageToV2PromptMessage,
+  TypeDetector,
+  filterMessagesByVisibility,
+  isVisiblePart,
+} from './message-list';
+export type { OutputFormat, MastraPartVisibility } from './message-list';
 export * from './types';
 export * from './agent';
 export * from './utils';

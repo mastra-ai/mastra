@@ -65,10 +65,31 @@ export type StreamTransportRef = {
   current?: StreamTransport;
 };
 
+/**
+ * Controls who sees a chunk after it leaves a processor.
+ *
+ * - `'all'` (default): chunk is delivered to the agent loop, persisted to memory,
+ *    and emitted on the user-facing stream.
+ * - `'llm'`: chunk is delivered to the agent loop and persisted to memory, but
+ *    is NOT emitted on the user-facing stream and is filtered out by the memory
+ *    retrieval helpers that respect this flag. Use this from `processOutputStream`
+ *    to keep tool calls / state changes flowing through execution while hiding
+ *    them from the UI.
+ *
+ * `'ui'` (UI-only chunks that don't reach the LLM) is reserved for a future change.
+ */
+export type ChunkVisibility = 'all' | 'llm';
+
 interface BaseChunkType {
   runId: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
+  /**
+   * Optional visibility flag controlling whether this chunk reaches the
+   * user-facing stream and UI-facing memory retrieval. Defaults to `'all'`.
+   * See {@link ChunkVisibility}.
+   */
+  visibility?: ChunkVisibility;
 }
 
 interface ResponseMetadataPayload {
@@ -673,6 +694,12 @@ export type DataChunkType = {
   id?: string;
   /** When true, the chunk is streamed to the client but not persisted to storage. */
   transient?: boolean;
+  /**
+   * Optional visibility flag controlling whether this chunk reaches the
+   * user-facing stream and UI-facing memory retrieval. Defaults to `'all'`.
+   * See {@link ChunkVisibility}.
+   */
+  visibility?: ChunkVisibility;
 };
 
 export type NetworkChunkType<OUTPUT = undefined> =
@@ -883,7 +910,13 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
-  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
+  | (DataChunkType & {
+      from: never;
+      runId: never;
+      metadata?: BaseChunkType['metadata'];
+      visibility?: BaseChunkType['visibility'];
+      payload: never;
+    });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;

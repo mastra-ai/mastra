@@ -598,4 +598,108 @@ describe('MastraModelOutput', () => {
       expect('raw' in finishPayload.totalUsage).toBe(false);
     });
   });
+
+  describe('chunk visibility filtering on the user-facing stream', () => {
+    function createTextChunk(runId: string, text: string, visibility?: 'all' | 'llm'): ChunkType {
+      return {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        ...(visibility ? { visibility } : {}),
+        payload: { id: 'span-1', text },
+      } as ChunkType;
+    }
+
+    it('drops chunks marked visibility:"llm" from fullStream', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        createTextChunk(runId, 'visible'),
+        createTextChunk(runId, 'hidden', 'llm'),
+        createTextChunk(runId, 'also-visible', 'all'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const seen: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        seen.push(chunk);
+      }
+
+      const textDeltas = seen.filter(c => c.type === 'text-delta');
+      const texts = textDeltas.map(c => (c.payload as { text: string }).text);
+      expect(texts).toEqual(['visible', 'also-visible']);
+    });
+
+    it('keeps llm-only chunks in the internal stream so message building still sees them', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        createTextChunk(runId, 'visible'),
+        createTextChunk(runId, 'hidden', 'llm'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const internal: ChunkType[] = [];
+      // _getBaseStream is the unfiltered internal source consumed by message building.
+      const baseStream = (output as unknown as { _getBaseStream: () => ReadableStream<ChunkType> })._getBaseStream();
+      const reader = baseStream.getReader();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) internal.push(value);
+      }
+
+      const textDeltas = internal.filter(c => c.type === 'text-delta');
+      const texts = textDeltas.map(c => (c.payload as { text: string }).text);
+      expect(texts).toEqual(['visible', 'hidden']);
+    });
+
+    it('also filters llm-only chunks already in the buffer for late subscribers', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        createTextChunk(runId, 'visible'),
+        createTextChunk(runId, 'hidden', 'llm'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      // Drain via consumeStream so the buffer is fully populated before we
+      // subscribe to fullStream.
+      await output.consumeStream();
+
+      const seen: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        seen.push(chunk);
+      }
+      const texts = seen.filter(c => c.type === 'text-delta').map(c => (c.payload as { text: string }).text);
+      expect(texts).toEqual(['visible']);
+    });
+  });
 });

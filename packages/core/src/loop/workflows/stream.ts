@@ -110,6 +110,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             const dataPart = {
               type: processedChunk.type as `data-${string}`,
               data: 'data' in processedChunk ? processedChunk.data : undefined,
+              // Persist visibility flag so UI-facing memory retrieval can filter
+              // chunks the processor marked as `'llm'` only.
+              ...(processedChunk.visibility && processedChunk.visibility !== 'all'
+                ? { visibility: processedChunk.visibility }
+                : {}),
             };
             const message: MastraDBMessage = {
               id: responseMessageId,

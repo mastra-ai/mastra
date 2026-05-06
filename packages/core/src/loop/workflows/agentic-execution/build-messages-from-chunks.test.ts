@@ -381,4 +381,113 @@ describe('buildMessagesFromChunks', () => {
     // Verify the configured modelId is preserved in the message metadata
     expect(msgs[0]!.content.metadata).toEqual({ modelId: 'gpt-5.4', provider: 'openai.responses' });
   });
+
+  // ── Visibility propagation ─────────────────────────────────
+
+  describe('visibility propagation', () => {
+    it('does not set a visibility flag when no chunk specifies one', () => {
+      const result = parts([
+        { type: 'text-start', payload: { id: 't1' } },
+        { type: 'text-delta', payload: { id: 't1', text: 'hi' } },
+        { type: 'text-end', payload: { id: 't1' } },
+      ]);
+      expect(result).toHaveLength(1);
+      expect((result[0] as { visibility?: string }).visibility).toBeUndefined();
+    });
+
+    it('does not set a visibility flag when every contributing chunk is "all"', () => {
+      const result = parts([
+        { type: 'text-start', payload: { id: 't1' }, visibility: 'all' },
+        { type: 'text-delta', payload: { id: 't1', text: 'hi' }, visibility: 'all' },
+        { type: 'text-end', payload: { id: 't1' }, visibility: 'all' },
+      ]);
+      expect(result).toHaveLength(1);
+      expect((result[0] as { visibility?: string }).visibility).toBeUndefined();
+    });
+
+    it('marks a text part as "llm" when any contributing chunk does', () => {
+      const result = parts([
+        { type: 'text-start', payload: { id: 't1' } },
+        { type: 'text-delta', payload: { id: 't1', text: 'hi' }, visibility: 'llm' },
+        { type: 'text-end', payload: { id: 't1' } },
+      ]);
+      expect(result).toHaveLength(1);
+      expect((result[0] as { visibility?: string }).visibility).toBe('llm');
+    });
+
+    it('marks a tool-call part as "llm" when the tool-call chunk is flagged', () => {
+      const result = parts([
+        {
+          type: 'tool-call',
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'hidden-tool',
+            args: { foo: 'bar' },
+          },
+          visibility: 'llm',
+        },
+      ]);
+      expect(result).toHaveLength(1);
+      expect((result[0] as { visibility?: string }).visibility).toBe('llm');
+    });
+
+    it('marks a merged tool-call+result as "llm" when only the result chunk is flagged', () => {
+      const result = parts([
+        {
+          type: 'tool-call',
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'tool-a',
+            args: {},
+            providerExecuted: true,
+          },
+        },
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'tool-a',
+            args: {},
+            result: { ok: true },
+            providerExecuted: true,
+          },
+          visibility: 'llm',
+        },
+      ]);
+      expect(result).toHaveLength(1);
+      expect((result[0] as { visibility?: string }).visibility).toBe('llm');
+    });
+
+    it('marks reasoning, source, and file parts based on chunk visibility', () => {
+      const result = parts([
+        { type: 'reasoning-start', payload: { id: 'r1' }, visibility: 'llm' },
+        { type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking' } },
+        { type: 'reasoning-end', payload: { id: 'r1' } },
+        { type: 'source', payload: { id: 's1', url: 'https://example.com', title: 't' }, visibility: 'llm' },
+        { type: 'file', payload: { data: 'data', mimeType: 'text/plain' }, visibility: 'llm' },
+      ]);
+      expect(result).toHaveLength(3);
+      for (const part of result) {
+        expect((part as { visibility?: string }).visibility).toBe('llm');
+      }
+    });
+
+    it('only marks the parts whose chunks are flagged, leaving others untouched', () => {
+      const result = parts([
+        { type: 'text-start', payload: { id: 't1' } },
+        { type: 'text-delta', payload: { id: 't1', text: 'visible' } },
+        { type: 'text-end', payload: { id: 't1' } },
+        {
+          type: 'tool-call',
+          payload: { toolCallId: 'call-1', toolName: 'hidden', args: {} },
+          visibility: 'llm',
+        },
+      ]);
+      expect(result).toHaveLength(2);
+      const text = result.find(p => p.type === 'text');
+      const tool = result.find(p => p.type === 'tool-invocation');
+      expect((text as { visibility?: string } | undefined)?.visibility).toBeUndefined();
+      expect((tool as { visibility?: string } | undefined)?.visibility).toBe('llm');
+    });
+  });
 });

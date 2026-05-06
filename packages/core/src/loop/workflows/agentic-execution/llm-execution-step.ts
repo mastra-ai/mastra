@@ -126,8 +126,10 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    // Collect every chunk for post-stream message building
-    collectedChunks.push({ type: chunk.type, payload: chunk.payload });
+    // Collect every chunk for post-stream message building.
+    // Preserve `visibility` so chunk-level visibility flags can flow through to
+    // `buildMessagesFromChunks` and be persisted on the resulting parts.
+    collectedChunks.push({ type: chunk.type, payload: chunk.payload, visibility: chunk.visibility });
 
     switch (chunk.type) {
       case 'response-metadata':

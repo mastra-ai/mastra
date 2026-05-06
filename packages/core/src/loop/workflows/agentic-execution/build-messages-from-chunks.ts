@@ -1,7 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
-import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MastraPartVisibility } from '../../../agent/message-list';
 import type {
+  ChunkVisibility,
   FilePayload,
   ReasoningDeltaPayload,
   ReasoningStartPayload,
@@ -15,9 +16,31 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
 
 /**
  * A raw chunk collected during the stream.
- * We only store the type and payload — everything needed to reconstruct messages post-stream.
+ * We only store the type, payload, and visibility — everything needed to
+ * reconstruct messages post-stream while preserving processor-set visibility.
  */
-export type CollectedChunk = { type: string; payload: any };
+export type CollectedChunk = { type: string; payload: any; visibility?: ChunkVisibility };
+
+/**
+ * Merge two visibility values, returning the more restrictive one.
+ * `'llm'` is more restrictive than `'all'` (or undefined).
+ */
+function mergeVisibility(
+  current: MastraPartVisibility | undefined,
+  next: ChunkVisibility | undefined,
+): MastraPartVisibility | undefined {
+  if (next === 'llm' || current === 'llm') return 'llm';
+  return current ?? next;
+}
+
+/**
+ * Apply a visibility flag to a part, omitting the field when not set so we
+ * don't pollute persisted messages with default values.
+ */
+function withVisibility<T extends MastraMessagePart>(part: T, visibility?: MastraPartVisibility): T {
+  if (!visibility || visibility === 'all') return part;
+  return { ...part, visibility } as T;
+}
 
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
@@ -48,7 +71,14 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: any;
+      args: any;
+      providerMetadata: any;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+      visibility?: ChunkVisibility;
+    }
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
@@ -59,17 +89,30 @@ export function buildMessagesFromChunks({
         providerMetadata: p.providerMetadata,
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
+        visibility: chunk.visibility,
       });
     }
   }
 
   // State for text span accumulation (keyed by text ID to handle interleaved spans)
-  const textSpans = new Map<string, { deltas: string[]; providerMetadata: Record<string, any> | undefined }>();
+  const textSpans = new Map<
+    string,
+    {
+      deltas: string[];
+      providerMetadata: Record<string, any> | undefined;
+      visibility?: MastraPartVisibility;
+    }
+  >();
 
   // State for reasoning span accumulation (keyed by reasoning ID)
   const reasoningSpans = new Map<
     string,
-    { deltas: string[]; providerMetadata: Record<string, any> | undefined; redacted: boolean }
+    {
+      deltas: string[];
+      providerMetadata: Record<string, any> | undefined;
+      redacted: boolean;
+      visibility?: MastraPartVisibility;
+    }
   >();
   for (const chunk of chunks) {
     switch (chunk.type) {
@@ -80,6 +123,7 @@ export function buildMessagesFromChunks({
           textSpans.set(p.id, {
             deltas: [],
             providerMetadata: p.providerMetadata,
+            visibility: mergeVisibility(undefined, chunk.visibility),
           });
         } else {
           // Update providerMetadata if this start has it
@@ -87,6 +131,7 @@ export function buildMessagesFromChunks({
           if (p.providerMetadata) {
             existing.providerMetadata = p.providerMetadata;
           }
+          existing.visibility = mergeVisibility(existing.visibility, chunk.visibility);
         }
         break;
       }
@@ -103,6 +148,7 @@ export function buildMessagesFromChunks({
         if (p.providerMetadata) {
           span.providerMetadata = p.providerMetadata;
         }
+        span.visibility = mergeVisibility(span.visibility, chunk.visibility);
         break;
       }
       case 'text-end': {
@@ -113,14 +159,20 @@ export function buildMessagesFromChunks({
           if (pEnd.providerMetadata) {
             span.providerMetadata = pEnd.providerMetadata;
           }
+          span.visibility = mergeVisibility(span.visibility, chunk.visibility);
           const text = span.deltas.join('');
           // Only emit a part if there's actual content — skip empty text spans
           if (text.length > 0) {
-            parts.push({
-              type: 'text' as const,
-              text,
-              ...(span.providerMetadata ? { providerMetadata: span.providerMetadata } : {}),
-            } as MastraMessagePart);
+            parts.push(
+              withVisibility(
+                {
+                  type: 'text' as const,
+                  text,
+                  ...(span.providerMetadata ? { providerMetadata: span.providerMetadata } : {}),
+                } as MastraMessagePart,
+                span.visibility,
+              ),
+            );
           }
           textSpans.delete(pEnd.id);
         }
@@ -138,6 +190,7 @@ export function buildMessagesFromChunks({
             deltas: [],
             providerMetadata: p.providerMetadata,
             redacted: isRedacted,
+            visibility: mergeVisibility(undefined, chunk.visibility),
           });
         } else {
           // Update providerMetadata if this start has it
@@ -148,6 +201,7 @@ export function buildMessagesFromChunks({
           if (isRedacted) {
             existing.redacted = true;
           }
+          existing.visibility = mergeVisibility(existing.visibility, chunk.visibility);
         }
         break;
       }
@@ -164,6 +218,7 @@ export function buildMessagesFromChunks({
         if (p.providerMetadata) {
           span.providerMetadata = p.providerMetadata;
         }
+        span.visibility = mergeVisibility(span.visibility, chunk.visibility);
         break;
       }
       case 'reasoning-end': {
@@ -174,23 +229,34 @@ export function buildMessagesFromChunks({
           if (p.providerMetadata) {
             span.providerMetadata = p.providerMetadata;
           }
+          span.visibility = mergeVisibility(span.visibility, chunk.visibility);
 
           if (span.redacted) {
-            parts.push({
-              type: 'reasoning' as const,
-              reasoning: '',
-              details: [{ type: 'redacted', data: '' }],
-              providerMetadata: span.providerMetadata,
-            } as MastraMessagePart);
+            parts.push(
+              withVisibility(
+                {
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details: [{ type: 'redacted', data: '' }],
+                  providerMetadata: span.providerMetadata,
+                } as MastraMessagePart,
+                span.visibility,
+              ),
+            );
           } else {
             // Always emit reasoning parts, even if empty — OpenAI requires item_reference
             // for tool calls that follow reasoning. See: https://github.com/mastra-ai/mastra/issues/9005
-            parts.push({
-              type: 'reasoning' as const,
-              reasoning: '',
-              details: [{ type: 'text', text: span.deltas.join('') }],
-              providerMetadata: span.providerMetadata,
-            } as MastraMessagePart);
+            parts.push(
+              withVisibility(
+                {
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details: [{ type: 'text', text: span.deltas.join('') }],
+                  providerMetadata: span.providerMetadata,
+                } as MastraMessagePart,
+                span.visibility,
+              ),
+            );
           }
 
           reasoningSpans.delete(p.id);
@@ -201,40 +267,55 @@ export function buildMessagesFromChunks({
       // Redacted reasoning can appear as a standalone chunk (not wrapped in start/end)
       case 'redacted-reasoning': {
         const p = chunk.payload as { id: string; data: unknown; providerMetadata?: Record<string, any> };
-        parts.push({
-          type: 'reasoning' as const,
-          reasoning: '',
-          details: [{ type: 'redacted', data: '' }],
-          providerMetadata: p.providerMetadata,
-        } as MastraMessagePart);
+        parts.push(
+          withVisibility(
+            {
+              type: 'reasoning' as const,
+              reasoning: '',
+              details: [{ type: 'redacted', data: '' }],
+              providerMetadata: p.providerMetadata,
+            } as MastraMessagePart,
+            mergeVisibility(undefined, chunk.visibility),
+          ),
+        );
         break;
       }
 
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
         const p = chunk.payload as SourcePayload;
-        parts.push({
-          type: 'source',
-          source: {
-            sourceType: 'url',
-            id: p.id,
-            url: p.url || '',
-            title: p.title,
-            providerMetadata: p.providerMetadata,
-          },
-        } as MastraMessagePart);
+        parts.push(
+          withVisibility(
+            {
+              type: 'source',
+              source: {
+                sourceType: 'url',
+                id: p.id,
+                url: p.url || '',
+                title: p.title,
+                providerMetadata: p.providerMetadata,
+              },
+            } as MastraMessagePart,
+            mergeVisibility(undefined, chunk.visibility),
+          ),
+        );
         break;
       }
 
       // ── File ───────────────────────────────────────────────────
       case 'file': {
         const p = chunk.payload as FilePayload;
-        parts.push({
-          type: 'file' as const,
-          data: p.data,
-          mimeType: p.mimeType,
-          ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
-        } as MastraMessagePart);
+        parts.push(
+          withVisibility(
+            {
+              type: 'file' as const,
+              data: p.data,
+              mimeType: p.mimeType,
+              ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
+            } as MastraMessagePart,
+            mergeVisibility(undefined, chunk.visibility),
+          ),
+        );
         break;
       }
 
@@ -250,31 +331,41 @@ export function buildMessagesFromChunks({
         if (result) {
           // Merge call + result into a single 'result' state part
           const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
-          parts.push({
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'result' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
-              result: result.result,
-            },
-            providerMetadata: result.providerMetadata ?? p.providerMetadata,
-            providerExecuted: resultProviderExecuted,
-          } as MastraMessagePart);
+          parts.push(
+            withVisibility(
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: p.toolCallId,
+                  toolName: p.toolName,
+                  args: p.args,
+                  result: result.result,
+                },
+                providerMetadata: result.providerMetadata ?? p.providerMetadata,
+                providerExecuted: resultProviderExecuted,
+              } as MastraMessagePart,
+              mergeVisibility(mergeVisibility(undefined, chunk.visibility), result.visibility),
+            ),
+          );
         } else {
           // No result yet — emit as 'call' state
-          parts.push({
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'call' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
-            },
-            providerMetadata: p.providerMetadata,
-            providerExecuted,
-          } as MastraMessagePart);
+          parts.push(
+            withVisibility(
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: p.toolCallId,
+                  toolName: p.toolName,
+                  args: p.args,
+                },
+                providerMetadata: p.providerMetadata,
+                providerExecuted,
+              } as MastraMessagePart,
+              mergeVisibility(undefined, chunk.visibility),
+            ),
+          );
         }
         break;
       }
@@ -289,20 +380,30 @@ export function buildMessagesFromChunks({
   // Flush any unclosed reasoning spans (stream ended without reasoning-end)
   for (const [_id, span] of reasoningSpans) {
     if (span.redacted) {
-      parts.push({
-        type: 'reasoning' as const,
-        reasoning: '',
-        details: [{ type: 'redacted', data: '' }],
-        providerMetadata: span.providerMetadata,
-      } as MastraMessagePart);
+      parts.push(
+        withVisibility(
+          {
+            type: 'reasoning' as const,
+            reasoning: '',
+            details: [{ type: 'redacted', data: '' }],
+            providerMetadata: span.providerMetadata,
+          } as MastraMessagePart,
+          span.visibility,
+        ),
+      );
     } else {
       const text = span.deltas.join('');
-      parts.push({
-        type: 'reasoning' as const,
-        reasoning: '',
-        details: [{ type: 'text', text }],
-        providerMetadata: span.providerMetadata,
-      } as MastraMessagePart);
+      parts.push(
+        withVisibility(
+          {
+            type: 'reasoning' as const,
+            reasoning: '',
+            details: [{ type: 'text', text }],
+            providerMetadata: span.providerMetadata,
+          } as MastraMessagePart,
+          span.visibility,
+        ),
+      );
     }
   }
 
@@ -310,11 +411,16 @@ export function buildMessagesFromChunks({
   for (const [, span] of textSpans) {
     const text = span.deltas.join('');
     if (text.length > 0) {
-      parts.push({
-        type: 'text' as const,
-        text,
-        ...(span.providerMetadata ? { providerMetadata: span.providerMetadata } : {}),
-      } as MastraMessagePart);
+      parts.push(
+        withVisibility(
+          {
+            type: 'text' as const,
+            text,
+            ...(span.providerMetadata ? { providerMetadata: span.providerMetadata } : {}),
+          } as MastraMessagePart,
+          span.visibility,
+        ),
+      );
     }
   }
 

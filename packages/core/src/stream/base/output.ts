@@ -1581,8 +1581,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
-        // Replay existing buffered chunks
+        // Replay existing buffered chunks. Skip chunks marked with
+        // `visibility: 'llm'` — those are intentionally hidden from
+        // user-facing readers but remain in #bufferedChunks so internal
+        // consumers (e.g. message building, processor state) keep working.
         self.#bufferedChunks.forEach(chunk => {
+          if (chunk.visibility === 'llm') return;
           controller.enqueue(chunk);
         });
 
@@ -1594,6 +1598,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         // Listen for new chunks and stream finish
         const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
+          if (chunk.visibility === 'llm') return;
           safeEnqueue(controller, chunk);
         };
 
