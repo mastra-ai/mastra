@@ -73,9 +73,15 @@ export function Combobox({
             className,
           )}
         >
-          <span className="truncate flex items-center gap-2">
+          {/* Outer flex MUST allow shrink (min-w-0). `truncate` (overflow:hidden + ellipsis)
+              sits on the INNER span around the value text — never on the outer wrapper,
+              otherwise badges/indicators absolutely positioned on `start` (e.g. provider
+              connection-status dot) would get clipped. */}
+          <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
-            <BaseCombobox.Value placeholder={placeholder} />
+            <span className="truncate">
+              <BaseCombobox.Value placeholder={placeholder} />
+            </span>
           </span>
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>
