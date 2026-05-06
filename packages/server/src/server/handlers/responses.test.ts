@@ -2296,6 +2296,14 @@ describe('Responses Handlers', () => {
 
     const events = (await readSseEvents(response)) as Array<Record<string, any>>;
     const completed = events.find(event => event.type === 'response.completed')!;
+    const storedMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+    const storedMessagesById = new Map(storedMessages.messages.map(message => [message.id, message] as const));
+    const syntheticToolCall = storedMessagesById.get(`${completed.response.id}:tool-call:${toolTurn.callId}`);
+    const syntheticToolResult = storedMessagesById.get(`${completed.response.id}:tool-result:${toolTurn.callId}`);
+    const syntheticMessage = storedMessagesById.get(completed.response.id);
 
     expect(completed.response.output).toMatchObject([
       {
@@ -2315,6 +2323,11 @@ describe('Responses Handlers', () => {
         content: [{ text: 'The lookup is done.' }],
       },
     ]);
+    expect(syntheticToolCall).toBeDefined();
+    expect(syntheticToolResult).toBeDefined();
+    expect(syntheticMessage).toBeDefined();
+    expect(syntheticToolCall!.createdAt.getTime()).toBeLessThan(syntheticToolResult!.createdAt.getTime());
+    expect(syntheticToolResult!.createdAt.getTime()).toBeLessThan(syntheticMessage!.createdAt.getTime());
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),

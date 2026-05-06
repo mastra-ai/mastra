@@ -336,9 +336,11 @@ function createSyntheticMessagesFromOutputItems({
     ),
   );
 
-  return outputItems.map((item): MastraDBMessage => {
+  const baseCreatedAt = Date.now();
+
+  return outputItems.map((item, index): MastraDBMessage => {
     const baseMessage = {
-      createdAt: new Date(),
+      createdAt: new Date(baseCreatedAt + index),
       threadId: threadContext.threadId,
       resourceId: threadContext.resourceId,
     };
