@@ -3,10 +3,10 @@ import {
   AgentIcon,
   Button,
   EmptyState,
-  EntityListPageLayout,
   ErrorState,
   ListSearch,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
@@ -87,8 +87,8 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <EntityListPageLayout className="px-4 md:px-10">
-      <EntityListPageLayout.Top>
+    <PageLayout className="px-4 md:px-10">
+      <PageLayout.TopArea>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>
             <PageHeader.Title>
@@ -112,9 +112,9 @@ export default function AgentBuilderAgentsPage() {
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
         </div>
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
       {body}
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }

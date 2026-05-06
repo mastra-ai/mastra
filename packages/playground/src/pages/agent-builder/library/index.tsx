@@ -1,10 +1,10 @@
 import type { ListStoredAgentsParams, ListStoredSkillsParams, StoredSkillResponse } from '@mastra/client-js';
 import {
   EmptyState,
-  EntityListPageLayout,
   ErrorState,
   ListSearch,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
@@ -108,8 +108,8 @@ export default function AgentBuilderLibraryPage() {
 
   return (
     <>
-      <EntityListPageLayout className="px-4 md:px-10">
-        <EntityListPageLayout.Top>
+      <PageLayout className="px-4 md:px-10">
+        <PageLayout.TopArea>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
             <PageHeader>
               <PageHeader.Title>
@@ -145,10 +145,10 @@ export default function AgentBuilderLibraryPage() {
               <ListSearch onSearch={setSearch} label="Filter library" placeholder="Filter by name or description" />
             </div>
           </div>
-        </EntityListPageLayout.Top>
+        </PageLayout.TopArea>
 
         {body}
-      </EntityListPageLayout>
+      </PageLayout>
 
       {selectedSkill && (
         <SkillEditDialog

@@ -265,8 +265,6 @@ const EditWorkspaceLayoutConnected = ({
       mode="build"
       detailOpen={activeDetail !== null}
       showConfigure={isOwner}
-      backHref={`/agent-builder/agents/${agentId}/view`}
-      backTooltip="Back to agent chat"
       onModeToggle={onModeToggle}
       modeToggleDisabled={isRunning}
       rightAside={

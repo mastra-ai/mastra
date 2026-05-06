@@ -69,7 +69,7 @@ export function AgentBuilderList({ agents, search, rowTestId }: AgentBuilderList
   }
 
   return (
-    <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
+    <div className="bg-surface2 border h-full border-border1 rounded-xl divide-y divide-border1 overflow-y-auto content-start">
       {filtered.map(agent => {
         const avatar = getAvatarUrl(agent);
 

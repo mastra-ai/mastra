@@ -217,12 +217,12 @@ describe('AgentBuilderAgentEdit', () => {
       expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
     });
 
-    it('back arrow navigates to the view page without saving', () => {
+    it('back arrow navigates to the agents list without saving', () => {
       const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Back to agent chat'));
+      fireEvent.click(getByLabelText('Agents list'));
 
       expect(saveMock).not.toHaveBeenCalled();
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
 
     it('autosaves edits without navigating away', async () => {
@@ -328,7 +328,7 @@ describe('AgentBuilderAgentEdit', () => {
   });
 
   describe('back arrow', () => {
-    it('navigates to the view page in edit mode', () => {
+    it('navigates to the agents list in edit mode', () => {
       storedAgent = {
         id: 'agent-123',
         name: 'Existing',
@@ -338,8 +338,8 @@ describe('AgentBuilderAgentEdit', () => {
         workflows: [],
       };
       const { getByLabelText } = renderAt();
-      fireEvent.click(getByLabelText('Back to agent chat'));
-      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-123/view', { viewTransition: true });
+      fireEvent.click(getByLabelText('Agents list'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents', { viewTransition: true });
     });
   });
 });
