@@ -21,14 +21,26 @@ export interface UseBuilderAgentAccessResult {
   hasAgentFeature: boolean;
   hasRequiredPermissions: boolean;
   canAccessAgentBuilder: boolean;
+  canWrite: boolean;
+  canExecute: boolean;
+  canManageSkills: boolean;
+  canUseFavorites: boolean;
   agentFeatures: AgentFeatureFlags | undefined;
 }
 
 export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
-  const { hasAllPermissions, rbacEnabled } = usePermissions();
+  const { hasAnyPermission, hasPermission, rbacEnabled } = usePermissions();
 
-  const hasRequiredPermissions = !rbacEnabled || hasAllPermissions(['stored-agents:read', 'stored-agents:write']);
-  const canFetchSettings = !rbacEnabled || hasAllPermissions(['stored-agents:read']);
+  // Access requires read OR write (operators can browse but not create)
+  const hasRequiredPermissions = !rbacEnabled || hasAnyPermission(['stored-agents:read', 'stored-agents:write']);
+  const canFetchSettings = !rbacEnabled || hasAnyPermission(['stored-agents:read']);
+
+  // Granular capability flags
+  const canWrite = !rbacEnabled || hasPermission('stored-agents:write');
+  const canExecute = !rbacEnabled || hasAnyPermission(['stored-agents:read', 'stored-agents:write']);
+  const canManageSkills = !rbacEnabled || hasPermission('stored-skills:read');
+  const canUseFavorites = !rbacEnabled || hasAnyPermission(['stored-agents:read', 'stored-skills:read']);
+
   const {
     data: builderSettings,
     isLoading,
@@ -57,6 +69,10 @@ export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
     hasAgentFeature,
     hasRequiredPermissions,
     canAccessAgentBuilder,
+    canWrite,
+    canExecute,
+    canManageSkills,
+    canUseFavorites,
     agentFeatures: builderSettings?.features?.agent as AgentFeatureFlags | undefined,
   };
 }

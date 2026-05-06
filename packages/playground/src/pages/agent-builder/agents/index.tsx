@@ -19,12 +19,14 @@ import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-builder-list/agent-builder-list';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
 export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const { canWrite, canUseFavorites } = useBuilderAgentAccess();
   const [search, setSearch] = useState('');
   const { Link: FrameworkLink } = useLinkComponent();
 
@@ -74,16 +76,18 @@ export default function AgentBuilderAgentsPage() {
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
-              <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
-                <PlusIcon /> Create an agent
-              </Button>
+              canWrite ? (
+                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
+                  <PlusIcon /> Create an agent
+                </Button>
+              ) : undefined
             }
           />
         </div>
       );
     }
 
-    return <AgentBuilderList agents={agents} search={search} />;
+    return <AgentBuilderList agents={agents} search={search} showStars={canUseFavorites} />;
   })();
 
   return (
@@ -96,7 +100,7 @@ export default function AgentBuilderAgentsPage() {
             </PageHeader.Title>
             <PageHeader.Description>Agents you've created.</PageHeader.Description>
           </PageHeader>
-          {agents.length > 0 && (
+          {agents.length > 0 && canWrite && (
             <div className="w-full shrink-0 md:w-auto">
               <Button
                 as={FrameworkLink}

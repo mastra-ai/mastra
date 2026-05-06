@@ -21,6 +21,7 @@ import { useStreamRunning } from '@/domains/agent-builder/components/agent-build
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -41,6 +42,7 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
   useChannelConnectToast();
+  const { canWrite } = useBuilderAgentAccess();
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const fromStarter = initialUserMessage !== undefined;
@@ -83,8 +85,8 @@ export default function AgentBuilderAgentEdit() {
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
 
-  // Redirect non-owners to the view page (server blocks writes anyway)
-  if (!fromStarter && !isOwner) {
+  // Redirect users without write permission or non-owners to the view page (server blocks writes anyway)
+  if (!fromStarter && (!canWrite || !isOwner)) {
     return <Navigate to={`/agent-builder/agents/${id}/view`} replace />;
   }
 

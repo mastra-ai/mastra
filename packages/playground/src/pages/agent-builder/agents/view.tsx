@@ -19,6 +19,7 @@ import { useStreamRunning } from '@/domains/agent-builder/components/agent-build
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -150,6 +151,8 @@ const AgentBuilderAgentViewReady = ({
   // Gate publishing on the *saved* visibility — never on unsaved form state.
   const isPublishable = storedAgent?.visibility === 'public';
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
+  const { canWrite } = useBuilderAgentAccess();
+  const canModify = canWrite && isOwner;
   const threadId = currentUser?.id ? `${currentUser.id}-${id}` : id;
 
   const availableAgentTools = useAvailableAgentTools({
@@ -184,15 +187,15 @@ const AgentBuilderAgentViewReady = ({
         mode="test"
         defaultExpanded={false}
         detailOpen={activeDetail !== null}
-        showConfigure={isOwner}
+        showConfigure={canModify}
         modeAction={
           <div className="hidden lg:flex items-center gap-2">
-            {isOwner && isPublishable && <PublishToChannelButton agentId={id} />}
+            {canModify && isPublishable && <PublishToChannelButton agentId={id} />}
             <VisibilitySelectIfAuth />
           </div>
         }
         primaryAction={
-          isOwner ? (
+          canModify ? (
             <ViewHeaderActions
               agentId={id}
               agentName={storedAgent?.name ?? ''}
@@ -201,7 +204,7 @@ const AgentBuilderAgentViewReady = ({
           ) : undefined
         }
         mobileExtra={
-          isOwner ? (
+          canModify ? (
             <AgentBuilderMobileMenu
               agentId={id}
               showPublishToChannel={isPublishable}

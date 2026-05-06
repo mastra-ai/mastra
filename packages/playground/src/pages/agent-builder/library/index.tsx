@@ -20,11 +20,13 @@ import {
   SkillBuilderList,
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 type Tab = 'agents' | 'skills';
 
@@ -33,8 +35,10 @@ export default function AgentBuilderLibraryPage() {
   const [tab, setTab] = useState<Tab>('agents');
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
+  const { canUseFavorites } = useBuilderAgentAccess();
   const { data: currentUser } = useCurrentUser();
-  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
+  const { hasPermission, rbacEnabled } = usePermissions();
+  const canWriteSkills = !rbacEnabled || hasPermission('stored-skills:write');
 
   const agentListParams = useMemo<ListStoredAgentsParams>(() => ({ visibility: 'public' }), []);
   const skillListParams = useMemo<ListStoredSkillsParams>(() => ({ visibility: 'public' }), []);
@@ -86,7 +90,9 @@ export default function AgentBuilderLibraryPage() {
           </div>
         );
       }
-      return <AgentBuilderList agents={agents} search={search} rowTestId="library-agent-row" />;
+      return (
+        <AgentBuilderList agents={agents} search={search} rowTestId="library-agent-row" showStars={canUseFavorites} />
+      );
     }
 
     // Skills tab
@@ -103,7 +109,14 @@ export default function AgentBuilderLibraryPage() {
         </div>
       );
     }
-    return <SkillBuilderList skills={skills} search={search} onSkillClick={setSelectedSkill} />;
+    return (
+      <SkillBuilderList
+        skills={skills}
+        search={search}
+        onSkillClick={canWriteSkills ? setSelectedSkill : undefined}
+        showStars={canUseFavorites}
+      />
+    );
   })();
 
   return (
@@ -156,7 +169,7 @@ export default function AgentBuilderLibraryPage() {
           onClose={() => setSelectedSkill(null)}
           skill={selectedSkill}
           currentUserId={currentUser?.id}
-          isAdmin={isAdmin}
+          isAdmin={canWriteSkills}
         />
       )}
     </>
