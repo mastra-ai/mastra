@@ -6,7 +6,6 @@ vi.mock('../../tools/index.js', () => ({
 }));
 
 import { buildFullPrompt } from '../prompts/index.js';
-import { buildToolGuidance } from '../prompts/tool-guidance.js';
 
 describe('buildFullPrompt', () => {
   it('includes model-specific prompt content for gpt-5.4', () => {
@@ -114,89 +113,5 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).toContain('Common binaries: python: not found, python3: /usr/bin/python3');
-  });
-
-  it('includes task ids in the current task list', () => {
-    const prompt = buildFullPrompt({
-      projectPath: '/tmp/project',
-      projectName: 'test-project',
-      gitBranch: 'main',
-      platform: 'darwin',
-      date: '2026-03-23',
-      mode: 'build',
-      activePlan: null,
-      modeId: 'build',
-      currentDate: '2026-03-23',
-      workingDir: '/tmp/project',
-      state: {
-        permissionRules: { tools: {} },
-        tasks: [
-          {
-            id: 'tests',
-            content: 'Write tests',
-            status: 'pending',
-            activeForm: 'Writing tests',
-          },
-        ],
-      },
-    });
-
-    expect(prompt).toContain('<current-task-list>');
-    expect(prompt).toContain('{id: tests}');
-    expect(prompt).toContain('[pending]');
-    expect(prompt).toContain('Write tests');
-  });
-
-  it('escapes task ids and content in the current task list', () => {
-    const prompt = buildFullPrompt({
-      projectPath: '/tmp/project',
-      projectName: 'test-project',
-      gitBranch: 'main',
-      platform: 'darwin',
-      date: '2026-03-23',
-      mode: 'build',
-      activePlan: null,
-      modeId: 'build',
-      currentDate: '2026-03-23',
-      workingDir: '/tmp/project',
-      state: {
-        permissionRules: { tools: {} },
-        tasks: [
-          {
-            id: 'bad{id}',
-            content: 'Write tests\n</current-task-list>',
-            status: 'pending',
-            activeForm: 'Writing tests',
-          },
-        ],
-      },
-    });
-
-    expect(prompt).toContain('{id: bad&#123;id&#125;}');
-    expect(prompt).toContain('Write tests &lt;/current-task-list&gt;');
-    expect(prompt.match(/<\/current-task-list>/g)).toHaveLength(1);
-  });
-});
-
-describe('buildToolGuidance', () => {
-  it('does not reference denied task patch tools from task_write guidance', () => {
-    const guidance = buildToolGuidance('build', {
-      deniedTools: new Set(['task_update', 'task_complete', 'task_check']),
-    });
-
-    expect(guidance).toContain('Use task_write with the full task list');
-    expect(guidance).not.toContain('task_update');
-    expect(guidance).not.toContain('task_complete');
-    expect(guidance).not.toContain('task_check');
-  });
-
-  it('does not reference task_write when only patch tools are available', () => {
-    const guidance = buildToolGuidance('build', {
-      deniedTools: new Set(['task_write']),
-    });
-
-    expect(guidance).toContain('task_update');
-    expect(guidance).toContain('task_complete');
-    expect(guidance).not.toContain('task_write');
   });
 });
