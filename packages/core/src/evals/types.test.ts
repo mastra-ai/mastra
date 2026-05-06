@@ -770,6 +770,10 @@ describe('saveScorePayloadSchema', () => {
     expect(() => saveScorePayloadSchema.parse(buildPayload(entityType))).not.toThrow();
   });
 
+  it('accepts SpanType values forwarded from observability', () => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload(SpanType.AGENT_RUN))).not.toThrow();
+  });
+
   it('rejects entityType values outside the allowed set', () => {
     expect(() => saveScorePayloadSchema.parse(buildPayload('NOT_A_REAL_TYPE'))).toThrow();
   });
