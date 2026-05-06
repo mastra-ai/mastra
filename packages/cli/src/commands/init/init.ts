@@ -220,7 +220,7 @@ export const init = async ({
 
   Empty ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.
 
-  1. Visit ${color.cyan('https://cloud.mastra.ai')} to create a project and mint an access token.
+  1. Visit ${color.cyan('https://projects.mastra.ai')} to create a project and mint an access token.
   2. Paste the token into ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and the project id into ${color.cyan('MASTRA_PROJECT_ID')}.`,
         );
       }

@@ -628,7 +628,7 @@ export const writeObserveEnv = async ({
   const envFilePath = path.join(process.cwd(), '.env');
   const lines = [
     '',
-    '# Mastra Observe — https://cloud.mastra.ai',
+    '# Mastra Observe — https://projects.mastra.ai',
     '# Access token and project id wired up automatically when you ran',
     '# `mastra init` / `create-mastra` with Observe enabled.',
     `MASTRA_CLOUD_ACCESS_TOKEN=${token ?? ''}`,
