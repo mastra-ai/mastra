@@ -2,7 +2,7 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -16,17 +16,14 @@ const BASE_URL = 'http://localhost:4111';
 
 interface FormHarnessProps {
   defaultVisibility?: AgentBuilderEditFormValues['visibility'];
-  onDirtyChange?: (isDirty: boolean) => void;
   children: ReactNode;
 }
 
-const FormHarness = ({ defaultVisibility = 'private', onDirtyChange, children }: FormHarnessProps) => {
+const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessProps) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: { name: '', instructions: '', visibility: defaultVisibility },
   });
   const value = methods.watch('visibility');
-  const isDirty = methods.formState.isDirty;
-  onDirtyChange?.(isDirty);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
@@ -36,7 +33,6 @@ const FormHarness = ({ defaultVisibility = 'private', onDirtyChange, children }:
             <FormProvider {...methods}>
               {children}
               <span data-testid="form-visibility">{value}</span>
-              <span data-testid="form-dirty">{isDirty ? 'true' : 'false'}</span>
             </FormProvider>
           </TooltipProvider>
         </MemoryRouter>
@@ -109,21 +105,36 @@ describe('AgentBuilderMobileMenu', () => {
     expect(wrapper.className).toContain('lg:hidden');
   });
 
-  it('shows visibility item plus a per-platform publish item', async () => {
+  it('shows Add to library when private and Publish item per platform', async () => {
     server.use(...slackOnlyHandlers());
     render(
-      <FormHarness>
+      <FormHarness defaultVisibility="private">
         <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility showPublishToChannel />
       </FormHarness>,
     );
 
     await openDropdown();
 
-    expect(screen.getByTestId('agent-builder-mobile-menu-visibility')).toBeTruthy();
+    expect(screen.getByTestId('agent-builder-mobile-menu-visibility-add')).toBeTruthy();
+    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility-remove')).toBeNull();
     expect(await screen.findByTestId('agent-builder-mobile-menu-publish-channel-slack')).toBeTruthy();
   });
 
-  it('shows only Publish in view-mode shape and never renders the visibility dialog', async () => {
+  it('shows Remove from library when public', async () => {
+    server.use(...slackOnlyHandlers());
+    render(
+      <FormHarness defaultVisibility="public">
+        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility showPublishToChannel />
+      </FormHarness>,
+    );
+
+    await openDropdown();
+
+    expect(screen.getByTestId('agent-builder-mobile-menu-visibility-remove')).toBeTruthy();
+    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility-add')).toBeNull();
+  });
+
+  it('hides visibility items when showSetVisibility is false', async () => {
     server.use(...slackOnlyHandlers());
     render(
       <FormHarness>
@@ -133,34 +144,40 @@ describe('AgentBuilderMobileMenu', () => {
 
     await openDropdown();
 
-    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility-add')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility-remove')).toBeNull();
     expect(await screen.findByTestId('agent-builder-mobile-menu-publish-channel-slack')).toBeTruthy();
-    expect(screen.queryByTestId('agent-builder-visibility-dialog')).toBeNull();
   });
 
-  it('opens the visibility dialog, writes Public into the form (dirties it), and closes on Done', async () => {
-    server.use(...slackOnlyHandlers());
+  it('confirming Add to library PATCHes /api/stored/agents/:id with visibility=public', async () => {
+    let capturedBody: any = null;
+    server.use(
+      ...slackOnlyHandlers(),
+      http.patch(`${BASE_URL}/api/stored/agents/agent-1`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'agent-1', visibility: 'public' });
+      }),
+    );
     render(
-      <FormHarness>
+      <FormHarness defaultVisibility="private">
         <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility showPublishToChannel />
       </FormHarness>,
     );
 
-    expect(screen.getByTestId('form-visibility').textContent).toBe('private');
-    expect(screen.getByTestId('form-dirty').textContent).toBe('false');
-
     await openDropdown();
-    fireEvent.click(screen.getByTestId('agent-builder-mobile-menu-visibility'));
+    fireEvent.click(screen.getByTestId('agent-builder-mobile-menu-visibility-add'));
 
-    const publicOption = await screen.findByTestId('agent-builder-visibility-dialog-option-public');
-    fireEvent.click(publicOption);
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
+    });
 
+    await waitFor(() => {
+      expect(capturedBody).toEqual({ visibility: 'public' });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();
+    });
     expect(screen.getByTestId('form-visibility').textContent).toBe('public');
-    expect(screen.getByTestId('form-dirty').textContent).toBe('true');
-
-    fireEvent.click(screen.getByTestId('agent-builder-visibility-dialog-done'));
-
-    expect(screen.queryByTestId('agent-builder-visibility-dialog')).toBeNull();
   });
 
   it('triggers the Slack connect endpoint directly (skipping the dialog) when not yet connected', async () => {
@@ -214,14 +231,14 @@ describe('AgentBuilderMobileMenu', () => {
   it('disables menu items when disabled is true', async () => {
     server.use(...slackOnlyHandlers());
     render(
-      <FormHarness>
+      <FormHarness defaultVisibility="private">
         <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility showPublishToChannel disabled />
       </FormHarness>,
     );
 
     await openDropdown();
 
-    const visibilityItem = screen.getByTestId('agent-builder-mobile-menu-visibility');
+    const visibilityItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
     const publishItem = await screen.findByTestId('agent-builder-mobile-menu-publish-channel-slack');
 
     expect(visibilityItem.getAttribute('data-disabled')).not.toBeNull();

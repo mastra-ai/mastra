@@ -1,5 +1,5 @@
 import { Button, DropdownMenu, StatusBadge } from '@mastra/playground-ui';
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, SendIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -30,6 +30,7 @@ export function PublishToChannelButton({ agentId, disabled = false }: PublishToC
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button size="sm" variant="ghost" disabled={disabled} data-testid="agent-builder-publish-channel">
+            <SendIcon className="h-4 w-4" />
             Publish to…
             <ChevronDownIcon className="h-4 w-4" />
           </Button>

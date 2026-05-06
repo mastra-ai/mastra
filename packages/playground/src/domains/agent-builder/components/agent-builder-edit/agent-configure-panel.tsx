@@ -34,6 +34,7 @@ interface BaseProps {
   activeDetail?: ActiveDetail;
   onActiveDetailChange?: (next: ActiveDetail) => void;
   disabled?: boolean;
+  deleteAction?: React.ReactNode;
 }
 
 type AgentConfigurePanelProps = BaseProps & {
@@ -50,6 +51,7 @@ export function AgentConfigurePanel({
   disabled = false,
   editable = true,
   agent,
+  deleteAction,
 }: AgentConfigurePanelProps) {
   if (isLoading) {
     return <AgentConfigurePanelSkeleton />;
@@ -64,6 +66,7 @@ export function AgentConfigurePanel({
       onActiveDetailChange={onActiveDetailChange}
       editable={editable}
       disabled={disabled}
+      deleteAction={deleteAction}
     />
   );
 }
@@ -76,6 +79,7 @@ interface ConfigurePanelContentProps {
   onActiveDetailChange: (next: ActiveDetail) => void;
   editable: boolean;
   disabled?: boolean;
+  deleteAction?: React.ReactNode;
 }
 
 function ConfigurePanelContent({
@@ -86,6 +90,7 @@ function ConfigurePanelContent({
   onActiveDetailChange,
   editable,
   disabled: propDisabled = false,
+  deleteAction,
 }: ConfigurePanelContentProps) {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
@@ -255,6 +260,11 @@ function ConfigurePanelContent({
             disabled={disabled}
           />
         </div>
+        {deleteAction && (
+          <div className="px-6 pb-6 pt-4 border-t border-border1" data-testid="agent-configure-delete-action">
+            {deleteAction}
+          </div>
+        )}
       </div>
     </div>
   );

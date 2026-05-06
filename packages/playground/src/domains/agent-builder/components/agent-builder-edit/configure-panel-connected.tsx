@@ -9,6 +9,7 @@ interface BaseProps {
   availableSkills?: StoredSkillResponse[];
   activeDetail: ActiveDetail;
   onActiveDetailChange: (next: ActiveDetail) => void;
+  deleteAction?: React.ReactNode;
 }
 
 type ConfigurePanelConnectedProps =
@@ -28,6 +29,7 @@ export const ConfigurePanelConnected = (props: ConfigurePanelConnectedProps) => 
       activeDetail={props.activeDetail}
       onActiveDetailChange={props.onActiveDetailChange}
       disabled={isRunning}
+      deleteAction={props.deleteAction}
     />
   );
 };

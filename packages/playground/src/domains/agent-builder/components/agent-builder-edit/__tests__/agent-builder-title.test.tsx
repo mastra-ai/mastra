@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderTitle } from '../agent-builder-title';
 
@@ -94,15 +94,66 @@ describe('AgentBuilderTitle', () => {
     expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
   });
 
-  it('renders "New agent" as a standalone title when creating, with no badge', () => {
+  it('renders no mode-toggle button when onModeToggle is omitted', () => {
     render(
       <FormWrapper>
-        <AgentBuilderTitle creating mode="build" />
+        <AgentBuilderTitle mode="build" />
       </FormWrapper>,
     );
 
-    expect(screen.getByTestId('agent-builder-create-title').textContent).toBe('New agent');
-    expect(screen.queryByTestId('agent-builder-mode-badge-build')).toBeNull();
-    expect(screen.queryByText('Support agent')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
+  });
+
+  it('renders no mode-toggle button when mode is undefined, even with onModeToggle', () => {
+    render(
+      <FormWrapper>
+        <AgentBuilderTitle onModeToggle={vi.fn()} />
+      </FormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
+  });
+
+  it('renders a "Switch to View mode" toggle next to the badge in build mode and invokes the callback on click', () => {
+    const onModeToggle = vi.fn();
+    render(
+      <FormWrapper>
+        <AgentBuilderTitle mode="build" onModeToggle={onModeToggle} />
+      </FormWrapper>,
+    );
+
+    const toggle = screen.getByTestId('agent-builder-mode-toggle') as HTMLButtonElement;
+    expect(toggle.tagName).toBe('BUTTON');
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to View mode');
+    expect(toggle.className).toContain('rounded-full');
+
+    fireEvent.click(toggle);
+    expect(onModeToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a "Switch to Edit mode" toggle in test mode', () => {
+    const onModeToggle = vi.fn();
+    render(
+      <FormWrapper>
+        <AgentBuilderTitle mode="test" onModeToggle={onModeToggle} />
+      </FormWrapper>,
+    );
+
+    const toggle = screen.getByTestId('agent-builder-mode-toggle');
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to Edit mode');
+  });
+
+  it('disables the toggle and does not invoke onModeToggle when disabled is true', () => {
+    const onModeToggle = vi.fn();
+    render(
+      <FormWrapper>
+        <AgentBuilderTitle mode="test" onModeToggle={onModeToggle} disabled />
+      </FormWrapper>,
+    );
+
+    const toggle = screen.getByTestId('agent-builder-mode-toggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    fireEvent.click(toggle);
+    expect(onModeToggle).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import type { MastraUIMessage } from '@mastra/react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useFormContext, useWatch } from 'react-hook-form';
 
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { ChatComposer } from '../chat-primitives/chat-composer';
@@ -12,12 +13,12 @@ import type { AvailableWorkspace } from './hooks/use-agent-builder-tool';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { CONNECT_CHANNEL_TOOL_NAME, useConnectChannelTool } from './hooks/use-connect-channel-tool';
 import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from './hooks/use-create-skill-tool';
-import { useInitialMessage } from './hooks/use-initial-message';
 import { useStreamMessages, useStreamRunning, useStreamSend } from './stream-chat-context';
 import { StreamChatProvider } from './stream-chat-provider';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
+import { buildFormSnapshotInstructions } from '@/domains/agent-builder/mappers/build-form-snapshot';
+import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
-import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/builder';
-import { useAllModels, useLLMProviders } from '@/domains/llm';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProviderProps {
@@ -68,12 +69,9 @@ export const ConversationPanelProvider = ({
   const storedMessages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
-  const { data: dataProviders, isLoading: areLLMProvidersLoading } = useLLMProviders();
-  const llmProviders = dataProviders?.providers || [];
-  const allModels = useAllModels(llmProviders);
-  const modelPolicy = useBuilderModelPolicy();
-  const filteredModels = useBuilderFilteredModels(allModels, modelPolicy);
-  const availableModels = features.model ? filteredModels : [];
+  const { models: filteredModels, isLoading: areLLMProvidersLoading } = useAgentBuilderAllowedModels();
+  const emptyModels = useMemo(() => [] as typeof filteredModels, []);
+  const availableModels = features.model ? filteredModels : emptyModels;
   const initialMessageToolsReady = toolsReady && (!features.model || !areLLMProvidersLoading);
 
   const agentBuilderTool = useAgentBuilderTool({
@@ -83,6 +81,20 @@ export const ConversationPanelProvider = ({
     availableSkills,
     availableModels,
   });
+
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const formValues = useWatch({ control }) as AgentBuilderEditFormValues;
+  const extraInstructions = useMemo(
+    () =>
+      buildFormSnapshotInstructions(formValues, {
+        availableAgentTools,
+        availableSkills,
+        availableWorkspaces,
+        availableModels,
+        features,
+      }),
+    [formValues, availableAgentTools, availableSkills, availableWorkspaces, availableModels, features],
+  );
   const createSkillTool = useCreateSkillTool({ availableWorkspaces });
   const connectChannelTool = useConnectChannelTool();
   const clientTools = useMemo(
@@ -99,19 +111,23 @@ export const ConversationPanelProvider = ({
     [isConversationLoading, agentId],
   );
 
+  // Only forward the starter prompt into StreamChatProvider when it's actually
+  // safe to dispatch (tools wired up, no existing convo loading, fresh thread).
+  // StreamChatProvider then dispatches in a parent-level effect that runs *after*
+  // useChat's `initialMessages` reset effect, which would otherwise wipe the
+  // optimistic user message added by sendMessage.
+  const starterMessageReady =
+    initialMessageToolsReady && !isConversationLoading && !hasExistingConversation ? initialUserMessage : undefined;
+
   return (
     <StreamChatProvider
       agentId={BUILDER_AGENT_ID}
       threadId={builderThreadId}
       initialMessages={v5Messages}
+      initialUserMessage={starterMessageReady}
       clientTools={clientTools}
+      extraInstructions={extraInstructions}
     >
-      <ConversationInitialMessage
-        initialUserMessage={initialUserMessage}
-        toolsReady={initialMessageToolsReady}
-        isConversationLoading={isConversationLoading}
-        hasExistingConversation={hasExistingConversation}
-      />
       <ConversationContext.Provider value={conversationContextValue}>{children}</ConversationContext.Provider>
     </StreamChatProvider>
   );
@@ -123,32 +139,6 @@ interface ConversationContextValue {
 }
 
 const ConversationContext = createContext<ConversationContextValue>({ isLoading: false, agentId: '' });
-
-interface ConversationInitialMessageProps {
-  initialUserMessage?: string;
-  toolsReady: boolean;
-  isConversationLoading: boolean;
-  hasExistingConversation: boolean;
-}
-
-const ConversationInitialMessage = ({
-  initialUserMessage,
-  toolsReady,
-  isConversationLoading,
-  hasExistingConversation,
-}: ConversationInitialMessageProps) => {
-  const send = useStreamSend();
-
-  useInitialMessage({
-    initialUserMessage,
-    toolsReady,
-    isConversationLoading,
-    hasExistingConversation,
-    onSend: send,
-  });
-
-  return null;
-};
 
 export const ConversationPanelChat = () => {
   return (

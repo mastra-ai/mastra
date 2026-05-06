@@ -11,8 +11,17 @@ type ActiveTab = 'chat' | 'configure';
 
 interface WorkspaceLayoutProps {
   isLoading: boolean;
-  mode: WorkspaceMode;
-  creating?: boolean;
+  /**
+   * The current workspace mode. When omitted, no mode badge or mode-toggle is
+   * rendered (e.g. for non-owners viewing a public agent).
+   */
+  mode?: WorkspaceMode;
+  /** Called when the user clicks the mode badge to switch between Edit and View. */
+  onModeToggle?: () => void;
+  /** Disables the mode-toggle button (e.g. while a stream is running). */
+  modeToggleDisabled?: boolean;
+  /** Very-subtle slot rendered first (leftmost) in the right action cluster (e.g. autosave status). */
+  rightAside?: ReactNode;
   modeAction?: ReactNode;
   primaryAction?: ReactNode;
   /** Optional slot rendered AFTER primaryAction (e.g. mobile-only 3-dot menu). */
@@ -34,7 +43,9 @@ interface WorkspaceLayoutProps {
 export const WorkspaceLayout = ({
   isLoading,
   mode,
-  creating = false,
+  onModeToggle,
+  modeToggleDisabled = false,
+  rightAside,
   modeAction,
   primaryAction,
   mobileExtra,
@@ -71,11 +82,13 @@ export const WorkspaceLayout = ({
     >
       <div
         className={cn(
-          'flex min-w-0 flex-col h-full lg:h-auto lg:min-h-0 lg:overflow-hidden',
+          'flex min-w-0 flex-col lg:h-auto lg:min-h-0 lg:overflow-hidden',
           // On mobile, when activeTab === 'configure' the chat panel is hidden;
-          // shrink this column so the configure sibling can claim the space.
-          activeTab === 'configure' ? 'flex-none' : 'flex-1',
-          'lg:flex-1',
+          // shrink this column to its intrinsic height (header + tabs only) so
+          // the configure sibling can claim the remaining space. When the chat
+          // tab is active, fill the viewport so the chat panel can scroll.
+          activeTab === 'configure' ? 'flex-none' : 'flex-1 h-full',
+          'lg:flex-1 lg:h-full',
         )}
       >
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
@@ -93,9 +106,11 @@ export const WorkspaceLayout = ({
             className="min-w-0 justify-self-start"
             isLoading={isLoading}
             mode={mode}
-            creating={creating}
+            onModeToggle={onModeToggle}
+            disabled={modeToggleDisabled}
           />
           <div className="justify-self-end flex items-center gap-2 shrink-0">
+            {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
             {modeAction && <div className="shrink-0">{modeAction}</div>}
             {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
             {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
@@ -124,7 +139,7 @@ export const WorkspaceLayout = ({
           </div>
         </div>
         {showConfigure && (
-          <div className="lg:hidden px-4 py-4 md:px-10 md:py-5">
+          <div className="lg:hidden px-4 pt-4 pb-2 md:px-10 md:pt-5 md:pb-3">
             <div
               role="tablist"
               aria-label="Workspace view"
@@ -169,7 +184,15 @@ export const WorkspaceLayout = ({
             </div>
           </div>
         )}
-        <div className="flex flex-1 min-h-0 min-w-0 flex-col px-4 pb-6 pt-4 md:px-10">
+        <div
+          className={cn(
+            'flex flex-1 min-h-0 min-w-0 flex-col px-4 md:px-10',
+            // On mobile, when the configure tab is active the chat is hidden;
+            // collapse this wrapper's vertical padding so it doesn't add empty
+            // space between the tabs and the configure panel.
+            activeTab === 'configure' ? 'pt-0 pb-0 lg:pt-4 lg:pb-6' : 'pt-4 pb-6',
+          )}
+        >
           <div
             className="h-full w-full min-w-0 overflow-hidden data-[active-tab=configure]:hidden lg:!block"
             data-active-tab={activeTab}

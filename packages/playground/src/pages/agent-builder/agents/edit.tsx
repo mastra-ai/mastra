@@ -1,18 +1,18 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, Spinner } from '@mastra/playground-ui';
-import { CheckIcon } from 'lucide-react';
+import { Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-mobile-menu';
 import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-builder-edit/autosave-indicator';
 import { ConfigurePanelConnected } from '@/domains/agent-builder/components/agent-builder-edit/configure-panel-connected';
 import {
   ConversationPanelChat,
   ConversationPanelProvider,
 } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
-import { DeleteAgentDesktopButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
+import { DeleteAgentPanelButton } from '@/domains/agent-builder/components/agent-builder-edit/delete-agent-action';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useChannelConnectToast } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-channel-connect-toast';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
@@ -20,9 +20,9 @@ import { PublishToChannelButton } from '@/domains/agent-builder/components/agent
 import { useStreamRunning } from '@/domains/agent-builder/components/agent-builder-edit/stream-chat-context';
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
+import { useAutosaveAgent } from '@/domains/agent-builder/hooks/use-autosave-agent';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
-import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
@@ -45,11 +45,7 @@ export default function AgentBuilderAgentEdit() {
   const { canWrite } = useBuilderAgentAccess();
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
-  const fromStarter = initialUserMessage !== undefined;
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, {
-    status: 'draft',
-    enabled: !fromStarter,
-  });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
@@ -59,10 +55,10 @@ export default function AgentBuilderAgentEdit() {
   const { data: workspacesData } = useStoredWorkspaces();
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
-  const isOwnershipLoading = !fromStarter && Boolean(storedAgent?.authorId) && isCurrentUserLoading;
+  const isOwnershipLoading = Boolean(storedAgent?.authorId) && isCurrentUserLoading;
   const isReady =
     Boolean(id) &&
-    (fromStarter || !isStoredAgentLoading) &&
+    !isStoredAgentLoading &&
     !isOwnershipLoading &&
     (!features.tools || !isToolsPending) &&
     (!features.skills || !isSkillsPending) &&
@@ -85,8 +81,13 @@ export default function AgentBuilderAgentEdit() {
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
 
+  // Edit-only route: bounce out to the agents list when no stored agent exists for this id.
+  if (!storedAgent) {
+    return <Navigate to="/agent-builder/agents" replace />;
+  }
+
   // Redirect users without write permission or non-owners to the view page (server blocks writes anyway)
-  if (!fromStarter && (!canWrite || !isOwner)) {
+  if (!canWrite || !isOwner) {
     return <Navigate to={`/agent-builder/agents/${id}/view`} replace />;
   }
 
@@ -100,7 +101,6 @@ export default function AgentBuilderAgentEdit() {
       availableWorkspaces={availableWorkspaces}
       availableSkills={availableSkills}
       initialUserMessage={initialUserMessage}
-      fromStarter={fromStarter}
       isOwner={isOwner}
     />
   );
@@ -108,14 +108,13 @@ export default function AgentBuilderAgentEdit() {
 
 interface PageProps {
   id: string | undefined;
-  storedAgent: StoredAgent | null | undefined;
+  storedAgent: StoredAgent;
   toolsData: ToolsData | undefined;
   agentsData: AgentsData | undefined;
   workflowsData: WorkflowsData | undefined;
   availableWorkspaces: AvailableWorkspace[];
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
-  fromStarter: boolean;
   isOwner: boolean;
 }
 
@@ -128,20 +127,16 @@ const AgentBuilderAgentEditPage = ({
   availableWorkspaces,
   availableSkills,
   initialUserMessage,
-  fromStarter,
   isOwner,
 }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: storedAgentToFormValues(storedAgent),
   });
 
-  const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
-
   return (
     <FormProvider {...formMethods}>
       <AgentBuilderAgentEditReady
         id={id!}
-        mode={mode}
         storedAgent={storedAgent}
         toolsData={toolsData ?? {}}
         agentsData={agentsData ?? {}}
@@ -149,7 +144,6 @@ const AgentBuilderAgentEditPage = ({
         availableWorkspaces={availableWorkspaces}
         availableSkills={availableSkills}
         initialUserMessage={initialUserMessage}
-        fromStarter={fromStarter}
         isOwner={isOwner}
       />
     </FormProvider>
@@ -164,21 +158,18 @@ const AgentBuilderAgentEditSkeleton = () => (
 
 interface AgentBuilderAgentEditReadyProps {
   id: string;
-  mode: 'create' | 'edit';
-  storedAgent: StoredAgent | null | undefined;
+  storedAgent: StoredAgent;
   toolsData: ToolsData;
   agentsData: AgentsData;
   workflowsData: WorkflowsData;
   availableWorkspaces: AvailableWorkspace[];
   availableSkills: StoredSkillResponse[];
   initialUserMessage: string | undefined;
-  fromStarter: boolean;
   isOwner: boolean;
 }
 
 const AgentBuilderAgentEditReady = ({
   id,
-  mode,
   storedAgent,
   toolsData,
   agentsData,
@@ -186,10 +177,8 @@ const AgentBuilderAgentEditReady = ({
   availableWorkspaces,
   availableSkills,
   initialUserMessage,
-  fromStarter,
   isOwner,
 }: AgentBuilderAgentEditReadyProps) => {
-  const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
@@ -197,7 +186,7 @@ const AgentBuilderAgentEditReady = ({
   const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
 
   // Gate publishing on the *saved* visibility — unsaved form edits should not unlock publishing.
-  const isPublishable = storedAgent?.visibility === 'public';
+  const isPublishable = storedAgent.visibility === 'public';
 
   const availableAgentTools = useAvailableAgentTools({
     toolsData,
@@ -211,20 +200,20 @@ const AgentBuilderAgentEditReady = ({
 
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
 
-  const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableAgentTools, availableSkills });
+  const autosave = useAutosaveAgent({ agentId: id, availableAgentTools, availableSkills });
 
-  const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
-    await save(values);
-    void navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true });
-  };
-  const handleSave = formMethods.handleSubmit(handleSaveSuccess);
+  const isFreshThread = initialUserMessage !== undefined;
+  const canPublishToChannel = isOwner && isPublishable;
+  const navigate = useNavigate();
 
-  const canPublishToChannel = mode === 'edit' && isOwner && isPublishable;
+  const onModeToggle = isOwner
+    ? () => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })
+    : undefined;
 
   return (
     <ConversationPanelProvider
       initialUserMessage={initialUserMessage}
-      isFreshThread={fromStarter}
+      isFreshThread={isFreshThread}
       features={features}
       availableAgentTools={availableAgentTools}
       availableWorkspaces={availableWorkspaces}
@@ -233,59 +222,90 @@ const AgentBuilderAgentEditReady = ({
       agentId={id}
       canPublishToChannel={canPublishToChannel}
     >
-      <WorkspaceLayout
-        isLoading={false}
-        mode="build"
-        creating={mode === 'create'}
-        defaultExpanded={mode === 'edit'}
-        detailOpen={activeDetail !== null}
-        showConfigure={isOwner}
-        backHref={mode === 'edit' ? `/agent-builder/agents/${id}/view` : '/agent-builder/agents'}
-        backTooltip={mode === 'edit' ? 'Back to agent chat' : 'Agents list'}
-        modeAction={
-          <div className="hidden lg:flex items-center gap-2">
-            {canPublishToChannel && <PublishToChannelButton agentId={id} />}
-            <VisibilitySelectConnected />
-          </div>
-        }
-        primaryAction={<HeaderActions mode={mode} agentId={id} isSaving={isSaving} onSave={handleSave} />}
-        mobileExtra={
-          <AgentBuilderMobileMenuConnected
-            agentId={id}
-            showPublishToChannel={canPublishToChannel}
-            showDelete={mode === 'edit'}
-          />
-        }
-        chat={<ConversationPanelChat />}
-        configure={
-          <ConfigurePanelConnected
-            editable
-            availableAgentTools={availableAgentTools}
-            availableSkills={availableSkills}
-            activeDetail={activeDetail}
-            onActiveDetailChange={setActiveDetail}
-          />
-        }
+      <EditWorkspaceLayoutConnected
+        agentId={id}
+        isOwner={isOwner}
+        canPublishToChannel={canPublishToChannel}
+        autosave={autosave}
+        availableAgentTools={availableAgentTools}
+        availableSkills={availableSkills}
+        activeDetail={activeDetail}
+        onActiveDetailChange={setActiveDetail}
+        onModeToggle={onModeToggle}
       />
     </ConversationPanelProvider>
   );
 };
 
-const VisibilitySelectConnected = () => {
+interface EditWorkspaceLayoutConnectedProps {
+  agentId: string;
+  isOwner: boolean;
+  canPublishToChannel: boolean;
+  autosave: ReturnType<typeof useAutosaveAgent>;
+  availableAgentTools: ReturnType<typeof useAvailableAgentTools>;
+  availableSkills: StoredSkillResponse[];
+  activeDetail: ActiveDetail;
+  onActiveDetailChange: (next: ActiveDetail) => void;
+  onModeToggle: (() => void) | undefined;
+}
+
+const EditWorkspaceLayoutConnected = ({
+  agentId,
+  isOwner,
+  canPublishToChannel,
+  autosave,
+  availableAgentTools,
+  availableSkills,
+  activeDetail,
+  onActiveDetailChange,
+  onModeToggle,
+}: EditWorkspaceLayoutConnectedProps) => {
   const isRunning = useStreamRunning();
+  return (
+    <WorkspaceLayout
+      isLoading={false}
+      mode="build"
+      detailOpen={activeDetail !== null}
+      showConfigure={isOwner}
+      onModeToggle={onModeToggle}
+      modeToggleDisabled={isRunning}
+      rightAside={
+        <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
+      }
+      modeAction={
+        <div className="hidden lg:flex items-center gap-2">
+          {canPublishToChannel && <PublishToChannelButton agentId={agentId} />}
+          <VisibilitySelectConnected agentId={agentId} />
+        </div>
+      }
+      mobileExtra={<AgentBuilderMobileMenuConnected agentId={agentId} showPublishToChannel={canPublishToChannel} />}
+      chat={<ConversationPanelChat />}
+      configure={
+        <ConfigurePanelConnected
+          editable
+          availableAgentTools={availableAgentTools}
+          availableSkills={availableSkills}
+          activeDetail={activeDetail}
+          onActiveDetailChange={onActiveDetailChange}
+          deleteAction={isOwner ? <DeleteAgentPanelButtonConnected agentId={agentId} /> : undefined}
+        />
+      }
+    />
+  );
+};
+
+const VisibilitySelectConnected = ({ agentId }: { agentId: string }) => {
   const { data: capabilities } = useAuthCapabilities();
   if (!capabilities?.enabled) return null;
-  return <VisibilitySelect disabled={isRunning} variant="ghost" />;
+  return <VisibilitySelect agentId={agentId} />;
 };
 
 const AgentBuilderMobileMenuConnected = ({
   agentId,
   showPublishToChannel,
-  showDelete,
 }: {
   agentId: string | undefined;
   showPublishToChannel: boolean;
-  showDelete: boolean;
 }) => {
   const isRunning = useStreamRunning();
   const { data: capabilities } = useAuthCapabilities();
@@ -297,31 +317,16 @@ const AgentBuilderMobileMenuConnected = ({
       agentId={agentId}
       showSetVisibility={authEnabled}
       showPublishToChannel={showPublishToChannel}
-      showDelete={showDelete}
+      showDelete
       agentName={name}
       disabled={isRunning}
     />
   );
 };
 
-interface HeaderActionsProps {
-  mode: 'create' | 'edit';
-  agentId: string;
-  isSaving: boolean;
-  onSave: () => void;
-}
-
-const HeaderActions = ({ mode, agentId, isSaving, onSave }: HeaderActionsProps) => {
+const DeleteAgentPanelButtonConnected = ({ agentId }: { agentId: string }) => {
   const isRunning = useStreamRunning();
-  const disabled = isSaving || isRunning;
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control: formMethods.control, name: 'name' }) ?? '';
-  return (
-    <div className="flex items-center gap-2">
-      {mode === 'edit' && <DeleteAgentDesktopButton agentId={agentId} agentName={name} disabled={disabled} />}
-      <Button size="sm" variant="cta" onClick={onSave} disabled={disabled} data-testid="agent-builder-edit-save">
-        <CheckIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
-      </Button>
-    </div>
-  );
+  return <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />;
 };

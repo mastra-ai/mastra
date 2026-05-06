@@ -21,21 +21,28 @@ export async function initWorkOS(): Promise<AuthResult> {
       admin: ['*'],
       // Another admin-level role (should be filtered from preview list)
       superadmin: ['*'],
-      // Agent Builder access: CRUD agents/skills, workspace file I/O, chat history
+      // Agent Builder: full CRUD on agents/skills + studio read access
       member: [
-        // necessary
         'stored-agents:*',
         'stored-skills:*',
-        //not necessary, but lose out on some features (tools in tool list and chat history)
+        'stored-workspaces:*',
         'tools:read',
         'workflows:read',
+        'agents:read',
         'memory:read',
       ],
-      // Can only view and run agents
-      operator: ['agents:read', 'agents:execute', 'tools:read', 'workflows:read'],
-      // Read-only access — no resources at all
-      viewer: [],
-      // Can only see observability
+      // Agent Builder: browse + chat only, no create/edit/delete
+      operator: [
+        'stored-agents:read',
+        'stored-agents:execute',
+        'stored-skills:read',
+        'agents:read',
+        'tools:read',
+        'workflows:read',
+      ],
+      // Studio only: read agents/workflows/tools, no Agent Builder access
+      viewer: ['agents:read', 'workflows:read', 'tools:read'],
+      // Observability only: logs + traces, no Agent Builder access
       auditor: ['observability:read', 'logs:read'],
       // Minimal default - no access
       _default: [],
