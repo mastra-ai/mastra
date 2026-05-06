@@ -6,8 +6,12 @@ import type { AIV5Type, CoreMessageV4 } from '../types';
 import { getResponseProviderItemKeys } from '../utils/response-item-metadata';
 import type { MastraMessagePart, UIMessageV4Part } from './types';
 
-function appendResponseProviderItemKeys(cacheKey: string, providerMetadata: unknown): string {
-  for (const itemKey of getResponseProviderItemKeys(providerMetadata as Record<string, unknown> | undefined)) {
+function appendResponseProviderItemKeys(cacheKey: string, ...providerSources: unknown[]): string {
+  const itemKeys = new Set(
+    providerSources.flatMap(source => getResponseProviderItemKeys(source as Record<string, unknown> | undefined)),
+  );
+
+  for (const itemKey of itemKeys) {
     cacheKey += `|${itemKey}`;
   }
 
@@ -124,14 +128,12 @@ export class CacheKeyGenerator {
       if (part.type === 'text') {
         key += part.text.length;
         const partAny = part as any;
-        key = appendResponseProviderItemKeys(key, partAny.providerMetadata);
-        key = appendResponseProviderItemKeys(key, partAny.providerOptions);
+        key = appendResponseProviderItemKeys(key, partAny.providerMetadata, partAny.providerOptions);
       }
       if (part.type === 'reasoning') {
         key += part.text.length;
         const partAny = part as any;
-        key = appendResponseProviderItemKeys(key, partAny.providerMetadata);
-        key = appendResponseProviderItemKeys(key, partAny.providerOptions);
+        key = appendResponseProviderItemKeys(key, partAny.providerMetadata, partAny.providerOptions);
       }
       if (part.type === 'tool-call') {
         key += part.toolCallId;

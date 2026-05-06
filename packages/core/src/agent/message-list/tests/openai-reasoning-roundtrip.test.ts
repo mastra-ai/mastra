@@ -427,6 +427,40 @@ describe('OpenAI reasoning round-trip', () => {
     );
   });
 
+  it('should deduplicate mirrored provider metadata and options in cache keys', () => {
+    const providerOptionsOnly = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_mirrored',
+          },
+        },
+      },
+    ];
+    const mirroredAcrossBags = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerMetadata: {
+          azure: {
+            itemId: 'rs_azure_mirrored',
+          },
+        },
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_mirrored',
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(providerOptionsOnly as any)).toBe(
+      CacheKeyGenerator.fromAIV4CoreMessageContent(mirroredAcrossBags as any),
+    );
+  });
+
   it('should canonicalize mirrored Azure and OpenAI text itemIds in cache keys', () => {
     const azureOnly = [
       {
