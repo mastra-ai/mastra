@@ -1,5 +1,75 @@
 # @mastra/playground-ui
 
+## 26.1.0-alpha.0
+
+### Minor Changes
+
+- Added CodeBlock component with select/tabs switcher, optional shiki syntax highlighting, and Notion-style hover-only copy button (always visible on touch devices via media query). ([#16202](https://github.com/mastra-ai/mastra/pull/16202))
+
+- **Added** `MainSidebar.NavLabel` — collapse-aware label slot for `asChild` nav items. When the sidebar collapses to icon-only mode, the label hides via `VisuallyHidden` (still announced by screen readers) instead of leaking outside the 36px icon rail. The default `link={...}` path was already collapse-aware; `asChild` consumers now have a matching primitive. ([#16167](https://github.com/mastra-ai/mastra/pull/16167))
+
+  ```tsx
+  // Before: text leaked visually when the sidebar collapsed
+  <MainSidebar.NavLink asChild>
+    <button>
+      <Bot />
+      Agents
+    </button>
+  </MainSidebar.NavLink>
+
+  // After: wrap labels in MainSidebar.NavLabel
+  <MainSidebar.NavLink asChild>
+    <button>
+      <Bot />
+      <MainSidebar.NavLabel>Agents</MainSidebar.NavLabel>
+    </button>
+  </MainSidebar.NavLink>
+  ```
+
+  **Improved** truncation handling for nav items and section headers. Long labels now clip with a single-line ellipsis instead of wrapping to a second line during the collapse/expand transition, eliminating layout jumps at narrow widths.
+
+- Added SettingsRow primitive for label/description + control rows in settings pages. Markup mirrors the existing platform settings row pattern (flex justify-between with title + optional description on the left, control on the right) so consumers can adopt it without visual regressions. ([#16150](https://github.com/mastra-ai/mastra/pull/16150))
+
+  Removed the redundant SelectField wrapper. Its only internal consumer (Studio settings) was migrated to SettingsRow + Select primitives. For form fields use SelectFieldBlock; for settings rows use SettingsRow.
+
+  **Before**
+
+  ```tsx
+  <SelectField name="theme" label="Theme mode" value={theme} onValueChange={setTheme} options={THEME_OPTIONS} />
+  ```
+
+  **After**
+
+  ```tsx
+  <SettingsRow label="Theme mode" htmlFor="theme">
+    <Select value={theme} onValueChange={setTheme}>
+      <SelectTrigger id="theme" className="w-full sm:w-48">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>{/* items */}</SelectContent>
+    </Select>
+  </SettingsRow>
+  ```
+
+### Patch Changes
+
+- Refreshed the visual style of form controls and popups for a softer, more consistent look: ([#16150](https://github.com/mastra-ai/mastra/pull/16150))
+  - **Button:** thinner border (`border` instead of `border-2`); text-mode buttons use `rounded-full`; icon-mode buttons are circular.
+  - **Combobox / Select / DropdownMenu / Command:** triggers and items aligned on the form-input look — `rounded-lg` border, transparent background, soft hover/open states, consistent `text-ui-smd` typography.
+  - **Popups (Popover / Tooltip / Select / Dropdown content):** `rounded-xl` containers with `shadow-dialog`; inner items `rounded-lg` inside `p-1`.
+  - **Tokens:** bumped the radius scale (`sm` 2→4px, `md` 4→6px, `lg` 6→10px, `xl` 12→14px); replaced `--shadow-dialog`'s outer 1px ring with an inset top gloss so the dialog shadow stops doubling up with each consumer's own border.
+
+- Aligned Badge variant colors with the Notice and Toast palette so the design system uses one consistent set of semantic colors. Default badges keep their neutral surface, while success, error, info and warning variants now use the same notice tokens as Notices and Toasts. Icons inside badges are sized down to match the badge height. ([#16215](https://github.com/mastra-ai/mastra/pull/16215))
+
+- Restored auto-refresh on the traces list page, polling every 10 seconds. Polling is paused while the request is forbidden (HTTP 403) to avoid flicker. ([#16204](https://github.com/mastra-ai/mastra/pull/16204))
+
+- Fixed Notice component alignment with action: button now stays at default sm size, vertically aligns to first text line via negative margin compensation, and stacks below the message as a full-width button on narrow containers. ([#16150](https://github.com/mastra-ai/mastra/pull/16150))
+
+- Updated dependencies [[`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60)]:
+  - @mastra/core@1.33.0-alpha.0
+  - @mastra/client-js@1.17.2-alpha.0
+  - @mastra/react@0.2.36-alpha.0
+
 ## 26.0.1
 
 ### Patch Changes

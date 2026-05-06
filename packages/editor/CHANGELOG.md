@@ -1,5 +1,21 @@
 # @mastra/editor
 
+## 0.7.24-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`0764baf`](https://github.com/mastra-ai/mastra/commit/0764baf9d67cfdb310391a93837511f454a74475)]:
+  - @mastra/memory@1.17.6-alpha.0
+
+## 0.7.24-alpha.0
+
+### Patch Changes
+
+- Fixed peer dependency ranges so packages that use the Mastra server require a compatible Mastra core version. ([#16208](https://github.com/mastra-ai/mastra/pull/16208))
+
+- Updated dependencies [[`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60)]:
+  - @mastra/core@1.33.0-alpha.0
+
 ## 0.7.23
 
 ### Patch Changes

@@ -1,16 +1,21 @@
 # Mastra Code
 
-A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi-tui](https://github.com/badlogic/pi-mono).
+A coding agent that never compacts. Built with [Mastra](https://mastra.ai) and [pi-tui](https://github.com/badlogic/pi-mono).
+
+Learn more in the [documentation](https://code.mastra.ai/) and [announcement post](https://mastra.ai/blog/announcing-mastra-code).
+
+![Screenshot of the Mastra Code TUI. At the top it shows in green letters "Mastra Code". It then displays the version, project, resource ID, and user. The user and assistant message have green borders. At the bottom is a green input field. Below the input is on the left the current mode and model displayed. In the middle the Observational Memory status is shown. On the right is the current directory.](https://res.cloudinary.com/mastra-assets/image/upload/v1778048981/mastracode-init_tny2pb.png)
 
 ## Features
 
-- 🤖 **Multi-model support**: Use Claude, GPT, Gemini, and 70+ other models via Mastra's unified model router
-- 🔐 **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
-- 💾 **Persistent conversations**: Threads are saved per-project and resume automatically
-- 🛠️ **Coding tools**: View files, edit code, run shell commands
-- 📋 **Plan persistence**: Approved plans are saved as markdown files for future reference
-- 📊 **Token tracking**: Monitor usage with persistent token counts per thread
-- 🎨 **Beautiful TUI**: Polished terminal interface with streaming responses
+- **Observational Memory built-in**: Never deal with compaction again. [Observational Memory](https://mastra.ai/docs/memory/observational-memory) automatically extracts and stores observations from every conversation, then injects relevant context into future requests.
+- **Multi-model support**: Use Claude, GPT, Gemini, and thousands of other models via Mastra's unified model router
+- **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
+- **Persistent conversations**: Threads are saved per-project and resume automatically
+- **Coding tools**: View files, edit code, run shell commands
+- **Plan persistence**: Approved plans are saved as markdown files for future reference
+- **Token tracking**: Monitor usage with persistent token counts per thread
+- **Beautiful TUI**: Polished terminal interface with streaming responses
 
 ## Installation
 
@@ -28,10 +33,10 @@ npx mastracode
 
 On first launch, an interactive onboarding wizard guides you through:
 
-1. **Authentication** — log in with your AI provider (Anthropic, OpenAI, etc.)
-2. **Model packs** — choose default models for each mode (build / plan / fast)
-3. **Observational Memory** — pick a model for OM (learns about you over time)
-4. **YOLO mode** — auto-approve tool calls, or require manual confirmation
+1. **Authentication**: Log in with your AI provider (Anthropic, OpenAI, etc.)
+2. **Model packs**: Choose default models for each mode (build / plan / fast)
+3. **Observational Memory**: Pick a model for OM (learns about you over time)
+4. **YOLO mode**: Auto-approve tool calls, or require manual confirmation
 
 You can re-run setup anytime with `/setup`.
 
@@ -140,8 +145,8 @@ The SQLite database is stored in your system's application data directory:
 
 For **Anthropic** models, mastracode supports two authentication methods:
 
-1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription.
-2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
+1. **Claude Max OAuth (primary)**: Use `/login` to authenticate with a Claude Pro/Max subscription.
+2. **API key (fallback)**: Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
 
 When both are available, Claude Max OAuth takes priority.
 
@@ -237,9 +242,9 @@ pnpm build
 
 ## Credits
 
-- [Mastra](https://mastra.ai) - AI agent framework
-- [pi-mono](https://github.com/badlogic/pi-mono) - TUI primitives and inspiration
-- [OpenCode](https://github.com/sst/opencode) - OAuth provider patterns
+- [Mastra](https://mastra.ai): AI agent framework
+- [pi-mono](https://github.com/badlogic/pi-mono): TUI primitives and inspiration
+- [OpenCode](https://github.com/sst/opencode): OAuth provider patterns
 
 ## License
 
