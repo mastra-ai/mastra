@@ -3122,6 +3122,93 @@ describe('Responses Handlers', () => {
     });
   });
 
+  it('preserves persisted zero-argument assistant tool calls without args', async () => {
+    vi.spyOn(toolAgent, 'generate').mockResolvedValue(
+      createGenerateResult({
+        text: 'The zero-argument tool is done.',
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-zero-arg-tool-call',
+            role: 'assistant',
+            type: 'tool-call',
+            createdAt: new Date('2026-03-23T10:00:00.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: 'call_zero_arg_persisted',
+                  toolName: 'weather',
+                },
+              },
+            ],
+          }),
+          createDbMessage({
+            id: 'tool-zero-arg-result',
+            role: 'tool',
+            type: 'tool-result',
+            createdAt: new Date('2026-03-23T10:00:01.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_zero_arg_persisted',
+                  toolName: 'weather',
+                  result: { weather: 'sunny' },
+                },
+              },
+            ],
+          }),
+          createDbMessage({
+            id: 'assistant-zero-arg-final',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:00:02.000Z'),
+            parts: [{ type: 'text', text: 'The zero-argument tool is done.' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Use the zero argument tool',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: created.id,
+    });
+
+    for (const output of [created.output, retrieved.output]) {
+      expect(output).toMatchObject([
+        {
+          id: 'call_zero_arg_persisted',
+          type: 'function_call',
+          call_id: 'call_zero_arg_persisted',
+          name: 'weather',
+          arguments: '{}',
+        },
+        {
+          id: 'call_zero_arg_persisted:output',
+          type: 'function_call_output',
+          call_id: 'call_zero_arg_persisted',
+          output: JSON.stringify({ weather: 'sunny' }),
+        },
+        {
+          id: created.id,
+          type: 'message',
+          content: [{ text: 'The zero-argument tool is done.' }],
+        },
+      ]);
+    }
+  });
+
   it('deletes all persisted messages for a tool-backed turn', async () => {
     vi.spyOn(toolAgent, 'generate').mockResolvedValue(
       createGenerateResult({

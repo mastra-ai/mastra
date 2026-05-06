@@ -268,7 +268,7 @@ function mapMastraMessageToResponseToolItems({
     if (
       getMessageRole(message) === 'assistant' &&
       toolName &&
-      toolInvocation.args !== undefined &&
+      (toolInvocation.args !== undefined || toolInvocation.result === undefined) &&
       !emittedCallIds.has(toolCallId)
     ) {
       items.push(
