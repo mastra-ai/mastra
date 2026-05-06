@@ -40,8 +40,8 @@ export class InMemoryServerCache extends MastraServerCache {
     return this.cache.get(key);
   }
 
-  async set(key: string, value: unknown): Promise<void> {
-    this.cache.set(key, value);
+  async set(key: string, value: unknown, ttlMs?: number): Promise<void> {
+    this.cache.set(key, value, ttlMs !== undefined ? { ttl: ttlMs } : undefined);
   }
 
   async listLength(key: string): Promise<number> {

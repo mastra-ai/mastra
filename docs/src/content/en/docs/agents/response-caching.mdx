@@ -1,0 +1,117 @@
+---
+title: "Response caching | Agents"
+description: "Cache identical agent calls to skip the LLM, return responses instantly, and avoid duplicate spend."
+packages:
+  - "@mastra/core"
+---
+
+# Response caching
+
+Response caching skips the LLM call and replays a previously cached response when an agent receives an identical request. Use it to drop latency to single-digit milliseconds and avoid paying for repeated calls.
+
+## When to use response caching
+
+Reach for it when the same request shape repeats across users or sessions, for example prompt templates, suggested-prompt buttons, agentic search re-asks, or guardrail LLMs that classify the same input over and over. Skip it when calls trigger external side effects through tools, since cache hits replay tool calls without re-executing them.
+
+## Quickstart
+
+Pass `responseCache: true` on a single call to use the agent's default cache configuration:
+
+```typescript title="src/example.ts"
+const result = await agent.generate('What is the capital of France?', {
+  responseCache: true,
+})
+```
+
+The first call runs the LLM normally and writes the response to the cache. Subsequent identical calls return the cached response without invoking the LLM.
+
+## Enable for the whole agent
+
+Set `responseCache` on the agent to cache every call by default:
+
+```typescript title="src/mastra/agents/search-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const searchAgent = new Agent({
+  name: 'Search Agent',
+  instructions: 'You answer questions concisely.',
+  model: 'openai/gpt-5',
+  responseCache: { ttl: 600 }, // 10 minutes
+})
+```
+
+Per-call options override agent-level defaults. Pass `responseCache: false` to opt out for a single request.
+
+## Configure TTL, scope, key, and bust
+
+```typescript title="src/example.ts"
+await agent.stream(prompt, {
+  responseCache: {
+    key, // override the auto-derived cache key
+    ttl, // per-entry TTL in seconds
+    scope, // tenant/user scope, or null to disable scoping
+    cache, // custom MastraCache implementation
+    bust, // when true, bypass any existing entry and overwrite
+  },
+})
+```
+
+By default, the cache key includes the resource id from `memory` if provided, so two users with separate memory resources never see each other's cached responses. Override with `scope` for explicit tenant isolation:
+
+```typescript title="src/example.ts"
+await agent.stream(prompt, {
+  responseCache: { scope: ctx.organizationId },
+})
+```
+
+Pass `scope: null` to deliberately share entries across all callers — only use this for known-public, non-personalized content.
+
+## Provide a custom cache backend
+
+If you don't pass `cache`, the agent uses the cache registered on its `Mastra` instance via `new Mastra({ cache })`. Pass any [`MastraCache`](/reference/core/MastraCache) implementation to override:
+
+```typescript title="src/mastra/agents/cached-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import type { MastraCache } from '@mastra/core/cache'
+
+const cache: MastraCache = {
+  async get(key) {
+    /* ... */
+  },
+  async set(key, value, ttlSeconds) {
+    /* ... */
+  },
+}
+
+export const agent = new Agent({
+  name: 'Cached Agent',
+  instructions: '...',
+  model: 'openai/gpt-5',
+  responseCache: { cache },
+})
+```
+
+## What's in the cache key
+
+When you don't supply `key`, Mastra derives one deterministically from inputs that change the LLM's response: `agentId`, `methodType` (`stream` vs `generate`), `scope`, model identity (`provider`, `modelId`, spec version), `modelSettings`, `providerOptions`, `toolChoice`, system prompt + instructions, tool definitions (id, description, schemas), structured output schema, input messages, and request `context`. Any change to these inputs automatically invalidates the cache.
+
+## How cache hits work
+
+`agent.generate()` returns the cached `FullOutput` directly. `agent.stream()` returns a `MastraModelOutput` whose chunks are replayed from the cached buffer through the same pipeline, so consumers iterating `fullStream` or awaiting `text`, `usage`, and `finishReason` see the cached values.
+
+Cache writes happen after the response completes. Failed runs (errors, tripwire activations) are not cached, so the next call retries cleanly.
+
+## Comparison with provider-level caching
+
+Provider-level caching like [OpenRouter response caching](https://openrouter.ai/announcements/response-caching) lives at the API layer and is scoped to your provider account. Mastra's response cache is at the agent layer, so it works with any model, runs in your own infrastructure (latency is a few ms instead of a network round-trip), and can share entries across providers if you set the same `key`. The two are complementary.
+
+:::note
+Visit [Agent.stream() reference](/reference/agents/stream) and [Agent.generate() reference](/reference/agents/generate) for the full options.
+:::
+
+## Related
+
+- [Processors](/docs/agents/processors)
+- [Guardrails](/docs/agents/guardrails)
+- [Agent.stream()](/reference/agents/stream)
+- [Agent.generate()](/reference/agents/generate)

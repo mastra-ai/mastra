@@ -231,6 +231,13 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description:
       'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
+  {
+    name: 'responseCache',
+    type: 'boolean | { key?: string; ttl?: number; scope?: string | null; cache?: MastraCache; bust?: boolean }',
+    isOptional: true,
+    description:
+      "Default response cache configuration for `agent.stream()` and `agent.generate()`. Set to `true` to use the Mastra instance's server cache, or pass an options object to customize the TTL (seconds), scope, custom cache implementation, or bust behavior. Per-call options override these defaults; pass `responseCache: false` per call to opt out. See [Response caching](/docs/agents/response-caching).",
+  },
 ]}
 />
 

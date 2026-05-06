@@ -11,6 +11,8 @@ import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
+import { createMastraCacheFromServerCache } from '../cache';
+import type { MastraCache } from '../cache';
 import { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -69,6 +71,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
@@ -97,12 +100,16 @@ import type {
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import { buildAgentResponseCacheKey, resolveResponseCacheConfig, summarizeToolsForCacheKey } from './response-cache';
+import type { AgentResponseCacheOption, CachedAgentResponse } from './response-cache';
+import { replayCachedAgentResponse } from './response-cache-replay';
 import { SaveQueueManager } from './save-queue';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
   AgentGenerateOptions,
+  AgentMemoryOption,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -261,6 +268,7 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  #responseCache?: AgentResponseCacheOption;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -456,6 +464,10 @@ export class Agent<
 
     if (config.backgroundTasks) {
       this.#backgroundTasks = config.backgroundTasks;
+    }
+
+    if (config.responseCache !== undefined) {
+      this.#responseCache = config.responseCache;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -5045,6 +5057,153 @@ export class Agent<
   }
 
   /**
+   * Build a cache lookup descriptor for a `stream()` / `generate()` call from
+   * already-resolved request inputs. Returns `undefined` if response caching
+   * is disabled or if there's no usable cache (no custom cache + no Mastra
+   * server cache).
+   *
+   * The cache key incorporates everything that can change the LLM's response
+   * (model identity, model settings, provider options, system prompt,
+   * instructions, tool definitions, structured output schema, input messages,
+   * `methodType`) plus an optional scope for multi-tenant isolation. See
+   * {@link buildAgentResponseCacheKey} for details.
+   *
+   * @internal
+   */
+  async #resolveResponseCacheLookup(args: {
+    methodType: 'stream' | 'generate';
+    perCallOption: AgentResponseCacheOption | undefined;
+    requestContext?: RequestContext;
+    modelInfo: { provider?: string; modelId?: string; specificationVersion?: string };
+    messages: MessageListInput;
+    mergedOptions: Record<string, unknown>;
+  }): Promise<
+    | undefined
+    | {
+        cache: MastraCache;
+        cacheKey: string;
+        ttl?: number;
+        bust: boolean;
+      }
+  > {
+    const config = resolveResponseCacheConfig(this.#responseCache, args.perCallOption);
+    if (!config.enabled) return undefined;
+
+    let cache = config.cache;
+    if (!cache) {
+      const serverCache = this.#mastra?.getServerCache();
+      if (serverCache) {
+        cache = createMastraCacheFromServerCache(serverCache);
+      }
+    }
+
+    if (!cache) {
+      this.logger.debug(
+        `[Agent:${this.name}] responseCache requested but no cache available — pass responseCache.cache or register the agent with a Mastra instance`,
+      );
+      return undefined;
+    }
+
+    let cacheKey = config.key;
+    if (!cacheKey) {
+      const memoryOption = (args.mergedOptions.memory ?? undefined) as AgentMemoryOption | undefined;
+      const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
+
+      let agentTools: ToolsInput | undefined;
+      try {
+        agentTools = (await this.listTools({ requestContext: args.requestContext })) as unknown as ToolsInput;
+      } catch {
+        // Dynamic tool resolution can throw — fall back to skipping tools in
+        // the key. Cache hits are still safe because tool definitions are
+        // deterministic per request anyway, and `responseCache.key` is the
+        // documented escape hatch.
+      }
+
+      const toolsets = args.mergedOptions.toolsets as Record<string, ToolsInput> | undefined;
+      const clientTools = args.mergedOptions.clientTools as ToolsInput | undefined;
+      let instructions: AgentInstructions | undefined;
+      try {
+        instructions = await this.getInstructions({ requestContext: args.requestContext });
+      } catch {
+        // Same fallback rationale as tools.
+      }
+
+      cacheKey = buildAgentResponseCacheKey({
+        agentId: this.id,
+        methodType: args.methodType,
+        scope,
+        model: {
+          provider: args.modelInfo.provider,
+          modelId: args.modelInfo.modelId,
+          specVersion: args.modelInfo.specificationVersion,
+        },
+        instructions,
+        system: args.mergedOptions.system,
+        messages: args.messages,
+        modelSettings: args.mergedOptions.modelSettings,
+        providerOptions: args.mergedOptions.providerOptions,
+        toolChoice: args.mergedOptions.toolChoice,
+        tools: {
+          agent: summarizeToolsForCacheKey(agentTools as Record<string, unknown> | undefined),
+          toolsets: toolsets
+            ? Object.fromEntries(
+                Object.entries(toolsets).map(([k, v]) => [
+                  k,
+                  summarizeToolsForCacheKey(v as Record<string, unknown> | undefined),
+                ]),
+              )
+            : undefined,
+          clientTools: summarizeToolsForCacheKey(clientTools as Record<string, unknown> | undefined),
+        },
+        structuredOutputSchema:
+          (args.mergedOptions.structuredOutput as { schema?: unknown } | undefined)?.schema ??
+          (args.mergedOptions.experimental_output as { jsonSchema?: unknown } | undefined)?.jsonSchema,
+        context: args.mergedOptions.context,
+      });
+    }
+
+    return { cache, cacheKey, ttl: config.ttl, bust: config.bust };
+  }
+
+  /**
+   * Fire-and-forget cache write for a completed agent response. Captures
+   * post-processor chunks via `output.fullStream` (which replays the buffered
+   * chunks because the stream has already finished) and stores them alongside
+   * the `FullOutput` so future cache hits can replay either form.
+   *
+   * @internal
+   */
+  #writeResponseCache<OUTPUT>(
+    lookup: { cache: MastraCache; cacheKey: string; ttl?: number },
+    output: MastraModelOutput<OUTPUT>,
+    fullOutput: FullOutput<OUTPUT>,
+  ): void {
+    void (async () => {
+      try {
+        if (fullOutput.tripwire || fullOutput.error) {
+          // Don't cache failed runs — replaying an error is not what users
+          // expect from a cache hit.
+          return;
+        }
+        const chunks: ChunkType<OUTPUT>[] = [];
+        for await (const chunk of output.fullStream) {
+          chunks.push(chunk);
+        }
+        const cached: CachedAgentResponse<OUTPUT> = {
+          chunks,
+          fullOutput,
+          cachedAt: Date.now(),
+        };
+        await lookup.cache.set(lookup.cacheKey, cached, lookup.ttl);
+      } catch (err) {
+        this.logger.warn(`[Agent:${this.name}] responseCache write failed`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })();
+  }
+
+  /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
@@ -5789,6 +5948,29 @@ export class Agent<
       });
     }
 
+    const responseCacheLookup = await this.#resolveResponseCacheLookup({
+      methodType: 'generate',
+      perCallOption: options?.responseCache,
+      requestContext: mergedOptions.requestContext,
+      modelInfo,
+      messages,
+      mergedOptions: mergedOptions as unknown as Record<string, unknown>,
+    });
+
+    if (responseCacheLookup && !responseCacheLookup.bust) {
+      try {
+        const cached = await responseCacheLookup.cache.get<CachedAgentResponse<OUTPUT>>(responseCacheLookup.cacheKey);
+        if (cached?.fullOutput) {
+          this.logger.debug(`[Agent:${this.name}] responseCache HIT (generate)`, { key: responseCacheLookup.cacheKey });
+          return cached.fullOutput;
+        }
+      } catch (err) {
+        this.logger.warn(`[Agent:${this.name}] responseCache read failed`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const executeOptions = {
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
@@ -5833,6 +6015,10 @@ export class Agent<
 
     if (error) {
       throw error;
+    }
+
+    if (responseCacheLookup) {
+      this.#writeResponseCache(responseCacheLookup, result.result, fullOutput);
     }
 
     return fullOutput;
@@ -5921,6 +6107,40 @@ export class Agent<
       });
     }
 
+    const responseCacheLookup = await this.#resolveResponseCacheLookup({
+      methodType: 'stream',
+      perCallOption: streamOptions?.responseCache,
+      requestContext: mergedOptions.requestContext,
+      modelInfo,
+      messages,
+      mergedOptions: mergedOptions as unknown as Record<string, unknown>,
+    });
+
+    if (responseCacheLookup && !responseCacheLookup.bust) {
+      try {
+        const cached = await responseCacheLookup.cache.get<CachedAgentResponse<OUTPUT>>(responseCacheLookup.cacheKey);
+        if (cached?.fullOutput) {
+          this.logger.debug(`[Agent:${this.name}] responseCache HIT (stream)`, { key: responseCacheLookup.cacheKey });
+          return replayCachedAgentResponse({
+            cached,
+            modelInfo: {
+              provider: modelInfo.provider,
+              modelId: modelInfo.modelId,
+              specVersion: modelInfo.specificationVersion,
+            },
+            threadId:
+              typeof mergedOptions.memory?.thread === 'string'
+                ? mergedOptions.memory.thread
+                : mergedOptions.memory?.thread?.id,
+          });
+        }
+      } catch (err) {
+        this.logger.warn(`[Agent:${this.name}] responseCache read failed`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const executeOptions = {
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
@@ -5957,6 +6177,20 @@ export class Agent<
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
       });
+    }
+
+    if (responseCacheLookup) {
+      const stream = result.result;
+      void (async () => {
+        try {
+          const fullOutput = await stream.getFullOutput();
+          this.#writeResponseCache(responseCacheLookup, stream, fullOutput);
+        } catch (err) {
+          this.logger.warn(`[Agent:${this.name}] responseCache write skipped (stream finalize failed)`, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })();
     }
 
     return result.result;

@@ -119,6 +119,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/response-caching',
+          label: 'Response caching',
+        },
+        {
+          type: 'doc',
           id: 'agents/agent-approval',
           label: 'Agent Approval',
         },

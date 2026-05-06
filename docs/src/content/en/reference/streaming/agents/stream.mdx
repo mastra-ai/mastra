@@ -727,6 +727,13 @@ const stream = await agent.stream('message for agent')
             description: 'Request Context for dependency injection and contextual information.',
           },
           {
+            name: 'responseCache',
+            type: 'boolean | { key?: string; ttl?: number; scope?: string | null; cache?: MastraCache; bust?: boolean }',
+            isOptional: true,
+            description:
+              'Cache the response so identical subsequent requests skip the LLM call and return the cached output. Pass `true` to use the agent-level default, `false` to opt out for this call, or an options object to customize TTL (seconds), scope, custom cache, or bust behavior. The cache key includes model identity, model settings, system prompt, instructions, tools, structured output schema, and input messages, so any change automatically invalidates the cache. See [Response caching](/docs/agents/response-caching).',
+          },
+          {
             name: 'tracingContext',
             type: 'TracingContext',
             isOptional: true,
