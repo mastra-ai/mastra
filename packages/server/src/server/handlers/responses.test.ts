@@ -1873,6 +1873,69 @@ describe('Responses Handlers', () => {
     expect(argumentDeltas).toBe(argumentsDone?.arguments);
   });
 
+  it('uses a later canonical tool name for streamed tool calls', async () => {
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: '',
+        chunks: [
+          {
+            type: 'tool-call-input-streaming-start',
+            payload: {
+              toolCallId: 'call_canonical_name',
+              toolName: 'pending_tool_name',
+            },
+          },
+          {
+            type: 'tool-call-delta',
+            payload: {
+              toolCallId: 'call_canonical_name',
+              toolName: 'weather',
+              argsTextDelta: JSON.stringify({ city: 'Lagos' }),
+            },
+          },
+          {
+            type: 'tool-call-input-streaming-end',
+            payload: {
+              toolCallId: 'call_canonical_name',
+            },
+          },
+          {
+            type: 'tool-result',
+            payload: {
+              toolCallId: 'call_canonical_name',
+              result: { weather: 'sunny' },
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Use canonical tool name',
+      store: false,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const argumentsDone = events.find(event => event.type === 'response.function_call_arguments.done');
+    const completedToolCall = events.find(
+      event => event.type === 'response.output_item.done' && event.item?.type === 'function_call',
+    );
+
+    expect(argumentsDone).toMatchObject({
+      item_id: 'call_canonical_name',
+      name: 'weather',
+    });
+    expect(completedToolCall?.item).toMatchObject({
+      id: 'call_canonical_name',
+      name: 'weather',
+      arguments: JSON.stringify({ city: 'Lagos' }),
+    });
+  });
+
   it('reconciles late canonical tool-call chunks after an early tool result', async () => {
     vi.spyOn(toolAgent, 'stream').mockResolvedValue(
       createStreamResultFromChunks({
@@ -1992,7 +2055,7 @@ describe('Responses Handlers', () => {
   it('ignores late argument deltas after a function call is completed', async () => {
     vi.spyOn(toolAgent, 'stream').mockResolvedValue(
       createStreamResultFromChunks({
-        text: '',
+        text: 'Done.',
         chunks: [
           {
             type: 'tool-call',
@@ -2184,7 +2247,7 @@ describe('Responses Handlers', () => {
   it('defaults final tool-call chunks without args to an empty object', async () => {
     vi.spyOn(toolAgent, 'stream').mockResolvedValue(
       createStreamResultFromChunks({
-        text: '',
+        text: 'Done.',
         chunks: [
           {
             type: 'tool-call',
@@ -2352,6 +2415,76 @@ describe('Responses Handlers', () => {
         content: [{ text: 'The lookup is done.' }],
       },
     ]);
+  });
+
+  it('preserves malformed streamed tool arguments in fallback storage', async () => {
+    const malformedArguments = '{"city":';
+
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: '',
+        chunks: [
+          {
+            type: 'tool-call',
+            payload: {
+              toolCallId: 'call_malformed_args',
+              toolName: 'weather',
+              args: malformedArguments,
+            },
+          },
+          {
+            type: 'tool-result',
+            payload: {
+              toolCallId: 'call_malformed_args',
+              toolName: 'weather',
+              result: { weather: 'sunny' },
+            },
+          },
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'Done.',
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check malformed tool args',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const storedMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+    const syntheticToolCall = storedMessages.messages.find(
+      message => message.id === `${completed.response.id}:tool-call:call_malformed_args`,
+    );
+    const toolInvocation = syntheticToolCall?.content.parts.find(
+      part => part.type === 'tool-invocation',
+    )?.toolInvocation;
+
+    expect(completed.response.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'call_malformed_args',
+          type: 'function_call',
+          arguments: malformedArguments,
+        }),
+      ]),
+    );
+    expect(toolInvocation).toMatchObject({
+      toolCallId: 'call_malformed_args',
+      args: { __raw: malformedArguments },
+    });
   });
 
   it('merges streamed fallback tool items when db messages are partial', async () => {

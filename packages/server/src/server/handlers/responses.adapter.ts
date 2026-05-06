@@ -127,6 +127,14 @@ function stringifyToolPayload(value: unknown) {
   return JSON.stringify(value === undefined ? {} : value);
 }
 
+function stringifyToolArguments(value: unknown) {
+  if (isRecord(value) && typeof value.__raw === 'string') {
+    return value.__raw;
+  }
+
+  return stringifyToolPayload(value);
+}
+
 function createOutputMessage({
   messageId,
   status,
@@ -189,7 +197,7 @@ function createFunctionCallItem({
     type: 'function_call' as const,
     call_id: callId,
     name,
-    arguments: stringifyToolPayload(args),
+    arguments: stringifyToolArguments(args),
     status: 'completed' as const,
   };
 }
@@ -1008,6 +1016,10 @@ export function createResponseStreamEventTranslator(responseId: string) {
   }): { events: ResponseSseEvent[]; state: ToolCallStreamState } => {
     const existing = toolCalls.get(toolCallId);
     if (existing) {
+      if (!existing.completed && toolName && existing.name !== toolName) {
+        existing.name = toolName;
+      }
+
       return { events: [], state: existing };
     }
 

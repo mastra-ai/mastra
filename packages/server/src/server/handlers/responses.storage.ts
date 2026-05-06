@@ -63,6 +63,8 @@ type ResponseResultLike = {
       };
 };
 
+type SyntheticToolResultMessage = Omit<MastraDBMessage, 'role'> & { role: 'tool' };
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -312,8 +314,48 @@ function parseFunctionCallArguments(value: string): unknown {
   try {
     return JSON.parse(value);
   } catch {
-    return {};
+    return { __raw: value };
   }
+}
+
+function createSyntheticToolResultMessage({
+  baseMessage,
+  item,
+  responseId,
+  toolCall,
+}: {
+  baseMessage: Pick<MastraDBMessage, 'createdAt' | 'threadId' | 'resourceId'>;
+  item: Extract<ResponseOutputItem, { type: 'function_call_output' }>;
+  responseId: string;
+  toolCall?: { args: unknown; toolName: string };
+}): SyntheticToolResultMessage {
+  return {
+    ...baseMessage,
+    id: `${responseId}:tool-result:${item.call_id}`,
+    role: 'tool',
+    type: 'tool-result',
+    content: {
+      format: 2 as const,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: item.call_id,
+            toolName: toolCall?.toolName ?? 'unknown',
+            args: toolCall?.args ?? {},
+            result: item.output,
+          },
+        },
+      ],
+    },
+  };
+}
+
+function toMastraDBMessage(message: SyntheticToolResultMessage): MastraDBMessage {
+  // MastraDBMessage does not yet type persisted v2 tool-role messages, but
+  // storage and response mapping already handle them at runtime.
+  return message as unknown as MastraDBMessage;
 }
 
 function createSyntheticMessagesFromOutputItems({
@@ -371,27 +413,7 @@ function createSyntheticMessagesFromOutputItems({
     if (item.type === 'function_call_output') {
       const toolCall = toolCallsById.get(item.call_id);
 
-      return {
-        ...baseMessage,
-        id: `${responseId}:tool-result:${item.call_id}`,
-        role: 'tool',
-        type: 'tool-result',
-        content: {
-          format: 2 as const,
-          parts: [
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: item.call_id,
-                toolName: toolCall?.toolName ?? 'unknown',
-                args: toolCall?.args ?? {},
-                result: item.output,
-              },
-            },
-          ],
-        },
-      } as unknown as MastraDBMessage;
+      return toMastraDBMessage(createSyntheticToolResultMessage({ baseMessage, item, responseId, toolCall }));
     }
 
     return {

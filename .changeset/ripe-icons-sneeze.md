@@ -2,6 +2,18 @@
 '@mastra/server': minor
 ---
 
-Fixed Responses streams so Mastra-hosted server routes emit tool-call argument, function-call, and function-call-output events instead of dropping tool activity from SSE output.
+Responses streams now emit tool call events so clients can track tool arguments and results in real time.
 
-Streamed and stored fallback output now preserves tool items when an agent stream does not return complete DB messages. Response and conversation tool item IDs now use provider tool call IDs, with tool outputs using the `<toolCallId>:output` form, so clients can correlate streamed arguments with completed tool outputs.
+Tool outputs now use consistent IDs (`<toolCallId>:output`) so streamed arguments can be matched to completed results.
+
+```ts
+for await (const event of stream) {
+  if (event.type === 'response.function_call_arguments.delta') {
+    console.log(event.delta);
+  }
+
+  if (event.type === 'response.output_item.done' && event.item.type === 'function_call') {
+    console.log(event.item.id);
+  }
+}
+```
