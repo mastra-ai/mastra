@@ -13,6 +13,7 @@
  */
 
 import { TransformStream } from 'node:stream/web';
+import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
 import type {
   Span,
@@ -22,6 +23,19 @@ import type {
   UpdateSpanOptions,
 } from '@mastra/core/observability';
 import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+
+/**
+ * Feature gate for MODEL_INFERENCE spans. When the installed @mastra/core
+ * predates the feature flag, `SpanType.MODEL_INFERENCE` resolves to undefined
+ * at runtime; in that case the tracker falls back to parenting MODEL_CHUNK
+ * spans directly under MODEL_STEP (the pre-MODEL_INFERENCE behavior).
+ *
+ * Read at every call so tests can toggle the flag between cases. The set
+ * lookup is O(1) and not on a hot path.
+ */
+function supportsModelInference(): boolean {
+  return coreFeatures.has('model-inference-span');
+}
 
 import { extractUsageMetrics } from './usage';
 
@@ -411,8 +425,15 @@ export class ModelSpanTracker {
    * Open the MODEL_INFERENCE span for the current step. Chunks (including tool-call
    * chunks emitted by the model) parent under this span so its duration reflects
    * pure model latency.
+   *
+   * No-ops when the installed @mastra/core lacks the `model-inference-span`
+   * feature flag. Chunks then fall back to parenting under MODEL_STEP via
+   * #chunkParent(), preserving the pre-MODEL_INFERENCE hierarchy.
    */
   #startInferenceSpan(input: StepInputPreview): void {
+    if (!supportsModelInference()) {
+      return;
+    }
     if (!this.#currentStepSpan || this.#currentInferenceSpan) {
       return;
     }

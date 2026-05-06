@@ -1,7 +1,8 @@
 import { ReadableStream } from 'node:stream/web';
+import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityExporter, TracingEvent, ExportedSpan } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from './instances';
 import { ModelSpanTracker } from './model-tracing';
@@ -1362,6 +1363,11 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('MODEL_INFERENCE span', () => {
+    beforeEach(() => {
+      // Guarantee the feature is enabled regardless of nested-describe ordering
+      coreFeatures.add('model-inference-span');
+    });
+
     it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with chunks parented under it', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
@@ -1441,6 +1447,54 @@ describe('ModelSpanTracker', () => {
       expect(stepSpan!.attributes.usage).toBeDefined();
       expect(inferenceSpan!.attributes).toMatchObject({ finishReason: 'stop' });
       expect(inferenceSpan!.attributes.usage).toBeDefined();
+    });
+
+    describe('feature-flag fallback for older @mastra/core', () => {
+      afterEach(() => {
+        // Restore the flag for subsequent tests in the suite
+        coreFeatures.add('model-inference-span');
+      });
+
+      it('falls back to parenting chunks under MODEL_STEP when feature flag is absent', async () => {
+        // Simulate an older @mastra/core that predates the model-inference-span feature
+        coreFeatures.delete('model-inference-span');
+
+        const modelSpan = tracing.startSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'test-generation',
+        });
+
+        const tracker = new ModelSpanTracker(modelSpan);
+
+        const chunks = [
+          { type: 'step-start', payload: { messageId: 'msg-1' } },
+          { type: 'text-delta', payload: { text: 'hi' } },
+          {
+            type: 'step-finish',
+            payload: {
+              output: { usage: { totalTokens: 5 } },
+              stepResult: { reason: 'stop', warnings: [] },
+              metadata: {},
+            },
+          },
+        ];
+
+        await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+        modelSpan.end();
+
+        // No MODEL_INFERENCE span is created
+        const inferenceSpans = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+        expect(inferenceSpans).toHaveLength(0);
+
+        // Chunks parent under MODEL_STEP (pre-MODEL_INFERENCE behavior)
+        const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+        const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+        expect(stepSpan).toBeDefined();
+        expect(chunkSpans.length).toBeGreaterThan(0);
+        for (const chunk of chunkSpans) {
+          expect(chunk.parentSpanId).toBe(stepSpan!.id);
+        }
+      });
     });
 
     it('closes MODEL_INFERENCE on step-finish even when step-close is deferred (durable mode)', async () => {
