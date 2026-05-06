@@ -91,6 +91,16 @@ interface SearchResult {
  * once the new core export lands in a published version, this can be replaced
  * with an import). Internal callers (the agent loop's `memory.recall()` and
  * semantic recall) bypass the HTTP boundary, so they keep seeing all parts.
+ *
+ * Pagination caveat: the filter is applied AFTER pagination, so a page that
+ * happens to consist entirely of `'llm'`-only messages will come back short
+ * (or empty) even when there are visible messages further down the thread.
+ * `total`/`hasMore` continue to reflect the full result set so the UI can
+ * keep paginating. In practice processors mark individual parts within a
+ * message rather than entire messages, so the visible-message count is
+ * almost always the same as the underlying message count and this caveat
+ * doesn't surface. Callers that need precise visible-message counts should
+ * paginate locally over the unfiltered result.
  */
 function filterMessagesByVisibility<T extends { content: unknown }>(messages: T[]): T[] {
   const result: T[] = [];
@@ -131,11 +141,37 @@ function filterMessagesByVisibility<T extends { content: unknown }>(messages: T[
       .map(part => part.text)
       .join('\n');
 
-    const { content: _legacyContent, ...restContent } = content as {
+    // Recompute the legacy `content.toolInvocations` array using only the
+    // tool-invocation parts that survived the visibility filter — otherwise
+    // a hidden tool call would still leak through that field.
+    const visibleToolCallIds = new Set<string>();
+    for (const part of filteredParts) {
+      const candidate = part as {
+        type?: string;
+        toolInvocation?: { toolCallId?: unknown };
+      };
+      if (candidate.type === 'tool-invocation' && typeof candidate.toolInvocation?.toolCallId === 'string') {
+        visibleToolCallIds.add(candidate.toolInvocation.toolCallId);
+      }
+    }
+
+    const {
+      content: _legacyContent,
+      toolInvocations,
+      ...restContent
+    } = content as {
       content?: string;
+      toolInvocations?: Array<{ toolCallId?: string }>;
       [key: string]: unknown;
     };
     const contentStringPatch = (content as { content?: string }).content === undefined ? {} : { content: visibleText };
+    const toolInvocationsPatch = Array.isArray(toolInvocations)
+      ? {
+          toolInvocations: toolInvocations.filter(
+            invocation => typeof invocation?.toolCallId === 'string' && visibleToolCallIds.has(invocation.toolCallId),
+          ),
+        }
+      : {};
 
     result.push({
       ...message,
@@ -143,6 +179,7 @@ function filterMessagesByVisibility<T extends { content: unknown }>(messages: T[
         ...restContent,
         parts: filteredParts,
         ...contentStringPatch,
+        ...toolInvocationsPatch,
       },
     } as T);
   }

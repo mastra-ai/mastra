@@ -1727,14 +1727,83 @@ describe('Memory Handlers', () => {
       });
     });
 
-    it('should NOT strip llm-only parts when calling memory.recall directly (agent-loop path)', async () => {
-      // The agent loop calls `memory.recall()` itself, never going through
-      // the HTTP handler. This is just a smoke-test that the underlying
-      // recall return shape is preserved untouched.
+    it('should NOT push the visibility filter down to memory.recall (agent-loop path)', async () => {
+      // The agent loop calls `memory.recall()` directly (see
+      // packages/core/src/agent/agent.ts `getMemoryMessages`), bypassing
+      // the HTTP handler. The contract this test enforces is that the
+      // handler does not mutate or wrap the recall arguments — so when the
+      // agent loop later calls recall, it gets back an unfiltered result.
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const recallSpy = vi.spyOn(mockMemory, 'recall').mockResolvedValue({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+
+      await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+
+      // recall is invoked with no visibility-related arguments — the filter
+      // is layered on top of the response, never pushed into the recall
+      // call itself, so the agent loop's own recall() is unchanged.
+      expect(recallSpy).toHaveBeenCalledWith({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+    });
+
+    it('should also strip hidden tool calls from legacy content.toolInvocations', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const visibleInvocation = {
+        state: 'result' as const,
+        toolCallId: 'call-visible',
+        toolName: 'searchTool',
+        args: { query: 'q' },
+        result: 'result',
+      };
+      const hiddenInvocation = {
+        state: 'result' as const,
+        toolCallId: 'call-hidden',
+        toolName: 'skillsTool',
+        args: {},
+        result: 'secret',
+      };
+
       const mockResult = {
         messages: [
           {
-            id: 'msg-1',
+            id: 'msg-with-hidden-tool',
             role: 'assistant',
             type: 'text',
             createdAt: new Date(),
@@ -1743,12 +1812,18 @@ describe('Memory Handlers', () => {
             content: {
               format: 2 as const,
               parts: [
-                { type: 'text' as const, text: 'visible', visibility: 'all' as const },
-                { type: 'text' as const, text: 'llm-only', visibility: 'llm' as const },
+                { type: 'tool-invocation' as const, toolInvocation: visibleInvocation },
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: hiddenInvocation,
+                  visibility: 'llm' as const,
+                },
               ],
-              content: 'visible\nllm-only',
+              // Legacy mirror including the hidden invocation; if not
+              // filtered, the UI would still render the secret tool call.
+              toolInvocations: [visibleInvocation, hiddenInvocation],
             },
-          } as MastraDBMessage,
+          } as unknown as MastraDBMessage,
         ],
         total: 1,
         page: 0,
@@ -1756,18 +1831,26 @@ describe('Memory Handlers', () => {
         hasMore: false,
       };
 
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
       vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
 
-      const direct = await mockMemory.recall({
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId: 'test-thread',
         resourceId: 'test-resource',
+        agentId: 'test-agent',
         perPage: 10,
         page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
       });
 
-      expect(direct.messages).toHaveLength(1);
-      // Both parts present — the LLM still sees everything.
-      expect(direct.messages[0]?.content.parts).toHaveLength(2);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.content.parts).toHaveLength(1);
+      expect((result.messages[0]?.content as { toolInvocations?: unknown[] }).toolInvocations).toEqual([
+        visibleInvocation,
+      ]);
     });
   });
 

@@ -154,4 +154,48 @@ describe('filterMessagesByVisibility', () => {
     expect(messages[0]!.content.parts).toBe(originalParts);
     expect(messages[0]!.content.parts).toHaveLength(2);
   });
+
+  it('strips hidden tool calls from legacy content.toolInvocations', () => {
+    const visibleInvocation = {
+      state: 'result' as const,
+      toolCallId: 'call-visible',
+      toolName: 'searchTool',
+      args: { query: 'q' },
+      result: 'result',
+    };
+    const hiddenInvocation = {
+      state: 'result' as const,
+      toolCallId: 'call-hidden',
+      toolName: 'skillsTool',
+      args: {},
+      result: 'secret',
+    };
+
+    const messages = [
+      {
+        ...baseMessage([
+          { type: 'tool-invocation', toolInvocation: visibleInvocation },
+          { type: 'tool-invocation', toolInvocation: hiddenInvocation, visibility: 'llm' },
+        ]),
+        content: {
+          format: 2 as const,
+          parts: [
+            { type: 'tool-invocation' as const, toolInvocation: visibleInvocation },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: hiddenInvocation,
+              visibility: 'llm' as const,
+            },
+          ],
+          // Legacy mirror of every tool invocation, including the hidden one.
+          toolInvocations: [visibleInvocation, hiddenInvocation],
+        },
+      },
+    ];
+
+    const [filtered] = filterMessagesByVisibility(messages as MastraDBMessage[]);
+    expect(filtered).toBeDefined();
+    expect(filtered!.content.parts).toHaveLength(1);
+    expect(filtered!.content.toolInvocations).toEqual([visibleInvocation]);
+  });
 });

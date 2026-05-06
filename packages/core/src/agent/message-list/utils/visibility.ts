@@ -63,8 +63,28 @@ export function filterMessagesByVisibility(
       .filter((part): part is Extract<MastraMessagePart, { type: 'text' }> => part.type === 'text')
       .map(part => part.text)
       .join('\n');
-    const { content: _legacyContent, ...restContent } = message.content;
+
+    // Recompute the legacy `content.toolInvocations` array using only the
+    // tool-invocation parts that survived the visibility filter — otherwise
+    // a hidden tool call would still leak through that field.
+    const visibleToolCallIds = new Set(
+      filteredParts
+        .filter(
+          (part): part is Extract<MastraMessagePart, { type: 'tool-invocation' }> => part.type === 'tool-invocation',
+        )
+        .map(part => part.toolInvocation.toolCallId)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+
+    const { content: _legacyContent, toolInvocations, ...restContent } = message.content;
     const contentStringPatch = message.content.content === undefined ? {} : { content: visibleText };
+    const toolInvocationsPatch = Array.isArray(toolInvocations)
+      ? {
+          toolInvocations: toolInvocations.filter(
+            invocation => typeof invocation?.toolCallId === 'string' && visibleToolCallIds.has(invocation.toolCallId),
+          ),
+        }
+      : {};
 
     result.push({
       ...message,
@@ -72,6 +92,7 @@ export function filterMessagesByVisibility(
         ...restContent,
         parts: filteredParts,
         ...contentStringPatch,
+        ...toolInvocationsPatch,
       },
     });
   }
