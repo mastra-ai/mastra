@@ -7,7 +7,16 @@ import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 import { installMastraSkills } from './skills-install';
-import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
+import {
+  createComponentsDir,
+  createMastraDir,
+  getAPIKey,
+  writeAgentsMarkdown,
+  writeAPIKey,
+  writeClaudeMarkdown,
+  writeCodeSample,
+  writeIndexFile,
+} from './utils';
 import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
@@ -70,6 +79,10 @@ export const init = async ({
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
       if (needsLibsql) {
         await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
+      }
+      const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
+      if (needsDuckDB) {
+        await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
       }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
@@ -137,6 +150,27 @@ export const init = async ({
       });
     }
 
+    // Write AGENTS.md and CLAUDE.md if skills or MCP were configured
+    if ((skills && skills.length > 0) || mcpServer) {
+      try {
+        // Always write AGENTS.md
+        await writeAgentsMarkdown({ skills, mcpServer });
+
+        // Write CLAUDE.md only if claude-code is in skills list
+        const shouldWriteClaudeMd = skills?.includes('claude-code');
+        if (shouldWriteClaudeMd) {
+          await writeClaudeMarkdown();
+        }
+      } catch (error) {
+        // Don't fail initialization if markdown files fail to write
+        console.warn(
+          color.yellow(
+            `\nWarning: Failed to create agent guide files: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          ),
+        );
+      }
+    }
+
     if (initGit) {
       s.start('Initializing git repository');
       try {
@@ -151,8 +185,8 @@ export const init = async ({
       p.note(`
       ${color.green('Mastra initialized successfully!')}
 
-      Add your ${color.cyan(key)} as an environment variable
-      in your ${color.cyan('.env')} file
+      Rename ${color.cyan('.env.example')} to ${color.cyan('.env')}
+      and add your ${color.cyan(key)}
       `);
     } else {
       p.note(`

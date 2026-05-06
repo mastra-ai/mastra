@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
 import type { SchemaField } from './types';
@@ -22,9 +21,5 @@ export function FieldList({ className, children }: JSONSchemaFormFieldListProps)
     return null;
   }
 
-  return (
-    <div className={cn('flex flex-col gap-2', className)}>
-      {fields.map((field, index) => children(field, index, { parentPath, depth }))}
-    </div>
-  );
+  return <div className={className}>{fields.map((field, index) => children(field, index, { parentPath, depth }))}</div>;
 }

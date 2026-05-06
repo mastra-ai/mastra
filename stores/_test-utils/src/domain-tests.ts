@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { MemoryStorage, WorkflowsStorage, ScoresStorage } from '@mastra/core/storage';
+import type {
+  MemoryStorage,
+  WorkflowsStorage,
+  ScoresStorage,
+  DatasetsStorage,
+  ExperimentsStorage,
+} from '@mastra/core/storage';
 
 /**
  * Configuration for the domain-level pre-configured client test factory
@@ -22,6 +28,12 @@ export interface DomainTestConfig {
    * Use this to test that domains accept extra options alongside the client.
    */
   createMemoryDomainWithOptions?: () => MemoryStorage;
+
+  /** Optional: Factory to create a Datasets domain instance with pre-configured client */
+  createDatasetsDomain?: () => DatasetsStorage;
+
+  /** Optional: Factory to create an Experiments domain instance with pre-configured client */
+  createExperimentsDomain?: () => ExperimentsStorage;
 }
 
 /**
@@ -49,8 +61,15 @@ export interface DomainTestConfig {
  * ```
  */
 export function createDomainDirectTests(config: DomainTestConfig) {
-  const { storeName, createMemoryDomain, createWorkflowsDomain, createScoresDomain, createMemoryDomainWithOptions } =
-    config;
+  const {
+    storeName,
+    createMemoryDomain,
+    createWorkflowsDomain,
+    createScoresDomain,
+    createMemoryDomainWithOptions,
+    createDatasetsDomain,
+    createExperimentsDomain,
+  } = config;
 
   describe(`${storeName} Domain-level Pre-configured Client`, () => {
     it('should allow using Memory domain directly with pre-configured client', async () => {
@@ -158,6 +177,54 @@ export function createDomainDirectTests(config: DomainTestConfig) {
           expect(savedThread.id).toBe(thread.id);
         } finally {
           await memoryDomain.deleteThread({ threadId: thread.id });
+        }
+      });
+    }
+
+    if (createDatasetsDomain) {
+      it('should allow using Datasets domain directly with pre-configured client', async () => {
+        const datasetsDomain = createDatasetsDomain();
+        expect(datasetsDomain).toBeDefined();
+        await datasetsDomain.init();
+
+        try {
+          const ds = await datasetsDomain.createDataset({ name: 'domain-direct-test' });
+          expect(ds.id).toBeDefined();
+          expect(ds.name).toBe('domain-direct-test');
+
+          const retrieved = await datasetsDomain.getDatasetById({ id: ds.id });
+          expect(retrieved).toBeDefined();
+          expect(retrieved?.name).toBe('domain-direct-test');
+        } finally {
+          await datasetsDomain.dangerouslyClearAll();
+        }
+      });
+    }
+
+    if (createExperimentsDomain) {
+      it('should allow using Experiments domain directly with pre-configured client', async () => {
+        const experimentsDomain = createExperimentsDomain();
+        expect(experimentsDomain).toBeDefined();
+        await experimentsDomain.init();
+
+        try {
+          const exp = await experimentsDomain.createExperiment({
+            name: 'domain-direct-test',
+            datasetId: null,
+            datasetVersion: null,
+            targetType: 'agent',
+            targetId: 'agent-1',
+            totalItems: 1,
+          });
+          expect(exp.id).toBeDefined();
+          expect(exp.name).toBe('domain-direct-test');
+          expect(exp.status).toBe('pending');
+
+          const retrieved = await experimentsDomain.getExperimentById({ id: exp.id });
+          expect(retrieved).toBeDefined();
+          expect(retrieved?.name).toBe('domain-direct-test');
+        } finally {
+          await experimentsDomain.dangerouslyClearAll();
         }
       });
     }

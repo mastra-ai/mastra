@@ -8,18 +8,47 @@ import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 import pc from 'picocolors';
+import { getAnalytics } from '../../analytics/index.js';
 import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
 import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
+import { loadAndValidatePresets } from '../../utils/validate-presets.js';
+
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 let serverStartTime: number | undefined;
+let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+
+function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+  if (child.exitCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      resolve();
+    };
+    child.once('exit', done);
+    if (child.exitCode !== null) {
+      child.removeListener('exit', done);
+      done();
+      return;
+    }
+    timer = setTimeout(() => {
+      child.kill('SIGKILL');
+    }, timeoutMs);
+  });
+}
 
 interface HTTPSOptions {
   key: Buffer;
@@ -39,12 +68,14 @@ type ProcessOptions = {
   port: number;
   host: string;
   studioBasePath: string;
+  apiPrefix: string;
   publicDir: string;
 };
 
-const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
+const restartAllActiveWorkflowRuns = async ({ host, port, https }: { host: string; port: number; https?: boolean }) => {
+  const scheme = https ? 'https' : 'http';
   try {
-    await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+    await fetch(`${scheme}://${host}:${port}/__restart-active-workflow-runs`, {
       method: 'POST',
     });
   } catch (error) {
@@ -52,7 +83,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
     // Retry after another second
     await new Promise(resolve => setTimeout(resolve, 1500));
     try {
-      await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+      await fetch(`${scheme}://${host}:${port}/__restart-active-workflow-runs`, {
         method: 'POST',
       });
     } catch {
@@ -63,7 +94,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
 
 const startServer = async (
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   env: Map<string, string>,
   startOptions: StartOptions = {},
   errorRestartCount = 0,
@@ -135,11 +166,7 @@ const startServer = async (
     if (currentServerProcess.stdout) {
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
-        if (
-          !output.includes('Studio available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on ')
-        ) {
+        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
           process.stdout.write(output);
         }
       });
@@ -148,11 +175,7 @@ const startServer = async (
     if (currentServerProcess.stderr) {
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
-        if (
-          !output.includes('Studio available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on ')
-        ) {
+        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
           process.stderr.write(output);
         }
       });
@@ -181,14 +204,15 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(host, port, studioBasePath, serverStartTime, startOptions.https);
+        devLogger.ready(host, port, studioBasePath, apiPrefix, serverStartTime, startOptions.https);
         devLogger.watching();
 
-        await restartAllActiveWorkflowRuns({ host, port });
+        await restartAllActiveWorkflowRuns({ host, port, https: !!startOptions.https });
 
         // Send refresh signal
+        const scheme = startOptions.https ? 'https' : 'http';
         try {
-          await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+          await fetch(`${scheme}://${host}:${port}${studioBasePath}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -198,7 +222,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+            await fetch(`${scheme}://${host}:${port}${studioBasePath}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -246,6 +270,7 @@ const startServer = async (
             port,
             host,
             studioBasePath,
+            apiPrefix,
             publicDir,
           },
           env,
@@ -259,7 +284,7 @@ const startServer = async (
 
 async function checkAndRestart(
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -269,7 +294,8 @@ async function checkAndRestart(
 
   try {
     // Check if hot reload is disabled due to template installation
-    const response = await fetch(`http://${host}:${port}${studioBasePath}/__hot-reload-status`);
+    const scheme = startOptions.https ? 'https' : 'http';
+    const response = await fetch(`${scheme}://${host}:${port}${studioBasePath}/__hot-reload-status`);
     if (response.ok) {
       const status = (await response.json()) as { disabled: boolean; timestamp: string };
       if (status.disabled) {
@@ -284,12 +310,12 @@ async function checkAndRestart(
 
   // Proceed with restart
   devLogger.info('[Mastra Dev] - ✅ Restarting server...');
-  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, publicDir }, bundler, startOptions);
+  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, apiPrefix, publicDir }, bundler, startOptions);
 }
 
 async function rebundleAndRestart(
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -303,10 +329,56 @@ async function rebundleAndRestart(
     if (currentServerProcess) {
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGINT');
+      const serverProcess = currentServerProcess;
+      // Wait for the process to exit before starting a new one
+      await new Promise<void>(resolve => {
+        if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+          resolve();
+          return;
+        }
+
+        let timeout: NodeJS.Timeout | undefined;
+        const handleExit = () => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          resolve();
+        };
+
+        serverProcess.once('exit', handleExit);
+
+        try {
+          serverProcess.kill('SIGINT');
+        } catch {
+          if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+            serverProcess.off('exit', handleExit);
+            resolve();
+          }
+          return;
+        }
+
+        timeout = setTimeout(() => {
+          try {
+            serverProcess.kill('SIGKILL');
+          } catch {
+            if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+              serverProcess.off('exit', handleExit);
+              resolve();
+            }
+          }
+        }, 5000);
+      });
+      if (currentServerProcess === serverProcess) {
+        currentServerProcess = undefined;
+      }
     }
 
     const env = await bundler.loadEnvVars();
+
+    // Add request context presets to env if available
+    if (requestContextPresetsJson) {
+      env.set('MASTRA_REQUEST_CONTEXT_PRESETS', requestContextPresetsJson);
+    }
 
     // spread env into process.env
     for (const [key, value] of env.entries()) {
@@ -319,6 +391,7 @@ async function rebundleAndRestart(
         port,
         host,
         studioBasePath,
+        apiPrefix,
         publicDir,
       },
       env,
@@ -338,6 +411,7 @@ export async function dev({
   inspectBrk,
   customArgs,
   https,
+  requestContextPresets,
   debug,
 }: {
   dir?: string;
@@ -348,6 +422,7 @@ export async function dev({
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: boolean;
+  requestContextPresets?: string;
   debug: boolean;
 }) {
   const rootDir = root || process.cwd();
@@ -365,15 +440,33 @@ export async function dev({
 
   const loadedEnv = await bundler.loadEnvVars();
 
+  // Clear any prior presets to avoid cross-run leakage
+  requestContextPresetsJson = undefined;
+  loadedEnv.delete('MASTRA_REQUEST_CONTEXT_PRESETS');
+  delete process.env.MASTRA_REQUEST_CONTEXT_PRESETS;
+
   // spread loadedEnv into process.env
   for (const [key, value] of loadedEnv.entries()) {
     process.env[key] = value;
+  }
+
+  // Load and validate request context presets if provided
+  if (requestContextPresets) {
+    try {
+      requestContextPresetsJson = await loadAndValidatePresets(requestContextPresets);
+      // Add presets to loaded env so it's passed to the server
+      loadedEnv.set('MASTRA_REQUEST_CONTEXT_PRESETS', requestContextPresetsJson);
+    } catch (error) {
+      devLogger.error(`Failed to load request context presets: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
   }
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+  const apiPrefixToUse = serverOptions?.apiPrefix ?? '/api';
 
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
@@ -429,6 +522,7 @@ export async function dev({
       port: Number(portToUse),
       host: hostToUse,
       studioBasePath: studioBasePathToUse,
+      apiPrefix: apiPrefixToUse,
       publicDir: join(mastraDir, 'public'),
     },
     loadedEnv,
@@ -449,6 +543,7 @@ export async function dev({
           port: Number(portToUse),
           host: hostToUse,
           studioBasePath: studioBasePathToUse,
+          apiPrefix: apiPrefixToUse,
           publicDir: join(mastraDir, 'public'),
         },
         bundler,
@@ -457,16 +552,48 @@ export async function dev({
     }
   });
 
-  process.on('SIGINT', () => {
+  let isShuttingDown = false;
+  const handleShutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    const forceExit = setTimeout(() => process.exit(0), 3000);
+    forceExit.unref();
+
     devLogger.shutdown();
 
     if (currentServerProcess) {
       currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
+    }
+
+    const analytics = getAnalytics();
+    if (analytics && serverStartTime) {
+      const durationMs = Date.now() - serverStartTime;
+      analytics.trackEvent('cli_dev_session_end', {
+        durationMs,
+        durationMinutes: Math.round(durationMs / 60000),
+      });
+    }
+    if (analytics) {
+      await analytics.shutdown();
     }
 
     watcher
       .close()
       .catch(() => {})
-      .finally(() => process.exit(0));
-  });
+      .finally(() => {
+        clearTimeout(forceExit);
+        process.exit(0);
+      });
+  };
+
+  const onSignal = () => {
+    handleShutdown().catch(() => process.exit(0));
+  };
+
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGHUP', onSignal);
 }

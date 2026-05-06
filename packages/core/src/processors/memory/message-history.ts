@@ -2,7 +2,8 @@ import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
-import type { TracingContext } from '../../observability';
+import { SpanType, EntityType } from '../../observability';
+import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -61,14 +62,33 @@ export class MessageHistory implements Processor {
     return null;
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext } = args;
+  private createMemorySpan(
+    operationType: MemoryOperationAttributes['operationType'],
+    observabilityContext?: Partial<ObservabilityContext>,
+    input?: any,
+    attributes?: Partial<MemoryOperationAttributes>,
+  ) {
+    const currentSpan = observabilityContext?.tracingContext?.currentSpan;
+    if (!currentSpan) return undefined;
+    return currentSpan.createChildSpan({
+      type: SpanType.MEMORY_OPERATION,
+      name: `memory: ${operationType}`,
+      entityType: EntityType.MEMORY,
+      entityName: 'Memory',
+      input,
+      attributes: { operationType, ...attributes },
+    });
+  }
+
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -79,43 +99,66 @@ export class MessageHistory implements Processor {
 
     const { threadId, resourceId } = context;
 
-    // 1. Fetch historical messages from storage (as DB format)
-    const result = await this.storage.listMessages({
-      threadId,
-      resourceId,
-      page: 0,
-      perPage: this.lastMessages,
-      orderBy: { field: 'createdAt', direction: 'DESC' },
-    });
+    const span = this.createMemorySpan(
+      'recall',
+      observabilityContext,
+      { threadId, resourceId },
+      {
+        lastMessages: this.lastMessages,
+      },
+    );
 
-    // 2. Filter out system messages (they should never be stored in DB)
-    const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
-      return msg.role !== 'system';
-    });
+    try {
+      // 1. Fetch historical messages from storage (as DB format)
+      const result = await this.storage.listMessages({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: this.lastMessages,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
 
-    // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
-    // This includes messages added by previous processors like SemanticRecall
-    const existingMessages = messageList.get.all.db();
-    const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-    const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+      // 2. Filter out system messages (they should never be stored in DB)
+      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
+        return msg.role !== 'system';
+      });
 
-    // Reverse to chronological order (oldest first) since we fetched DESC
-    const chronologicalMessages = uniqueHistoricalMessages.reverse();
+      // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
+      // This includes messages added by previous processors like SemanticRecall
+      const existingMessages = messageList.get.all.db();
+      const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
+      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
 
-    if (chronologicalMessages.length === 0) {
-      return messageList;
-    }
+      // Reverse to chronological order (oldest first) since we fetched DESC
+      const chronologicalMessages = uniqueHistoricalMessages.reverse();
 
-    // Add historical messages with source: 'memory'
-    for (const msg of chronologicalMessages) {
-      if (msg.role === 'system') {
-        continue; // memory should not store system messages
-      } else {
-        messageList.add(msg, 'memory');
+      if (chronologicalMessages.length === 0) {
+        span?.end({
+          output: { success: true },
+          attributes: { messageCount: 0 },
+        });
+        return messageList;
       }
-    }
 
-    return messageList;
+      // Add historical messages with source: 'memory'
+      for (const msg of chronologicalMessages) {
+        if (msg.role === 'system') {
+          continue; // memory should not store system messages
+        } else {
+          messageList.add(msg, 'memory');
+        }
+      }
+
+      span?.end({
+        output: { success: true },
+        attributes: { messageCount: chronologicalMessages.length },
+      });
+
+      return messageList;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
   }
 
   /**
@@ -176,14 +219,15 @@ export class MessageHistory implements Processor {
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
   }
 
-  async processOutputResult(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList> {
-    const { messageList, requestContext } = args;
+  async processOutputResult(
+    args: {
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList> {
+    const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -206,9 +250,24 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+    const span = this.createMemorySpan('save', observabilityContext, undefined, {
+      messageCount: messagesToSave.length,
+    });
 
-    return messageList;
+    try {
+      await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+      // add extra 1ms latency to make sure the next generate has not the same input
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      span?.end({
+        output: { success: true },
+      });
+
+      return messageList;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
   }
 
   /**

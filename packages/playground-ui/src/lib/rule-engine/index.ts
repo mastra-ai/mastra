@@ -1,5 +1,10 @@
-export { isEligible } from './utils';
-export type { Rule, RuleContext, ConditionOperator, RuleValue } from './types';
+export type { Rule, RuleGroup, ConditionOperator } from './types';
+
+// Re-export JSON Schema types from shared location for backward compatibility
+export type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
+
+// Utilities
+export { isRule, isRuleGroup, countLeafRules, createDefaultRule, createDefaultRuleGroup } from './utils';
 
 // Components
 export {
@@ -17,8 +22,6 @@ export {
 } from './components';
 
 export type {
-  JsonSchema,
-  JsonSchemaProperty,
   FieldOption,
   RuleBuilderProps,
   RuleRowProps,

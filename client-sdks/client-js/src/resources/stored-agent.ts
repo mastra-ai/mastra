@@ -31,12 +31,17 @@ export class StoredAgent extends BaseResource {
   /**
    * Retrieves details about the stored agent
    * @param requestContext - Optional request context to pass as query parameter
+   * @param options - Optional options like status filter
    * @returns Promise containing stored agent details
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<StoredAgentResponse> {
-    return this.request(
-      `/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
-    );
+  details(
+    requestContext?: RequestContext | Record<string, any>,
+    options?: { status?: 'draft' | 'published' | 'archived' },
+  ): Promise<StoredAgentResponse> {
+    const contextString = requestContextQueryString(requestContext);
+    const statusParam = options?.status ? `status=${options.status}` : '';
+    const url = `/stored/agents/${encodeURIComponent(this.storedAgentId)}${contextString}${statusParam ? `${contextString ? '&' : '?'}${statusParam}` : ''}`;
+    return this.request(url);
   }
 
   /**

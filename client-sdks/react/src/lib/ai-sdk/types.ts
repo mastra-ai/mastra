@@ -1,5 +1,5 @@
-import { UIMessage } from '@ai-sdk/react';
-import { CompleteAttachment } from '@assistant-ui/react';
+import type { UIMessage } from '@ai-sdk/react';
+import type { CompleteAttachment } from '@assistant-ui/react';
 
 /**
  * Tripwire metadata included when a processor triggers a tripwire
@@ -20,6 +20,11 @@ export type MastraUIMessageMetadata = {
 } & (
   | {
       mode: 'generate';
+      completionResult?: {
+        passed: boolean;
+        suppressFeedback?: boolean;
+      };
+      runningBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -34,11 +39,31 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
+      /**
+       * Per-tool-call background-task metadata keyed by `toolCallId`. A single
+       * assistant message can carry multiple concurrent background-dispatched
+       * tool calls, so timing/ID is stored per call rather than as one value
+       * on the message.
+       */
+      backgroundTasks?: Record<
+        string,
+        {
+          startedAt?: Date;
+          completedAt?: Date;
+          taskId: string;
+        }
+      >;
     }
   | {
       mode: 'stream';
+      completionResult?: {
+        passed: boolean;
+        suppressFeedback?: boolean;
+      };
+      runningBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -53,8 +78,23 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
+      /**
+       * Per-tool-call background-task metadata keyed by `toolCallId`. A single
+       * assistant message can carry multiple concurrent background-dispatched
+       * tool calls, so timing/ID is stored per call rather than as one value
+       * on the message.
+       */
+      backgroundTasks?: Record<
+        string,
+        {
+          startedAt?: Date;
+          completedAt?: Date;
+          taskId: string;
+        }
+      >;
     }
   | {
       mode: 'network';
@@ -64,6 +104,7 @@ export type MastraUIMessageMetadata = {
       hasMoreMessages?: boolean;
       completionResult?: {
         passed: boolean;
+        suppressFeedback?: boolean;
       };
       requireApprovalMetadata?: {
         [toolName: string]: {
@@ -79,6 +120,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
     }

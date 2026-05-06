@@ -7,6 +7,15 @@ export { bundler };
 "
 `;
 
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./__fixtures__/with-dynamic-packages.js 1`] = `
+"const bundler = {
+  dynamicPackages: ["pino-opentelemetry-transport"]
+};
+
+export { bundler };
+"
+`;
+
 exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic.js 1`] = `
 "const bundler = {};
 

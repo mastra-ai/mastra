@@ -3,6 +3,7 @@ import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList, TypeDetector } from '@mastra/core/agent';
+import { TokenCounter } from '../../../../../packages/memory/src/processors/observational-memory/token-counter';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
@@ -79,6 +80,58 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.messages.every(TypeDetector.isMastraDBMessage)).toBe(true);
+    });
+
+    it('should persist and reload token estimates written by token counting', async () => {
+      const counter = new TokenCounter();
+      const originalCountString = counter.countString.bind(counter);
+      let countStringCalls = 0;
+
+      try {
+        counter.countString = (text: string) => {
+          countStringCalls += 1;
+          return originalCountString(text);
+        };
+
+        const cachedMessage = createSampleMessageV2({
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'assistant',
+          content: {
+            parts: [
+              {
+                type: 'text',
+                text: 'message with cached token estimate from counter',
+              } as any,
+            ],
+          },
+        });
+
+        const firstCount = counter.countMessage(cachedMessage);
+        const callsAfterFirst = countStringCalls;
+        const firstEstimate = (cachedMessage.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+        expect(firstCount).toBeGreaterThan(0);
+        expect(firstEstimate).toBeTruthy();
+        expect(callsAfterFirst).toBeGreaterThan(1);
+
+        await memoryStorage.saveMessages({ messages: [cachedMessage] });
+
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+        });
+
+        const reloaded = result.messages.find(m => m.id === cachedMessage.id);
+        expect(reloaded).toBeTruthy();
+        expect((reloaded!.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate).toEqual(firstEstimate);
+
+        const secondCount = counter.countMessage(reloaded!);
+        const callsAfterSecond = countStringCalls;
+        expect(secondCount).toBe(firstCount);
+        expect(callsAfterSecond - callsAfterFirst).toBe(1);
+      } finally {
+        counter.countString = originalCountString;
+      }
     });
 
     it('should list messages with pagination', async () => {
@@ -568,7 +621,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           perPage: 0,
         });
         expect(result0.messages).toHaveLength(0);
-        expect(result0.total).toBe(5); // Total should still reflect actual count
+        expect(result0.total).toBe(0); // Count query is skipped when perPage is 0 with no includes
         expect(result0.perPage).toBe(0);
 
         // Test negative perPage - should throw an error (invalid input)
@@ -578,6 +631,165 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             perPage: -5,
           }),
         ).rejects.toThrow('perPage must be >= 0');
+      });
+
+      it('should return only included messages when perPage is 0 with include', async () => {
+        // perPage: 0 with include should skip pagination/counting entirely
+        // and return only the included messages with context
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        // Should return Message 2 (previous), Message 3 (target), Message 4 (next)
+        expect(result.messages).toHaveLength(3);
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3', 'Message 4']);
+        expect(result.total).toBe(0); // total is 0 because we skipped the count query
+        expect(result.perPage).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should return only included messages from different threads when perPage is 0', async () => {
+        // perPage: 0 with cross-thread include
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [
+            {
+              id: messages[0]!.id, // Message 1 from thread
+              withPreviousMessages: 0,
+              withNextMessages: 0,
+            },
+            {
+              id: messages[5]!.id, // Thread2 Message 1
+              withPreviousMessages: 0,
+              withNextMessages: 0,
+            },
+          ],
+        });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should return empty results when perPage is 0 with empty include array', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [],
+        });
+
+        expect(result.messages).toHaveLength(0);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should deduplicate overlapping context windows on the include-only fast path (perPage=0)', async () => {
+        // Message 2 with +1 next → Messages 2, 3
+        // Message 3 with +1 prev → Messages 2, 3
+        // Without dedup this would return 4 messages; with dedup it should return 2
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [
+            {
+              id: messages[1]!.id, // Message 2
+              withPreviousMessages: 0,
+              withNextMessages: 1,
+            },
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 0,
+            },
+          ],
+        });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3']);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should respect DESC orderBy on the include-only fast path (perPage=0)', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          include: [
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        expect(result.messages).toHaveLength(3);
+        // DESC order: Message 4, Message 3, Message 2
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 4', 'Message 3', 'Message 2']);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+    });
+
+    describe('high-volume include correctness', () => {
+      it('should return correct messages from a large thread with scattered includes (perPage=0)', async () => {
+        const largeThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: largeThread });
+
+        const baseTime = Date.now() + 100000; // offset to avoid collisions with beforeEach data
+        const count = 200;
+        const largeMessages = Array.from({ length: count }, (_, i) =>
+          createSampleMessageV2({
+            threadId: largeThread.id,
+            resourceId: largeThread.resourceId,
+            content: { content: `Msg ${i}` },
+            createdAt: new Date(baseTime + i * 1000),
+          }),
+        );
+        await memoryStorage.saveMessages({ messages: largeMessages });
+
+        // Pick targets scattered across the thread: indices 10, 50, 100, 150, 190
+        const targets = [10, 50, 100, 150, 190];
+        const contextBefore = 2;
+        const contextAfter = 2;
+
+        const result = await memoryStorage.listMessages({
+          threadId: largeThread.id,
+          perPage: 0,
+          include: targets.map(idx => ({
+            id: largeMessages[idx]!.id,
+            withPreviousMessages: contextBefore,
+            withNextMessages: contextAfter,
+          })),
+        });
+
+        // Build expected set: each target ± 2, clamped to [0, count-1]
+        const expectedIndices = new Set<number>();
+        for (const idx of targets) {
+          for (let i = Math.max(0, idx - contextBefore); i <= Math.min(count - 1, idx + contextAfter); i++) {
+            expectedIndices.add(i);
+          }
+        }
+
+        expect(result.messages).toHaveLength(expectedIndices.size);
+
+        // Verify ASC order
+        const contents = result.messages.map((m: any) => m.content.content);
+        const expectedContents = [...expectedIndices].sort((a, b) => a - b).map(i => `Msg ${i}`);
+        expect(contents).toEqual(expectedContents);
+
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
       });
     });
 

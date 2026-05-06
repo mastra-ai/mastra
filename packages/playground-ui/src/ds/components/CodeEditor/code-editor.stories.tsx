@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CodeEditor } from './code-editor';
 import { TooltipProvider } from '../Tooltip';
+import { CodeEditor } from './code-editor';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof CodeEditor> = {
   title: 'Composite/CodeEditor',
@@ -15,7 +16,6 @@ const meta: Meta<typeof CodeEditor> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     showCopyButton: {
       control: { type: 'boolean' },
@@ -94,7 +94,7 @@ export const WithoutCopyButton: Story = {
   args: {
     data: { message: 'Hello, World!' },
     showCopyButton: false,
-    className: 'w-[300px]',
+    className: 'w-dropdown-max-height',
   },
 };
 
@@ -168,5 +168,74 @@ Regular text continues here.`,
     language: 'markdown',
     highlightVariables: false,
     className: 'w-[600px]',
+  },
+};
+
+const sampleSchema: JsonSchema = {
+  type: 'object',
+  properties: {
+    userName: { type: 'string', description: 'The name of the user' },
+    userEmail: { type: 'string', description: 'User email address' },
+    companyName: { type: 'string', description: 'The company name' },
+    context: {
+      type: 'object',
+      description: 'Additional context information',
+      properties: {
+        role: { type: 'string', description: 'User role in the organization' },
+        department: { type: 'string', description: 'Department name' },
+        permissions: {
+          type: 'array',
+          description: 'List of user permissions',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Permission name' },
+              level: { type: 'number', description: 'Permission level' },
+            },
+          },
+        },
+      },
+    },
+    settings: {
+      type: 'object',
+      description: 'User settings',
+      properties: {
+        language: { type: 'string', description: 'Preferred language' },
+        timezone: { type: 'string', description: 'User timezone' },
+        notifications: { type: 'boolean', description: 'Enable notifications' },
+      },
+    },
+  },
+};
+
+export const MarkdownWithAutocomplete: Story = {
+  args: {
+    value: `# Agent Instructions
+
+You are a helpful assistant for .
+
+## User Context
+- Name:
+- Role:
+
+## Guidelines
+
+1. Greet the user by name
+2. Use their preferred language:
+3. Respect their timezone:
+
+Type {{ to see autocomplete suggestions for available variables.`,
+    language: 'markdown',
+    highlightVariables: true,
+    schema: sampleSchema,
+    className: 'w-[600px] h-[400px]',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates the variable autocomplete feature. Type `{{` to trigger the autocomplete popup showing available variables derived from the schema.',
+      },
+    },
   },
 };

@@ -1,0 +1,164 @@
+---
+title: "Tools | Editor"
+description: Add and manage tools from code, integration providers, and MCP servers through the editor.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Tools
+
+The editor gives you three ways to add tools to agents:
+
+- **Code tools**: Tools already registered in your Mastra instance.
+- **Integration providers**: Third-party tool platforms like Composio and Arcade.
+- **MCP clients**: Tools from MCP servers, configured as reusable client definitions.
+
+You can manage all three sources through the Studio UI or programmatically through the server API. Non-technical team members can browse tool catalogs, add tools to agents, and test different tool combinations without code changes. Tool configurations are versioned alongside the rest of the agent, so you can roll back tool changes, compare versions, and experiment safely.
+
+## Description overrides
+
+Every tool, regardless of source, can have its description overridden at the agent level. This changes the description the agent sees during tool selection without modifying the original tool definition.
+
+This is useful when you want to:
+
+- Tailor a generic tool's purpose for a specific agent's context.
+- Add instructions about when or how to use a tool.
+- Clarify ambiguous tool descriptions.
+
+In the Studio, select a tool in the agent's tool list and edit the **Description** field. The override applies only to that agent.
+
+## Display conditions
+
+Each tool in an agent can have display conditions — rule groups that control whether the tool is available at runtime. This uses the same rule system as [prompt blocks](/docs/editor/prompts#display-conditions).
+
+When a request comes in, the editor evaluates each tool's rules against the current context (agent variables and request context). Tools whose conditions are not met are excluded from that run.
+
+Use display conditions to:
+
+- Restrict expensive tools to specific users or roles.
+- Enable tools based on feature flags or environment variables.
+- Conditionally include tools based on the conversation context.
+
+Tools without display conditions are always available.
+
+## Studio
+
+Go to the **Agents** tab in Studio and select an agent to edit. Select the **Editor** tab. Scroll to the **Tools** section.
+
+Here you are able to add tools and configure MCP clients.
+
+Once you've made the changes, be sure to save the agent configuration.
+
+## Integration providers
+
+Integration providers connect external tool platforms to the editor. Once registered, you can browse available tools in the Studio and add them to any agent.
+
+### Composio
+
+[Composio](https://composio.dev) gives access to hundreds of integration tools organized into toolkits (GitHub, Slack, Gmail, and others).
+
+1. Get an API key from your Composio dashboard.
+
+1. Register the provider in your Editor configuration:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { MastraEditor } from '@mastra/editor'
+   import { ComposioToolProvider } from '@mastra/editor/composio'
+
+   export const mastra = new Mastra({
+     agents: {
+       /* your agents */
+     },
+     editor: new MastraEditor({
+       toolProviders: {
+         composio: new ComposioToolProvider({
+           apiKey: process.env.COMPOSIO_API_KEY!,
+         }),
+       },
+     }),
+   })
+   ```
+
+   Composio tool slugs use a format like `GITHUB_CREATE_ISSUE`. Tool calls are scoped to a `userId` passed through request context for per-user authentication.
+
+### Arcade
+
+[Arcade](https://arcade.dev) provides a curated catalog of tools with built-in authentication handling.
+
+1. Get an API key from your Arcade dashboard.
+
+1. Register the provider in your Editor configuration:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { MastraEditor } from '@mastra/editor'
+   import { ArcadeToolProvider } from '@mastra/editor/arcade'
+
+   export const mastra = new Mastra({
+     agents: {
+       /* your agents */
+     },
+     editor: new MastraEditor({
+       toolProviders: {
+         arcade: new ArcadeToolProvider({
+           apiKey: process.env.ARCADE_API_KEY!,
+         }),
+       },
+     }),
+   })
+   ```
+
+   Arcade tools use a `Toolkit.ToolName` format (for example, `Github.GetRepository`). The provider pre-seeds common toolkits to reduce API calls during browsing.
+
+## MCP clients
+
+The editor lets you create stored MCP client configurations that connect to MCP servers. Once created, you can reference these clients in any agent to give it access to the server's tools.
+
+### Transport types
+
+Stored MCP clients support two transport types:
+
+| Transport | Description |
+| - | - |
+| **stdio** | Launches a local process and communicates over standard I/O. Specify the `command` and optional `args` and `env`. |
+| **HTTP** | Connects to a remote MCP server over HTTP. Specify the server `url` and optional `headers`. |
+
+### Tool filtering
+
+You can filter MCP tools at two levels:
+
+1. **Client level**: On the MCP client itself, specify which tools from the server to include or exclude. This applies to every agent that references the client.
+1. **Agent level**: On the agent's MCP client reference, further limit which tools are available. This lets you use the same MCP client in multiple agents while exposing different tool subsets.
+
+### Tool namespacing
+
+Tools from MCP servers are namespaced as `serverName_toolName` to avoid conflicts. For example, a tool called `search` from a server named `docs` becomes `docs_search`.
+
+### Conditional activation
+
+MCP client references in an agent can have display conditions, just like [prompt blocks](/docs/editor/prompts). This lets you conditionally include MCP tools based on request context or agent variables.
+
+## How tools are merged
+
+When an agent runs, tools from all sources are merged in this order:
+
+1. Code tools
+1. Integration tools
+1. MCP tools
+
+If a tool ID exists in multiple sources, later sources take precedence. Description overrides set at the agent level always take priority over the original tool description.
+
+:::note
+
+See the [ToolProvider reference](/reference/editor/tool-provider) for the full provider API.
+
+:::
+
+## Related
+
+- [Editor overview](/docs/editor/overview): Setup and versioning.
+- [Prompts](/docs/editor/prompts): Display conditions reference for prompt blocks.
+- [ToolProvider reference](/reference/editor/tool-provider): Composio and Arcade API details.
+- [MCP overview](/docs/mcp/overview): General MCP documentation.

@@ -4,8 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
-export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
+export interface WorkflowsTestOptions {
+  storage: MastraStorage;
+}
+
+export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
   let workflowsStorage: WorkflowsStorage;
+  let supportsConcurrentUpdates: boolean;
 
   beforeAll(async () => {
     const store = await storage.getStore('workflows');
@@ -13,6 +18,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       throw new Error('Workflows storage not found');
     }
     workflowsStorage = store;
+    supportsConcurrentUpdates = workflowsStorage.supportsConcurrentUpdates();
   });
 
   describe('listWorkflowRuns', () => {
@@ -544,8 +550,11 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       expect(run?.runId).toBe(runId);
     });
 
-    // implement on other stores
-    it.todo('should update workflow results in snapshot', async () => {
+    it('should update workflow results in snapshot', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow state updates sequentially test');
+        return;
+      }
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
@@ -636,9 +645,99 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
     });
 
-    // TODO: This test requires atomic transactions for concurrent updates.
-    // Stores without transaction support (e.g., Upstash) will fail this test.
-    it.todo('should update workflow state in snapshot', async () => {
+    it('should update workflow state sequentially', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow state updates sequentially test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const snapshot = {
+        status: 'running',
+        context: { initialStep: { status: 'success' } },
+        activePaths: [],
+        timestamp: Date.now(),
+      } as any;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot,
+      });
+
+      // First update - add waitingPaths
+      const firstUpdate = await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: {
+          status: 'suspended',
+          waitingPaths: {
+            path1: [0, 1],
+          },
+        },
+      });
+
+      expect(firstUpdate?.status).toBe('suspended');
+      expect(firstUpdate?.waitingPaths).toEqual({ path1: [0, 1] });
+      expect(firstUpdate?.context).toEqual({ initialStep: { status: 'success' } });
+
+      // Second update - add result and change status
+      const secondUpdate = await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: {
+          status: 'success',
+          result: {
+            status: 'success',
+            output: { finalData: 'completed' },
+            payload: { input: 'test' },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      expect(secondUpdate?.status).toBe('success');
+      expect(secondUpdate?.result?.output).toEqual({ finalData: 'completed' });
+      // Previous update should still be present
+      expect(secondUpdate?.waitingPaths).toEqual({ path1: [0, 1] });
+
+      // Verify final state in storage
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
+        workflowName,
+        runId,
+      });
+
+      expect(finalSnapshot?.status).toBe('success');
+      expect(finalSnapshot?.waitingPaths).toEqual({ path1: [0, 1] });
+      expect(finalSnapshot?.result?.output).toEqual({ finalData: 'completed' });
+      expect(finalSnapshot?.context).toEqual({ initialStep: { status: 'success' } });
+    });
+
+    it('should return undefined when updating non-existent workflow state', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping return undefined when updating non-existent workflow state test');
+        return;
+      }
+      const result = await workflowsStorage.updateWorkflowState({
+        workflowName: 'non-existent-workflow',
+        runId: `run-${randomUUID()}`,
+        opts: {
+          status: 'success',
+        },
+      });
+
+      expect(result).toBeUndefined();
+    });
+
+    // This test requires atomic transactions for concurrent updates.
+    // Stores without transaction support (e.g., LanceDB) may fail this test
+    // due to race conditions in the read-modify-write pattern.
+    it('should handle concurrent workflow results updates atomically', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping concurrent workflow results updates atomically test');
+        return;
+      }
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
@@ -652,37 +751,148 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         snapshot,
       });
 
-      await workflowsStorage.updateWorkflowState({
-        workflowName,
-        runId,
-        opts: {
-          status: 'success',
-          waitingPaths: {
-            test: [0],
-          },
-        },
-      });
-
-      await workflowsStorage.updateWorkflowState({
-        workflowName,
-        runId,
-        opts: {
-          status: 'success',
+      // Simulate concurrent step completions - multiple steps finishing at the same time
+      // Without atomic transactions, one step's result may overwrite another's
+      await Promise.all([
+        workflowsStorage.updateWorkflowResults({
+          workflowName,
+          runId,
+          stepId: 'step-a',
           result: {
             status: 'success',
-            output: { data: 'test2' },
-            payload: { data: 'test' },
+            output: { data: 'result-a' },
+            payload: { input: 'a' },
             startedAt: Date.now(),
             endedAt: Date.now(),
           },
-        },
-      });
+          requestContext: { stepA: true },
+        }),
+        workflowsStorage.updateWorkflowResults({
+          workflowName,
+          runId,
+          stepId: 'step-b',
+          result: {
+            status: 'success',
+            output: { data: 'result-b' },
+            payload: { input: 'b' },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          requestContext: { stepB: true },
+        }),
+        workflowsStorage.updateWorkflowResults({
+          workflowName,
+          runId,
+          stepId: 'step-c',
+          result: {
+            status: 'success',
+            output: { data: 'result-c' },
+            payload: { input: 'c' },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          requestContext: { stepC: true },
+        }),
+      ]);
 
       const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
 
+      // All three step results should be present in the final snapshot
+      // If any are missing, the store lacks proper atomicity for concurrent updates
+      expect(finalSnapshot?.context).toEqual({
+        'step-a': {
+          status: 'success',
+          output: { data: 'result-a' },
+          payload: { input: 'a' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'step-b': {
+          status: 'success',
+          output: { data: 'result-b' },
+          payload: { input: 'b' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'step-c': {
+          status: 'success',
+          output: { data: 'result-c' },
+          payload: { input: 'c' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      // All request contexts should be merged
+      expect(finalSnapshot?.requestContext).toEqual(
+        expect.objectContaining({
+          stepA: true,
+          stepB: true,
+          stepC: true,
+        }),
+      );
+    });
+
+    // This test requires atomic transactions for concurrent updates.
+    // Stores without transaction support (e.g., LanceDB) may fail this test
+    // due to race conditions in the read-modify-write pattern.
+    it('should handle concurrent workflow state updates atomically', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping concurrent workflow state updates atomically test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const snapshot = {
+        status: 'running',
+        context: {},
+      } as any;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot,
+      });
+
+      // Simulate concurrent updates from multiple workflow steps completing at the same time
+      // Without atomic transactions, one update may overwrite the other's changes
+      await Promise.all([
+        workflowsStorage.updateWorkflowState({
+          workflowName,
+          runId,
+          opts: {
+            status: 'success',
+            waitingPaths: {
+              test: [0],
+            },
+          },
+        }),
+        workflowsStorage.updateWorkflowState({
+          workflowName,
+          runId,
+          opts: {
+            status: 'success',
+            result: {
+              status: 'success',
+              output: { data: 'test2' },
+              payload: { data: 'test' },
+              startedAt: Date.now(),
+              endedAt: Date.now(),
+            },
+          },
+        }),
+      ]);
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
+        workflowName,
+        runId,
+      });
+
+      // Both updates should be present in the final snapshot
+      // If either is missing, the store lacks proper atomicity for concurrent updates
       expect(finalSnapshot?.result).toEqual({
         status: 'success',
         output: { data: 'test2' },

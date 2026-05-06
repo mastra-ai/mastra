@@ -4,16 +4,38 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
+import { BackgroundTasksStorageMongoDB } from './domains/background-tasks';
+import { MongoDBBlobStore } from './domains/blobs';
+import { MongoDBDatasetsStorage } from './domains/datasets';
+import { MongoDBExperimentsStorage } from './domains/experiments';
+import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
+import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
+import { MongoDBPromptBlocksStorage } from './domains/prompt-blocks';
+import { SchedulesMongoDB } from './domains/schedules';
+import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
+import { MongoDBSkillsStorage } from './domains/skills';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
+import { MongoDBWorkspacesStorage } from './domains/workspaces';
 import type { MongoDBConfig } from './types';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
+  BackgroundTasksStorageMongoDB,
   MongoDBAgentsStorage,
+  MongoDBBlobStore,
+  MongoDBDatasetsStorage,
+  MongoDBExperimentsStorage,
+  MongoDBMCPClientsStorage,
+  MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
+  MongoDBPromptBlocksStorage,
+  SchedulesMongoDB,
+  MongoDBScorerDefinitionsStorage,
+  MongoDBSkillsStorage,
+  MongoDBWorkspacesStorage,
   ObservabilityMongoDB,
   ScoresStorageMongoDB,
   WorkflowsStorageMongoDB,
@@ -64,12 +86,45 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const agents = new MongoDBAgentsStorage(domainConfig);
 
+    const promptBlocks = new MongoDBPromptBlocksStorage(domainConfig);
+
+    const scorerDefinitions = new MongoDBScorerDefinitionsStorage(domainConfig);
+
+    const mcpClients = new MongoDBMCPClientsStorage(domainConfig);
+
+    const mcpServers = new MongoDBMCPServersStorage(domainConfig);
+
+    const workspaces = new MongoDBWorkspacesStorage(domainConfig);
+
+    const skills = new MongoDBSkillsStorage(domainConfig);
+
+    const blobs = new MongoDBBlobStore(domainConfig);
+
+    const datasets = new MongoDBDatasetsStorage(domainConfig);
+
+    const experiments = new MongoDBExperimentsStorage(domainConfig);
+
+    const backgroundTasks = new BackgroundTasksStorageMongoDB(domainConfig);
+
+    const schedules = new SchedulesMongoDB(domainConfig);
+
     this.stores = {
       memory,
       scores,
       workflows,
       observability,
       agents,
+      promptBlocks,
+      scorerDefinitions,
+      mcpClients,
+      mcpServers,
+      workspaces,
+      skills,
+      blobs,
+      backgroundTasks,
+      datasets,
+      experiments,
+      schedules,
     };
   }
 

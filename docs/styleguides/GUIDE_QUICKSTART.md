@@ -1,0 +1,1 @@
+../../.claude/skills/mastra-docs/references/GUIDE_QUICKSTART.md

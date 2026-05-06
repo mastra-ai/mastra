@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
-import { SpanType } from '../../observability';
-import type { TracingContext } from '../../observability';
+import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -25,7 +25,7 @@ import type {
 } from '../types';
 import { createDeprecationProxy, runCountDeprecationMessage, getResumeLabelsByStepId } from '../utils';
 
-export interface ExecuteParallelParams {
+export interface ExecuteParallelParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
@@ -48,7 +48,6 @@ export interface ExecuteParallelParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  tracingContext: TracingContext;
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
@@ -73,17 +72,19 @@ export async function executeParallel(
     restart,
     timeTravel,
     executionContext,
-    tracingContext,
     pubsub,
     abortController,
     requestContext,
     outputWriter,
     disableScorers,
     perStep,
+    ...rest
   } = params;
 
+  const observabilityContext = resolveObservabilityContext(rest);
+
   const parallelSpan = await engine.createChildSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_PARALLEL,
@@ -155,15 +156,14 @@ export async function executeParallel(
           workflowId,
           runId,
           executionPath: [...executionContext.executionPath, i],
+          stepExecutionPath: executionContext.stepExecutionPath,
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
           tracingIds: executionContext.tracingIds,
         },
-        tracingContext: {
-          currentSpan: parallelSpan,
-        },
+        ...createObservabilityContext({ currentSpan: parallelSpan }),
         pubsub,
         abortController,
         requestContext,
@@ -225,7 +225,7 @@ export async function executeParallel(
   return execResults;
 }
 
-export interface ExecuteConditionalParams {
+export interface ExecuteConditionalParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
@@ -246,7 +246,6 @@ export interface ExecuteConditionalParams {
   restart?: RestartExecutionParams;
   timeTravel?: TimeTravelExecutionParams;
   executionContext: ExecutionContext;
-  tracingContext: TracingContext;
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
@@ -271,17 +270,19 @@ export async function executeConditional(
     restart,
     timeTravel,
     executionContext,
-    tracingContext,
     pubsub,
     abortController,
     requestContext,
     outputWriter,
     disableScorers,
     perStep,
+    ...rest
   } = params;
 
+  const observabilityContext = resolveObservabilityContext(rest);
+
   const conditionalSpan = await engine.createChildSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_CONDITIONAL,
@@ -324,9 +325,7 @@ export async function executeConditional(
             inputData: prevOutput,
             state: executionContext.state,
             retryCount: -1,
-            tracingContext: {
-              currentSpan: evalSpan,
-            },
+            ...createObservabilityContext({ currentSpan: evalSpan }),
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(null, stepResults),
             bail: (() => {}) as () => InnerOutput,
@@ -422,7 +421,7 @@ export async function executeConditional(
   });
 
   const results: StepResult<any, any, any, any>[] = await Promise.all(
-    stepsToRun.map(async (step, index) => {
+    stepsToRun.map(async step => {
       const currStepResult = stepResults[step.step.id];
       const isRestartStep = restart ? !!restart.activeStepsPath[step.step.id] : undefined;
 
@@ -450,7 +449,8 @@ export async function executeConditional(
         executionContext: {
           workflowId,
           runId,
-          executionPath: [...executionContext.executionPath, index],
+          executionPath: [...executionContext.executionPath, entry.steps.indexOf(step)],
+          stepExecutionPath: executionContext.stepExecutionPath,
           activeStepsPath: executionContext.activeStepsPath,
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
@@ -458,9 +458,7 @@ export async function executeConditional(
           state: executionContext.state,
           tracingIds: executionContext.tracingIds,
         },
-        tracingContext: {
-          currentSpan: conditionalSpan,
-        },
+        ...createObservabilityContext({ currentSpan: conditionalSpan }),
         pubsub,
         abortController,
         requestContext,
@@ -525,7 +523,7 @@ export async function executeConditional(
   return execResults;
 }
 
-export interface ExecuteLoopParams {
+export interface ExecuteLoopParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
@@ -547,7 +545,6 @@ export interface ExecuteLoopParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  tracingContext: TracingContext;
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
@@ -572,7 +569,6 @@ export async function executeLoop(
     restart,
     timeTravel,
     executionContext,
-    tracingContext,
     pubsub,
     abortController,
     requestContext,
@@ -580,12 +576,15 @@ export async function executeLoop(
     disableScorers,
     serializedStepGraph,
     perStep,
+    ...rest
   } = params;
+
+  const observabilityContext = resolveObservabilityContext(rest);
 
   const { step, condition } = entry;
 
   const loopSpan = await engine.createChildSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_LOOP,
@@ -609,6 +608,21 @@ export async function executeLoop(
   let currentTimeTravel = timeTravel;
 
   do {
+    // Honor cancellation between iterations so long-running loops (e.g. dountil
+    // with delays inside the step) terminate when the run is cancelled.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration,
+          },
+        },
+      });
+      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+    }
+
     const stepExecResult = await engine.executeStep({
       workflowId,
       runId,
@@ -620,9 +634,7 @@ export async function executeLoop(
       resume: currentResume,
       timeTravel: currentTimeTravel,
       prevOutput: (result as { output: any }).output,
-      tracingContext: {
-        currentSpan: loopSpan,
-      },
+      ...createObservabilityContext({ currentSpan: loopSpan }),
       pubsub,
       abortController,
       requestContext,
@@ -660,6 +672,22 @@ export async function executeLoop(
       return result;
     }
 
+    // If the step finished but the run was cancelled while it was running
+    // (e.g. user step ignored abortSignal), surface cancellation now instead
+    // of evaluating the loop condition and starting another iteration.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration + 1,
+          },
+        },
+      });
+      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+    }
+
     const evalSpan = await engine.createChildSpan({
       parentSpan: loopSpan,
       operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.span.start`,
@@ -685,9 +713,7 @@ export async function executeLoop(
           inputData: result.output,
           state: executionContext.state,
           retryCount: -1,
-          tracingContext: {
-            currentSpan: evalSpan,
-          },
+          ...createObservabilityContext({ currentSpan: evalSpan }),
           iterationCount: iteration + 1,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(null, stepResults),
@@ -725,6 +751,23 @@ export async function executeLoop(
     });
 
     iteration++;
+
+    // Honor cancellation triggered during condition evaluation (the condition
+    // context exposes `abort()`, and the run can be cancelled externally while
+    // the condition is awaiting). Without this check a condition that returns
+    // a terminal value after aborting would let the loop exit as 'success'.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration,
+          },
+        },
+      });
+      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+    }
   } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
   await engine.endChildSpan({
@@ -741,7 +784,7 @@ export async function executeLoop(
   return result;
 }
 
-export interface ExecuteForeachParams {
+export interface ExecuteForeachParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
@@ -765,7 +808,6 @@ export interface ExecuteForeachParams {
     forEachIndex?: number;
   };
   executionContext: ExecutionContext;
-  tracingContext: TracingContext;
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
@@ -790,7 +832,6 @@ export async function executeForeach(
     resume,
     timeTravel,
     executionContext,
-    tracingContext,
     pubsub,
     abortController,
     requestContext,
@@ -798,7 +839,10 @@ export async function executeForeach(
     disableScorers,
     serializedStepGraph,
     perStep,
+    ...rest
   } = params;
+
+  const observabilityContext = resolveObservabilityContext(rest);
 
   const { step, opts } = entry;
   const results: StepResult<any, any, any, any>[] = [];
@@ -814,7 +858,7 @@ export async function executeForeach(
   };
 
   const loopSpan = await engine.createChildSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_LOOP,
@@ -856,7 +900,28 @@ export async function executeForeach(
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
 
+  const totalCount = prevOutput.length;
+  let completedCount = 0;
+
   for (let i = 0; i < prevOutput.length; i += concurrency) {
+    // Honor cancellation between concurrency chunks so cancelling a long
+    // foreach (large list / slow steps) terminates without dispatching more work.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          output: results,
+        },
+      });
+      return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
+        any,
+        any,
+        any,
+        any
+      >;
+    }
+
     const items = prevOutput.slice(i, i + concurrency);
     const itemsResults = await Promise.all(
       items.map(async (item: any, j: number) => {
@@ -889,7 +954,7 @@ export async function executeForeach(
           executionContext: { ...executionContext, foreachIndex: k },
           resume: resumeToUse,
           prevOutput: item,
-          tracingContext: { currentSpan: loopSpan },
+          ...createObservabilityContext({ currentSpan: loopSpan }),
           pubsub,
           abortController,
           requestContext,
@@ -914,7 +979,39 @@ export async function executeForeach(
 
         if (execResults.status === 'suspended') {
           foreachIndexObj[i + resultIndex] = execResults;
+
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-progress',
+              payload: {
+                id: step.id,
+                completedCount,
+                totalCount,
+                currentIndex: i + resultIndex,
+                iterationStatus: 'suspended' as const,
+              },
+            },
+          });
         } else {
+          completedCount++;
+
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-progress',
+              payload: {
+                id: step.id,
+                completedCount,
+                totalCount,
+                currentIndex: i + resultIndex,
+                iterationStatus: 'failed' as const,
+              },
+            },
+          });
+
           await pubsub.publish(`workflow.events.v2.${runId}`, {
             type: 'watch',
             runId,
@@ -942,6 +1039,24 @@ export async function executeForeach(
           return result;
         }
       } else {
+        completedCount++;
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-progress',
+            payload: {
+              id: step.id,
+              completedCount,
+              totalCount,
+              currentIndex: i + resultIndex,
+              iterationStatus: 'success' as const,
+              iterationOutput: result?.output,
+            },
+          },
+        });
+
         const indexResumeLabel = Object.keys(resumeLabels).find(
           key => resumeLabels[key]?.foreachIndex === i + resultIndex,
         )!;
@@ -952,7 +1067,17 @@ export async function executeForeach(
         results[i + resultIndex] = result?.output;
       }
 
-      prevForeachOutput[i + resultIndex] = { ...result, suspendPayload: {} };
+      // Preserve `suspendPayload` for iterations that are still suspended so
+      // their resume context (e.g. an agent's `__streamState`) survives the
+      // round-trip through the workflow snapshot. When a different iteration
+      // is resumed later, the foreach loop re-enters with `prevForeachOutput`
+      // and uses each entry's `suspendPayload` to rebuild execution state for
+      // the iterations that are still pending. Wiping it for suspended results
+      // (the previous behavior) caused those iterations to lose their state on
+      // every resume, e.g. parallel tool-call approvals losing conversation
+      // context after the first approval. For non-suspended results, we still
+      // clear `suspendPayload` to keep the snapshot small.
+      prevForeachOutput[i + resultIndex] = result?.status === 'suspended' ? result : { ...result, suspendPayload: {} };
     }
 
     if (Object.keys(foreachIndexObj).length > 0) {
@@ -991,6 +1116,26 @@ export async function executeForeach(
         },
       } as StepSuspended<any, any, any>;
     }
+  }
+
+  // Honor cancellation that landed during the final concurrency chunk. Without
+  // this check, a foreach whose steps ignore abortSignal would still emit a
+  // 'success' workflow-step-result and persist a successful step result, even
+  // though the run was cancelled.
+  if (abortController?.signal?.aborted) {
+    await engine.endChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
+      endOptions: {
+        output: results,
+      },
+    });
+    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
+      any,
+      any,
+      any,
+      any
+    >;
   }
 
   await pubsub.publish(`workflow.events.v2.${runId}`, {

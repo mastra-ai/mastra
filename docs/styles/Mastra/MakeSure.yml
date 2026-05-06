@@ -1,0 +1,7 @@
+extends: substitution
+message: "Use 'Ensure' instead of '%s'."
+level: warning
+ignorecase: true
+swap:
+  make sure: Ensure
+  makes sure: Ensures

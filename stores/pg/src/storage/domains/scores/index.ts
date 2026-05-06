@@ -11,7 +11,8 @@ import {
   TABLE_SCHEMAS,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -69,9 +70,9 @@ export class ScoresPG extends ScoresStorage {
 
   /**
    * Returns default index definitions for the scores domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
    */
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
@@ -79,6 +80,41 @@ export class ScoresPG extends ScoresStorage {
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Table
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SCORERS,
+        schema: TABLE_SCHEMAS[TABLE_SCORERS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    // Indexes
+    for (const idx of ScoresPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return ScoresPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**

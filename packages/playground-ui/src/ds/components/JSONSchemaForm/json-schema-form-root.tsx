@@ -1,12 +1,13 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { JSONSchemaFormProvider } from './json-schema-form-context';
-import type { SchemaField, JSONSchemaOutput } from './types';
+import type { SchemaField } from './types';
 import { createField } from './types';
 import { fieldsToJSONSchema, addFieldAtPath, removeFieldAtPath, updateFieldAtPath } from './utils';
+import type { JsonSchema } from '@/lib/json-schema';
+import { cn } from '@/lib/utils';
 
 export interface JSONSchemaFormRootProps {
-  onChange?: (schema: JSONSchemaOutput) => void;
+  onChange?: (schema: JsonSchema) => void;
   onFieldsChange?: (fields: SchemaField[]) => void;
   defaultValue?: SchemaField[];
   maxDepth?: number;

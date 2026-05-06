@@ -1,0 +1,614 @@
+---
+title: "Reference: DaytonaSandbox | Workspace"
+description: "Documentation for the DaytonaSandbox provider for isolated cloud code execution."
+packages:
+  - "@mastra/daytona"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# DaytonaSandbox
+
+Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/daytona
+```
+
+Set your Daytona API key in one of three ways.
+
+<Tabs>
+  <TabItem value="shell-export" label="Shell export">
+    ```bash
+    export DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
+
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
+
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new DaytonaSandbox({ apiKey: 'your-api-key' })
+    ```
+  </TabItem>
+</Tabs>
+
+## Usage
+
+Add a `DaytonaSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    language: 'typescript',
+    timeout: 120_000,
+  }),
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: 'anthropic/claude-sonnet-4-6',
+  workspace,
+})
+
+const response = await agent.generate(
+  'Print "Hello, world!" and show the current working directory.',
+)
+
+console.log(response.text)
+// I'll run both commands simultaneously!
+//
+// Here are the results:
+//
+// 1. **Hello, world!** — Successfully printed the message.
+// 2. **Current Working Directory** — `/home/daytona`
+//
+// Both commands ran in parallel and completed successfully!
+```
+
+### With a snapshot
+
+Use a pre-built snapshot to skip environment setup time:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    snapshot: 'my-snapshot-id',
+    timeout: 60_000,
+  }),
+})
+```
+
+### Custom image with resources
+
+Use a custom Docker image with specific resource allocation:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    image: 'node:20-slim',
+    resources: { cpu: 2, memory: 4, disk: 6 },
+    language: 'typescript',
+  }),
+})
+```
+
+### Ephemeral sandbox
+
+For one-shot tasks — sandbox is deleted immediately on stop:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    ephemeral: true,
+    language: 'python',
+  }),
+})
+```
+
+### Streaming output
+
+Stream command output in real time via `onStdout` and `onStderr` callbacks:
+
+```typescript
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
+  onStdout: chunk => process.stdout.write(chunk),
+  onStderr: chunk => process.stderr.write(chunk),
+})
+```
+
+Both callbacks are optional and can be used independently.
+
+### Reconnection
+
+Reconnect to an existing sandbox by providing the same `id`. The sandbox resumes with its files and state intact:
+
+```typescript
+const sandbox = new DaytonaSandbox({ id: 'my-persistent-sandbox' })
+
+// First session
+await sandbox._start()
+await sandbox.executeCommand('sh', ['-c', 'echo "session 1" > /tmp/state.txt'])
+await sandbox._stop()
+
+// Later — reconnects to the same sandbox
+const sandbox2 = new DaytonaSandbox({ id: 'my-persistent-sandbox' })
+await sandbox2._start()
+const result = await sandbox2.executeCommand('cat', ['/tmp/state.txt'])
+console.log(result.stdout) // "session 1"
+```
+
+If the sandbox is in a stopped or archived state, it's restarted automatically. If it's in a dead state (destroyed, errored), a fresh sandbox is created instead.
+
+### Filesystem mounting
+
+Mount S3 or GCS buckets as local directories inside the sandbox.
+
+#### Via workspace mounts config
+
+The simplest way — filesystems are mounted automatically when the sandbox starts:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+import { GCSFilesystem } from '@mastra/gcs'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      bucket: process.env.S3_BUCKET!,
+      region: 'auto',
+      accessKeyId: process.env.S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+      endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+    }),
+    '/gcs-data': new GCSFilesystem({
+      bucket: process.env.GCS_BUCKET!,
+      projectId: 'my-project-id',
+      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+    }),
+  },
+  sandbox: new DaytonaSandbox({ language: 'python' }),
+})
+```
+
+When the workspace starts, the filesystems are automatically mounted at the specified paths. Code running in the sandbox can then access files at `/s3-data` and `/gcs-data` as if they were local directories.
+
+#### Via `sandbox.mount()`
+
+Mount manually at any point after the sandbox has started:
+
+#### S3
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+await sandbox.mount(
+  new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: 'us-east-1',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  }),
+  '/data',
+)
+```
+
+#### S3-compatible (Cloudflare R2, MinIO)
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+await sandbox.mount(
+  new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: 'auto',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+  }),
+  '/data',
+)
+```
+
+#### GCS
+
+```typescript
+import { GCSFilesystem } from '@mastra/gcs'
+
+await sandbox.mount(
+  new GCSFilesystem({
+    bucket: process.env.GCS_BUCKET!,
+    projectId: 'my-project-id',
+    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+  }),
+  '/data',
+)
+```
+
+### Network isolation
+
+Restrict outbound network access:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    networkBlockAll: true,
+    networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Daytona API key for authentication. Falls back to DAYTONA_API_KEY environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    description: 'Daytona API endpoint. Falls back to DAYTONA_API_URL environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'target',
+    type: 'string',
+    description: 'Runner region. Falls back to DAYTONA_TARGET environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default execution timeout in milliseconds.',
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'language',
+    type: "'typescript' | 'javascript' | 'python'",
+    description: 'Runtime language for the sandbox.',
+    isOptional: true,
+    defaultValue: "'typescript'",
+  },
+  {
+    name: 'snapshot',
+    type: 'string',
+    description: 'Pre-built snapshot ID to create the sandbox from. Takes precedence over image.',
+    isOptional: true,
+  },
+  {
+    name: 'image',
+    type: 'string',
+    description:
+      'Docker image for sandbox creation. Triggers image-based creation when set. Can be combined with resources. Ignored when snapshot is set.',
+    isOptional: true,
+  },
+  {
+    name: 'resources',
+    type: '{ cpu?: number; memory?: number; disk?: number }',
+    description:
+      'Resource allocation for the sandbox (CPU cores, memory in GiB, disk in GiB). Only used when image is set.',
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to set in the sandbox.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'labels',
+    type: 'Record<string, string>',
+    description: 'Custom metadata labels.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Sandbox display name.',
+    isOptional: true,
+    defaultValue: 'Sandbox id',
+  },
+  {
+    name: 'user',
+    type: 'string',
+    description: 'OS user to run commands as.',
+    isOptional: true,
+    defaultValue: "'daytona'",
+  },
+  {
+    name: 'public',
+    type: 'boolean',
+    description: 'Make port previews public.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'ephemeral',
+    type: 'boolean',
+    description: 'Delete sandbox immediately on stop.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'autoStopInterval',
+    type: 'number',
+    description: 'Auto-stop interval in minutes. Set to 0 to disable.',
+    isOptional: true,
+    defaultValue: '15',
+  },
+  {
+    name: 'autoArchiveInterval',
+    type: 'number',
+    description: 'Auto-archive interval in minutes. Set to 0 for the maximum interval (7 days).',
+    isOptional: true,
+    defaultValue: '7 days',
+  },
+  {
+    name: 'autoDeleteInterval',
+    type: 'number',
+    description: 'Auto-delete interval in minutes. Negative values disable auto-delete. Set to 0 to delete on stop.',
+    isOptional: true,
+    defaultValue: 'disabled',
+  },
+  {
+    name: 'volumes',
+    type: 'Array<{ volumeId: string; mountPath: string }>',
+    description: 'Daytona volumes to attach at sandbox creation time.',
+    isOptional: true,
+  },
+  {
+    name: 'networkBlockAll',
+    type: 'boolean',
+    description: 'Block all outbound network access from the sandbox.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'networkAllowList',
+    type: 'string',
+    description: 'Comma-separated list of allowed CIDR addresses when network access is restricted.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('DaytonaSandbox').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('daytona').",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
+  },
+  {
+    name: 'instance',
+    type: 'Sandbox',
+    description:
+      'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+  },
+  {
+    name: 'processes',
+    type: 'DaytonaProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+]}
+/>
+
+## Background processes
+
+`DaytonaSandbox` includes a built-in process manager for spawning and managing background processes. Processes run in the Daytona cloud sandbox using session-based command execution.
+
+```typescript
+const sandbox = new DaytonaSandbox({ language: 'typescript' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
+## Mounting cloud storage
+
+Daytona sandboxes can mount S3 or GCS buckets, making cloud storage accessible as local directories inside the sandbox. This is useful for:
+
+- Processing large datasets stored in cloud buckets
+- Writing output files directly to cloud storage
+- Sharing data between sandbox sessions
+
+For usage examples, see [Filesystem mounting](#filesystem-mounting).
+
+Daytona sandboxes use FUSE (Filesystem in Userspace) to mount cloud storage:
+
+- **S3/R2**: Mounted via [s3fs-fuse](https://github.com/s3fs-fuse/s3fs-fuse)
+- **GCS**: Mounted via [gcsfuse](https://github.com/GoogleCloudPlatform/gcsfuse)
+
+The required FUSE tools are installed automatically at mount time if not already present in the sandbox image.
+
+### S3 environment variables
+
+| Variable | Description |
+| - | - |
+| `S3_BUCKET` | Bucket name |
+| `S3_REGION` | AWS region or `auto` for R2/MinIO |
+| `S3_ACCESS_KEY_ID` | Access key ID |
+| `S3_SECRET_ACCESS_KEY` | Secret access key |
+| `S3_ENDPOINT` | Endpoint URL (S3-compatible only) |
+
+### GCS environment variables
+
+| Variable | Description |
+| - | - |
+| `GCS_BUCKET` | Bucket name |
+| `GCS_SERVICE_ACCOUNT_KEY` | Service account key JSON (full JSON string, not a path) |
+
+### Reducing cold start latency with a snapshot
+
+By default, `s3fs` and `gcsfuse` are installed at first mount via `apt`, which adds startup time. To eliminate this, prebake them into a Daytona snapshot and pass the snapshot name via the `snapshot` option.
+
+**Option 1: Declarative image build**
+
+```typescript
+import { Daytona, Image } from '@daytonaio/sdk'
+
+const template = Image.base('daytonaio/sandbox')
+  .runCommands('sudo apt-get update -qq')
+  .runCommands('sudo apt-get install -y s3fs')
+  // gcsfuse requires the Google Cloud apt repository
+  .runCommands(
+    'sudo mkdir -p /etc/apt/keyrings && ' +
+      'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
+      'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
+      // Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
+      'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
+  )
+  .runCommands('sudo apt-get update -qq && sudo apt-get install -y gcsfuse')
+
+const daytona = new Daytona()
+
+await daytona.snapshot.create(
+  {
+    name: 'cloud-fs-mounting',
+    image: template,
+  },
+  { onLogs: console.log },
+)
+```
+
+**Option 2: Dockerfile** — using [`Image.fromDockerfile()`](https://www.daytona.io/docs/typescript-sdk/image#fromdockerfile)
+
+```dockerfile
+FROM daytonaio/sandbox
+RUN sudo apt-get update -qq
+RUN sudo apt-get install -y s3fs
+# Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
+RUN sudo mkdir -p /etc/apt/keyrings && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+RUN sudo apt-get update -qq && sudo apt-get install -y gcsfuse
+```
+
+```typescript
+import { Daytona, Image } from '@daytonaio/sdk'
+
+const daytona = new Daytona()
+
+await daytona.snapshot.create(
+  {
+    name: 'cloud-fs-mounting',
+    image: Image.fromDockerfile('./Dockerfile'),
+  },
+  { onLogs: console.log },
+)
+```
+
+Then use the snapshot name in your sandbox config:
+
+```typescript
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      /* ... */
+    }),
+    '/gcs-data': new GCSFilesystem({
+      /* ... */
+    }),
+  },
+  sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
+})
+```
+
+## Direct SDK access
+
+Access the underlying Daytona `Sandbox` instance for filesystem, git, and other operations not exposed through the `WorkspaceSandbox` interface:
+
+```typescript
+const daytonaSandbox = sandbox.instance
+
+// Upload a file
+await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt')
+
+// Run git operations
+await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo')
+```
+
+The `instance` getter throws `SandboxNotReadyError` if the sandbox hasn't been started yet.
+
+## Sandbox creation modes
+
+`DaytonaSandbox` selects a creation mode based on the options provided:
+
+| Options | Creation mode |
+| - | - |
+| `snapshot` set | Snapshot-based (snapshot takes precedence over image) |
+| `image` set (no snapshot) | Image-based (optionally with `resources`) |
+| Neither set | Default snapshot-based |
+
+Resources are only applied when `image` is set. Passing `resources` without `image` has no effect.
+
+## Related
+
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [LocalSandbox reference](/reference/workspace/local-sandbox)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
+- [Workspace overview](/docs/workspace/overview)

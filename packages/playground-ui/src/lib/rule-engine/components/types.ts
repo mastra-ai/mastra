@@ -1,27 +1,7 @@
-import type { ConditionOperator, Rule } from '../types';
+import type { ConditionOperator, Rule, RuleGroup } from '../types';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
-/**
- * JSON Schema property definition (simplified for rule building)
- */
-export type JsonSchemaProperty = {
-  type?: string | string[];
-  properties?: Record<string, JsonSchemaProperty>;
-  items?: JsonSchemaProperty;
-  enum?: unknown[];
-  title?: string;
-  description?: string;
-};
-
-/**
- * JSON Schema definition for rule building
- */
-export type JsonSchema = {
-  type?: string;
-  properties?: Record<string, JsonSchemaProperty>;
-  required?: string[];
-  title?: string;
-  description?: string;
-};
+export type { JsonSchema, JsonSchemaProperty };
 
 /**
  * Represents a field option extracted from JSON Schema
@@ -47,12 +27,32 @@ export type FieldOption = {
 export type RuleBuilderProps = {
   /** JSON Schema defining available fields */
   schema: JsonSchema;
-  /** Current rules */
-  rules: Rule[];
-  /** Callback when rules change */
-  onChange: (rules: Rule[]) => void;
+  /** Current rule group (recursive, supports nested groups) */
+  ruleGroup: RuleGroup | undefined;
+  /** Callback when rule group changes */
+  onChange: (ruleGroup: RuleGroup | undefined) => void;
+  /** Maximum nesting depth (default: 3) */
+  maxDepth?: number;
   /** Optional class name */
   className?: string;
+};
+
+/**
+ * Internal props for the recursive RuleGroupView component
+ */
+export type RuleGroupViewProps = {
+  /** JSON Schema defining available fields */
+  schema: JsonSchema;
+  /** The rule group to render */
+  group: RuleGroup;
+  /** Callback when this group changes */
+  onChange: (group: RuleGroup) => void;
+  /** Callback to remove this group (undefined for root) */
+  onRemove?: () => void;
+  /** Current nesting depth (0 = root) */
+  depth: number;
+  /** Maximum nesting depth */
+  maxDepth: number;
 };
 
 /**
@@ -93,6 +93,8 @@ export type RuleOperatorSelectProps = {
   value: ConditionOperator;
   /** Callback when operator changes */
   onChange: (operator: ConditionOperator) => void;
+  /** Subset of operators to show. Defaults to all operators. */
+  operators?: readonly ConditionOperator[];
   /** Optional class name */
   className?: string;
 };
@@ -107,6 +109,8 @@ export type RuleValueInputProps = {
   onChange: (value: unknown) => void;
   /** The operator (affects input behavior for "in" and "not_in") */
   operator: ConditionOperator;
+  /** The field type from JSON Schema (string, number, boolean, etc.) */
+  fieldType?: string;
   /** Optional placeholder */
   placeholder?: string;
   /** Optional class name */
@@ -123,8 +127,12 @@ export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   not_contains: 'not contains',
   greater_than: 'greater than',
   less_than: 'less than',
+  greater_than_or_equal: 'greater than or equal',
+  less_than_or_equal: 'less than or equal',
   in: 'in',
   not_in: 'not in',
+  exists: 'exists',
+  not_exists: 'not exists',
 };
 
 /**
@@ -137,6 +145,10 @@ export const OPERATORS: ConditionOperator[] = [
   'not_contains',
   'greater_than',
   'less_than',
+  'greater_than_or_equal',
+  'less_than_or_equal',
   'in',
   'not_in',
+  'exists',
+  'not_exists',
 ];

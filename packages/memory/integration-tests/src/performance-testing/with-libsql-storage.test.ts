@@ -1,34 +1,35 @@
-import { DefaultStorage } from '@mastra/core/storage/libsql';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import dotenv from 'dotenv';
-import { describe } from 'vitest';
+import { afterAll, beforeAll, describe } from 'vitest';
 
 import { getPerformanceTests } from './performance-tests';
 
-dotenv.config({ path: '.env.test' });
+describe('Memory with LibSQL Performance', () => {
+  let dbPath: string;
 
-describe('Memory with LibSQL Integration', () => {
-  describe('with explicit storage', () => {
-    const memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:perf-test.db',
-        },
-      }),
-      options: {
-        lastMessages: 10,
-        semanticRecall: {
-          topK: 3,
-          messageRange: 2,
-        },
-      },
-    });
-
-    getPerformanceTests(memory);
+  beforeAll(async () => {
+    dbPath = await mkdtemp(join(tmpdir(), `perf-test-`));
   });
 
-  describe('with default storage', () => {
-    const memory = new Memory({
+  afterAll(async () => {
+    await rm(dbPath, { recursive: true });
+  });
+
+  getPerformanceTests(() => {
+    return new Memory({
+      storage: new LibSQLStore({
+        id: 'perf-test-storage',
+        url: `file:${dbPath}/perf-test.db`,
+      }),
+      vector: new LibSQLVector({
+        id: 'perf-test-vector',
+        url: `file:${dbPath}/perf-test.db`,
+      }),
+      embedder: fastembed.small,
       options: {
         lastMessages: 10,
         semanticRecall: {
@@ -37,7 +38,5 @@ describe('Memory with LibSQL Integration', () => {
         },
       },
     });
-
-    getPerformanceTests(memory);
   });
 });

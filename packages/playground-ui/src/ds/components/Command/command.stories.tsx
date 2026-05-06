@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Calculator, Calendar, CreditCard, Settings, Smile, User } from 'lucide-react';
 import * as React from 'react';
 
+import { Button } from '../Button';
 import {
   Command,
   CommandDialog,
@@ -13,7 +14,6 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from './command';
-import { Button } from '../Button';
 
 const meta: Meta<typeof Command> = {
   title: 'Composite/Command',
@@ -21,7 +21,6 @@ const meta: Meta<typeof Command> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

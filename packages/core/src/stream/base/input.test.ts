@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { ChunkType, CreateStream, OnResult } from '../types';
-import { MastraModelInput } from './input';
+import { safeEnqueue, MastraModelInput } from './input';
 
 // Test data representing a custom input format
 interface CustomInputFormat {
@@ -284,6 +284,108 @@ describe('MastraModelInput', () => {
 
       expect(done).toBe(true);
       reader.releaseLock();
+    });
+
+    // Regression test for https://github.com/mastra-ai/mastra/issues/13107
+    // When the output stream is cancelled while transform() is still running,
+    // controller.enqueue() throws "Controller is already closed" which can
+    // crash the Node.js process as an uncaught exception.
+    it('should not throw when controller is externally closed during transform (#13107)', async () => {
+      let continueTransform!: () => void;
+      const pausePromise = new Promise<void>(resolve => {
+        continueTransform = resolve;
+      });
+
+      let transformError: Error | null = null;
+
+      // A transform implementation that pauses mid-stream to allow external cancellation
+      class PausableInput extends MastraModelInput {
+        async transform({
+          runId,
+          stream,
+          controller,
+        }: {
+          runId: string;
+          stream: ReadableStream<any>;
+          controller: ReadableStreamDefaultController<ChunkType>;
+        }): Promise<void> {
+          const reader = stream.getReader();
+          try {
+            // Read and enqueue first chunk normally
+            const { value: first, done: firstDone } = await reader.read();
+            if (!firstDone && first) {
+              controller.enqueue({
+                type: 'text-delta',
+                runId,
+                from: 'test',
+                payload: { text: first.content },
+              });
+            }
+
+            // Pause here — the consumer will cancel the stream during this pause
+            await pausePromise;
+
+            // After resume, the controller has been closed by the consumer's cancel.
+            // Without the safeEnqueue guard, this enqueue throws
+            // "TypeError [ERR_INVALID_STATE]: Invalid state: Controller is already closed"
+            const { value: second, done: secondDone } = await reader.read();
+            if (!secondDone && second) {
+              safeEnqueue(controller, {
+                type: 'text-delta',
+                runId,
+                from: 'test',
+                payload: { text: second.content },
+              });
+            }
+          } catch (e: any) {
+            transformError = e;
+            throw e;
+          } finally {
+            reader.releaseLock();
+          }
+        }
+      }
+
+      const input = new PausableInput({ name: 'pausable' });
+
+      const resultStream = input.initialize({
+        runId: 'test-run',
+        createStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ content: 'first' });
+              controller.enqueue({ content: 'second' });
+              controller.close();
+            },
+          }),
+          warnings: {},
+          request: {},
+          rawResponse: {},
+        }),
+        onResult: () => {},
+      });
+
+      const reader = resultStream.getReader();
+
+      // Read the first chunk (enqueued before the pause)
+      const { value, done } = await reader.read();
+      expect(done).toBe(false);
+      expect(value.payload.text).toBe('first');
+
+      // Cancel the stream — this closes the controller externally.
+      // In production, this happens when a downstream TransformStream terminates
+      // (e.g., tripwire at output.ts:647) or the consumer aborts.
+      await reader.cancel();
+
+      // Resume the transform — it will try to enqueue on the now-closed controller
+      continueTransform();
+
+      // Wait for the async start callback to complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Without the fix, transformError is a TypeError: "Controller is already closed"
+      // With the fix (safeEnqueue guard), no error occurs
+      expect(transformError).toBeNull();
     });
   });
 

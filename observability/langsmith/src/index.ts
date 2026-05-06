@@ -7,3 +7,6 @@
 
 // Tracing
 export * from './tracing';
+
+// Helpers for building LangSmith-compatible tracing options
+export * from './helpers';

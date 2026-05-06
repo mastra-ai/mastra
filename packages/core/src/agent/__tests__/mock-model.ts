@@ -9,7 +9,10 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 
-export function getOpenAIModel(version: 'v1' | 'v2' | 'v3') {
+// Return type is a union of AI SDK provider return types - we use a generic return to avoid type portability issues
+export function getOpenAIModel(
+  version: 'v1' | 'v2' | 'v3',
+): ReturnType<typeof openai_v4> | ReturnType<typeof openai_v5> | ReturnType<typeof openai_v6> {
   if (version === 'v1') {
     return openai_v4('gpt-4o-mini');
   }

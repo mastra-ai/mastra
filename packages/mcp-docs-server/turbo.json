@@ -4,15 +4,26 @@
   "tasks": {
     "prepare-docs": {
       "cache": false,
-      "outputs": [".docs/**"],
-      "dependsOn": ["build:cli"]
-    },
-    "build": {
-      "dependsOn": ["build:cli", "prepare-docs"]
+      "dependsOn": ["mastra-docs#build"],
+      "outputs": [".docs/**"]
     },
     "build:cli": {
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
       "outputs": ["dist/**", "!dist/docs/**"],
       "dependsOn": ["^build"]
+    },
+    "build": {
+      "dependsOn": ["build:cli", "prepare-docs"],
+      "inputs": ["package.json"]
     },
     "test": {
       "dependsOn": ["build"],

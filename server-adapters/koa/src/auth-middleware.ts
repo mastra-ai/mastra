@@ -1,192 +1,80 @@
-import {
-  canAccessPublicly,
-  checkRules,
-  defaultAuthConfig,
-  isDevPlaygroundRequest,
-  isProtectedPath,
-} from '@mastra/server/auth';
+import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
+import { coreAuthMiddleware } from '@mastra/server/auth';
 import type { Context, Middleware, Next } from 'koa';
 
-export const authenticationMiddleware: Middleware = async (ctx: Context, next: Next) => {
-  const mastra = ctx.state.mastra;
-  const authConfig = mastra.getServer()?.auth;
-  const customRouteAuthConfig = ctx.state.customRouteAuthConfig;
+export interface KoaAuthMiddlewareOptions {
+  mastra: Mastra;
+  requiresAuth?: boolean;
+}
 
-  if (!authConfig) {
-    // No auth config, skip authentication
-    return next();
-  }
+function toWebRequest(ctx: Context): globalThis.Request {
+  const protocol = ctx.protocol || 'http';
+  const host = ctx.host || 'localhost';
+  const url = `${protocol}://${host}${ctx.url}`;
 
-  const path = String(ctx.path || '/');
-  const method = String(ctx.method || 'GET');
-  const getHeader = (name: string) => ctx.headers[name.toLowerCase()] as string | undefined;
-
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
-    // Skip authentication for dev playground requests
-    return next();
-  }
-
-  if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
-    return next();
-  }
-
-  // Skip authentication for public routes
-  if (canAccessPublicly(path, method, authConfig)) {
-    return next();
-  }
-
-  // Get token from header or query
-  const authHeader = ctx.headers.authorization;
-  let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
-
-  const query = ctx.query as Record<string, string>;
-  if (!token && query.apiKey) {
-    token = query.apiKey || null;
-  }
-
-  // Handle missing token
-  if (!token) {
-    ctx.status = 401;
-    ctx.body = { error: 'Authentication required' };
-    return;
-  }
-
-  try {
-    // Verify token and get user data
-    let user: unknown;
-
-    // Client provided verify function
-    if (typeof authConfig.authenticateToken === 'function') {
-      // Note: The auth config function signature accepts HonoRequest, but in practice
-      // it should work with any request object that has the necessary properties
-      user = await authConfig.authenticateToken(token, ctx.request as any);
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(ctx.headers)) {
+    if (!value) continue;
+    if (Array.isArray(value)) {
+      value.forEach(v => headers.append(key, v));
     } else {
-      throw new Error('No token verification method configured');
+      headers.set(key, value);
     }
+  }
 
-    if (!user) {
-      ctx.status = 401;
-      ctx.body = { error: 'Invalid or expired token' };
+  return new globalThis.Request(url, {
+    method: ctx.method,
+    headers,
+  });
+}
+
+export function createAuthMiddleware({ mastra, requiresAuth = true }: KoaAuthMiddlewareOptions): Middleware {
+  return async (ctx: Context, next: Next) => {
+    if (!requiresAuth) {
+      await next();
       return;
     }
 
-    // Store user in context
-    ctx.state.requestContext.set('user', user);
-
-    return next();
-  } catch (err) {
-    console.error(err);
-    ctx.status = 401;
-    ctx.body = { error: 'Invalid or expired token' };
-    return;
-  }
-};
-
-export const authorizationMiddleware: Middleware = async (ctx: Context, next: Next) => {
-  const mastra = ctx.state.mastra;
-  const authConfig = mastra.getServer()?.auth;
-  const customRouteAuthConfig = ctx.state.customRouteAuthConfig;
-
-  if (!authConfig) {
-    // No auth config, skip authorization
-    return next();
-  }
-
-  const path = String(ctx.path || '/');
-  const method = String(ctx.method || 'GET');
-  const getHeader = (name: string) => ctx.headers[name.toLowerCase()] as string | undefined;
-
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
-    // Skip authorization for dev playground requests
-    return next();
-  }
-
-  if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
-    return next();
-  }
-
-  // Skip for public routes
-  if (canAccessPublicly(path, method, authConfig)) {
-    return next();
-  }
-
-  const user = ctx.state.requestContext.get('user');
-
-  if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
-    try {
-      const isAuthorized = await authConfig.authorizeUser(user, ctx.request as any);
-
-      if (isAuthorized) {
-        return next();
-      }
-
-      ctx.status = 403;
-      ctx.body = { error: 'Access denied' };
-      return;
-    } catch (err) {
-      console.error(err);
-      ctx.status = 500;
-      ctx.body = { error: 'Authorization error' };
+    const authConfig = mastra.getServer()?.auth;
+    if (!authConfig) {
+      await next();
       return;
     }
-  }
 
-  // Client-provided authorization function
-  if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
-    try {
-      // Note: The authorize function signature expects ContextWithMastra as 4th param
-      // For Koa, we pass a compatible object with similar structure
-      const context = {
-        get: (key: string) => {
-          if (key === 'mastra') return ctx.state.mastra;
-          if (key === 'requestContext') return ctx.state.requestContext;
-          if (key === 'tools') return ctx.state.tools;
-          if (key === 'taskStore') return ctx.state.taskStore;
-          if (key === 'customRouteAuthConfig') return ctx.state.customRouteAuthConfig;
-          return undefined;
-        },
-        req: ctx.request as any,
-      } as any;
+    ctx.state.requestContext ??= new RequestContext();
+    ctx.state.mastra ??= mastra;
 
-      const isAuthorized = await authConfig.authorize(path, method, user, context);
+    const path = String(ctx.path || '/');
+    const method = String(ctx.method || 'GET');
+    const customRouteAuthConfig = new Map<string, boolean>(ctx.state.customRouteAuthConfig ?? []);
+    customRouteAuthConfig.set(`${method}:${path}`, true);
 
-      if (isAuthorized) {
-        return next();
-      }
+    const authHeader = ctx.headers.authorization;
+    let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
+    if (!token) {
+      token = (ctx.query.apiKey as string) || null;
+    }
 
-      ctx.status = 403;
-      ctx.body = { error: 'Access denied' };
-      return;
-    } catch (err) {
-      console.error(err);
-      ctx.status = 500;
-      ctx.body = { error: 'Authorization error' };
+    const result = await coreAuthMiddleware({
+      path,
+      method,
+      getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+      mastra,
+      authConfig,
+      customRouteAuthConfig,
+      requestContext: ctx.state.requestContext,
+      rawRequest: toWebRequest(ctx),
+      token,
+      buildAuthorizeContext: () => toWebRequest(ctx),
+    });
+
+    if (result.action === 'next') {
+      await next();
       return;
     }
-  }
 
-  // Custom rule-based authorization
-  if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(authConfig.rules, path, method, user);
-
-    if (isAuthorized) {
-      return next();
-    }
-
-    ctx.status = 403;
-    ctx.body = { error: 'Access denied' };
-    return;
-  }
-
-  // Default rule-based authorization
-  if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
-
-    if (isAuthorized) {
-      return next();
-    }
-  }
-
-  ctx.status = 403;
-  ctx.body = { error: 'Access denied' };
-};
+    ctx.status = result.status;
+    ctx.body = result.body;
+  };
+}

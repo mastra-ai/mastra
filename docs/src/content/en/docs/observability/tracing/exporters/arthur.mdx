@@ -1,0 +1,152 @@
+---
+title: "Arthur exporter | Tracing | Observability"
+description: "Send traces to Arthur AI using OpenTelemetry and OpenInference semantic conventions"
+packages:
+  - "@mastra/arthur"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Arthur exporter
+
+[Arthur](https://arthur.ai/) provides an observability and evaluation platform for AI applications through [Arthur Engine](https://github.com/arthur-ai/arthur-engine) (open-source). The Arthur exporter sends traces using OpenTelemetry and [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) semantic conventions.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/arthur@latest
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Arthur Engine instance**: Follow the [Docker Compose deployment guide](https://docs.arthur.ai/docs/arthur-genai-engine-docker-compose-deployment-guide) to start an Arthur Engine
+1. **API key**: [Generate an API key](https://docs.arthur.ai/docs/api-keys-management) from the Arthur Engine UI at `http://localhost:3030`
+1. **Task ID** (optional): [Create a task](https://docs.arthur.ai/docs/create-a-task) to route traces to a specific task
+
+### Task routing
+
+Arthur Engine associates traces with tasks in two ways:
+
+- **By service name**: Set `serviceName` in the observability config. Arthur Engine automatically routes traces to the task matching that name, creating it if needed.
+- **By task ID**: Pass a pre-existing `taskId` to the exporter to send traces to a specific task directly.
+
+If both are provided, `taskId` takes precedence.
+
+### Environment variables
+
+```bash title=".env"
+# Required
+ARTHUR_API_KEY=your-api-key
+ARTHUR_BASE_URL=http://localhost:3030
+
+# Optional - route traces to a pre-existing task by ID
+ARTHUR_TASK_ID=your-task-id
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { ArthurExporter } from '@mastra/arthur'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arthur: {
+        serviceName: 'my-service',
+        exporters: [new ArthurExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { ArthurExporter } from '@mastra/arthur'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arthur: {
+        serviceName: 'my-service',
+        exporters: [
+          new ArthurExporter({
+            apiKey: process.env.ARTHUR_API_KEY!,
+            endpoint: process.env.ARTHUR_BASE_URL!,
+            taskId: process.env.ARTHUR_TASK_ID,
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+## Configuration options
+
+### Complete Configuration
+
+```typescript
+new ArthurExporter({
+  // Arthur Configuration
+  apiKey: 'your-api-key', // Required
+  endpoint: 'http://localhost:3030', // Required
+  taskId: 'your-task-id', // Optional
+
+  // Optional OTLP settings
+  headers: {
+    'x-custom-header': 'value', // Additional headers for OTLP requests
+  },
+
+  // Debug and performance tuning
+  logLevel: 'debug', // Logging: debug | info | warn | error
+  batchSize: 512, // Batch size before exporting spans
+  timeout: 30000, // Timeout in ms before exporting spans
+
+  // Custom resource attributes
+  resourceAttributes: {
+    'deployment.environment': process.env.NODE_ENV,
+    'service.version': process.env.APP_VERSION,
+  },
+})
+```
+
+### Custom metadata
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload and surface in Arthur. You can add them via `tracingOptions.metadata`:
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      companyId: 'acme-co',
+      tier: 'enterprise',
+    },
+  },
+})
+```
+
+Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
+
+## OpenInference semantic conventions
+
+This exporter implements the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [ArthurExporter reference](/reference/observability/tracing/exporters/arthur)
+- [Arthur Engine documentation](https://docs.arthur.ai/)
+- [Arthur Engine repository](https://github.com/arthur-ai/arthur-engine)
+- [OpenInference Specification](https://github.com/Arize-ai/openinference/tree/main/spec)

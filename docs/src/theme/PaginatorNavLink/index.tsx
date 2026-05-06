@@ -12,6 +12,7 @@ export default function PaginatorNavLink(props: Props): ReactNode {
         isNext ? 'flex-row-reverse pl-4 2xl:-mr-8' : 'flex-row pr-4 2xl:-ml-8',
       )}
       to={permalink}
+      data-is-next={isNext}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

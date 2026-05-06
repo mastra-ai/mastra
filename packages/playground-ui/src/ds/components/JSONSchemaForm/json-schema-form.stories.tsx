@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
 import { PlusIcon } from 'lucide-react';
+import { useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
-import { JSONSchemaForm } from './index';
-import type { JSONSchemaOutput, SchemaField } from './types';
+import type { SchemaField } from './types';
 import { createField } from './types';
+import { JSONSchemaForm } from './index';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof JSONSchemaForm.Root> = {
   title: 'Forms/JSONSchemaForm',
@@ -19,13 +20,12 @@ const meta: Meta<typeof JSONSchemaForm.Root> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
 type Story = StoryObj<typeof JSONSchemaForm.Root>;
 
-function JSONSchemaPreview({ schema }: { schema: JSONSchemaOutput | null }) {
+function JSONSchemaPreview({ schema }: { schema: JsonSchema | null }) {
   if (!schema) return null;
   return (
     <pre className="mt-4 p-4 bg-surface2 rounded-md text-xs text-neutral4 overflow-auto max-h-64">
@@ -47,22 +47,21 @@ function RecursiveFieldRenderer({
   return (
     <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
       <div className="flex gap-2 items-start mb-2">
-        <JSONSchemaForm.FieldName label="Name" labelIsHidden placeholder="Property name" size="md" className="flex-1" />
-        <JSONSchemaForm.FieldType label="Type" placeholder="Type" size="md" className="w-32" />
-        <JSONSchemaForm.FieldRemove variant="ghost" size="md" />
+        <JSONSchemaForm.FieldName label="Name" placeholder="Property name" />
+        <JSONSchemaForm.FieldType label="Type" placeholder="Type" />
+        <JSONSchemaForm.FieldRemove />
       </div>
       <JSONSchemaForm.FieldDescription
         label="Description"
         labelIsHidden
         placeholder="Description (optional)"
-        size="md"
         className="mb-2"
       />
       <div className="flex gap-4 mb-2">
         <JSONSchemaForm.FieldOptional />
         <JSONSchemaForm.FieldNullable />
       </div>
-      <JSONSchemaForm.NestedFields className="ml-4">
+      <JSONSchemaForm.NestedFields className="m-4 mr-0">
         <JSONSchemaForm.FieldList>
           {(nestedField, _idx, nestedContext) => (
             <RecursiveFieldRenderer
@@ -73,8 +72,8 @@ function RecursiveFieldRenderer({
             />
           )}
         </JSONSchemaForm.FieldList>
-        <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-          <PlusIcon className="w-3 h-3 mr-1" />
+        <JSONSchemaForm.AddField className="mt-2">
+          <PlusIcon />
           Add nested property
         </JSONSchemaForm.AddField>
       </JSONSchemaForm.NestedFields>
@@ -84,7 +83,7 @@ function RecursiveFieldRenderer({
 
 export const Default: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     return (
       <div className="w-[500px]">
@@ -94,7 +93,7 @@ export const Default: Story = {
               <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField variant="ghost" size="md" className="mt-4">
+          <JSONSchemaForm.AddField className="mt-4">
             <PlusIcon className="w-4 h-4 mr-2" />
             Add property
           </JSONSchemaForm.AddField>
@@ -107,7 +106,7 @@ export const Default: Story = {
 
 export const WithDefaultValues: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     const defaultFields: SchemaField[] = [
       createField({ name: 'name', type: 'string', description: 'User name' }),
@@ -122,21 +121,14 @@ export const WithDefaultValues: Story = {
             {(field, _index, { parentPath, depth }) => (
               <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
                 <div className="flex gap-2 items-start mb-2">
-                  <JSONSchemaForm.FieldName
-                    label="Name"
-                    labelIsHidden
-                    placeholder="Property name"
-                    size="md"
-                    className="flex-1"
-                  />
-                  <JSONSchemaForm.FieldType label="Type" placeholder="Type" size="md" className="w-32" />
-                  <JSONSchemaForm.FieldRemove variant="ghost" size="md" />
+                  <JSONSchemaForm.FieldName label="Name" labelIsHidden placeholder="Property name" className="flex-1" />
+                  <JSONSchemaForm.FieldType label="Type" placeholder="Type" />
+                  <JSONSchemaForm.FieldRemove />
                 </div>
                 <JSONSchemaForm.FieldDescription
                   label="Description"
                   labelIsHidden
                   placeholder="Description (optional)"
-                  size="md"
                   className="mb-2"
                 />
                 <div className="flex gap-4 mb-4">
@@ -146,8 +138,8 @@ export const WithDefaultValues: Story = {
               </JSONSchemaForm.Field>
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField variant="ghost" size="md" className="mt-4">
-            <PlusIcon className="w-4 h-4 mr-2" />
+          <JSONSchemaForm.AddField className="mt-4">
+            <PlusIcon />
             Add property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
@@ -159,7 +151,7 @@ export const WithDefaultValues: Story = {
 
 export const CompactLayout: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     return (
       <div className="w-[400px]">
@@ -173,14 +165,14 @@ export const CompactLayout: Story = {
                 depth={depth}
                 className="flex gap-2 items-center mb-2"
               >
-                <JSONSchemaForm.FieldName label="Name" labelIsHidden placeholder="Name" size="sm" className="flex-1" />
-                <JSONSchemaForm.FieldType label="Type" placeholder="Type" size="sm" className="w-24" />
+                <JSONSchemaForm.FieldName label="Name" labelIsHidden placeholder="Name" className="flex-1" />
+                <JSONSchemaForm.FieldType label="Type" placeholder="Type" className="w-24" />
                 <JSONSchemaForm.FieldOptional label="" className="shrink-0" />
-                <JSONSchemaForm.FieldRemove variant="ghost" size="sm" />
+                <JSONSchemaForm.FieldRemove />
               </JSONSchemaForm.Field>
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField variant="outline" size="sm" className="mt-2 w-full">
+          <JSONSchemaForm.AddField className="mt-2 w-full" size="md">
             Add field
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
@@ -192,7 +184,7 @@ export const CompactLayout: Story = {
 
 export const NestedObjects: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     const defaultFields: SchemaField[] = [
       createField({
@@ -217,8 +209,8 @@ export const NestedObjects: Story = {
               <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField variant="ghost" size="md" className="mt-4">
-            <PlusIcon className="w-4 h-4 mr-2" />
+          <JSONSchemaForm.AddField className="mt-4">
+            <PlusIcon />
             Add property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
@@ -230,7 +222,7 @@ export const NestedObjects: Story = {
 
 export const CustomStyling: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     return (
       <div className="w-[500px]">
@@ -245,13 +237,12 @@ export const CustomStyling: Story = {
                 className="p-4 border border-border1 rounded-lg bg-surface1"
               >
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <JSONSchemaForm.FieldName label="Property Name" placeholder="Enter name" size="lg" />
-                  <JSONSchemaForm.FieldType label="Data Type" placeholder="Select type" size="lg" />
+                  <JSONSchemaForm.FieldName label="Property Name" placeholder="Enter name" />
+                  <JSONSchemaForm.FieldType label="Data Type" placeholder="Select type" />
                 </div>
                 <JSONSchemaForm.FieldDescription
                   label="Description"
                   placeholder="Describe this field..."
-                  size="lg"
                   className="mb-3"
                 />
                 <div className="flex justify-between items-center">
@@ -259,7 +250,7 @@ export const CustomStyling: Story = {
                     <JSONSchemaForm.FieldOptional label="Optional field" labelClassName="text-neutral4" />
                     <JSONSchemaForm.FieldNullable label="Allow null" labelClassName="text-neutral4" />
                   </div>
-                  <JSONSchemaForm.FieldRemove variant="outline" size="md" tooltip="Remove this field" />
+                  <JSONSchemaForm.FieldRemove variant="outline" tooltip="Remove this field" />
                 </div>
               </JSONSchemaForm.Field>
             )}

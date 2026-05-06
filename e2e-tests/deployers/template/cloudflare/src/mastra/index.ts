@@ -22,7 +22,7 @@ export const mastra = new Mastra({
     level: 'info',
   }),
   deployer: new CloudflareDeployer({
-    projectName: 'hello-mastra',
+    name: 'hello-mastra',
     env: {
       NODE_ENV: 'production',
       API_KEY: 'test-api-key',

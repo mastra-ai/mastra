@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostHog } from 'posthog-node';
+import { getPackageManager } from '../commands/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +34,7 @@ export class PosthogAnalytics {
   private client?: PostHog;
   private distinctId: string;
   private version: string;
+  private packageManager: string;
 
   constructor({
     version,
@@ -44,6 +46,7 @@ export class PosthogAnalytics {
     host: string;
   }) {
     this.version = version;
+    this.packageManager = getPackageManager();
     const cliConfigPath = path.join(__dirname, 'mastra-cli.json');
     if (existsSync(cliConfigPath)) {
       try {
@@ -121,6 +124,7 @@ export class PosthogAnalytics {
       session_id: this.sessionId,
       cli_version: this.version || 'unknown',
       machine_id: os.hostname(),
+      package_manager: this.packageManager,
     };
   }
   private getDurationMs(startTime: [number, number]): number {

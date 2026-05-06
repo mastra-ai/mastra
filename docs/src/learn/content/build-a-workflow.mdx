@@ -1,0 +1,35 @@
+The agent can already look up parks, pull live wait times, scrape for more park details, and factor in weather. But some tasks don't fit in a single tool call. In this lesson, you'll build a multi-step ticket purchase workflow with a human-in-the-loop approval gate.
+
+You'll create a mock ticket purchase workflow with three explicit steps: building a quote, pausing for user approval, and processing the charge. Each step has its own input and output schema, so data flows cleanly from one step to the next. You'll hook the workflow into your Mastra entry point and run it in Studio so you can watch every step execute in sequence, including the suspend and resume.
+
+This matters because some logic is deterministic and shouldn't go through a language model: calculating fees, validating inputs, confirming amounts. A workflow puts you in control of the execution order and gives you a clean place to pause for approval before any money moves.
+
+> "If something is deterministic, don't make the model reason about it. Just put it in a workflow step."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Workflows overview](/docs/workflows/overview)
+- [createStep()](/reference/workflows/step)
+- [createWorkflow()](/reference/workflows/workflow)
+- [suspend and resume](/docs/workflows/suspend-and-resume)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates
