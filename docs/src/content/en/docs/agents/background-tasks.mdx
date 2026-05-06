@@ -8,7 +8,7 @@ packages:
 
 # Background tasks
 
-**Added in:** `@mastra/core@1.28.0`
+**Added in:** `@mastra/core@1.29.0`
 
 Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) the agent is re-invoked automatically so the result is processed in the same call.
 

@@ -40,9 +40,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
     describe('createIndex and getIndexes', () => {
       it('should list indexes including the created one', async () => {
         const vector = client.getVector(vectorName);
-        // TODO(#15089): SDK type mismatch — client declares Promise<{ indexes: string[] }>
-        // but the server handler returns string[] directly (see vector.ts handler).
-        const result: any = await vector.getIndexes();
+        const result = await vector.getIndexes();
         expect(result).toBeDefined();
         expect(Array.isArray(result)).toBe(true);
         expect(result).toContain(indexName);
@@ -61,9 +59,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
     describe('upsert and query', () => {
       it('should upsert vectors', async () => {
         const vector = client.getVector(vectorName);
-        // TODO(#15089): SDK type mismatch — client declares Promise<string[]>
-        // but the server handler returns { ids: string[] } (see vector.ts handler).
-        const result: any = await vector.upsert({
+        const result = await vector.upsert({
           indexName,
           vectors: [
             [1.0, 0.0, 0.0],
@@ -80,9 +76,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
 
       it('should query vectors and return closest matches', async () => {
         const vector = client.getVector(vectorName);
-        // TODO(#15089): SDK type mismatch — client declares Promise<{ results: QueryResult[] }>
-        // but the server handler returns QueryResult[] directly (see vector.ts handler).
-        const results: any = await vector.query({
+        const results = await vector.query({
           indexName,
           queryVector: [1.0, 0.0, 0.0],
           topK: 2,
@@ -96,7 +90,7 @@ export function createVectorTests(config: VectorTestConfig = {}) {
 
       it('should query vectors with topK=1', async () => {
         const vector = client.getVector(vectorName);
-        const results: any = await vector.query({
+        const results = await vector.query({
           indexName,
           queryVector: [0.0, 1.0, 0.0],
           topK: 1,

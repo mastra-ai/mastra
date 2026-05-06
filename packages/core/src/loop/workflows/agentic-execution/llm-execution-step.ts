@@ -43,6 +43,8 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
+import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
@@ -353,13 +355,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   processorStates,
   requestContext,
   methodType,
+  requireToolApproval,
+  toolCallConcurrency,
+  toolCallForeachOptions,
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
   outputWriter,
-}: OuterLLMRun<TOOLS, OUTPUT>) {
+}: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialSystemMessages = messageList.getAllSystemMessages();
+  const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
 
@@ -640,6 +646,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
           }
 
+          if (toolCallForeachOptions) {
+            updateToolCallForeachConcurrency(toolCallForeachOptions, {
+              requireToolApproval,
+              tools: currentStep.tools,
+              activeTools: currentStep.activeTools as string[] | undefined,
+              configuredConcurrency: configuredToolCallConcurrency,
+            });
+          }
+
           const runState = new AgenticRunState({
             _internal: _internal!,
             model: currentStep.model,
@@ -785,6 +800,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     warnings = warningsFromStream;
                     request = requestFromStream || {};
                     rawResponse = rawResponseFromStream;
+
+                    modelSpanTracker?.updateStep?.({
+                      request: request || {},
+                      inputMessages,
+                      warnings: warnings || [],
+                      messageId: currentStep.messageId,
+                    });
 
                     safeEnqueue(controller, {
                       runId,
@@ -1138,9 +1160,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const messages = {
           all: messageList.get.all.aiV5.model(),
           user: messageList.get.input.aiV5.model(),
-          // Keep assistant messages out of the retry payload so agentic-execution/index.ts
-          // does not replay failed step output back into messageList. Error processors own
-          // any cleanup or replacement of assistant responses before the next attempt.
+          // Do not return failed assistant output as new response messages for this retry step.
+          // That output was already added to messageList while processing the failed stream;
+          // returning it in messages.nonUser would make agentic-execution/index.ts append it again.
           nonUser: [],
         };
 

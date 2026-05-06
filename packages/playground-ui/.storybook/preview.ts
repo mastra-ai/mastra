@@ -4,6 +4,7 @@ import './tailwind.css';
 import { Colors } from '@/ds/tokens/colors';
 
 const preview: Preview = {
+  tags: ['autodocs'],
   decorators: [
     (Story, context) => {
       const bg = context.globals?.backgrounds?.value;

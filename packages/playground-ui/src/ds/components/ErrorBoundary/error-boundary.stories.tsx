@@ -60,7 +60,6 @@ const meta: Meta<typeof ErrorBoundary> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

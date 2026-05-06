@@ -749,6 +749,30 @@ describe('Hono Server Adapter', () => {
       await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
     });
 
+    it('should allow framework-internal routes under the server prefix', async () => {
+      const customRoutes = [
+        {
+          path: '/mastra/agents/bot/channels/slack/webhook',
+          method: 'POST' as const,
+          requiresAuth: false,
+          _mastraInternal: true,
+          handler: async (c: any) => c.json({ ok: true }),
+        },
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).resolves.not.toThrow();
+    });
+
     it('should allow custom routes at paths not starting with the server prefix', async () => {
       const customRoutes = [
         registerApiRoute('/custom/hello', {

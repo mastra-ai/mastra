@@ -36,6 +36,9 @@ import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
+// Direct import (bypassing the index) avoids a cycle: the index does a
+// side-effect import of `./evented`, so going through it from here would
+// re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
 import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
@@ -53,8 +56,11 @@ import type {
   StepMetadata,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { validateCron } from '../scheduler/cron';
+import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
+import { __registerEventedCreateWorkflow } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -308,7 +314,11 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    return createStepFromProcessor(params);
+    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
+      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+    };
+    step.providesSkillDiscovery = params.providesSkillDiscovery;
+    return step;
   }
 
   if (isStepParams(params)) {
@@ -1460,6 +1470,26 @@ export function createWorkflow<
     EventedEngineType
   >[],
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  if (params.schedule) {
+    const schedules = Array.isArray(params.schedule) ? params.schedule : [params.schedule];
+    if (Array.isArray(params.schedule)) {
+      const seenIds = new Set<string>();
+      for (const entry of schedules) {
+        if (!entry.id) {
+          throw new Error(
+            `Workflow "${params.id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
+          );
+        }
+        if (seenIds.has(entry.id)) {
+          throw new Error(`Workflow "${params.id}" declares duplicate schedule id "${entry.id}".`);
+        }
+        seenIds.add(entry.id);
+      }
+    }
+    for (const entry of schedules) {
+      validateCron(entry.cron, entry.timezone);
+    }
+  }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1478,6 +1508,13 @@ export function createWorkflow<
   });
 }
 
+// Register this factory with the default `createWorkflow` so that workflows
+// declared with the default factory are auto-promoted to evented when they
+// declare a `schedule`. Done at module-load time; the registration slot is
+// initialized as `undefined` in `../workflow.ts` and is read lazily on user
+// call, so module evaluation order doesn't matter.
+__registerEventedCreateWorkflow(createWorkflow as Parameters<typeof __registerEventedCreateWorkflow>[0]);
+
 export class EventedWorkflow<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
@@ -1487,9 +1524,27 @@ export class EventedWorkflow<
   TOutput = unknown,
   TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  #schedules: WorkflowScheduleConfig[];
+
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
     this.engineType = 'evented';
+    if (!params.schedule) {
+      this.#schedules = [];
+    } else if (Array.isArray(params.schedule)) {
+      this.#schedules = params.schedule.map(cfg => ({ ...cfg }));
+    } else {
+      this.#schedules = [{ ...params.schedule }];
+    }
+  }
+
+  /**
+   * Returns the cron schedule configurations declared on this workflow as a
+   * normalized array. Used by the Mastra scheduler to register declarative
+   * schedules at boot. Returns an empty array when no schedule is declared.
+   */
+  getScheduleConfigs(): WorkflowScheduleConfig[] {
+    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {
@@ -1512,7 +1567,11 @@ export class EventedWorkflow<
         id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Atomic storage operations are not supported for this workflow store, please use a different storage or the default workflow engine',
+        text:
+          `Workflow "${this.id}" runs on the evented execution engine, which requires a storage adapter that supports concurrent updates. ` +
+          `Your current workflow storage adapter does not. Switch to an adapter that does (for example @mastra/libsql), or, if you do not need scheduled execution, ` +
+          `remove the \`schedule\` field from this workflow's definition to use the default execution engine.`,
+        details: { workflowId: this.id },
       });
     }
 

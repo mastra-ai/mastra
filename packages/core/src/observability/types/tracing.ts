@@ -659,6 +659,8 @@ interface BaseSpan<TType extends SpanType> {
 export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean;
+  /** Tracing policy for this span (inherited from parent or explicitly set) */
+  tracingPolicy?: TracingPolicy;
   /** Parent span reference (undefined for root spans) */
   parent?: AnySpan;
   /** Pointer to the ObservabilityInstance instance */
@@ -840,6 +842,37 @@ export interface IModelSpanTracker {
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
+  updateStep?(payload?: StepStartPayload): void;
+
+  /**
+   * Enable or disable deferred step closing for durable execution.
+   * When enabled, step-finish chunks won't automatically close the step span.
+   * Use exportCurrentStep() to get the span data, then endDeferredStep() to close later.
+   */
+  setDeferStepClose(defer: boolean): void;
+
+  /**
+   * Export the current step span for later rebuilding (durable execution).
+   * Returns undefined if no step span is active.
+   */
+  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+
+  /**
+   * Get the pending step finish payload (captured when defer mode is enabled).
+   * This contains usage, finishReason, etc. for closing the step later.
+   */
+  getPendingStepFinishPayload(): unknown;
+
+  /**
+   * Set the starting step index for durable execution.
+   * Used when resuming across agentic loop iterations to maintain step continuity.
+   */
+  setStepIndex(index: number): void;
+
+  /**
+   * Get the current step index.
+   */
+  getStepIndex(): number;
 }
 
 /**

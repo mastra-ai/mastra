@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.29.0-alpha.4",
+  "version": "1.33.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -120,7 +120,7 @@
     "rollup-plugin-esbuild": "^6.2.1",
     "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.16",
-    "typescript-paths": "^1.5.1",
+    "typescript-paths": "^1.5.2",
     "ws": "^8.20.0"
   },
   "devDependencies": {
@@ -150,7 +150,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

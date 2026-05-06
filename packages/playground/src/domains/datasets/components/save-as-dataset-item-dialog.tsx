@@ -215,7 +215,7 @@ export function SaveAsDatasetItemDialog({
             </Button>
             <Button
               type="submit"
-              variant="light"
+              variant="default"
               disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
             >
               {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading trajectory...' : 'Save Item'}

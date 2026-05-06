@@ -11,7 +11,7 @@ import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
-import { loadProjectConfig, saveProjectConfig } from './project-config.js';
+import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from './project-config.js';
 
 function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -361,7 +361,11 @@ export async function deployAction(
     }
 
     if (!isAlreadyLinked) {
-      await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
+      await saveProjectConfig(
+        targetDir,
+        getProjectConfigToSave(projectId, projectName, projectSlug, orgId, projectConfig),
+        opts.config,
+      );
       p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
     }
   } else {
@@ -397,7 +401,11 @@ export async function deployAction(
     p.log.success(`Created project "${projectName}"`);
 
     // Save the project link
-    await saveProjectConfig(targetDir, { projectId, projectName, projectSlug, organizationId: orgId }, opts.config);
+    await saveProjectConfig(
+      targetDir,
+      getProjectConfigToSave(projectId, projectName, projectSlug, orgId, projectConfig),
+      opts.config,
+    );
     p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
   }
 
@@ -447,6 +455,7 @@ export async function deployAction(
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
+    disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

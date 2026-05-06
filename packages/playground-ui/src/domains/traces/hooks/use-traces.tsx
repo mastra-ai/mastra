@@ -85,7 +85,7 @@ export const useTraces = ({ filters }: TracesFilters) => {
     placeholderData: keepPreviousData,
     retry: false,
     // Disable polling on 403 to prevent flickering
-    refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),
+    refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 10000),
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;

@@ -25,7 +25,6 @@ const meta: Meta<typeof SearchFieldBlock> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     size: {
       control: { type: 'select' },

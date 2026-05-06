@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -47,6 +48,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -365,8 +367,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               };
             }
           }
-        } else if (isResumeToolCall) {
-          await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
         //this is to avoid passing resume data to the tool if it's not needed
@@ -393,6 +393,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           workspace: _internal?.stepWorkspace,
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
+          // Let tools that read thread history mid-stream (e.g. forked subagents
+          // cloning the parent thread) drain the save queue so the store reflects
+          // the latest user/assistant messages before they read.
+          flushMessages:
+            _internal?.saveQueueManager && _internal?.threadId
+              ? () => _internal.saveQueueManager!.flushMessages(messageList, _internal.threadId, _internal.memoryConfig)
+              : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
               safeEnqueue(controller, {
@@ -504,12 +511,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
         // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
         // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        const needsRunIdLookup =
-          resumeDataToPassToToolOptions &&
-          (isAgentTool || isWorkflowTool) &&
-          (!isResumeToolCall || !args.suspendedToolRunId);
+        const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
         if (needsRunIdLookup) {
           let suspendedToolRunId = '';
+          const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
 
@@ -521,16 +526,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               break;
             }
 
-            const dataToolSuspendedParts = message.content.parts?.filter(
-              part =>
-                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                !(part.data as any).resumed,
-            );
-            if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-              const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
-              if (foundTool) {
-                suspendedToolRunId = (foundTool as any).data.runId;
-                break;
+            if (shouldUsePartsFallback) {
+              const dataToolSuspendedParts = message.content.parts?.filter(
+                part =>
+                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                  !(part.data as any).resumed,
+              );
+              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+                const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
+                if (foundTool) {
+                  suspendedToolRunId = (foundTool as any).data.runId;
+                  break;
+                }
               }
             }
           }
@@ -538,6 +545,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
           }
+        }
+
+        if (!toolRequiresApproval && isResumeToolCall) {
+          await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
         if (args === null || args === undefined) {
@@ -554,6 +565,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             args.threadId = _internal?.threadId;
             args.resourceId = _internal?.resourceId;
           }
+        }
+
+        // FGA authorization check before tool execution
+        const toolFgaProvider = mastra?.getServer?.()?.fga;
+        if (toolFgaProvider) {
+          const fgaUser = requestContext?.get('user');
+          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
+          if (!fgaUser) {
+            throw new FGADeniedError(
+              { id: 'unknown' },
+              { type: 'tool', id: inputData.toolName },
+              MastraFGAPermissions.TOOLS_EXECUTE,
+            );
+          }
+          await checkFGA({
+            fgaProvider: toolFgaProvider,
+            user: fgaUser,
+            resource: { type: 'tool', id: inputData.toolName },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          });
         }
 
         const llmBgOverrides =
@@ -886,6 +917,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         return { result, ...inputData };
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         return {
           error: error as Error,
           ...inputData,
