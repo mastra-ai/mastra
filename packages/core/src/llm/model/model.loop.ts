@@ -193,7 +193,7 @@ export class MastraLLMVNext extends MastraBase {
       parameters: modelSettings as Record<string, unknown> | undefined,
       providerOptions: providerOptions as Record<string, unknown> | undefined,
       availableTools: tools ? Object.keys(tools) : undefined,
-      toolChoice: toolChoice as any,
+      toolChoice,
       responseFormat: structuredOutput ? 'json_schema' : undefined,
     });
 

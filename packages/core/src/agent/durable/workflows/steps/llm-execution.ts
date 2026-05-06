@@ -219,7 +219,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
               availableTools: currentTools ? Object.keys(currentTools) : undefined,
-              toolChoice: currentToolChoice as any,
+              toolChoice: currentToolChoice,
               responseFormat: execOptions.structuredOutput ? 'json_schema' : undefined,
             });
 
