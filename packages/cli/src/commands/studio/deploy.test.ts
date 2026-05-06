@@ -237,6 +237,83 @@ describe('parseEnvFile', () => {
   });
 });
 
+describe('loadDeployEnvFromDotenv', () => {
+  beforeEach(() => {
+    delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORG_ID;
+  });
+
+  afterEach(() => {
+    delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORG_ID;
+  });
+
+  it('seeds MASTRA_PROJECT_ID and MASTRA_ORG_ID from .env', async () => {
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('/.env')) {
+        return 'MASTRA_PROJECT_ID=proj_abc\nMASTRA_ORG_ID=org_xyz\nFOO=bar';
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    const { loadDeployEnvFromDotenv } = await import('./deploy.js');
+    await loadDeployEnvFromDotenv('/fake/dir');
+
+    expect(process.env.MASTRA_PROJECT_ID).toBe('proj_abc');
+    expect(process.env.MASTRA_ORG_ID).toBe('org_xyz');
+    // Unrelated keys are not promoted
+    expect(process.env.FOO).toBeUndefined();
+  });
+
+  it('does not override existing process.env values', async () => {
+    process.env.MASTRA_PROJECT_ID = 'env-wins';
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('/.env')) {
+        return 'MASTRA_PROJECT_ID=dotenv-loses\nMASTRA_ORG_ID=org_xyz';
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    const { loadDeployEnvFromDotenv } = await import('./deploy.js');
+    await loadDeployEnvFromDotenv('/fake/dir');
+
+    expect(process.env.MASTRA_PROJECT_ID).toBe('env-wins');
+    expect(process.env.MASTRA_ORG_ID).toBe('org_xyz');
+  });
+
+  it('does nothing when no env files exist', async () => {
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockImplementation(async () => {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    const { loadDeployEnvFromDotenv } = await import('./deploy.js');
+    await loadDeployEnvFromDotenv('/fake/dir');
+
+    expect(process.env.MASTRA_PROJECT_ID).toBeUndefined();
+    expect(process.env.MASTRA_ORG_ID).toBeUndefined();
+  });
+
+  it('earlier files take precedence over later files', async () => {
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('/.env')) return 'MASTRA_PROJECT_ID=from-env';
+      if (filePath.endsWith('/.env.local')) return 'MASTRA_PROJECT_ID=from-local\nMASTRA_ORG_ID=from-local';
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    const { loadDeployEnvFromDotenv } = await import('./deploy.js');
+    await loadDeployEnvFromDotenv('/fake/dir');
+
+    expect(process.env.MASTRA_PROJECT_ID).toBe('from-env');
+    // .env didn't have MASTRA_ORG_ID, so .env.local fills it in
+    expect(process.env.MASTRA_ORG_ID).toBe('from-local');
+  });
+});
+
 describe('readEnvVars', () => {
   it('prompts for which env file to deploy when multiple files exist', async () => {
     const { readdir, readFile } = await import('node:fs/promises');

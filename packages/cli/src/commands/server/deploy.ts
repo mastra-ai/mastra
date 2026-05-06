@@ -68,6 +68,23 @@ export function parseEnvFile(content: string): Record<string, string> {
   return vars;
 }
 
+export async function loadDeployEnvFromDotenv(projectDir: string): Promise<void> {
+  const KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_ORG_ID'] as const;
+  for (const file of ['.env', '.env.local', '.env.production']) {
+    try {
+      const content = await readFile(join(projectDir, file), 'utf-8');
+      const vars = parseEnvFile(content);
+      for (const key of KEYS) {
+        if (!process.env[key] && vars[key]) {
+          process.env[key] = vars[key];
+        }
+      }
+    } catch {
+      // missing/unreadable — skip
+    }
+  }
+}
+
 async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
   const entries = await readdir(projectDir, { withFileTypes: true });
 
@@ -296,6 +313,9 @@ export async function serverDeployAction(
   },
 ) {
   const targetDir = resolve(dir || process.cwd());
+  // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
+  // auto-link to the project that `mastra observe` provisioned.
+  await loadDeployEnvFromDotenv(targetDir);
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   const autoAccept = opts.yes ?? isHeadless;
 

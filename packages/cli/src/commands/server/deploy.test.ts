@@ -129,6 +129,43 @@ describe('parseEnvFile (server deploy)', () => {
   });
 });
 
+describe('loadDeployEnvFromDotenv (server deploy)', () => {
+  beforeEach(() => {
+    delete process.env.MASTRA_PROJECT_ID;
+    delete process.env.MASTRA_ORG_ID;
+  });
+
+  it('seeds MASTRA_PROJECT_ID and MASTRA_ORG_ID from .env when unset', async () => {
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('/.env')) {
+        return 'MASTRA_PROJECT_ID=proj_abc\nMASTRA_ORG_ID=org_xyz\n';
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    const { loadDeployEnvFromDotenv } = await import('./deploy.js');
+    await loadDeployEnvFromDotenv('/fake/dir');
+
+    expect(process.env.MASTRA_PROJECT_ID).toBe('proj_abc');
+    expect(process.env.MASTRA_ORG_ID).toBe('org_xyz');
+  });
+
+  it('does not override existing process.env values', async () => {
+    process.env.MASTRA_PROJECT_ID = 'env-wins';
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('/.env')) return 'MASTRA_PROJECT_ID=dotenv-loses';
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    const { loadDeployEnvFromDotenv } = await import('./deploy.js');
+    await loadDeployEnvFromDotenv('/fake/dir');
+
+    expect(process.env.MASTRA_PROJECT_ID).toBe('env-wins');
+  });
+});
+
 describe('readEnvVars (server deploy)', () => {
   it('prompts for which env file to deploy when multiple files exist', async () => {
     const { readdir, readFile } = await import('node:fs/promises');
