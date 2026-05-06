@@ -1,7 +1,7 @@
 import type { ExportedMetric } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { MetricInstrumentCache, convertLabels, getOtelInstrumentType } from './metric-converter';
+import { MetricInstrumentCache, convertLabels } from './metric-converter';
 
 describe('metric-converter', () => {
   describe('convertLabels', () => {
@@ -18,165 +18,59 @@ describe('metric-converter', () => {
     });
   });
 
-  describe('getOtelInstrumentType', () => {
-    it('should map counter to Counter', () => {
-      expect(getOtelInstrumentType('counter')).toBe('Counter');
-    });
-
-    it('should map gauge to ObservableGauge', () => {
-      expect(getOtelInstrumentType('gauge')).toBe('ObservableGauge');
-    });
-
-    it('should map histogram to Histogram', () => {
-      expect(getOtelInstrumentType('histogram')).toBe('Histogram');
-    });
-  });
-
   describe('MetricInstrumentCache', () => {
     let mockMeter: any;
-    let mockCounter: any;
-    let mockHistogram: any;
-    let mockGaugeCallbacks: Array<(result: any) => void>;
+    let mockHistogram: { record: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
-      mockCounter = { add: vi.fn() };
       mockHistogram = { record: vi.fn() };
-      mockGaugeCallbacks = [];
-
       mockMeter = {
-        createCounter: vi.fn().mockReturnValue(mockCounter),
         createHistogram: vi.fn().mockReturnValue(mockHistogram),
-        createObservableGauge: vi.fn().mockReturnValue({
-          addCallback: vi.fn((cb: any) => mockGaugeCallbacks.push(cb)),
-        }),
       };
     });
 
-    it('should record counter metrics via OTEL counter', () => {
-      const cache = new MetricInstrumentCache(mockMeter);
-
-      const metric: ExportedMetric = {
+    function makeMetric(overrides: Partial<ExportedMetric> = {}): ExportedMetric {
+      return {
+        metricId: 'm1',
         timestamp: new Date(),
         name: 'mastra_agent_calls',
-        metricType: 'counter',
         value: 1,
-        labels: { agent: 'test' },
+        labels: { agent: 'weather-bot' },
+        ...overrides,
       };
+    }
 
-      cache.recordMetric(metric);
+    it('records a metric value through a Histogram with converted attributes', () => {
+      const cache = new MetricInstrumentCache(mockMeter);
 
-      expect(mockMeter.createCounter).toHaveBeenCalledWith('mastra_agent_calls', {
-        description: 'Mastra counter: mastra_agent_calls',
+      cache.recordMetric(makeMetric({ value: 2 }));
+
+      expect(mockMeter.createHistogram).toHaveBeenCalledWith('mastra_agent_calls', {
+        description: expect.any(String),
       });
-      expect(mockCounter.add).toHaveBeenCalledWith(1, { agent: 'test' });
+      expect(mockHistogram.record).toHaveBeenCalledWith(2, { agent: 'weather-bot' });
     });
 
-    it('should record histogram metrics via OTEL histogram', () => {
+    it('caches the histogram instrument by metric name', () => {
       const cache = new MetricInstrumentCache(mockMeter);
 
-      const metric: ExportedMetric = {
-        timestamp: new Date(),
-        name: 'mastra_agent_duration_ms',
-        metricType: 'histogram',
-        value: 150.5,
-        labels: { agent: 'test', model: 'gpt-4' },
-      };
+      cache.recordMetric(makeMetric({ value: 1 }));
+      cache.recordMetric(makeMetric({ value: 5 }));
 
-      cache.recordMetric(metric);
-
-      expect(mockMeter.createHistogram).toHaveBeenCalledWith('mastra_agent_duration_ms', {
-        description: 'Mastra histogram: mastra_agent_duration_ms',
-      });
-      expect(mockHistogram.record).toHaveBeenCalledWith(150.5, { agent: 'test', model: 'gpt-4' });
+      expect(mockMeter.createHistogram).toHaveBeenCalledTimes(1);
+      expect(mockHistogram.record).toHaveBeenNthCalledWith(1, 1, { agent: 'weather-bot' });
+      expect(mockHistogram.record).toHaveBeenNthCalledWith(2, 5, { agent: 'weather-bot' });
     });
 
-    it('should record gauge metrics via OTEL observable gauge', () => {
+    it('creates a separate histogram per distinct metric name', () => {
       const cache = new MetricInstrumentCache(mockMeter);
 
-      const metric: ExportedMetric = {
-        timestamp: new Date(),
-        name: 'mastra_active_agents',
-        metricType: 'gauge',
-        value: 5,
-        labels: { environment: 'production' },
-      };
+      cache.recordMetric(makeMetric({ name: 'metric_a' }));
+      cache.recordMetric(makeMetric({ name: 'metric_b' }));
 
-      cache.recordMetric(metric);
-
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith('mastra_active_agents', {
-        description: 'Mastra gauge: mastra_active_agents',
-      });
-    });
-
-    it('should reuse instruments for the same metric name', () => {
-      const cache = new MetricInstrumentCache(mockMeter);
-
-      const metric1: ExportedMetric = {
-        timestamp: new Date(),
-        name: 'mastra_agent_calls',
-        metricType: 'counter',
-        value: 1,
-        labels: { agent: 'a' },
-      };
-      const metric2: ExportedMetric = {
-        timestamp: new Date(),
-        name: 'mastra_agent_calls',
-        metricType: 'counter',
-        value: 3,
-        labels: { agent: 'b' },
-      };
-
-      cache.recordMetric(metric1);
-      cache.recordMetric(metric2);
-
-      // Should only create the counter once
-      expect(mockMeter.createCounter).toHaveBeenCalledTimes(1);
-      expect(mockCounter.add).toHaveBeenCalledTimes(2);
-    });
-
-    it('should register observable gauge only once per metric name', () => {
-      const cache = new MetricInstrumentCache(mockMeter);
-
-      const metric1: ExportedMetric = {
-        timestamp: new Date(),
-        name: 'mastra_active_agents',
-        metricType: 'gauge',
-        value: 3,
-        labels: { env: 'staging' },
-      };
-      const metric2: ExportedMetric = {
-        timestamp: new Date(),
-        name: 'mastra_active_agents',
-        metricType: 'gauge',
-        value: 7,
-        labels: { env: 'production' },
-      };
-
-      cache.recordMetric(metric1);
-      cache.recordMetric(metric2);
-
-      // Should only create the observable gauge once
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle gauge callback reporting latest values', () => {
-      const cache = new MetricInstrumentCache(mockMeter);
-
-      cache.recordMetric({
-        timestamp: new Date(),
-        name: 'mastra_active_agents',
-        metricType: 'gauge',
-        value: 10,
-        labels: { env: 'prod' },
-      });
-
-      // Simulate OTEL collecting metrics by invoking the callback
-      const mockResult = { observe: vi.fn() };
-      for (const cb of mockGaugeCallbacks) {
-        cb(mockResult);
-      }
-
-      expect(mockResult.observe).toHaveBeenCalledWith(10, { env: 'prod' });
+      expect(mockMeter.createHistogram).toHaveBeenCalledTimes(2);
+      expect(mockMeter.createHistogram).toHaveBeenNthCalledWith(1, 'metric_a', expect.any(Object));
+      expect(mockMeter.createHistogram).toHaveBeenNthCalledWith(2, 'metric_b', expect.any(Object));
     });
   });
 });

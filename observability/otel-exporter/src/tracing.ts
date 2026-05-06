@@ -572,7 +572,7 @@ export class OtelExporter extends BaseExporter {
   // ===========================================================================
 
   async onMetricEvent(event: MetricEvent): Promise<void> {
-    this.debugLog(`onMetricEvent received (name: ${event.metric.name}, type: ${event.metric.metricType})`);
+    this.debugLog(`onMetricEvent received (name: ${event.metric.name}, value: ${event.metric.value})`);
 
     await this.ensureSetup();
 
@@ -589,9 +589,7 @@ export class OtelExporter extends BaseExporter {
     try {
       this.metricCache.recordMetric(event.metric);
 
-      this.debugLog(
-        `Recorded metric ${event.metric.name} (type: ${event.metric.metricType}, value: ${event.metric.value})`,
-      );
+      this.debugLog(`Recorded metric ${event.metric.name} (value: ${event.metric.value})`);
     } catch (error) {
       this.logger.error(`[OtelExporter] Failed to record metric ${event.metric.name}:`, error);
     }

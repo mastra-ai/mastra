@@ -1,98 +1,48 @@
 /**
- * Convert Mastra ExportedMetric to OpenTelemetry metric format
+ * Convert Mastra ExportedMetric to OpenTelemetry metric instruments.
  *
- * Mastra emits individual metric observations (ExportedMetric).
- * We use the OTEL Metrics SDK (MeterProvider + PeriodicExportingMetricReader)
- * to handle aggregation and export. The converter maps Mastra metric names
- * to OTEL instrument types and records values through the OTEL Meter API.
+ * NOTE: This file is a minimal port to the new flat ExportedMetric model
+ * (`{ name, value, labels, ... }` with no instrument-type discriminator).
+ * The OTEL Metrics SDK still requires us to pick an instrument type per
+ * metric name. Until Mastra carries explicit instrument hints, every
+ * observation is recorded into a Histogram, which preserves the full
+ * distribution and lets the backend choose its own aggregation.
+ *
+ * TODO(metrics rewrite): Once Mastra exposes a per-name instrument hint
+ * (counter / gauge / histogram) or per-name aggregation policy, route
+ * counters and gauges through their proper OTEL instruments instead of
+ * forcing everything into Histogram.
  */
 
-import type { ExportedMetric, MetricType } from '@mastra/core/observability';
-import type { Meter, Counter as OtelCounter, Histogram as OtelHistogram, Attributes } from '@opentelemetry/api';
+import type { ExportedMetric } from '@mastra/core/observability';
+import type { Meter, Histogram as OtelHistogram, Attributes } from '@opentelemetry/api';
 
 /**
  * Manages OTEL metric instruments, creating them lazily and caching
  * for reuse across metric events with the same name.
  */
 export class MetricInstrumentCache {
-  private counters = new Map<string, OtelCounter>();
   private histograms = new Map<string, OtelHistogram>();
-  // Gauges use ObservableGauge in OTEL, but since we get point-in-time values
-  // from Mastra, we use a UpDownCounter to simulate gauge behavior, or we
-  // record directly. For simplicity, we'll use a gauge approach with
-  // lastValue tracking via ObservableGauge.
-  private gaugeValues = new Map<string, { value: number; attributes: Attributes }>();
-  private registeredGauges = new Set<string>();
 
   constructor(private readonly meter: Meter) {}
 
   /**
-   * Record a metric value using the appropriate OTEL instrument
+   * Record a metric observation through a (cached) OTEL Histogram.
    */
   recordMetric(metric: ExportedMetric): void {
     const attributes = convertLabels(metric.labels);
-
-    switch (metric.metricType) {
-      case 'counter':
-        this.getOrCreateCounter(metric.name).add(metric.value, attributes);
-        break;
-      case 'histogram':
-        this.getOrCreateHistogram(metric.name).record(metric.value, attributes);
-        break;
-      case 'gauge':
-        this.recordGaugeValue(metric.name, metric.value, attributes);
-        break;
-    }
-  }
-
-  private getOrCreateCounter(name: string): OtelCounter {
-    let counter = this.counters.get(name);
-    if (!counter) {
-      counter = this.meter.createCounter(name, {
-        description: `Mastra counter: ${name}`,
-      });
-      this.counters.set(name, counter);
-    }
-    return counter;
+    this.getOrCreateHistogram(metric.name).record(metric.value, attributes);
   }
 
   private getOrCreateHistogram(name: string): OtelHistogram {
     let histogram = this.histograms.get(name);
     if (!histogram) {
       histogram = this.meter.createHistogram(name, {
-        description: `Mastra histogram: ${name}`,
+        description: `Mastra metric: ${name}`,
       });
       this.histograms.set(name, histogram);
     }
     return histogram;
-  }
-
-  /**
-   * Record a gauge value. OTEL gauges are observable (callback-based),
-   * so we store the latest value and register an observable gauge
-   * that reports it on collection.
-   */
-  private recordGaugeValue(name: string, value: number, attributes: Attributes): void {
-    // Store the key with attributes for unique identification
-    const key = buildGaugeKey(name, attributes);
-    this.gaugeValues.set(key, { value, attributes });
-
-    // Register the observable gauge once per metric name
-    if (!this.registeredGauges.has(name)) {
-      this.registeredGauges.add(name);
-      this.meter
-        .createObservableGauge(name, {
-          description: `Mastra gauge: ${name}`,
-        })
-        .addCallback(result => {
-          // Report all stored values for this gauge name
-          for (const [storedKey, entry] of this.gaugeValues) {
-            if (storedKey.startsWith(name + '|')) {
-              result.observe(entry.value, entry.attributes);
-            }
-          }
-        });
-    }
   }
 }
 
@@ -105,32 +55,4 @@ export function convertLabels(labels: Record<string, string>): Attributes {
     attributes[key] = value;
   }
   return attributes;
-}
-
-/**
- * Build a unique key for gauge values (name + sorted attributes)
- */
-function buildGaugeKey(name: string, attributes: Attributes): string {
-  const sortedAttrs = Object.entries(attributes)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join(',');
-  return `${name}|${sortedAttrs}`;
-}
-
-/**
- * Determine the OTEL metric instrument type for a Mastra MetricType.
- * Useful for documentation/logging purposes.
- */
-export function getOtelInstrumentType(metricType: MetricType): string {
-  switch (metricType) {
-    case 'counter':
-      return 'Counter';
-    case 'gauge':
-      return 'ObservableGauge';
-    case 'histogram':
-      return 'Histogram';
-    default:
-      return 'Unknown';
-  }
 }

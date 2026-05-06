@@ -668,7 +668,7 @@ describe('OtelExporter', () => {
       mockGaugeCallbacks.length = 0;
     });
 
-    it('should export a counter metric via OTEL MeterProvider', async () => {
+    it('records a metric observation through an OTEL Histogram', async () => {
       exporter = new OtelExporter({
         provider: {
           custom: {
@@ -680,9 +680,9 @@ describe('OtelExporter', () => {
       const metricEvent: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: 'm1',
           timestamp: new Date(),
           name: 'mastra_agent_calls',
-          metricType: 'counter',
           value: 1,
           labels: { agent: 'weather-bot' },
         },
@@ -690,10 +690,10 @@ describe('OtelExporter', () => {
 
       await exporter.onMetricEvent(metricEvent);
 
-      expect(mockCounterAdd).toHaveBeenCalledWith(1, { agent: 'weather-bot' });
+      expect(mockHistogramRecord).toHaveBeenCalledWith(1, { agent: 'weather-bot' });
     });
 
-    it('should export a histogram metric via OTEL MeterProvider', async () => {
+    it('records a duration metric through an OTEL Histogram', async () => {
       exporter = new OtelExporter({
         provider: {
           custom: {
@@ -705,9 +705,9 @@ describe('OtelExporter', () => {
       const metricEvent: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: 'm2',
           timestamp: new Date(),
           name: 'mastra_agent_duration_ms',
-          metricType: 'histogram',
           value: 250.5,
           labels: { agent: 'weather-bot', model: 'gpt-4' },
         },
@@ -731,9 +731,9 @@ describe('OtelExporter', () => {
       const metricEvent: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: 'm3',
           timestamp: new Date(),
           name: 'mastra_agent_calls',
-          metricType: 'counter',
           value: 1,
           labels: {},
         },
@@ -741,7 +741,7 @@ describe('OtelExporter', () => {
 
       await exporter.onMetricEvent(metricEvent);
 
-      expect(mockCounterAdd).not.toHaveBeenCalled();
+      expect(mockHistogramRecord).not.toHaveBeenCalled();
     });
 
     it('should not export traces when signals.traces is false', async () => {
