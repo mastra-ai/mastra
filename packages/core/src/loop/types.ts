@@ -127,6 +127,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
   errorProcessors?: ErrorProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
