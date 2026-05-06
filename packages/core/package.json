@@ -221,6 +221,16 @@
         "default": "./dist/features/index.cjs"
       }
     },
+    "./flow-signals": {
+      "import": {
+        "types": "./dist/flow-signals/index.d.ts",
+        "default": "./dist/flow-signals/index.js"
+      },
+      "require": {
+        "types": "./dist/flow-signals/index.d.ts",
+        "default": "./dist/flow-signals/index.cjs"
+      }
+    },
     "./harness": {
       "import": {
         "types": "./dist/harness/index.d.ts",
