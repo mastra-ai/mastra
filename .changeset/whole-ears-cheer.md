@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/laminar': patch
 '@mastra/observability': patch
 ---
 
