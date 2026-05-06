@@ -289,6 +289,8 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
+    expect(guidance).toContain('**task_update**');
+    expect(guidance).toContain('**task_complete**');
     expect(guidance).toContain('**subagent**');
   });
 });
