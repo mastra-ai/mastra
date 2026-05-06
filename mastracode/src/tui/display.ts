@@ -47,8 +47,8 @@ export function showFormattedError(
   }
 
   // Add retry info if applicable
-  const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
-  const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
+  const retryable = 'retryable' in event && typeof event.retryable === 'boolean' ? event.retryable : parsed.retryable;
+  const retryDelay = 'retryDelay' in event && typeof event.retryDelay === 'number' ? event.retryDelay : parsed.retryDelay;
   if (retryable && retryDelay) {
     const seconds = Math.ceil(retryDelay / 1000);
     errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
@@ -74,7 +74,7 @@ function getErrorHint(errorType: string): string | null {
     case 'context_length':
       return 'Use /new to start a fresh conversation';
     case 'rate_limit':
-      return 'Wait a moment and try again';
+      return 'Try again in a moment';
     case 'network':
       return 'Check your internet connection';
     default:

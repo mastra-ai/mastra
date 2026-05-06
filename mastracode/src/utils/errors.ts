@@ -108,7 +108,7 @@ export function parseError(error: unknown): ParsedError {
   ) {
     const retryAfter = extractRetryAfter(errorObj);
     return {
-      message: 'Rate limited. Please wait a moment before trying again.',
+      message: 'Rate limited.',
       type: 'rate_limit',
       retryable: true,
       retryDelay: retryAfter || 5000,

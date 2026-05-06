@@ -46,4 +46,36 @@ describe('parseError', () => {
     expect(parsed.message).toBe('Access denied. You may not have permission to use this model.');
     expect(parsed.requestUrl).toBe('https://gateway-api.mastra.ai/v1/responses');
   });
+
+  it('classifies rate limits without retry-after', () => {
+    const error = new Error('rate limit exceeded');
+
+    const parsed = parseError(error);
+
+    expect(parsed.type).toBe('rate_limit');
+    expect(parsed.message).toBe('Rate limited.');
+    expect(parsed.retryDelay).toBe(5000);
+  });
+
+  it('extracts retry-after header for short waits', () => {
+    const error = Object.assign(new Error('rate limit exceeded'), {
+      status: 429,
+      headers: { 'retry-after': '30' },
+    });
+
+    const parsed = parseError(error);
+
+    expect(parsed.retryDelay).toBe(30000);
+  });
+
+  it('extracts retry-after header for long waits', () => {
+    const error = Object.assign(new Error('rate limit exceeded'), {
+      status: 429,
+      headers: { 'retry-after': '90' },
+    });
+
+    const parsed = parseError(error);
+
+    expect(parsed.retryDelay).toBe(90000);
+  });
 });
