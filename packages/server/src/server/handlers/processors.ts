@@ -18,7 +18,7 @@ import { handleError } from './error';
 // Route Definitions
 // ============================================================================
 
-type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
 
 /**
  * Helper to extract text from messages for outputStep testing.
@@ -49,7 +49,7 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
   if (isProcessorWorkflow(processor)) {
     // Workflow processors can potentially handle all phases
     // The createStep in workflows handles each phase and it's a no-op if not implemented
-    return ['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep'];
+    return ['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult'];
   }
 
   // For individual processors, detect by checking which methods exist
@@ -68,6 +68,9 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
   }
   if (typeof processor.processOutputStep === 'function') {
     phases.push('outputStep');
+  }
+  if (typeof processor.processToolResult === 'function') {
+    phases.push('toolResult');
   }
   return phases;
 }
@@ -237,7 +240,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         try {
           // Build inputData based on phase - each phase has different required fields
           const baseInputData = {
-            phase: phase as 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep',
+            phase: phase as 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult',
             messages: messageList.get.all.db(),
             messageList,
             retryCount: 0,
@@ -296,6 +299,19 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
                 part: null,
                 streamParts: [],
                 state: {},
+              };
+              break;
+            case 'toolResult':
+              inputData = {
+                ...inputData,
+                stepNumber: 0,
+                toolName: '',
+                toolCallId: '',
+                args: undefined,
+                toolResultValue: undefined,
+                providerExecuted: false,
+                systemMessages: [],
+                steps: [],
               };
               break;
           }
