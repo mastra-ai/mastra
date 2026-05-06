@@ -286,6 +286,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         );
       }
       state.pendingTools.clear();
+      state.pendingTaskToolIds?.clear();
     }
 
     state.streamingComponent = undefined;

@@ -37,6 +37,8 @@ const durableToolCallInputSchema = z.object({
  */
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
+  denied: z.boolean().optional(),
+  deniedReason: z.string().optional(),
   error: z
     .object({
       name: z.string(),
@@ -250,7 +252,6 @@ export function createDurableToolCallStep() {
             toolCallId,
             toolName,
             args,
-            resumeSchema,
           },
           {
             resumeLabel: toolCallId,
@@ -261,9 +262,24 @@ export function createDurableToolCallStep() {
       // Check if resuming from approval
       if (resumeData && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData) {
         if (!(resumeData as { approved: boolean }).approved) {
+          const deniedReason = 'Tool call was not approved by the user';
+          if (pubsub) {
+            try {
+              await emitChunkEvent(pubsub, runId, {
+                type: 'tool-result',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, result: deniedReason, denied: true, deniedReason },
+              });
+            } catch (emitError) {
+              logger?.warn?.(`[DurableAgent] Failed to emit denied tool-result chunk for ${toolName}: ${emitError}`);
+            }
+          }
           return {
             ...typedInput,
-            result: 'Tool call was not approved by the user',
+            result: deniedReason,
+            denied: true,
+            deniedReason,
           };
         }
       }
@@ -558,10 +574,6 @@ export function createDurableToolCallStep() {
               return suspend(
                 {
                   type: 'approval',
-                  toolCallId,
-                  toolName,
-                  args,
-                  resumeSchema: approvalResumeSchema,
                   requireToolApproval: { toolCallId, toolName, args },
                 },
                 { resumeLabel: toolCallId },
@@ -599,11 +611,8 @@ export function createDurableToolCallStep() {
               return suspend(
                 {
                   type: 'suspension',
-                  toolCallId,
                   toolCallSuspended: suspendPayload,
                   toolName,
-                  args,
-                  resumeSchema: suspendOptions?.resumeSchema,
                   resumeLabel: suspendOptions?.resumeLabel,
                 },
                 { resumeLabel: toolCallId },

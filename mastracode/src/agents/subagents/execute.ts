@@ -7,7 +7,7 @@
  */
 import type { HarnessSubagent } from '@mastra/core/harness';
 
-import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
+import { taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from '@mastra/core/harness';
 
 export const executeSubagent: HarnessSubagent = {
   id: 'execute',
@@ -30,7 +30,7 @@ export const executeSubagent: HarnessSubagent = {
 
 ## Workflow
 . Understand the task and explore relevant code
-. For complex tasks (3+ steps): use task_write to track progress
+. For complex tasks (3+ steps): use task_write to create tasks, then task_update or task_complete for individual task changes
 . Make changes incrementally — verify each change before moving on
 . Run tests or type-check to verify
 . If you created tasks: ALWAYS call task_check before finishing
@@ -49,6 +49,8 @@ End with a structured summary:
 . **Notes**: Follow-up needed (if any)`,
   tools: {
     task_write: taskWriteTool,
+    task_update: taskUpdateTool,
+    task_complete: taskCompleteTool,
     task_check: taskCheckTool,
   },
 };

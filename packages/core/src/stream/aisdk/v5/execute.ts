@@ -7,8 +7,6 @@ import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
-import type { PromptToolWaterfallRecorder } from '../../../observability/prompt-tool-waterfall';
-import { summarizePromptAndTools } from '../../../observability/prompt-tool-waterfall';
 import { getResponseFormat } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
@@ -46,8 +44,6 @@ type ExecutionProps<OUTPUT = undefined> = {
   shouldThrowError?: boolean;
   methodType: ModelMethodType;
   generateId?: IdGenerator;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
-  promptToolWaterfallStepIndex?: number;
 };
 
 export function execute<OUTPUT = undefined>({
@@ -67,8 +63,6 @@ export function execute<OUTPUT = undefined>({
   shouldThrowError,
   methodType,
   generateId,
-  promptToolWaterfallRecorder,
-  promptToolWaterfallStepIndex = 0,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -118,28 +112,6 @@ export function execute<OUTPUT = undefined>({
       schema: responseFormat.schema,
       schemaPrefix: `Your response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n`,
       schemaSuffix: `\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above.`,
-    });
-  }
-
-  if (structuredOutput?.schema) {
-    promptToolWaterfallRecorder?.recordPhase({
-      kind: 'structured_output',
-      stepIndex: promptToolWaterfallStepIndex,
-      ...summarizePromptAndTools({
-        prompt,
-        tools,
-        toolChoice,
-        activeTools,
-      }),
-      structuredOutput: {
-        mode:
-          structuredOutputMode === 'processor'
-            ? 'processor'
-            : structuredOutput?.jsonPromptInjection
-              ? 'direct'
-              : 'native',
-        mutated: prompt !== inputMessages,
-      },
     });
   }
 

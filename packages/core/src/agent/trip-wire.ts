@@ -3,7 +3,6 @@ import { ReadableStream } from 'node:stream/web';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ObservabilityContext } from '../observability';
 import { resolveObservabilityContext } from '../observability';
-import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import { ChunkFrom, MastraModelOutput } from '../stream';
 import type { ChunkType } from '../stream/types';
 import type { InnerAgentExecutionOptions } from './agent.types';
@@ -61,7 +60,6 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
   options,
   model,
   messageList,
-  promptToolWaterfallRecorder,
   ...rest
 }: {
   tripwire: TripwireData<TMetadata>;
@@ -69,7 +67,6 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
   options: InnerAgentExecutionOptions<OUTPUT>;
   model: MastraLanguageModel;
   messageList: MessageList;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
 } & ObservabilityContext) => {
   const observabilityContext = resolveObservabilityContext(rest);
   const tripwireStream = new ReadableStream<ChunkType<OUTPUT>>({
@@ -104,7 +101,6 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
       onFinish: options.onFinish as any, // Fix these types after the types PR is merged
       onStepFinish: options.onStepFinish as any,
       returnScorerData: options.returnScorerData,
-      promptToolWaterfallRecorder,
       requestContext: options.requestContext,
     },
     messageId: randomUUID(),

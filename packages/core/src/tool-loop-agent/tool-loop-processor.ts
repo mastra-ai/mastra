@@ -6,10 +6,9 @@ import type {
   ToolLoopAgentSettings,
 } from '@internal/ai-v6';
 import { isSupportedLanguageModel } from '../agent';
-import type { AgentExecutionOptions, AgentInstructions, MastraDBMessage } from '../agent';
+import type { AgentExecutionOptions, AgentInstructions } from '../agent';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
-import { validateProcessorResultExclusivity } from '../processors';
 import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
 import { getSettings as getToolLoopAgentSettings } from './utils';
 import type { ToolLoopAgentLike } from './utils';
@@ -221,32 +220,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
       stepResult.messages = result.messages as any;
     }
 
-    const modelContextResult = result as { modelContextMessages?: unknown };
-    if (
-      modelContextResult.modelContextMessages !== undefined &&
-      !Array.isArray(modelContextResult.modelContextMessages)
-    ) {
-      throw new Error('prepareCall/prepareStep modelContextMessages must be an array when provided.');
-    }
-    if (modelContextResult.modelContextMessages !== undefined) {
-      stepResult.modelContextMessages = modelContextResult.modelContextMessages as MastraDBMessage[];
-    }
-
     return stepResult;
-  }
-
-  private mergeProcessInputStepResult(
-    current: ProcessInputStepResult,
-    next: ProcessInputStepResult,
-  ): ProcessInputStepResult {
-    const merged = { ...current, ...next };
-
-    validateProcessorResultExclusivity({
-      result: merged,
-      processorId: this.id,
-    });
-
-    return merged as ProcessInputStepResult;
   }
 
   private async handlePrepareCall(args: ProcessInputStepArgs) {
@@ -290,7 +264,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
 
   private async handlePrepareStep(args: ProcessInputStepArgs, currentResult: ProcessInputStepResult) {
     if (this.settings.prepareStep) {
-      const { steps, stepNumber } = args;
+      const { messages, steps, stepNumber } = args;
 
       let model = args.model;
       if (currentResult.model) {
@@ -300,8 +274,6 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
         }
         model = resolvedModel;
       }
-
-      const preparedMessages = currentResult.modelContextMessages ?? currentResult.messages ?? args.messages;
 
       // Use the model from currentResult if prepareCall overrode it, otherwise use args.model
 
@@ -333,7 +305,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
       } = {
         model,
         // Messages are in Mastra format (MastraDBMessage[])
-        messages: preparedMessages as unknown as Array<ModelMessage>,
+        messages: messages as any,
         // Steps may have minor type differences in usage properties (inputTokenDetails/outputTokenDetails)
         steps: steps as any,
         stepNumber,
@@ -358,7 +330,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     if (this.prepareCallResult) {
       const mappedResult = this.mapToProcessInputStepResult(this.prepareCallResult);
       if (Object.keys(mappedResult).length > 0) {
-        result = this.mergeProcessInputStepResult(result, mappedResult);
+        result = { ...result, ...mappedResult };
       }
     }
 
@@ -369,7 +341,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
       if (prepareStepResult) {
         const mappedResult = this.mapToProcessInputStepResult(prepareStepResult as any);
         // prepareStep overrides prepareCall for this step
-        result = this.mergeProcessInputStepResult(result, mappedResult);
+        result = { ...result, ...mappedResult };
       }
     }
 

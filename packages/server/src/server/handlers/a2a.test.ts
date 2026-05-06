@@ -7,6 +7,8 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DefaultPushNotificationSender, DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER } from '../a2a/push-notification-sender';
+import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { InMemoryTaskStore } from '../a2a/store';
 import {
   AGENT_EXECUTION_ROUTE,
@@ -208,6 +210,7 @@ describe('A2A Handler', () => {
       } as any);
 
       expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(response.capabilities.pushNotifications).toBe(true);
     });
   });
 
@@ -960,6 +963,197 @@ describe('A2A Handler', () => {
         },
       });
     });
+
+    it('should persist push notification config from message/send and deliver on completion', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
+        fetch: fetchMock,
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+      });
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'https://example.com/webhook',
+            token: 'notification-token',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        pushNotificationSender,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+
+      const storedConfig = pushNotificationStore.get({
+        agentId,
+        params: { id: taskId },
+      });
+      expect(storedConfig).toEqual({
+        taskId,
+        pushNotificationConfig: {
+          id: taskId,
+          token: 'notification-token',
+          url: 'https://example.com/webhook',
+        },
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://93.184.216.34/webhook',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.any(Headers),
+          body: expect.any(String),
+        }),
+      );
+
+      const [, requestInit] = fetchMock.mock.calls[0]!;
+      expect((requestInit!.headers as Headers).get('host')).toBe('example.com');
+      expect((requestInit!.headers as Headers).get(DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER)).toBe('notification-token');
+      expect(JSON.parse(requestInit!.body as string)).toMatchObject({
+        id: taskId,
+        status: {
+          state: 'completed',
+        },
+      });
+    });
+
+    it('should not fail the request when push notification delivery fails', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const fetchMock = vi.fn().mockRejectedValue(new Error('Webhook unavailable'));
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
+        fetch: fetchMock,
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+      });
+      const logger = {
+        error: vi.fn(),
+      } as any;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'https://example.com/webhook',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        pushNotificationSender,
+        agent: mockAgent,
+        agentId,
+        logger,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
+      });
+    });
+
+    it('uses a provided push notification store even when no sender is passed', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const logger = {
+        error: vi.fn(),
+      } as any;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'http://localhost:9999/webhook',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        agent: mockAgent,
+        agentId,
+        logger,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+      expect(
+        pushNotificationStore.get({
+          agentId,
+          params: { id: taskId },
+        }),
+      ).toEqual({
+        taskId,
+        pushNotificationConfig: {
+          id: taskId,
+          url: 'http://localhost:9999/webhook',
+        },
+      });
+
+      await vi.waitFor(() => {
+        expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
+      });
+    });
   });
 
   describe('handleMessageStream', () => {
@@ -1541,37 +1735,129 @@ describe('A2A Handler', () => {
       mockTaskStore = new InMemoryTaskStore();
     });
 
-    it('returns push notification not supported for new push config methods', async () => {
-      const methods = [
-        {
-          method: 'tasks/pushNotificationConfig/set',
-          params: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com' } },
-        },
-        { method: 'tasks/pushNotificationConfig/get', params: { id: 'task-1' } },
-        { method: 'tasks/pushNotificationConfig/list', params: { id: 'task-1' } },
-        { method: 'tasks/pushNotificationConfig/delete', params: { id: 'task-1', pushNotificationConfigId: 'push-1' } },
-      ] as const;
+    it('stores, retrieves, lists, and deletes push notification configs', async () => {
+      const pushNotificationStore = new InMemoryPushNotificationStore();
 
-      for (const entry of methods) {
-        const result = await getAgentExecutionHandler({
-          requestId: 'test-request-id',
-          mastra: mockMastra,
-          agentId: 'test-agent',
-          requestContext: new RequestContext(),
-          method: entry.method as any,
-          params: entry.params as any,
-          taskStore: mockTaskStore,
-        });
-
-        expect(result).toMatchObject({
-          error: {
-            code: -32003,
-            message: 'Push Notification is not supported',
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          status: {
+            state: 'working',
+            message: undefined,
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-          id: 'test-request-id',
-          jsonrpc: '2.0',
-        });
-      }
+          artifacts: [],
+          metadata: undefined,
+          kind: 'task',
+        },
+      });
+
+      const setResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/set' as any,
+        params: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com' } } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+
+      expect(setResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          taskId: 'task-1',
+          pushNotificationConfig: {
+            id: 'task-1',
+            url: 'https://example.com',
+          },
+        },
+      });
+
+      const getResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/get' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(getResult).toEqual(setResult);
+
+      const listResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(listResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: [setResult.result],
+      });
+
+      const deleteResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/delete' as any,
+        params: { id: 'task-1', pushNotificationConfigId: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(deleteResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: null,
+      });
+
+      const listAfterDeleteResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(listAfterDeleteResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: [],
+      });
+    });
+
+    it('returns task not found when configuring push notifications for an unknown task', async () => {
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/set' as any,
+        params: { taskId: 'missing-task', pushNotificationConfig: { url: 'https://example.com' } } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore: new InMemoryPushNotificationStore(),
+      });
+
+      expect(result).toMatchObject({
+        error: {
+          code: -32001,
+          message: 'Task not found: missing-task',
+        },
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+      });
     });
 
     it('returns authenticated extended card not configured for agent/getAuthenticatedExtendedCard', async () => {
@@ -1595,7 +1881,7 @@ describe('A2A Handler', () => {
       });
     });
 
-    it('resubscribes to an existing terminal task as a final status update event', async () => {
+    it('resubscribes to an existing terminal task by returning the current task snapshot and closing', async () => {
       const task: Task = {
         id: 'task-1',
         contextId: 'context-1',
@@ -1630,6 +1916,108 @@ describe('A2A Handler', () => {
       expect(first.value).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
+        result: task,
+      });
+
+      const done = await result.next();
+      expect(done.done).toBe(true);
+    });
+
+    it('returns the current task snapshot first, then streams live artifact and status updates', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [
+          {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+        ],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: task,
+      });
+
+      const secondPromise = result.next();
+      await expect(Promise.race([secondPromise.then(() => 'resolved'), Promise.resolve('pending')])).resolves.toBe(
+        'pending',
+      );
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          ...task,
+          artifacts: [
+            ...task.artifacts!,
+            {
+              artifactId: 'response:data',
+              name: 'response.json',
+              parts: [{ kind: 'data', data: { total: 33.98 } }],
+            },
+          ],
+          status: {
+            state: 'completed',
+            message: {
+              messageId: 'message-2',
+              kind: 'message',
+              role: 'agent',
+              parts: [{ kind: 'text', text: 'Done!' }],
+            },
+            timestamp: '2025-05-08T11:48:38.458Z',
+          },
+        },
+      });
+
+      const second = await secondPromise;
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: 'response:data',
+            name: 'response.json',
+            parts: [{ kind: 'data', data: { total: 33.98 } }],
+          },
+          contextId: 'context-1',
+          kind: 'artifact-update',
+          lastChunk: true,
+          taskId: 'task-1',
+        },
+      });
+
+      const third = await result.next();
+      expect(third.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
         result: {
           contextId: 'context-1',
           final: true,
@@ -1637,12 +2025,12 @@ describe('A2A Handler', () => {
           status: {
             message: {
               kind: 'message',
-              messageId: 'message-1',
+              messageId: 'message-2',
               parts: [{ kind: 'text', text: 'Done!' }],
               role: 'agent',
             },
             state: 'completed',
-            timestamp: '2025-05-08T11:47:38.458Z',
+            timestamp: '2025-05-08T11:48:38.458Z',
           },
           taskId: 'task-1',
         },
@@ -1652,7 +2040,7 @@ describe('A2A Handler', () => {
       expect(done.done).toBe(true);
     });
 
-    it('keeps the stream open for non-terminal tasks until a later update is saved', async () => {
+    it('streams artifact updates even when task status does not change', async () => {
       const task: Task = {
         id: 'task-1',
         contextId: 'context-1',
@@ -1687,6 +2075,102 @@ describe('A2A Handler', () => {
       expect(first.value).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
+        result: task,
+      });
+
+      const secondPromise = result.next();
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          ...task,
+          artifacts: [
+            {
+              artifactId: 'response:text',
+              name: 'response.txt',
+              parts: [{ kind: 'text', text: 'Partial result' }],
+            },
+          ],
+        },
+      });
+
+      const second = await secondPromise;
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Partial result' }],
+          },
+          contextId: 'context-1',
+          kind: 'artifact-update',
+          lastChunk: false,
+          taskId: 'task-1',
+        },
+      });
+    });
+
+    it('streams status updates when only status message metadata changes', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+            metadata: { phase: 'initial' },
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: task,
+      });
+
+      const secondPromise = result.next();
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          ...task,
+          status: {
+            ...task.status,
+            message: {
+              ...task.status.message!,
+              metadata: { phase: 'updated' },
+            },
+          },
+        },
+      });
+
+      const second = await secondPromise;
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
         result: {
           contextId: 'context-1',
           final: false,
@@ -1695,6 +2179,7 @@ describe('A2A Handler', () => {
             message: {
               kind: 'message',
               messageId: 'message-1',
+              metadata: { phase: 'updated' },
               parts: [{ kind: 'text', text: 'Still working...' }],
               role: 'agent',
             },
@@ -1704,16 +2189,64 @@ describe('A2A Handler', () => {
           taskId: 'task-1',
         },
       });
+    });
+
+    it('streams each changed artifact in order before the final status update', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: task,
+      });
 
       const secondPromise = result.next();
-      await expect(Promise.race([secondPromise.then(() => 'resolved'), Promise.resolve('pending')])).resolves.toBe(
-        'pending',
-      );
 
       await mockTaskStore.save({
         agentId: 'test-agent',
         data: {
           ...task,
+          artifacts: [
+            {
+              artifactId: 'response:text',
+              name: 'response.txt',
+              parts: [{ kind: 'text', text: 'Partial result' }],
+            },
+            {
+              artifactId: 'response:data',
+              name: 'response.json',
+              parts: [{ kind: 'data', data: { total: 33.98 } }],
+            },
+          ],
           status: {
             state: 'completed',
             message: {
@@ -1729,6 +2262,40 @@ describe('A2A Handler', () => {
 
       const second = await secondPromise;
       expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Partial result' }],
+          },
+          contextId: 'context-1',
+          kind: 'artifact-update',
+          lastChunk: false,
+          taskId: 'task-1',
+        },
+      });
+
+      const third = await result.next();
+      expect(third.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifact: {
+            artifactId: 'response:data',
+            name: 'response.json',
+            parts: [{ kind: 'data', data: { total: 33.98 } }],
+          },
+          contextId: 'context-1',
+          kind: 'artifact-update',
+          lastChunk: true,
+          taskId: 'task-1',
+        },
+      });
+
+      const fourth = await result.next();
+      expect(fourth.value).toEqual({
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
@@ -1788,11 +2355,7 @@ describe('A2A Handler', () => {
 
       const first = await result.next();
       expect(first.value).toMatchObject({
-        result: {
-          final: false,
-          kind: 'status-update',
-          taskId: 'task-1',
-        },
+        result: task,
       });
 
       const pendingNext = result.next();

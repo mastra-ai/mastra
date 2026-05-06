@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RequestContext } from '../request-context';
-import { getInternalToolExecutionHints, setInternalToolExecutionHints } from '../tools/internal-execution-hints';
 
 // We need to mock Agent before importing tools.ts.
 const { mockStream, MockAgent, mockCreateWorkspaceTools } = vi.hoisted(() => {
@@ -510,7 +509,12 @@ describe('createSubagentTool allowedWorkspaceTools filtering', () => {
         name: 'Execute',
         description: 'Executor.',
         instructions: 'Execute stuff.',
-        tools: { task_write: { id: 'task_write' } as any, task_check: { id: 'task_check' } as any },
+        tools: {
+          task_write: { id: 'task_write' } as any,
+          task_update: { id: 'task_update' } as any,
+          task_complete: { id: 'task_complete' } as any,
+          task_check: { id: 'task_check' } as any,
+        },
         allowedWorkspaceTools: ['view', 'write_file', 'execute_command'],
       },
     ];
@@ -534,15 +538,25 @@ describe('createSubagentTool allowedWorkspaceTools filtering', () => {
       write_file: {},
       execute_command: {},
       task_write: {},
+      task_update: {},
+      task_complete: {},
       task_check: {},
     };
     const result = streamOpts.prepareStep({ tools: allTools });
 
     // All tools should be visible
     expect(result.activeTools).toEqual(
-      expect.arrayContaining(['view', 'write_file', 'execute_command', 'task_write', 'task_check']),
+      expect.arrayContaining([
+        'view',
+        'write_file',
+        'execute_command',
+        'task_write',
+        'task_update',
+        'task_complete',
+        'task_check',
+      ]),
     );
-    expect(result.activeTools).toHaveLength(5);
+    expect(result.activeTools).toHaveLength(7);
   });
 });
 
@@ -669,38 +683,6 @@ describe('createSubagentTool forked subagent behavior', () => {
     // Flush must happen strictly before clone — otherwise the clone reads stale storage.
     expect(flushOrder).toEqual(['flush', 'clone']);
     expect(parentStream).toHaveBeenCalledTimes(1);
-  });
-
-  it('forks: preserves global approval mode for inherited parent tools', async () => {
-    const { parentAgent, parentStream } = makeParentAgent('approval-preserving fork');
-    const cloneThreadForFork = vi
-      .fn()
-      .mockResolvedValue({ id: 'forked-thread-approval', resourceId: 'parent-resource-1' });
-
-    const tool = createSubagentTool({
-      subagents,
-      resolveModel,
-      fallbackModelId: 'test-model',
-      getParentAgent: () => parentAgent,
-      cloneThreadForFork,
-    });
-
-    const requestContext = new RequestContext();
-    requestContext.set('__mastra_requireToolApproval', true);
-    requestContext.set('harness', {
-      emitEvent: vi.fn(),
-      threadId: 'parent-thread-approval',
-      resourceId: 'parent-resource-1',
-    } satisfies Partial<HarnessRequestContext>);
-
-    const result = await (tool as any).execute(
-      { agentType: 'explore', task: 'Use inherited tools carefully', forked: true },
-      { requestContext, agent: { toolCallId: 'tc-approval-fork' } },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(parentStream).toHaveBeenCalledTimes(1);
-    expect(parentStream.mock.calls[0]![1].requireToolApproval).toBe(true);
   });
 
   it('forks: flushMessages failures are swallowed and the clone still runs', async () => {
@@ -932,22 +914,28 @@ describe('createSubagentTool forked subagent behavior', () => {
     const askUser = { id: 'ask_user', description: 'Ask user', execute: vi.fn() } as any;
     const submitPlan = { id: 'submit_plan', description: 'Submit plan', execute: vi.fn() } as any;
     const originalSubagentExecute = vi.fn();
+    const originalTaskWriteExecute = vi.fn();
+    const originalTaskCheckExecute = vi.fn();
     const inputSchemaSentinel = { type: 'object', properties: { agentType: { type: 'string' } } };
-    const internalExecutionHints = { bypassGlobalToolApproval: true, safeForConcurrentExecution: true };
-    const subagentTool = setInternalToolExecutionHints(
-      {
-        id: 'subagent',
-        description: 'Dispatch a subagent',
-        inputSchema: inputSchemaSentinel,
-        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
-        execute: originalSubagentExecute,
-      } as any,
-      internalExecutionHints,
-    );
+    const subagentTool = {
+      id: 'subagent',
+      description: 'Dispatch a subagent',
+      inputSchema: inputSchemaSentinel,
+      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      execute: originalSubagentExecute,
+    } as any;
+    const taskWriteTool = { id: 'task_write', description: 'Write tasks', execute: originalTaskWriteExecute } as any;
+    const taskCheckTool = { id: 'task_check', description: 'Check tasks', execute: originalTaskCheckExecute } as any;
     const userTool = { id: 'view', description: 'View', execute: vi.fn() } as any;
 
     const getParentToolsets = vi.fn().mockResolvedValue({
-      harnessBuiltIn: { ask_user: askUser, submit_plan: submitPlan, subagent: subagentTool },
+      harnessBuiltIn: {
+        ask_user: askUser,
+        submit_plan: submitPlan,
+        subagent: subagentTool,
+        task_write: taskWriteTool,
+        task_check: taskCheckTool,
+      },
       harness: { view: userTool },
     });
 
@@ -998,11 +986,44 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(stubResult.isError).toBe(true);
     expect(stubResult.content).toMatch(/maximum allowed subagent nesting level/i);
     expect(originalSubagentExecute).not.toHaveBeenCalled();
-    expect(getInternalToolExecutionHints(patchedSubagent)).toBe(internalExecutionHints);
+
+    const patchedTaskWrite = streamOpts.toolsets.harnessBuiltIn.task_write;
+    expect(patchedTaskWrite.id).toBe(taskWriteTool.id);
+    expect(patchedTaskWrite.description).toBe(taskWriteTool.description);
+    expect(patchedTaskWrite.execute).not.toBe(originalTaskWriteExecute);
+    await expect(patchedTaskWrite.execute({}, {})).resolves.toMatchObject({
+      content: expect.stringContaining('parent agent owns the visible task list'),
+      tasks: [],
+      isError: true,
+    });
+    expect(originalTaskWriteExecute).not.toHaveBeenCalled();
+
+    const patchedTaskCheck = streamOpts.toolsets.harnessBuiltIn.task_check;
+    expect(patchedTaskCheck.id).toBe(taskCheckTool.id);
+    expect(patchedTaskCheck.description).toBe(taskCheckTool.description);
+    expect(patchedTaskCheck.execute).not.toBe(originalTaskCheckExecute);
+    await expect(patchedTaskCheck.execute({}, {})).resolves.toMatchObject({
+      content: expect.stringContaining('parent agent owns the visible task list'),
+      tasks: [],
+      summary: {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        incomplete: 0,
+        hasTasks: false,
+        allCompleted: false,
+      },
+      incompleteTasks: [],
+      isError: true,
+    });
+    expect(originalTaskCheckExecute).not.toHaveBeenCalled();
 
     // The patched copy must not mutate the parent's toolset object — the same
     // toolset is reused across requests, so any mutation would persist.
     expect(subagentTool.execute).toBe(originalSubagentExecute);
+    expect(taskWriteTool.execute).toBe(originalTaskWriteExecute);
+    expect(taskCheckTool.execute).toBe(originalTaskCheckExecute);
   });
 
   it('forks: omitting getParentToolsets keeps `toolsets` unset on the stream call (back-compat)', async () => {

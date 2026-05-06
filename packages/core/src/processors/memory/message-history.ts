@@ -4,8 +4,7 @@ import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
-import { MASTRA_MEMORY_HISTORY_OVERRIDE_KEY } from '../../request-context';
-import type { MastraMemoryHistoryOverride, RequestContext } from '../../request-context';
+import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
 /**
@@ -14,98 +13,6 @@ import type { MemoryStorage } from '../../storage';
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
   lastMessages?: number;
-  saveMessages?: (args: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }>;
-  deleteMessages?: (messageIds: string[], observabilityContext?: Partial<ObservabilityContext>) => Promise<void>;
-  skipEmptyAssistantMessages?: boolean;
-}
-
-type RegenerateState = {
-  type: 'regenerate';
-  branchMessageIds: string[];
-};
-
-type MemoryHistoryOverride = MastraMemoryHistoryOverride;
-
-const INCOMPLETE_RESPONSE_STATUSES = new Set(['partial', 'aborted', 'cancelled', 'canceled']);
-
-export class RegenerateTargetError extends Error {
-  constructor(
-    public readonly kind: 'missing' | 'non-assistant',
-    public readonly targetMessageId: string,
-  ) {
-    super(`Cannot regenerate ${kind} message "${targetMessageId}"`);
-    this.name = 'RegenerateTargetError';
-  }
-}
-
-function isEmptyAssistantMessage(message: MastraDBMessage): boolean {
-  if (message.role !== 'assistant') {
-    return false;
-  }
-
-  if (typeof (message.content as unknown) === 'string') {
-    return (message.content as unknown as string).trim().length === 0;
-  }
-
-  const content = message.content;
-  if (typeof content?.content === 'string' && content.content.trim().length > 0) {
-    return false;
-  }
-
-  if (!Array.isArray(content?.parts) || content.parts.length === 0) {
-    return true;
-  }
-
-  return !content.parts.some(part => isMeaningfulAssistantPart(part));
-}
-
-function isMeaningfulAssistantPart(part: unknown): boolean {
-  if (!part || typeof part !== 'object') {
-    return false;
-  }
-
-  const record = part as Record<string, unknown>;
-  const type = record.type;
-
-  if (type === 'text') {
-    return typeof record.text === 'string' && record.text.trim().length > 0;
-  }
-
-  if (type === 'reasoning') {
-    return (
-      hasNonEmptyString(record.text) ||
-      hasNonEmptyString(record.reasoning) ||
-      hasMeaningfulReasoningDetails(record.details)
-    );
-  }
-
-  if (type === 'thinking') {
-    return typeof record.thinking === 'string' && record.thinking.trim().length > 0;
-  }
-
-  if (type === 'step-start' || type === 'step-end') {
-    return false;
-  }
-
-  return true;
-}
-
-function hasNonEmptyString(value: unknown): boolean {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function hasMeaningfulReasoningDetails(details: unknown): boolean {
-  return (
-    Array.isArray(details) &&
-    details.some(detail => {
-      if (!detail || typeof detail !== 'object') {
-        return false;
-      }
-
-      const record = detail as Record<string, unknown>;
-      return hasNonEmptyString(record.text) || hasNonEmptyString(record.data);
-    })
-  );
 }
 
 /**
@@ -121,16 +28,10 @@ export class MessageHistory implements Processor {
   readonly name = 'MessageHistory';
   private storage: MemoryStorage;
   private lastMessages?: number;
-  private saveMessages?: MessageHistoryOptions['saveMessages'];
-  private deleteMessages?: MessageHistoryOptions['deleteMessages'];
-  private skipEmptyAssistantMessages: boolean;
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
-    this.saveMessages = options.saveMessages;
-    this.deleteMessages = options.deleteMessages;
-    this.skipEmptyAssistantMessages = options.skipEmptyAssistantMessages ?? false;
   }
 
   /**
@@ -179,111 +80,12 @@ export class MessageHistory implements Processor {
     });
   }
 
-  private getMemoryHistoryOverride(requestContext?: RequestContext): MastraMemoryHistoryOverride | null {
-    const override = requestContext?.get(MASTRA_MEMORY_HISTORY_OVERRIDE_KEY);
-    if (!override || typeof override !== 'object') return null;
-
-    const maybeOverride = override as Partial<MastraMemoryHistoryOverride>;
-    if (maybeOverride.type === 'server-history') {
-      return maybeOverride as Extract<MemoryHistoryOverride, { type: 'server-history' }>;
-    }
-
-    if (maybeOverride.type === 'regenerate' && typeof maybeOverride.targetMessageId === 'string') {
-      return maybeOverride as Extract<MemoryHistoryOverride, { type: 'regenerate' }>;
-    }
-
-    throw new Error('Invalid memory history override');
-  }
-
-  private isIncompleteAssistantMessage(message: MastraDBMessage): boolean {
-    if (message.role !== 'assistant') return false;
-
-    const metadata =
-      message.content && typeof message.content === 'object' && !Array.isArray(message.content)
-        ? ((message.content as { metadata?: Record<string, unknown> }).metadata ?? {})
-        : {};
-    const mastra = metadata.mastra;
-    if (!mastra || typeof mastra !== 'object') return false;
-
-    const responseStatus = (mastra as { responseStatus?: unknown }).responseStatus;
-    return typeof responseStatus === 'string' && INCOMPLETE_RESPONSE_STATUSES.has(responseStatus);
-  }
-
-  private async cleanupIncompleteAssistantMessages(
-    messages: MastraDBMessage[],
-    observabilityContext?: Partial<ObservabilityContext>,
-  ): Promise<MastraDBMessage[]> {
-    const incompleteMessageIds = messages
-      .filter(message => this.isIncompleteAssistantMessage(message))
-      .map(message => message.id)
-      .filter((id): id is string => Boolean(id));
-
-    if (incompleteMessageIds.length > 0) {
-      if (this.deleteMessages) {
-        await this.deleteMessages(incompleteMessageIds, observabilityContext);
-      } else {
-        await this.storage.deleteMessages(incompleteMessageIds);
-      }
-    }
-
-    return messages.filter(message => !this.isIncompleteAssistantMessage(message));
-  }
-
-  private async processRegenerateInput(args: {
-    messageList: MessageList;
-    requestContext?: RequestContext;
-    state?: Record<string, unknown>;
-    context: { threadId: string; resourceId?: string };
-    override: Extract<MastraMemoryHistoryOverride, { type: 'regenerate' }>;
-  }): Promise<MessageList> {
-    const { messageList, context, override, state } = args;
-    const result = await this.storage.listMessages({
-      threadId: context.threadId,
-      resourceId: context.resourceId,
-      page: 0,
-      perPage: false,
-      orderBy: { field: 'createdAt', direction: 'ASC' },
-    });
-
-    const storedMessages = result.messages.filter((msg: MastraDBMessage) => msg.role !== 'system');
-    const targetIndex = storedMessages.findIndex(message => message.id === override.targetMessageId);
-    if (targetIndex === -1) {
-      throw new RegenerateTargetError('missing', override.targetMessageId);
-    }
-
-    const targetMessage = storedMessages[targetIndex]!;
-    if (targetMessage.role !== 'assistant') {
-      throw new RegenerateTargetError('non-assistant', override.targetMessageId);
-    }
-
-    const branchMessages = storedMessages.slice(targetIndex);
-    const branchMessageIds = branchMessages.map(message => message.id).filter(Boolean);
-    if (state) {
-      state.regenerate = {
-        type: 'regenerate',
-        branchMessageIds,
-      } satisfies RegenerateState;
-    }
-
-    const recallMessages = await this.cleanupIncompleteAssistantMessages(storedMessages.slice(0, targetIndex));
-    const existingMessages = messageList.get.all.db();
-    const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-    for (const msg of recallMessages) {
-      if (!msg.id || !messageIds.has(msg.id)) {
-        messageList.add(msg, 'memory');
-      }
-    }
-
-    return messageList;
-  }
-
   async processInput(
     args: {
       messages: MastraDBMessage[];
       messageList: MessageList;
       abort: (reason?: string) => never;
       requestContext?: RequestContext;
-      state?: Record<string, unknown>;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, requestContext, ...observabilityContext } = args;
@@ -296,7 +98,6 @@ export class MessageHistory implements Processor {
     }
 
     const { threadId, resourceId } = context;
-    const override = this.getMemoryHistoryOverride(requestContext);
 
     const span = this.createMemorySpan(
       'recall',
@@ -308,42 +109,19 @@ export class MessageHistory implements Processor {
     );
 
     try {
-      if (override?.type === 'regenerate') {
-        const regeneratedMessageList = await this.processRegenerateInput({
-          messageList,
-          requestContext,
-          state: args.state,
-          context,
-          override,
-        });
-
-        span?.end({
-          output: { success: true },
-          attributes: { messageCount: regeneratedMessageList.get.all.db().length },
-        });
-
-        return regeneratedMessageList;
-      }
-
       // 1. Fetch historical messages from storage (as DB format)
       const result = await this.storage.listMessages({
         threadId,
         resourceId,
         page: 0,
-        perPage: override?.type === 'server-history' ? false : this.lastMessages,
+        perPage: this.lastMessages,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       // 2. Filter out system messages (they should never be stored in DB)
-      let filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
+      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
         return msg.role !== 'system';
       });
-      if (override?.type === 'server-history') {
-        filteredMessages = await this.cleanupIncompleteAssistantMessages(filteredMessages, observabilityContext);
-        if (typeof this.lastMessages === 'number' && this.lastMessages > 0) {
-          filteredMessages = filteredMessages.slice(0, this.lastMessages);
-        }
-      }
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
       // This includes messages added by previous processors like SemanticRecall
@@ -393,19 +171,9 @@ export class MessageHistory implements Processor {
    * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
    * - For client-side tools (no execute function), 'call' is the final state from the server's perspective
    */
-  private filterMessagesForPersistence(
-    messages: MastraDBMessage[],
-    {
-      includeIncompleteAssistantMessages = false,
-      skipEmptyAssistantMessages = false,
-    }: { includeIncompleteAssistantMessages?: boolean; skipEmptyAssistantMessages?: boolean } = {},
-  ): MastraDBMessage[] {
+  private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
       .map(m => {
-        if (!includeIncompleteAssistantMessages && this.isIncompleteAssistantMessage(m)) {
-          return null;
-        }
-
         const newMessage = { ...m };
         // Only spread content if it's a proper V2 object
         if (m.content && typeof m.content === 'object' && !Array.isArray(m.content)) {
@@ -440,20 +208,10 @@ export class MessageHistory implements Processor {
             })
             .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
-          // If all parts were filtered out, skip the whole message only when
-          // it has no fallback text content left.
+          // If all parts were filtered out, skip the whole message
           if (newMessage.content.parts.length === 0) {
-            const hasContentText =
-              typeof newMessage.content.content === 'string' && newMessage.content.content.trim().length > 0;
-
-            if (!skipEmptyAssistantMessages || !hasContentText) {
-              return null;
-            }
+            return null;
           }
-        }
-
-        if (skipEmptyAssistantMessages && isEmptyAssistantMessage(newMessage)) {
-          return null;
         }
 
         return newMessage;
@@ -467,7 +225,6 @@ export class MessageHistory implements Processor {
       messageList: MessageList;
       abort: (reason?: string) => never;
       requestContext?: RequestContext;
-      state?: Record<string, unknown>;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
     const { messageList, requestContext, ...observabilityContext } = args;
@@ -478,7 +235,6 @@ export class MessageHistory implements Processor {
     // Check if readOnly from memoryConfig
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
-    const skipEmptyAssistantMessages = memoryContext?.memoryConfig?.skipEmptyAssistantMessages === true;
 
     if (!context || readOnly) {
       return messageList;
@@ -486,7 +242,6 @@ export class MessageHistory implements Processor {
 
     const { threadId, resourceId } = context;
 
-    const override = this.getMemoryHistoryOverride(requestContext);
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
     const messagesToSave = [...newInput, ...newOutput];
@@ -500,31 +255,7 @@ export class MessageHistory implements Processor {
     });
 
     try {
-      const persistedMessages = await this.persistMessages({
-        messages: messagesToSave,
-        threadId,
-        resourceId,
-        includeIncompleteAssistantMessages: override?.type === 'server-history',
-        skipEmptyAssistantMessages,
-      });
-
-      const regenerateState = args.state?.regenerate as RegenerateState | undefined;
-      const persistedReplacementOutput =
-        newOutput.length > 0 && persistedMessages.some(message => message.role === 'assistant');
-      if (regenerateState?.type === 'regenerate' && persistedReplacementOutput) {
-        const savedMessageIds = new Set(messagesToSave.map(message => message.id).filter(Boolean));
-        const messageIdsToDelete = regenerateState.branchMessageIds.filter(
-          messageId => !savedMessageIds.has(messageId),
-        );
-        if (messageIdsToDelete.length > 0) {
-          if (this.deleteMessages) {
-            await this.deleteMessages(messageIdsToDelete, observabilityContext);
-          } else {
-            await this.storage.deleteMessages(messageIdsToDelete);
-          }
-        }
-      }
-
+      await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
       // add extra 1ms latency to make sure the next generate has not the same input
       await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -546,26 +277,17 @@ export class MessageHistory implements Processor {
    * This method can be called externally by other processors (e.g., ObservationalMemory)
    * that need to save messages incrementally.
    */
-  async persistMessages(args: {
-    messages: MastraDBMessage[];
-    threadId: string;
-    resourceId?: string;
-    includeIncompleteAssistantMessages?: boolean;
-    skipEmptyAssistantMessages?: boolean;
-  }): Promise<MastraDBMessage[]> {
-    const { messages, threadId, resourceId, includeIncompleteAssistantMessages, skipEmptyAssistantMessages } = args;
+  async persistMessages(args: { messages: MastraDBMessage[]; threadId: string; resourceId?: string }): Promise<void> {
+    const { messages, threadId, resourceId } = args;
 
     if (messages.length === 0) {
-      return [];
+      return;
     }
 
-    const filtered = this.filterMessagesForPersistence(messages, {
-      includeIncompleteAssistantMessages,
-      skipEmptyAssistantMessages: this.skipEmptyAssistantMessages || skipEmptyAssistantMessages === true,
-    });
+    const filtered = this.filterMessagesForPersistence(messages);
 
     if (filtered.length === 0) {
-      return [];
+      return;
     }
 
     // Ensure thread exists (create if needed) before saving messages
@@ -591,12 +313,6 @@ export class MessageHistory implements Processor {
     }
 
     // Persist messages after thread is guaranteed to exist
-    if (this.saveMessages) {
-      const result = await this.saveMessages({ messages: filtered });
-      return result?.messages ?? filtered;
-    }
-
-    const result = await this.storage.saveMessages({ messages: filtered });
-    return result?.messages ?? filtered;
+    await this.storage.saveMessages({ messages: filtered });
   }
 }

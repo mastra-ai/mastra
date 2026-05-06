@@ -7,7 +7,6 @@
 
 // Re-export core types & entrypoint class
 export * from './types';
-export * from './prompt-tool-waterfall';
 export * from './no-op';
 export * from './utils';
 export { wrapMastra } from './context';

@@ -149,6 +149,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.messageComponentsById.clear();
         state.allShellComponents = [];
         state.pendingTools.clear();
+        state.pendingTaskToolIds?.clear();
         await ctx.renderExistingMessages();
 
         ctx.showInfo(`Switched to: ${thread.title || thread.id}`);

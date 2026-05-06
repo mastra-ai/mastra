@@ -265,13 +265,6 @@ export const weatherTool = createTool({
     isOptional: true,
   },
   {
-    name: 'payloadProjection',
-    type: 'ToolPayloadProjection',
-    description:
-      'Optional target-aware projection for tool payloads before they leave runtime for display streams or user-visible transcript messages. Configure `display` and `transcript` projectors for phases such as `input`, `inputDelta`, `output`, `error`, `approval`, `suspend`, and `resume`.',
-    isOptional: true,
-  },
-  {
     name: 'suspendSchema',
     type: 'StandardJSONSchemaV1',
     description:

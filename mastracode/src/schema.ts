@@ -36,6 +36,7 @@ export const stateSchema = z.object({
   tasks: z
     .array(
       z.object({
+        id: z.string().optional(),
         content: z.string(),
         status: z.enum(['pending', 'in_progress', 'completed']),
         activeForm: z.string(),

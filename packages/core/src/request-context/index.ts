@@ -31,31 +31,6 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 /**
- * Reserved key for internal memory-history execution overrides.
- *
- * This is used by server-controlled route helpers to ask memory processors to
- * alter history handling for a single request without accepting browser-owned
- * memory scope.
- *
- * @internal
- */
-export const MASTRA_MEMORY_HISTORY_OVERRIDE_KEY = 'mastra__memoryHistoryOverride';
-
-/**
- * Internal request-scoped override for message-history behavior.
- *
- * @internal
- */
-export type MastraMemoryHistoryOverride =
-  | {
-      type: 'server-history';
-    }
-  | {
-      type: 'regenerate';
-      targetMessageId: string;
-    };
-
-/**
  * Reserved key for storing version overrides on RequestContext.
  * When set, sub-agent delegation resolves versioned agents from these overrides.
  *

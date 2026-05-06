@@ -1,0 +1,327 @@
+---
+title: "MCP Apps | MCP"
+description: "Serve interactive HTML UIs from MCP tools using the MCP Apps extension."
+packages:
+  - "@mastra/mcp"
+---
+
+# MCP Apps
+
+The [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps) allows MCP tools to serve interactive HTML UIs via `ui://` resources. When a tool has an associated app resource, Mastra Studio renders it in a sandboxed iframe alongside the tool form or inline in agent chat.
+
+## When to use MCP Apps
+
+Use MCP Apps when a tool result is better presented as an interactive UI rather than plain text. For example:
+
+- A calculator that renders input fields and buttons for computation
+- A color picker that displays swatches and hex values
+- A form builder that captures structured user input
+- A data visualizer that renders charts
+
+## Quickstart
+
+Define app resources on your `MCPServer` by providing a `ui://` URI mapped to inline HTML or an HTML file path.
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from '@mastra/mcp'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const calculatorTool = createTool({
+  id: 'calculatorWithUI',
+  description: 'An interactive calculator',
+  inputSchema: z.object({
+    num1: z.number(),
+    num2: z.number(),
+    operation: z.enum(['add', 'subtract']),
+  }),
+  execute: async ({ num1, num2, operation }) => {
+    const result = operation === 'add' ? num1 + num2 : num1 - num2
+    return {
+      content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+      structuredContent: { result },
+    }
+  },
+})
+
+const server = new MCPServer({
+  id: 'my-app-server',
+  name: 'My App Server',
+  version: '1.0.0',
+  tools: { calculatorTool },
+  appResources: {
+    'ui://calculator/main': {
+      name: 'Interactive Calculator',
+      html: `<html>
+        <body>
+          <h2>Calculator</h2>
+          <button id="btn">Compute</button>
+          <script type="module">
+            import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm';
+            const app = new App({ name: 'Calculator', version: '1.0.0' });
+            app.ontoolinput = (params) => {
+              console.log('Tool input:', params.arguments);
+            };
+            document.getElementById('btn').addEventListener('click', async () => {
+              const result = await app.callServerTool({
+                name: 'calculatorWithUI',
+                arguments: { num1: 10, num2: 5, operation: 'add' }
+              });
+              document.body.innerHTML += '<p>Result: ' + JSON.stringify(result) + '</p>';
+            });
+            await app.connect();
+          </script>
+        </body>
+      </html>`,
+    },
+  },
+})
+```
+
+Link the tool to its app resource by adding `_meta.ui.resourceUri` to the tool definition:
+
+```typescript
+calculatorTool._meta = {
+  ui: { resourceUri: 'ui://calculator/main' },
+}
+```
+
+:::note
+
+Visit [MCPServer reference](/reference/tools/mcp-server#mcp-apps-appresources) for the full `appResources` configuration.
+
+:::
+
+## Connecting MCP Apps to agents
+
+Agents consume tools — they do not need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { calculatorTool } from '../mcp/tools'
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You have access to interactive UI tools.',
+  model: 'openai/gpt-5-mini',
+  tools: { calculatorTool },
+})
+```
+
+Register the MCP server at the Mastra level. Studio scans registered MCP servers to map tools to their app resources.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { myAgent } from './agents'
+import { myAppServer } from './mcp/server'
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: { myAppServer },
+})
+```
+
+For remote MCP servers, use `MCPClient.listTools()` to get tools and `toMCPServerProxies()` to register the server:
+
+```typescript title="src/mastra/index.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const mcpClient = new MCPClient({
+  servers: {
+    remoteApp: { url: new URL('https://remote-mcp-server.example.com/mcp') },
+  },
+})
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  model: 'openai/gpt-5-mini',
+  tools: await mcpClient.listTools(),
+})
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: { ...mcpClient.toMCPServerProxies() },
+})
+```
+
+When tools come from `MCPClient.listTools()`, each tool's `_meta.ui` is automatically stamped with a `serverId` so Studio can resolve its app resources without scanning all servers.
+
+## How MCP Apps work
+
+MCP Apps follow a specific communication pattern between the host (Mastra Studio) and the iframe:
+
+1. The tool executes and returns a brief summary in `content` (visible to the model) and detailed data in `structuredContent` (visible to the UI only).
+1. The host renders the app HTML in a sandboxed iframe.
+1. The iframe communicates with the host via a JSON-RPC postMessage protocol.
+1. The app can call server tools using `callServerTool()` and inject messages into the chat using `sendMessage()`.
+
+```
+Agent calls tool → Tool returns brief content + structuredContent
+  → Host renders iframe with app HTML
+  → User interacts with UI
+  → UI calls callServerTool() for computation
+  → UI calls sendMessage() to inject result into chat
+```
+
+## Tool result format
+
+Tools with app resources should return two fields:
+
+- `content`: A brief text summary for the model. Keep this short so the agent does not parrot the full result.
+- `structuredContent`: The data payload that hydrates the UI. The model does not see this field.
+
+```typescript
+execute: async ({ num1, num2, operation }) => {
+  const result = operation === 'add' ? num1 + num2 : num1 - num2
+  return {
+    content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+    structuredContent: { result },
+  }
+}
+```
+
+## App API (guest-side)
+
+MCP App HTML uses the standard [`App` class from `@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps) to communicate with the host. Import it via ESM CDN or bundle it.
+
+```javascript
+import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
+const app = new App({ name: 'MyApp', version: '1.0.0' })
+```
+
+### `app.callServerTool(params)`
+
+Calls an MCP server tool from within the iframe. This is useful for interactive computation without leaving the UI.
+
+```javascript
+const result = await app.callServerTool({
+  name: 'calculatorWithUI',
+  arguments: { num1: 42, num2: 8, operation: 'add' },
+})
+```
+
+### `app.sendMessage(params)`
+
+Injects a user message into the agent chat, triggering a new model turn. Use this for sharing results or requesting follow-up actions.
+
+```javascript
+await app.sendMessage({
+  role: 'user',
+  content: [{ type: 'text', text: 'The result of 42 + 8 is 50' }],
+})
+```
+
+### `app.ontoolinput`
+
+A callback that fires when the host delivers tool input data to the iframe, allowing pre-population of form fields. The `params.arguments` object contains the tool call arguments.
+
+```javascript
+app.ontoolinput = params => {
+  document.getElementById('num1').value = params.arguments.num1
+}
+```
+
+:::tip[Preventing UI flicker]
+
+If your app has default form values, the user may briefly see them before `ontoolinput` hydrates the correct values. To prevent this, start the body hidden and reveal it after hydration:
+
+```html
+<style>
+  body {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  body.ready {
+    opacity: 1;
+  }
+</style>
+<script type="module">
+  import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
+  const app = new App({ name: 'MyApp', version: '1.0.0' })
+
+  app.ontoolinput = params => {
+    // Hydrate form fields from params.arguments
+    document.body.classList.add('ready')
+  }
+
+  await app.connect()
+  // Fallback: reveal after connection if no tool input arrives
+  setTimeout(() => document.body.classList.add('ready'), 150)
+</script>
+```
+
+:::
+
+### `app.connect()`
+
+Establishes the connection to the host. Call this after registering all event handlers.
+
+```javascript
+await app.connect()
+```
+
+:::note
+
+See the [`App` class API reference](https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html) for the full list of methods, callbacks, and lifecycle hooks.
+
+:::
+
+## Using external MCP servers with apps
+
+External (non-Mastra) MCP servers that implement the MCP Apps extension work with Mastra via `MCPClient`. Use `listTools()` for agent tools and `toMCPServerProxies()` to register them in Studio.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MCPClient } from '@mastra/mcp'
+import { Agent } from '@mastra/core/agent'
+
+const mcpClient = new MCPClient({
+  servers: {
+    'external-server': {
+      command: 'node',
+      args: ['path/to/external-server.js'],
+    },
+  },
+})
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  model: 'openai/gpt-5-mini',
+  tools: await mcpClient.listTools(),
+})
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  mcpServers: {
+    ...mcpClient.toMCPServerProxies(),
+  },
+})
+```
+
+:::note
+
+Visit [MCPClient reference](/reference/tools/mcp-client#tomcpserverproxies) for more details on proxying external servers.
+
+:::
+
+## Sandbox security
+
+Mastra Studio uses [`@mcp-ui/client`](https://www.npmjs.com/package/@mcp-ui/client) to render MCP App iframes through a sandbox proxy. The proxy loads app HTML via `postMessage` rather than `srcDoc`, providing additional isolation.
+
+App iframes are sandboxed with the following permissions:
+
+- `allow-scripts`: Enables JavaScript execution
+- `allow-forms`: Allows form submission
+- `allow-popups`: Permits `window.open()` and link targets
+
+The iframe does not have access to the parent page's DOM, cookies, or storage. All communication happens through the JSON-RPC postMessage protocol managed by `@mcp-ui/client`'s `AppRenderer` on the host side and `@modelcontextprotocol/ext-apps`'s `App` class on the guest side.
+
+## Related
+
+- [MCP overview](/docs/mcp/overview)
+- [MCPServer reference](/reference/tools/mcp-server)
+- [MCPClient reference](/reference/tools/mcp-client)
+- [MCP Apps extension spec](https://github.com/modelcontextprotocol/ext-apps)

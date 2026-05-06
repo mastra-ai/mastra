@@ -1,6 +1,15 @@
 export { Harness } from './harness';
-export { askUserTool, parseSubagentMeta, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
-export type { TaskItem } from './tools';
+export {
+  askUserTool,
+  assignTaskIds,
+  parseSubagentMeta,
+  submitPlanTool,
+  taskCheckTool,
+  taskCompleteTool,
+  taskUpdateTool,
+  taskWriteTool,
+} from './tools';
+export type { TaskCheckResult, TaskCheckSummary, TaskItem, TaskItemInput, TaskItemSnapshot } from './tools';
 export { defaultDisplayState, defaultOMProgressState } from './types';
 export type {
   ActiveSubagentState,
@@ -8,8 +17,6 @@ export type {
   AvailableModel,
   CustomAvailableModel,
   CustomModelCatalogProvider,
-  HarnessAwaitingInput,
-  HarnessAwaitingInputKind,
   HarnessConfig,
   HarnessDisplayState,
   HarnessDisplayStateListener,
@@ -19,22 +26,16 @@ export type {
   HarnessMessage,
   HarnessMessageContent,
   HarnessMode,
-  HarnessListAwaitingInputsOptions,
   HarnessOMConfig,
   HarnessQuestionAnswer,
   HarnessQuestionOption,
   HarnessQuestionSelectionMode,
   HarnessRequestContext,
-  HarnessResumeAwaitingInputOptions,
-  HarnessResumeAwaitingInputResult,
   HarnessSession,
   HarnessStateSchema,
   HarnessSubagent,
   HarnessSubagentHistoryEntry,
-  HarnessSubagentHistoryStatus,
   HarnessThread,
-  HarnessGetAwaitingInputOptions,
-  HarnessWaitForAwaitingInputReadyOptions,
   HeartbeatHandler,
   ModelAuthChecker,
   ModelAuthStatus,

@@ -76,13 +76,6 @@ const toolSearch = new ToolSearchProcessor({
             isOptional: true,
             default: '3600000',
           },
-          {
-            name: 'filterTool',
-            type: '(args: ToolSearchFilterArgs) => boolean | Promise<boolean>',
-            description:
-              'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
-            isOptional: true,
-          },
         ],
       },
     ],
@@ -115,35 +108,6 @@ const toolSearch = new ToolSearchProcessor({
   },
 ]}
 />
-
-## Request-aware filtering
-
-Use `filterTool` to apply request-specific policy to dynamic tools. The hook receives the resolved tool ID, tool, request context, and phase.
-
-```typescript
-import { ToolSearchProcessor } from '@mastra/core/processors'
-
-const toolSearch = new ToolSearchProcessor({
-  tools: allTools,
-  filterTool: ({ toolName, requestContext, phase }) => {
-    const plan = requestContext?.get('plan')
-
-    if (phase === 'search') {
-      return true
-    }
-
-    return plan === 'pro' || !toolName.startsWith('premium_')
-  },
-})
-```
-
-The `phase` value describes where the filter is being applied:
-
-- `search`: Filters results returned by `search_tools`.
-- `load`: Blocks `load_tool` from loading disallowed tools.
-- `active`: Hides already-loaded tools from the current request if they are no longer allowed.
-
-If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The meta-tools `search_tools` and `load_tool` are always available. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
 
 ## Extended usage example
 

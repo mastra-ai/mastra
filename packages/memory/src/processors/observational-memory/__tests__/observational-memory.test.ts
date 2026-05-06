@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -144,110 +145,6 @@ function createInMemoryStorage(): InMemoryMemory {
   const db = new InMemoryDB();
   return new InMemoryMemory({ db });
 }
-
-describe('ObservationalMemoryProcessor read-only mode', () => {
-  it('loads stored context without starting observation side effects', async () => {
-    const { MessageList } = await import('@mastra/core/agent');
-    const { RequestContext } = await import('@mastra/core/di');
-
-    const storage = createInMemoryStorage();
-    const threadId = 'read-only-om-thread';
-    const resourceId = 'read-only-om-resource';
-
-    await storage.saveThread({
-      thread: {
-        id: threadId,
-        resourceId,
-        title: 'Read-only OM',
-        createdAt: new Date('2025-01-01T08:00:00Z'),
-        updatedAt: new Date('2025-01-01T08:00:00Z'),
-        metadata: {},
-      },
-    });
-
-    await storage.saveMessages({
-      messages: [
-        {
-          id: 'stored-user-1',
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'Stored read-only context' }] },
-          type: 'text',
-          createdAt: new Date('2025-01-01T09:00:00Z'),
-          threadId,
-          resourceId,
-        } as any,
-      ],
-    });
-
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-        content: [{ type: 'text' as const, text: 'ok' }],
-        warnings: [],
-      }),
-    });
-
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      model: mockModel as any,
-      observation: { messageTokens: 1, bufferTokens: false },
-      reflection: { observationTokens: 1 },
-    });
-
-    const baseMemoryProvider = createMemoryProvider(om);
-    const memoryProvider: MemoryContextProvider = {
-      getContext: vi.fn(baseMemoryProvider.getContext),
-      persistMessages: vi.fn(baseMemoryProvider.persistMessages),
-    };
-
-    const beginTurnSpy = vi.spyOn(om, 'beginTurn');
-    const observeSpy = vi.spyOn(om, 'observe');
-    const bufferSpy = vi.spyOn(om, 'buffer');
-    const persistSpy = vi.spyOn(om, 'persistMessages');
-    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
-
-    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
-    const messageList = new MessageList({ threadId, resourceId });
-    const requestContext = new RequestContext();
-    requestContext.set('MastraMemory', {
-      thread: { id: threadId },
-      resourceId,
-      memoryConfig: { readOnly: true },
-    });
-
-    const state: Record<string, unknown> = {};
-
-    await processor.processInputStep({
-      messageList,
-      messages: [],
-      requestContext,
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: mockModel as any,
-      retryCount: 0,
-      abort: (() => {
-        throw new Error('aborted');
-      }) as any,
-    });
-
-    expect(memoryProvider.getContext).toHaveBeenCalledTimes(1);
-    expect(memoryProvider.getContext).toHaveBeenCalledWith({ threadId, resourceId });
-    expect(messageList.get.all.db().map(m => m.id)).toContain('stored-user-1');
-
-    expect(state.__omTurn).toBeUndefined();
-    expect(beginTurnSpy).not.toHaveBeenCalled();
-    expect(observeSpy).not.toHaveBeenCalled();
-    expect(bufferSpy).not.toHaveBeenCalled();
-    expect(persistSpy).not.toHaveBeenCalled();
-    expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
-    expect(emitProgressSpy).not.toHaveBeenCalled();
-  });
-});
 
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
@@ -1545,7 +1442,7 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain(base64);
     });
 
-    it('should replace legacy image tool-result blocks with attachment placeholders', () => {
+    it('should hoist file-data tool-result blocks under the file counter', () => {
       const base64 = 'C'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
@@ -1555,9 +1452,9 @@ describe('Observer Agent Helpers', () => {
             type: 'tool-invocation',
             toolInvocation: {
               state: 'result',
-              toolCallId: 'tool-legacy-image',
-              toolName: 'read_file',
-              args: { path: 'figures/result.png' },
+              toolCallId: 'tool-3',
+              toolName: 'fetchInvoice',
+              args: { id: 'inv-42' },
               result: {},
             },
             providerMetadata: {
@@ -1565,8 +1462,8 @@ describe('Observer Agent Helpers', () => {
                 modelOutput: {
                   type: 'content',
                   value: [
-                    { type: 'text', text: 'Image read: figures/result.png' },
-                    { type: 'image', data: base64, mimeType: 'image/png' },
+                    { type: 'text', text: 'Invoice retrieved.' },
+                    { type: 'file-data', data: base64, mediaType: 'application/pdf', filename: 'invoice-42.pdf' },
                   ],
                 },
               },
@@ -1576,107 +1473,11 @@ describe('Observer Agent Helpers', () => {
       } as any;
 
       const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('Tool Result read_file');
-      expect(formatted).toContain('Image read: figures/result.png');
-      expect(formatted).toContain('[Image #1: image/png]');
+      expect(formatted).toContain('Tool Result fetchInvoice');
+      expect(formatted).toContain('Invoice retrieved.');
+      expect(formatted).toContain('[File #1: invoice-42.pdf]');
+      expect(formatted).not.toContain('[Image #1');
       expect(formatted).not.toContain(base64);
-    });
-
-    it('should replace URL, file, and generic media tool-result blocks with attachment placeholders', () => {
-      const pdfBase64 = 'P'.repeat(2000);
-      const imageBase64 = 'I'.repeat(2000);
-      const imageUrl = 'https://example.com/screenshots/page.png';
-      const fileUrl = 'https://example.com/files/report.csv';
-      const msg = createTestMessage('ignored', 'assistant');
-      msg.content = {
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-media',
-              toolName: 'read_assets',
-              args: {},
-              result: {},
-            },
-            providerMetadata: {
-              mastra: {
-                modelOutput: {
-                  type: 'content',
-                  value: [
-                    { type: 'text', text: 'Collected assets.' },
-                    { type: 'image-url', url: imageUrl, mediaType: 'image/png' },
-                    { type: 'file-data', data: pdfBase64, mediaType: 'application/pdf', filename: 'paper.pdf' },
-                    { type: 'file-url', url: fileUrl, mediaType: 'text/csv', filename: 'report.csv' },
-                    { type: 'media', data: imageBase64, mediaType: 'image/jpeg' },
-                  ],
-                },
-              },
-            },
-          },
-        ],
-      } as any;
-
-      const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('Tool Result read_assets');
-      expect(formatted).toContain('Collected assets.');
-      expect(formatted).toContain('[Image #1: page.png]');
-      expect(formatted).toContain('[File #1: paper.pdf]');
-      expect(formatted).toContain('[File #2: report.csv]');
-      expect(formatted).toContain('[Image #2: image/jpeg]');
-      expect(formatted).not.toContain(pdfBase64);
-      expect(formatted).not.toContain(imageBase64);
-      expect(formatted).not.toContain(imageUrl);
-      expect(formatted).not.toContain(fileUrl);
-    });
-
-    it('should redact media blocks when formatting tool results for token counting', () => {
-      const imageBase64 = 'G'.repeat(2000);
-      const pdfBase64 = 'H'.repeat(2000);
-      const formatted = formatToolResultForObserver({
-        type: 'content',
-        value: [
-          { type: 'text', text: 'Collected assets.' },
-          { type: 'image-data', data: `data:image/png;base64,${imageBase64}`, mediaType: 'image/png' },
-          { type: 'file-data', data: pdfBase64, mediaType: 'application/pdf', filename: 'paper.pdf' },
-          { type: 'image-file-id', id: 'img_123' },
-          { type: 'file-id', id: 'file_456' },
-        ],
-      });
-
-      expect(formatted).toContain('Collected assets.');
-      expect(formatted).toContain('[Image: image/png]');
-      expect(formatted).toContain('[File: paper.pdf]');
-      expect(formatted).toContain('[Image: img_123]');
-      expect(formatted).toContain('[File: file_456]');
-      expect(formatted).not.toContain(imageBase64);
-      expect(formatted).not.toContain(pdfBase64);
-      expect(formatted).not.toContain('data:image/png;base64');
-    });
-
-    it('should leave non-content tool-result outputs unchanged', () => {
-      const msg = createTestMessage('ignored', 'assistant');
-      msg.content = {
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-2',
-              toolName: 'getWeather',
-              args: { city: 'NYC' },
-              result: { temperature: 72, conditions: 'sunny' },
-            },
-          },
-        ],
-      } as any;
-
-      const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('Tool Result getWeather');
-      expect(formatted).toContain('"temperature": 72');
-      expect(formatted).toContain('"conditions": "sunny"');
     });
 
     // Regression test for https://github.com/mastra-ai/mastra/issues/15573
@@ -1822,8 +1623,9 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(base64);
     });
 
-    it('should hoist legacy image tool-result blocks into observer input attachments', () => {
-      const base64 = 'D'.repeat(1500);
+    it('should hoist URL and media tool-result blocks into observer input attachments', () => {
+      const imageData = 'E'.repeat(1500);
+      const fileData = 'F'.repeat(1500);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
         format: 2,
@@ -1832,60 +1634,8 @@ describe('Observer Agent Helpers', () => {
             type: 'tool-invocation',
             toolInvocation: {
               state: 'result',
-              toolCallId: 'tool-legacy-image',
-              toolName: 'read_file',
-              args: { path: 'figures/result.png' },
-              result: {},
-            },
-            providerMetadata: {
-              mastra: {
-                modelOutput: {
-                  type: 'content',
-                  value: [
-                    { type: 'text', text: 'Image read.' },
-                    { type: 'image', data: base64, mimeType: 'image/png' },
-                  ],
-                },
-              },
-            },
-          },
-        ],
-      } as any;
-
-      const historyMessage = buildObserverHistoryMessage([msg]);
-      const content = historyMessage.content as any[];
-
-      const textParts = content.filter(part => part.type === 'text');
-      const imageParts = content.filter(part => part.type === 'image');
-
-      expect(imageParts).toHaveLength(1);
-      expect(imageParts[0]).toMatchObject({
-        type: 'image',
-        image: `data:image/png;base64,${base64}`,
-        mimeType: 'image/png',
-      });
-
-      const joinedText = textParts.map(part => part.text).join('\n');
-      expect(joinedText).toContain('Tool Result read_file');
-      expect(joinedText).toContain('[Image #1: image/png]');
-      expect(joinedText).not.toContain(base64);
-    });
-
-    it('should hoist URL, file, and generic media tool-result blocks into observer input attachments', () => {
-      const pdfBase64 = 'E'.repeat(1500);
-      const dataUriImage = `data:image/jpeg;base64,${'F'.repeat(1500)}`;
-      const imageUrl = 'https://example.com/screenshots/page.png';
-      const fileUrl = 'https://example.com/files/report.csv';
-      const msg = createTestMessage('ignored', 'assistant');
-      msg.content = {
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-media',
-              toolName: 'read_assets',
+              toolCallId: 'tool-1',
+              toolName: 'captureAssets',
               args: {},
               result: {},
             },
@@ -1894,11 +1644,16 @@ describe('Observer Agent Helpers', () => {
                 modelOutput: {
                   type: 'content',
                   value: [
-                    { type: 'text', text: 'Collected assets.' },
-                    { type: 'image-url', url: imageUrl, mediaType: 'image/png' },
-                    { type: 'file-data', data: pdfBase64, mediaType: 'application/pdf', filename: 'paper.pdf' },
-                    { type: 'file-url', url: fileUrl, mediaType: 'text/csv', filename: 'report.csv' },
-                    { type: 'media', data: dataUriImage, mediaType: 'image/jpeg' },
+                    { type: 'text', text: 'Assets captured.' },
+                    { type: 'image-url', url: 'https://example.com/chart.png', mediaType: 'image/png' },
+                    {
+                      type: 'file-url',
+                      url: 'https://example.com/report.pdf',
+                      mediaType: 'application/pdf',
+                      filename: 'report.pdf',
+                    },
+                    { type: 'media', data: imageData, mediaType: 'image/jpeg' },
+                    { type: 'media', data: fileData, mediaType: 'application/pdf' },
                   ],
                 },
               },
@@ -1909,47 +1664,139 @@ describe('Observer Agent Helpers', () => {
 
       const historyMessage = buildObserverHistoryMessage([msg]);
       const content = historyMessage.content as any[];
-
-      const textParts = content.filter(part => part.type === 'text');
       const imageParts = content.filter(part => part.type === 'image');
       const fileParts = content.filter(part => part.type === 'file');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
 
       expect(imageParts).toHaveLength(2);
       expect(imageParts[0]).toMatchObject({
         type: 'image',
-        image: imageUrl,
+        image: 'https://example.com/chart.png',
         mimeType: 'image/png',
       });
       expect(imageParts[1]).toMatchObject({
         type: 'image',
-        image: dataUriImage,
+        image: `data:image/jpeg;base64,${imageData}`,
         mimeType: 'image/jpeg',
       });
 
       expect(fileParts).toHaveLength(2);
       expect(fileParts[0]).toMatchObject({
         type: 'file',
-        data: `data:application/pdf;base64,${pdfBase64}`,
+        data: 'https://example.com/report.pdf',
         mimeType: 'application/pdf',
-        filename: 'paper.pdf',
+        filename: 'report.pdf',
       });
       expect(fileParts[1]).toMatchObject({
         type: 'file',
-        data: fileUrl,
-        mimeType: 'text/csv',
-        filename: 'report.csv',
+        data: `data:application/pdf;base64,${fileData}`,
+        mimeType: 'application/pdf',
       });
 
-      const joinedText = textParts.map(part => part.text).join('\n');
-      expect(joinedText).toContain('Tool Result read_assets');
-      expect(joinedText).toContain('[Image #1: page.png]');
-      expect(joinedText).toContain('[File #1: paper.pdf]');
-      expect(joinedText).toContain('[File #2: report.csv]');
+      expect(joinedText).toContain('[Image #1: chart.png]');
+      expect(joinedText).toContain('[File #1: report.pdf]');
       expect(joinedText).toContain('[Image #2: image/jpeg]');
-      expect(joinedText).not.toContain(pdfBase64);
-      expect(joinedText).not.toContain(dataUriImage);
-      expect(joinedText).not.toContain(imageUrl);
-      expect(joinedText).not.toContain(fileUrl);
+      expect(joinedText).toContain('[File #2: application/pdf]');
+      expect(joinedText).not.toContain(imageData);
+      expect(joinedText).not.toContain(fileData);
+    });
+
+    it('should hoist image-data without mediaType without leaking base64 into observer text', () => {
+      const base64 = 'G'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: {},
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: base64 }],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(1);
+      expect(imageParts[0]).toMatchObject({ type: 'image', image: base64 });
+      expect(joinedText).toContain('[Image #1]');
+      expect(joinedText).not.toContain(base64);
+    });
+
+    it('should share the image counter between user-attached and tool-result images', () => {
+      const toolBase64 = 'D'.repeat(1500);
+
+      const userMsg = createTestMessage('ignored', 'user');
+      userMsg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at this.' },
+          { type: 'image', image: 'https://example.com/user-photo.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const toolMsg = createTestMessage('ignored', 'assistant');
+      toolMsg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: toolBase64, mediaType: 'image/png' }],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([userMsg, toolMsg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts[0]).toMatchObject({ image: 'https://example.com/user-photo.png' });
+      expect(imageParts[1]).toMatchObject({ image: `data:image/png;base64,${toolBase64}` });
+
+      expect(joinedText).toContain('[Image #1: user-photo.png]');
+      expect(joinedText).toContain('[Image #2: image/png]');
+      expect(joinedText).not.toMatch(/\[Image #1: image\/png\]/);
     });
 
     it('should reuse part-level date grouping without message separators', () => {
@@ -7762,7 +7609,7 @@ describe('Model Requirement', () => {
     ).toThrow('Please bump @mastra/core to a newer version');
   });
 
-  it('should throw when no model is provided at all', () => {
+  it('should use the default model when no model is provided', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -7771,19 +7618,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
-    ).toThrow('Observational Memory requires a model to be set');
-  });
-
-  it('should include docs link in model error', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          observation: { messageTokens: 50000 },
-          reflection: { observationTokens: 20000 },
-        }),
-    ).toThrow('https://mastra.ai/docs/memory/observational-memory#models');
+    ).not.toThrow();
   });
 
   it('should accept a top-level model', () => {
@@ -7840,6 +7675,30 @@ describe('Model Requirement', () => {
           reflection: { observationTokens: 20000 },
         }),
     ).not.toThrow();
+  });
+
+  it('should resolve model: "default" using contextual observation and reflection defaults', () => {
+    const originalObservationModel = OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+    const originalReflectionModel = OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+
+    try {
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model = 'test/observer-default';
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model = 'test/reflector-default';
+
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: 'default',
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).observationConfig.model).toBe('test/observer-default');
+      expect((om as any).reflectionConfig.model).toBe('test/reflector-default');
+    } finally {
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model = originalObservationModel;
+      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model = originalReflectionModel;
+    }
   });
 
   it('should not allow top-level model with observation.model', () => {

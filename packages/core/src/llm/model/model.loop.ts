@@ -132,9 +132,6 @@ export class MastraLLMVNext extends MastraBase {
     isTaskComplete,
     onIterationComplete,
     workspace,
-    modelContextMessages,
-    promptToolWaterfallRecorder,
-    promptToolWaterfallAgentSpan,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -223,9 +220,6 @@ export class MastraLLMVNext extends MastraBase {
         isTaskComplete,
         onIterationComplete,
         workspace,
-        modelContextMessages,
-        promptToolWaterfallRecorder,
-        promptToolWaterfallAgentSpan,
         ...observabilityContext,
         options: {
           ...options,

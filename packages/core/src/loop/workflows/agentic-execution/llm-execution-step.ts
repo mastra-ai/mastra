@@ -4,7 +4,7 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
+import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -15,10 +15,8 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
-import { summarizePromptAndTools } from '../../../observability/prompt-tool-waterfall';
 import { executeWithContextSync } from '../../../observability/utils';
 import type { ProcessorStreamWriter } from '../../../processors/index';
-import { createPromptOnlyMessageList } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
@@ -33,12 +31,7 @@ import type {
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
-import { ChunkFrom } from '../../../stream/types';
-import {
-  projectToolPayloadForTargets,
-  withToolPayloadProjectionMetadata,
-  withToolPayloadProjectionProviderMetadata,
-} from '../../../tools/payload-projection';
+import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
@@ -70,124 +63,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
-  toolPayloadProjection?: NonNullable<OuterLLMRun['_internal']>['toolPayloadProjection'];
 };
-
-async function addToolPayloadProjectionToChunk<OUTPUT>(
-  chunk: ChunkType<OUTPUT>,
-  {
-    tools,
-    policy,
-    logger,
-  }: {
-    tools?: ToolSet;
-    policy?: NonNullable<OuterLLMRun['_internal']>['toolPayloadProjection'];
-    logger?: IMastraLogger;
-  },
-): Promise<ChunkType<OUTPUT>> {
-  const payload = 'payload' in chunk ? chunk.payload : undefined;
-  if (!payload || typeof payload !== 'object') {
-    return chunk;
-  }
-
-  const toolName = (payload as { toolName?: unknown }).toolName;
-  const toolCallId = (payload as { toolCallId?: unknown }).toolCallId;
-  if (typeof toolName !== 'string' || typeof toolCallId !== 'string') {
-    return chunk;
-  }
-
-  const tool =
-    tools?.[toolName] ||
-    findProviderToolByName(tools, toolName) ||
-    Object.values(tools || {}).find((candidate: any) => `id` in candidate && candidate.id === toolName);
-  const source = {
-    policy,
-    toolProjection: (tool as { payloadProjection?: unknown } | undefined)?.payloadProjection as any,
-  };
-  let projection;
-
-  if (chunk.type === 'tool-call') {
-    projection = await projectToolPayloadForTargets(
-      {
-        phase: 'input-available',
-        toolName,
-        toolCallId,
-        input: (payload as { args?: unknown }).args,
-        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-      },
-      source,
-      logger,
-    );
-  } else if (chunk.type === 'tool-call-delta') {
-    projection = await projectToolPayloadForTargets(
-      {
-        phase: 'input-delta',
-        toolName,
-        toolCallId,
-        inputTextDelta: (payload as { argsTextDelta?: string }).argsTextDelta,
-        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-      },
-      source,
-      logger,
-    );
-  } else if (chunk.type === 'tool-result') {
-    chunk = withToolPayloadProjectionMetadata(
-      chunk,
-      await projectToolPayloadForTargets(
-        {
-          phase: 'input-available',
-          toolName,
-          toolCallId,
-          input: (payload as { args?: unknown }).args,
-          providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-        },
-        source,
-        logger,
-      ),
-    );
-    projection = await projectToolPayloadForTargets(
-      {
-        phase: 'output-available',
-        toolName,
-        toolCallId,
-        input: (payload as { args?: unknown }).args,
-        output: (payload as { result?: unknown }).result,
-        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-      },
-      source,
-      logger,
-    );
-  } else if (chunk.type === 'tool-error') {
-    chunk = withToolPayloadProjectionMetadata(
-      chunk,
-      await projectToolPayloadForTargets(
-        {
-          phase: 'input-available',
-          toolName,
-          toolCallId,
-          input: (payload as { args?: unknown }).args,
-          providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-        },
-        source,
-        logger,
-      ),
-    );
-    projection = await projectToolPayloadForTargets(
-      {
-        phase: 'error',
-        toolName,
-        toolCallId,
-        input: (payload as { args?: unknown }).args,
-        error: (payload as { error?: unknown }).error,
-        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-      },
-      source,
-      logger,
-    );
-  }
-
-  return withToolPayloadProjectionMetadata(chunk, projection);
-}
 
 function buildResponseModelMetadata(
   runState: AgenticRunState,
@@ -220,12 +96,11 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
-  toolPayloadProjection,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
 
-  for await (let chunk of outputStream._getBaseStream()) {
+  for await (const chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
     // so we must check the signal on each iteration to avoid accumulating the full
@@ -251,18 +126,8 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    chunk = await addToolPayloadProjectionToChunk(chunk, {
-      tools,
-      policy: toolPayloadProjection,
-      logger,
-    });
-
     // Collect every chunk for post-stream message building
-    collectedChunks.push({
-      type: chunk.type,
-      payload: 'payload' in chunk ? chunk.payload : undefined,
-      metadata: chunk.metadata,
-    });
+    collectedChunks.push({ type: chunk.type, payload: chunk.payload });
 
     switch (chunk.type) {
       case 'response-metadata':
@@ -380,7 +245,7 @@ async function processOutputStream<OUTPUT = undefined>({
               args: chunk.payload.args,
               result: chunk.payload.result,
             },
-            providerMetadata: withToolPayloadProjectionProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
+            providerMetadata: chunk.payload.providerMetadata,
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
@@ -497,10 +362,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
-  modelContextMessages,
   outputWriter,
-  promptToolWaterfallRecorder,
-  promptToolWaterfallAgentSpan,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialSystemMessages = messageList.getAllSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
@@ -528,13 +390,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
-      let modelResult;
+      let modelResult: ReturnType<typeof execute> | undefined;
       let warnings: any;
       let request: any;
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
-      let executedModelContextMessages: MastraDBMessage[] | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -576,12 +437,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
-          const hasExplicitModelContextMessages = Object.prototype.hasOwnProperty.call(
-            inputData,
-            'modelContextMessages',
-          );
-          const shouldSeedModelContextMessages =
-            (inputData.output?.steps?.length || 0) === 0 && !hasExplicitModelContextMessages;
           const currentStep: {
             messageId: string;
             model: MastraLanguageModel;
@@ -591,7 +446,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             providerOptions?: SharedProviderOptions | undefined;
             modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
             structuredOutput?: StructuredOutputOptions<OUTPUT>;
-            modelContextMessages?: MastraDBMessage[];
             workspace?: Workspace;
           } = {
             messageId: currentMessageId,
@@ -603,121 +457,69 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             modelSettings,
             structuredOutput,
             workspace,
-            modelContextMessages: shouldSeedModelContextMessages
-              ? modelContextMessages
-              : inputData.modelContextMessages,
           };
 
-          const runInputStepProcessors = async (
-            processorsToRun: NonNullable<typeof inputProcessors>,
-            phaseKind: 'input_processors' | 'prepare_step',
-          ) => {
+          const inputStepProcessors = [
+            ...(inputProcessors || []),
+            ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
+          ];
+          if (inputStepProcessors && inputStepProcessors.length > 0) {
             const processorRunner = new ProcessorRunner({
-              inputProcessors: processorsToRun,
+              inputProcessors: inputStepProcessors,
               outputProcessors: [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
               processorStates,
             });
 
-            // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
-            const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
-
-            // Create a ProcessorStreamWriter from outputWriter if available.
-            // Forward any processor-supplied options (e.g. a future `transient`
-            // flag) and override messageId so the step always owns the
-            // response id for persisted data-* chunks.
-            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
-              ? {
-                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                    outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
-                }
-              : undefined;
-
-            return processorRunner.runProcessInputStep({
-              messageList,
-              stepNumber: inputData.output?.steps?.length || 0,
-              ...createObservabilityContext(stepTracingContext),
-              requestContext,
-              model,
-              steps: inputData.output?.steps || [],
-              messageId: currentStep.messageId,
-              rotateResponseMessageId: () => {
-                currentMessageId = _internal?.generateId?.() ?? generateId();
-                currentStep.messageId = currentMessageId;
-                return currentMessageId;
-              },
-              tools,
-              toolChoice,
-              activeTools: activeTools as string[] | undefined,
-              providerOptions,
-              modelSettings,
-              structuredOutput,
-              modelContextMessages: currentStep.modelContextMessages,
-              retryCount: inputData.processorRetryCount || 0,
-              writer: inputStepWriter,
-              abortSignal: options?.abortSignal,
-              onProcessorResult: ({
-                processorId,
-                processorIndex,
-                processorExecutor,
-                processorWorkflowId,
-                processorStepId,
-                processorStepIndex,
-                processorStepStatus,
-                output,
-                result,
-              }) => {
-                promptToolWaterfallRecorder?.recordPhase({
-                  kind: phaseKind,
-                  stepIndex: currentIteration - 1,
-                  ...summarizePromptAndTools({
-                    prompt: output ?? result.modelContextMessages ?? messageList,
-                    tools: result.tools ?? currentStep.tools,
-                    toolChoice: result.toolChoice ?? currentStep.toolChoice,
-                    activeTools: (result.activeTools ?? currentStep.activeTools) as string[] | undefined,
-                  }),
-                  meta: {
-                    processorId,
-                    processorIndex,
-                    ...(processorExecutor ? { processorExecutor } : {}),
-                    ...(processorWorkflowId ? { processorWorkflowId } : {}),
-                    ...(processorStepId ? { processorStepId } : {}),
-                    ...(processorStepIndex !== undefined ? { processorStepIndex } : {}),
-                    ...(processorStepStatus ? { processorStepStatus } : {}),
-                  },
-                });
-              },
-            });
-          };
-
-          const inputStepProcessors = inputProcessors || [];
-          if (inputStepProcessors.length > 0 || options?.prepareStep) {
             try {
-              let latestInputStepResult: Awaited<ReturnType<typeof runInputStepProcessors>> | undefined;
-              if (inputStepProcessors.length > 0) {
-                const processInputStepResult = await runInputStepProcessors(inputStepProcessors, 'input_processors');
-                latestInputStepResult = processInputStepResult;
-                Object.assign(currentStep, processInputStepResult);
-              }
+              // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+              const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
-              if (options?.prepareStep) {
-                const prepareStepResult = await runInputStepProcessors(
-                  [new PrepareStepProcessor({ prepareStep: options.prepareStep })],
-                  'prepare_step',
-                );
-                latestInputStepResult = prepareStepResult;
-                Object.assign(currentStep, prepareStepResult);
-              }
+              // Create a ProcessorStreamWriter from outputWriter if available.
+              // Forward any processor-supplied options (e.g. a future `transient`
+              // flag) and override messageId so the step always owns the
+              // response id for persisted data-* chunks.
+              const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+                ? {
+                    custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                      outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
+                  }
+                : undefined;
+
+              const processInputStepResult = await processorRunner.runProcessInputStep({
+                messageList,
+                stepNumber: inputData.output?.steps?.length || 0,
+                ...createObservabilityContext(stepTracingContext),
+                requestContext,
+                model,
+                steps: inputData.output?.steps || [],
+                messageId: currentStep.messageId,
+                rotateResponseMessageId: () => {
+                  currentMessageId = _internal?.generateId?.() ?? generateId();
+                  currentStep.messageId = currentMessageId;
+                  return currentMessageId;
+                },
+                tools,
+                toolChoice,
+                activeTools: activeTools as string[] | undefined,
+                providerOptions,
+                modelSettings,
+                structuredOutput,
+                retryCount: inputData.processorRetryCount || 0,
+                writer: inputStepWriter,
+                abortSignal: options?.abortSignal,
+              });
+              Object.assign(currentStep, processInputStepResult);
               executedStepModel =
                 currentStep.model.provider && currentStep.model.modelId
                   ? `${currentStep.model.provider}/${currentStep.model.modelId}`
                   : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
-              const modelChanged = latestInputStepResult?.model && latestInputStepResult.model !== model;
+              const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
               const modelSettingsChanged =
-                latestInputStepResult?.modelSettings && latestInputStepResult.modelSettings !== modelSettings;
+                processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
               if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
                 modelSpanTracker.updateGeneration({
                   ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
@@ -734,14 +536,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               }
 
               // Update AGENT_RUN span if processor actually changed available tools
-              const toolsChanged = latestInputStepResult?.tools && latestInputStepResult.tools !== tools;
+              const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
               const activeToolsChanged =
-                latestInputStepResult?.activeTools && latestInputStepResult.activeTools !== activeTools;
+                processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
               if (toolsChanged || activeToolsChanged) {
                 const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
                 if (agentSpan) {
                   const toolNames = activeToolsChanged
-                    ? (latestInputStepResult?.activeTools as string[])
+                    ? (processInputStepResult.activeTools as string[])
                     : currentStep.tools
                       ? Object.keys(currentStep.tools)
                       : undefined;
@@ -757,7 +559,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
               // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
               // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
-              if (latestInputStepResult?.tools && currentStep.tools) {
+              if (processInputStepResult.tools && currentStep.tools) {
                 const convertedTools: Record<string, unknown> = {};
                 for (const [name, tool] of Object.entries(currentStep.tools)) {
                   if (isMastraTool(tool)) {
@@ -806,22 +608,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   },
                 });
 
-                const waterfallTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
-                const agentSpan = (promptToolWaterfallAgentSpan ??
-                  (waterfallTracingContext?.currentSpan?.type === SpanType.AGENT_RUN
-                    ? waterfallTracingContext.currentSpan
-                    : waterfallTracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN))) as
-                  | typeof promptToolWaterfallAgentSpan
-                  | undefined;
-                promptToolWaterfallRecorder?.finalizeSpan({
-                  agentSpan,
-                  status: 'tripwire',
-                  tripwire: {
-                    reason: error.message,
-                    processorId: error.processorId,
-                  },
-                });
-
                 // Create a minimal runState for the bail response
                 const runState = new AgenticRunState({
                   _internal: _internal!,
@@ -844,7 +630,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     }),
                     messageList,
                     messageId: currentStep.messageId,
-                    options: { runId, promptToolWaterfallRecorder },
+                    options: { runId },
                   }),
                   runState,
                   stepTools: tools,
@@ -892,14 +678,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          const promptMessageList = currentStep.modelContextMessages
-            ? createPromptOnlyMessageList({
-                canonicalMessageList: messageList,
-                modelContextMessages: currentStep.modelContextMessages,
-              })
-            : messageList;
-          executedModelContextMessages = currentStep.modelContextMessages;
-          let inputMessages = await promptMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();
@@ -975,17 +754,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
-          promptToolWaterfallRecorder?.recordPhase({
-            kind: 'pre_model',
-            stepIndex: currentIteration - 1,
-            ...summarizePromptAndTools({
-              prompt: inputMessages,
-              tools: currentStep.tools,
-              toolChoice: currentStep.toolChoice,
-              activeTools: currentStep.activeTools as string[] | undefined,
-            }),
-          });
-
           if (isSupportedLanguageModel(currentStep.model)) {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1024,8 +792,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   })(),
                   methodType,
                   generateId: _internal?.generateId,
-                  promptToolWaterfallRecorder,
-                  promptToolWaterfallStepIndex: currentIteration - 1,
                   onResult: ({
                     warnings: warningsFromStream,
                     request: requestFromStream,
@@ -1079,7 +845,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               outputProcessors,
               isLLMExecutionStep: true,
               tracingContext,
-              promptToolWaterfallRecorder,
               processorStates,
               requestContext,
             },
@@ -1088,7 +853,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           let transportResolver: (() => StreamTransport | undefined) | undefined;
           if (currentStep.model instanceof ModelRouterLanguageModel) {
             const routerModel = currentStep.model;
-            transportResolver = () => routerModel._getStreamTransport();
+            transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
           }
 
           try {
@@ -1109,7 +874,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger,
               transportRef: _internal?.transportRef,
               transportResolver,
-              toolPayloadProjection: _internal?.toolPayloadProjection,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
@@ -1122,29 +886,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               tools: currentStep.tools,
             });
             for (const msg of builtMessages) {
-              if (options?.abortSignal?.aborted && msg.content && typeof msg.content === 'object') {
-                const existingMastraMetadata =
-                  typeof msg.content.metadata?.mastra === 'object' && msg.content.metadata.mastra !== null
-                    ? msg.content.metadata.mastra
-                    : {};
-                const existingStatus = (existingMastraMetadata as { responseStatus?: unknown }).responseStatus;
-                if (existingStatus === 'finished' || existingStatus === 'completed') {
-                  messageList.add(msg, 'response');
-                  continue;
-                }
-
-                msg.content = {
-                  ...msg.content,
-                  metadata: {
-                    ...msg.content.metadata,
-                    mastra: {
-                      ...existingMastraMetadata,
-                      responseStatus: 'aborted',
-                      runId,
-                    },
-                  },
-                };
-              }
               messageList.add(msg, 'response');
             }
 
@@ -1244,10 +985,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
               const errorResult = await processorRunner.runProcessAPIError({
                 error,
-                messages: executedModelContextMessages ?? messageList.get.all.db(),
-                ...(executedModelContextMessages !== undefined
-                  ? { modelContextMessages: executedModelContextMessages }
-                  : {}),
+                messages: messageList.get.all.db(),
                 messageList,
                 stepNumber: inputData.output?.steps?.length || 0,
                 steps: inputData.output?.steps || [],
@@ -1267,7 +1005,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               });
 
               if (errorResult.retry && canRetryError) {
-                executedModelContextMessages = errorResult.modelContextMessages ?? executedModelContextMessages;
                 // Signal retry - store on runState so it's handled after the callback returns
                 runState.setState({
                   hasErrored: false,
@@ -1385,8 +1122,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         const errorResult = await processorRunner.runProcessAPIError({
           error: runState.state.apiError,
-          messages: executedModelContextMessages ?? messageList.get.all.db(),
-          ...(executedModelContextMessages !== undefined ? { modelContextMessages: executedModelContextMessages } : {}),
+          messages: messageList.get.all.db(),
           messageList,
           stepNumber: inputData.output?.steps?.length || 0,
           steps: inputData.output?.steps || [],
@@ -1405,7 +1141,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
 
         if (errorResult.retry && canRetryError) {
-          executedModelContextMessages = errorResult.modelContextMessages ?? executedModelContextMessages;
           apiErrorRetryResult = errorResult;
           // Clear error state for retry
           runState.setState({
@@ -1453,9 +1188,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           messages,
           processorRetryCount: nextProcessorRetryCount,
-          // API-error retries re-run the same model attempt, so preserve the exact
-          // prompt-only context that was executed instead of reseeding from canonical messages.
-          ...(executedModelContextMessages !== undefined ? { modelContextMessages: executedModelContextMessages } : {}),
           ...(activeFallbackModelIndex > 0 ? { fallbackModelIndex: activeFallbackModelIndex } : {}),
         };
       }
@@ -1708,9 +1440,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
         processorRetryFeedback: retryFeedbackText,
-        ...(shouldRetry && executedModelContextMessages !== undefined
-          ? { modelContextMessages: executedModelContextMessages }
-          : {}),
         ...(nextFallbackModelIndex > 0 ? { fallbackModelIndex: nextFallbackModelIndex } : {}),
       };
     },

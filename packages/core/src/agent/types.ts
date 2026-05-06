@@ -33,7 +33,6 @@ import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
-import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -42,7 +41,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
-import type { ToolAction, ToolPayloadProjectionPolicy, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
@@ -420,11 +419,6 @@ export interface AgentConfig<
    * Controls which tools can run in the background and their behavior.
    */
   backgroundTasks?: AgentBackgroundConfig;
-  /**
-   * Optional agent-level projection policy for tool payloads before they are
-   * serialized into display streams or user-visible transcripts.
-   */
-  toolPayloadProjection?: ToolPayloadProjectionPolicy;
 }
 
 export type AgentMemoryOption = {
@@ -628,7 +622,6 @@ export type AgentExecuteOnFinishOptions = {
   threadExists: boolean;
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

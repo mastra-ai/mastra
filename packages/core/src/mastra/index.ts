@@ -43,7 +43,7 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
-import type { ToolAction, ToolPayloadProjectionPolicy } from '../tools';
+import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
@@ -437,11 +437,6 @@ export interface Config<
    * ```
    */
   environment?: string;
-  /**
-   * Optional central projection policy for tool payloads before they are
-   * serialized into display streams or user-visible transcripts.
-   */
-  toolPayloadProjection?: ToolPayloadProjectionPolicy;
 }
 
 /**
@@ -534,7 +529,6 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
-  #toolPayloadProjection?: ToolPayloadProjectionPolicy;
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -663,10 +657,6 @@ export class Mastra<
    */
   public getEnvironment(): string | undefined {
     return this.#environment;
-  }
-
-  public getToolPayloadProjection(): ToolPayloadProjectionPolicy | undefined {
-    return this.#toolPayloadProjection;
   }
 
   /**
@@ -858,7 +848,6 @@ export class Mastra<
     // Resolve deployment environment: explicit config wins, else fall back to
     // NODE_ENV. Leave undefined if neither is set rather than guessing.
     this.#environment = config?.environment ?? process.env.NODE_ENV;
-    this.#toolPayloadProjection = config?.toolPayloadProjection;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -3037,6 +3026,14 @@ export class Mastra<
     const memoryRegistry = this.#memory as Record<string, MastraMemory>;
     if (memoryRegistry[memoryKey]) {
       return;
+    }
+
+    memory.__registerMastra(this);
+    if (!memory.hasOwnStorage) {
+      const storage = this.getStorage();
+      if (storage) {
+        memory.setStorage(storage);
+      }
     }
 
     memoryRegistry[memoryKey] = memory;

@@ -32,6 +32,20 @@ When the source agent stream includes a final structured output object, `toAISdk
 
 The `object` field contains your full structured output value. This maps Mastra's final structured output chunk into the AI SDK UI stream. Partial structured output chunks are not emitted.
 
+## Tool approval denial in UI streams
+
+When a tool approval is declined, `toAISdkStream()` emits a semantic AI SDK UI stream part instead of requiring the client to inspect error text:
+
+```json
+{
+  "type": "tool-output-denied",
+  "toolCallId": "tool-call-123",
+  "reason": "Tool call was not approved by the user"
+}
+```
+
+Mastra emits this part when the source `tool-result` chunk includes `denied: true`. Ordinary tool execution failures continue to emit `tool-output-error`.
+
 ## Usage example
 
 Next.js App Router example:

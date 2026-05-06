@@ -1,18 +1,15 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
-import type { MastraDBMessage } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType } from '../stream';
 import { ChunkFrom } from '../stream/types';
 import { ProcessorRunner } from './runner';
-import type { ProcessorStepOutput } from './step-schema';
-import type { Processor, ProcessorWorkflow } from './index';
+import type { Processor } from './index';
 
 // Helper to create a message
-const createMessage = (content: string, role: 'user' | 'assistant' | 'system' = 'user'): MastraDBMessage => ({
+const createMessage = (content: string, role: 'user' | 'assistant' = 'user') => ({
   id: `msg-${Math.random()}`,
   role,
   content: {
@@ -35,36 +32,6 @@ const mockLogger: IMastraLogger = {
   listLogsByRunId: vi.fn(() => []),
 } as any;
 
-const createMockModel = (): MastraLanguageModel =>
-  ({
-    modelId: 'test-model',
-    specificationVersion: 'v2',
-    provider: 'test',
-    defaultObjectGenerationMode: 'json',
-    supportsImageUrls: false,
-    supportsStructuredOutputs: true,
-    doGenerate: async () => ({}),
-    doStream: async () => ({}),
-  }) as unknown as MastraLanguageModel;
-
-const createProcessorWorkflow = (
-  id: string,
-  handler: (input: ProcessorStepOutput) => ProcessorStepOutput | Promise<ProcessorStepOutput>,
-): ProcessorWorkflow =>
-  ({
-    id,
-    inputSchema: {},
-    outputSchema: {},
-    execute: async () => undefined,
-    createRun: async () => ({
-      start: async ({ inputData }: { inputData: ProcessorStepOutput }) => ({
-        status: 'success' as const,
-        result: await handler(inputData),
-        steps: {},
-      }),
-    }),
-  }) as unknown as ProcessorWorkflow;
-
 describe('ProcessorRunner', () => {
   let messageList: MessageList;
   let runner: ProcessorRunner;
@@ -80,240 +47,6 @@ describe('ProcessorRunner', () => {
   });
 
   describe('Input Processors', () => {
-    it('should allow processInput to return prompt-only model context without mutating canonical messages', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'prompt-only',
-            processInput: async () => ({
-              modelContextMessages: [promptOnlyMessage],
-            }),
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runInputProcessors(messageList);
-
-      expect(result.messageList.get.input.db()).toEqual([canonicalMessage]);
-      expect(result.modelContextMessages).toEqual([promptOnlyMessage]);
-    });
-
-    it('should pass prompt-only messages to later processInput processors and keep canonical messages intact', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      const trimmedPromptMessage = createMessage('trimmed prompt input', 'user');
-      const seenMessages: string[][] = [];
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'inject',
-            processInput: async ({ messages }) => {
-              seenMessages.push(messages.map(message => (message.content.parts?.[0] as TextPart).text));
-              return { modelContextMessages: [promptOnlyMessage] };
-            },
-          },
-          {
-            id: 'trim',
-            processInput: async ({ messages }) => {
-              seenMessages.push(messages.map(message => (message.content.parts?.[0] as TextPart).text));
-              return [trimmedPromptMessage];
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runInputProcessors(messageList);
-
-      expect(seenMessages).toEqual([['canonical input'], ['prompt-only input']]);
-      expect(result.messageList.get.input.db()).toEqual([canonicalMessage]);
-      expect(result.modelContextMessages).toEqual([trimmedPromptMessage]);
-    });
-
-    it('should isolate prompt-only messages from later deep mutations', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'prompt-only-from-canonical',
-            processInput: async ({ messages }) => ({
-              modelContextMessages: messages,
-            }),
-          },
-          {
-            id: 'deep-mutator',
-            processInput: async ({ messages }) => {
-              (messages[0]!.content.parts![0] as TextPart).text = 'mutated prompt-only input';
-              return undefined;
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runInputProcessors(messageList);
-
-      expect((result.messageList.get.input.db()[0]!.content.parts![0] as TextPart).text).toBe('canonical input');
-      expect((result.modelContextMessages![0]!.content.parts![0] as TextPart).text).toBe('mutated prompt-only input');
-    });
-
-    it('should treat an empty modelContextMessages array as an intentional prompt-only clear', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'prompt-only',
-            processInput: async () => ({ modelContextMessages: [promptOnlyMessage] }),
-          },
-          {
-            id: 'clear-prompt-only',
-            processInput: async () => ({ modelContextMessages: [] }),
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runInputProcessors(messageList);
-
-      expect(result.messageList.get.input.db()).toEqual([canonicalMessage]);
-      expect(result.modelContextMessages).toEqual([]);
-    });
-
-    it('should reject processInput results that return messages and modelContextMessages together', async () => {
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'invalid',
-            processInput: async ({ messages }) => ({
-              messages,
-              modelContextMessages: messages,
-            }),
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(
-        'returned both messages and modelContextMessages',
-      );
-    });
-
-    it('should reject processInput results that include both messages and modelContextMessages keys', async () => {
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'invalid-present-keys',
-            processInput: async () =>
-              ({
-                messages: undefined,
-                modelContextMessages: [promptOnlyMessage],
-              }) as never,
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(
-        'returned both messages and modelContextMessages',
-      );
-    });
-
-    it('should reject processInput object results that return messages and messageList together', async () => {
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'invalid-message-list-object',
-            processInput: async ({ messages, messageList }) =>
-              ({
-                messages,
-                messageList,
-              }) as never,
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow('returned both messages and messageList');
-    });
-
-    it('should reject mutating messageList while returning prompt-only model context', async () => {
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'invalid-mutation',
-            processInput: async ({ messageList }) => {
-              messageList.add([createMessage('canonical mutation', 'user')], 'input');
-              return { modelContextMessages: [promptOnlyMessage] };
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(
-        'mutated messageList and returned modelContextMessages',
-      );
-    });
-
-    it('should reject workflow messageList mutations while returning prompt-only model context', async () => {
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          createProcessorWorkflow('invalid-workflow-mutation', input => {
-            if (!input.messageList) throw new Error('missing messageList');
-            input.messageList.add([createMessage('canonical mutation', 'user')], 'input');
-            return {
-              phase: 'input',
-              modelContextMessages: [promptOnlyMessage],
-            };
-          }),
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(
-        'mutated messageList and returned modelContextMessages',
-      );
-    });
-
     it('should run input processors in order', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
@@ -348,7 +81,7 @@ describe('ProcessorRunner', () => {
       const result = await runner.runInputProcessors(messageList);
 
       expect(executionOrder).toEqual(['processor1', 'processor2']);
-      const messages = await result.messageList.get.all.prompt();
+      const messages = await result.get.all.prompt();
       expect(messages).toHaveLength(3);
       expect((messages[0].content[0] as TextPart).text).toBe('original message');
       expect((messages[1].content[0] as TextPart).text).toBe('processed by 1');
@@ -488,6 +221,64 @@ describe('ProcessorRunner', () => {
       expect(executionOrder).toEqual(['processor1']);
     });
 
+    it('should call onViolation when a processor triggers abort()', async () => {
+      const onViolation = vi.fn();
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Cost exceeded', { metadata: { limit: 5, usage: 7 } });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'guard-processor',
+        message: 'Cost exceeded',
+        detail: { limit: 5, usage: 7 },
+      });
+    });
+
+    it('should not fail if onViolation throws', async () => {
+      const onViolation = vi.fn().mockRejectedValue(new Error('callback error'));
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Blocked');
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalled();
+    });
+
     it('should skip processors that do not implement processInput', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
@@ -527,7 +318,7 @@ describe('ProcessorRunner', () => {
       const result = await runner.runInputProcessors(messageList);
 
       expect(executionOrder).toEqual(['processor1', 'processor3']);
-      const messages = await result.messageList.get.all.prompt();
+      const messages = await result.get.all.prompt();
       expect(messages).toHaveLength(3);
       expect((messages[0].content[0] as TextPart).text).toBe('original');
       expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
@@ -637,7 +428,7 @@ describe('ProcessorRunner', () => {
         const result = await runner.runInputProcessors(messageList);
 
         // After processing, the system messages should be modified
-        const allMessages = await result.messageList.get.all.aiV5.prompt();
+        const allMessages = await result.get.all.aiV5.prompt();
         const systemMessages = allMessages.filter((m: any) => m.role === 'system');
 
         // Verify system messages were trimmed
@@ -685,7 +476,7 @@ describe('ProcessorRunner', () => {
         const result = await runner.runInputProcessors(messageList);
 
         // Verify the system message was added
-        const allMessages = await result.messageList.get.all.aiV5.prompt();
+        const allMessages = await result.get.all.aiV5.prompt();
         const systemMessages = allMessages.filter((m: any) => m.role === 'system');
 
         expect(systemMessages).toHaveLength(1);
@@ -698,511 +489,7 @@ describe('ProcessorRunner', () => {
     });
   });
 
-  describe('Input Step Processors', () => {
-    it('should pass prompt-only messages to later processInputStep processors and keep canonical messages intact', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      const trimmedPromptMessage = createMessage('trimmed prompt input', 'user');
-      const seenMessages: string[][] = [];
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'inject-step',
-            processInputStep: async ({ messages }) => {
-              seenMessages.push(messages.map(message => (message.content.parts?.[0] as TextPart).text));
-              return { modelContextMessages: [promptOnlyMessage] };
-            },
-          },
-          {
-            id: 'trim-step',
-            processInputStep: async ({ messages }) => {
-              seenMessages.push(messages.map(message => (message.content.parts?.[0] as TextPart).text));
-              return [trimmedPromptMessage];
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runProcessInputStep({
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        model: createMockModel(),
-      });
-
-      expect(seenMessages).toEqual([['canonical input'], ['prompt-only input']]);
-      expect(messageList.get.all.db()).toEqual([canonicalMessage]);
-      expect(result.modelContextMessages).toEqual([trimmedPromptMessage]);
-    });
-
-    it('should reject canonical messageList mutations after processInputStep prompt-only mode starts', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      const mutationMessage = createMessage('canonical mutation', 'assistant');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'canonical-step-mutation',
-            processInputStep: async ({ messageList }) => {
-              messageList.add([mutationMessage], 'response');
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(
-        runner.runProcessInputStep({
-          messageList,
-          modelContextMessages: [promptOnlyMessage],
-          stepNumber: 0,
-          steps: [],
-          model: createMockModel(),
-        }),
-      ).rejects.toThrow('mutated messageList after prompt-only model context was set');
-    });
-
-    it('should reject workflow messageList mutations after processInputStep prompt-only mode starts', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      const mutationMessage = createMessage('canonical mutation', 'assistant');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          createProcessorWorkflow('canonical-step-workflow-mutation', input => {
-            if (!input.messageList) throw new Error('missing messageList');
-            input.messageList.add([mutationMessage], 'response');
-            return { phase: 'inputStep' };
-          }),
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(
-        runner.runProcessInputStep({
-          messageList,
-          modelContextMessages: [promptOnlyMessage],
-          stepNumber: 0,
-          steps: [],
-          model: createMockModel(),
-        }),
-      ).rejects.toThrow('mutated messageList after prompt-only model context was set');
-    });
-
-    it('should allow processInputStep processors to repair prompt-only context with returned messages', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      const mutationMessage = createMessage('canonical mutation', 'assistant');
-      const repairedPromptMessage = createMessage('repaired prompt-only input', 'user');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'context-step',
-            processInputStep: async () => ({ modelContextMessages: [promptOnlyMessage] }),
-          },
-          {
-            id: 'repair-step',
-            processInputStep: async ({ messageList }) => {
-              messageList.add([mutationMessage], 'response');
-              return { messages: [repairedPromptMessage] };
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runProcessInputStep({
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        model: createMockModel(),
-      });
-
-      expect(result.modelContextMessages).toEqual([repairedPromptMessage]);
-      expect(messageList.get.all.db()).toContainEqual(mutationMessage);
-    });
-
-    it('should allow processInputStep processors to add system messages after prompt-only mode starts', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'context-step',
-            processInputStep: async () => ({ modelContextMessages: [promptOnlyMessage] }),
-          },
-          {
-            id: 'system-step',
-            processInputStep: async ({ messageList }) => {
-              messageList.addSystem('extra system guidance');
-              return {};
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const result = await runner.runProcessInputStep({
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        model: createMockModel(),
-      });
-
-      expect(result.modelContextMessages).toEqual([promptOnlyMessage]);
-      expect(messageList.getAllSystemMessages()).toHaveLength(1);
-    });
-
-    it('should snapshot workflow step outputs before later in-place mutations', async () => {
-      const firstMessage = createMessage('first workflow prompt', 'user');
-      const secondMessage = createMessage('second workflow prompt', 'user');
-      const workflowOutput = {
-        phase: 'inputStep',
-        messages: [firstMessage],
-        providerOptions: { test: { mode: 'first' } },
-      } satisfies ProcessorStepOutput;
-      const processorResults: Array<{ processorId: string; result?: { messages?: MastraDBMessage[] } }> = [];
-      let watcher: ((event: unknown) => void) | undefined;
-
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'mutating-workflow',
-            inputSchema: {},
-            outputSchema: {},
-            execute: async () => undefined,
-            createRun: async () => ({
-              watch: (callback: (event: unknown) => void) => {
-                watcher = callback;
-                return () => {};
-              },
-              start: async () => {
-                watcher?.({
-                  type: 'workflow-step-result',
-                  payload: { id: 'processor:first-workflow-step', status: 'success', output: workflowOutput },
-                });
-                workflowOutput.messages = [secondMessage];
-                workflowOutput.providerOptions.test.mode = 'second';
-                watcher?.({
-                  type: 'workflow-step-result',
-                  payload: { id: 'processor:second-workflow-step', status: 'success', output: workflowOutput },
-                });
-                return { status: 'success' as const, result: workflowOutput, steps: {} };
-              },
-            }),
-          } as unknown as ProcessorWorkflow,
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await runner.runProcessInputStep({
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        model: createMockModel(),
-        onProcessorResult: result => processorResults.push(result),
-      });
-
-      expect(processorResults.map(result => result.processorId)).toEqual([
-        'first-workflow-step',
-        'second-workflow-step',
-      ]);
-      expect(processorResults.map(result => result.result?.messages?.[0]?.id)).toEqual([
-        firstMessage.id,
-        secondMessage.id,
-      ]);
-    });
-
-    it('should carry workflow snapshot result fields forward across step outputs', async () => {
-      const secondMessage = createMessage('second workflow prompt', 'user');
-      const firstWorkflowOutput = {
-        phase: 'inputStep',
-        tools: { alphaTool: { name: 'alpha' } },
-        toolChoice: { type: 'tool', toolName: 'alphaTool' } as ProcessorStepOutput['toolChoice'],
-        activeTools: ['alphaTool'],
-        providerOptions: { test: { source: 'first-step' } },
-      } satisfies ProcessorStepOutput;
-      const secondWorkflowOutput = {
-        phase: 'inputStep',
-        messages: [secondMessage],
-      } satisfies ProcessorStepOutput;
-      const processorResults: Array<{
-        processorId: string;
-        result?: {
-          messages?: MastraDBMessage[];
-          tools?: Record<string, unknown>;
-          toolChoice?: unknown;
-          activeTools?: string[];
-          providerOptions?: Record<string, unknown>;
-        };
-      }> = [];
-      let watcher: ((event: unknown) => void) | undefined;
-
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'stateful-workflow',
-            inputSchema: {},
-            outputSchema: {},
-            execute: async () => undefined,
-            createRun: async () => ({
-              watch: (callback: (event: unknown) => void) => {
-                watcher = callback;
-                return () => {};
-              },
-              start: async () => {
-                watcher?.({
-                  type: 'workflow-step-result',
-                  payload: { id: 'processor:first-workflow-step', status: 'success', output: firstWorkflowOutput },
-                });
-                watcher?.({
-                  type: 'workflow-step-result',
-                  payload: { id: 'processor:second-workflow-step', status: 'success', output: secondWorkflowOutput },
-                });
-                return { status: 'success' as const, result: secondWorkflowOutput, steps: {} };
-              },
-            }),
-          } as unknown as ProcessorWorkflow,
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await runner.runProcessInputStep({
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        model: createMockModel(),
-        tools: { baseTool: { name: 'base' } },
-        toolChoice: 'auto',
-        activeTools: ['baseTool'],
-        onProcessorResult: result => processorResults.push(result),
-      });
-
-      expect(processorResults.map(result => result.processorId)).toEqual([
-        'first-workflow-step',
-        'second-workflow-step',
-      ]);
-      expect(processorResults[1]?.result?.messages?.[0]?.id).toBe(secondMessage.id);
-      expect(processorResults[1]?.result?.tools).toEqual({ alphaTool: { name: 'alpha' } });
-      expect(processorResults[1]?.result?.toolChoice).toEqual({ type: 'tool', toolName: 'alphaTool' });
-      expect(processorResults[1]?.result?.activeTools).toEqual(['alphaTool']);
-      expect(processorResults[1]?.result?.providerOptions).toEqual({ test: { source: 'first-step' } });
-    });
-
-    it('should not subscribe workflow step snapshots without a processor result observer', async () => {
-      const watch = vi.fn(() => () => {});
-
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'unobserved-workflow',
-            inputSchema: {},
-            outputSchema: {},
-            execute: async () => undefined,
-            createRun: async () => ({
-              watch,
-              start: async () => ({
-                status: 'success' as const,
-                result: { phase: 'inputStep' } satisfies ProcessorStepOutput,
-                steps: {},
-              }),
-            }),
-          } as unknown as ProcessorWorkflow,
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await runner.runProcessInputStep({
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        model: createMockModel(),
-      });
-
-      expect(watch).not.toHaveBeenCalled();
-    });
-
-    it('should report latest workflow snapshot output for tripwire fallback phases', async () => {
-      const latestMessage = createMessage('latest workflow prompt before tripwire', 'user');
-      const workflowOutput = {
-        phase: 'inputStep',
-        messages: [latestMessage],
-      } satisfies ProcessorStepOutput;
-      const processorResults: Array<{ processorId: string; result?: { messages?: MastraDBMessage[] } }> = [];
-      let watcher: ((event: unknown) => void) | undefined;
-
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'tripwire-workflow',
-            inputSchema: {},
-            outputSchema: {},
-            execute: async () => undefined,
-            createRun: async () => ({
-              watch: (callback: (event: unknown) => void) => {
-                watcher = callback;
-                return () => {};
-              },
-              start: async () => {
-                watcher?.({
-                  type: 'workflow-step-result',
-                  payload: { id: 'processor:last-successful-step', status: 'success', output: workflowOutput },
-                });
-                return {
-                  status: 'tripwire' as const,
-                  tripwire: { reason: 'blocked', processorId: 'tripwire-step' },
-                  steps: {},
-                };
-              },
-            }),
-          } as unknown as ProcessorWorkflow,
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(
-        runner.runProcessInputStep({
-          messageList,
-          stepNumber: 0,
-          steps: [],
-          model: createMockModel(),
-          onProcessorResult: result => processorResults.push(result),
-        }),
-      ).rejects.toBeInstanceOf(TripWire);
-
-      expect(processorResults.map(result => result.processorId)).toEqual(['last-successful-step', 'tripwire-step']);
-      expect(processorResults.at(-1)?.result?.messages?.[0]?.id).toBe(latestMessage.id);
-    });
-
-    it('should reject mutating messageList while returning prompt-only model context from processInputStep', async () => {
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'invalid-step-mutation',
-            processInputStep: async ({ messageList }) => {
-              messageList.add([createMessage('canonical mutation', 'assistant')], 'response');
-              return { modelContextMessages: [promptOnlyMessage] };
-            },
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(
-        runner.runProcessInputStep({
-          messageList,
-          stepNumber: 0,
-          steps: [],
-          model: createMockModel(),
-        }),
-      ).rejects.toThrow('mutated messageList and returned modelContextMessages');
-    });
-
-    it('should reject processInputStep results that return messages and modelContextMessages together', async () => {
-      messageList.add([createMessage('canonical input', 'user')], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'invalid-step',
-            processInputStep: async ({ messages }) => ({
-              messages,
-              modelContextMessages: messages,
-            }),
-          },
-        ],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(
-        runner.runProcessInputStep({
-          messageList,
-          stepNumber: 0,
-          steps: [],
-          model: createMockModel(),
-        }),
-      ).rejects.toThrow('returned both messages and modelContextMessages');
-    });
-  });
-
   describe('Output Processors', () => {
-    it('should keep prompt-only input context out of output processors', async () => {
-      const canonicalMessage = createMessage('canonical input', 'user');
-      const promptOnlyMessage = createMessage('prompt-only input', 'user');
-      const responseMessage = createMessage('canonical response', 'assistant');
-      let messagesSeenByOutputProcessor: string[] = [];
-
-      messageList.add([canonicalMessage], 'user');
-      runner = new ProcessorRunner({
-        inputProcessors: [
-          {
-            id: 'prompt-only-input',
-            processInput: async () => ({
-              modelContextMessages: [promptOnlyMessage],
-            }),
-          },
-        ],
-        outputProcessors: [
-          {
-            id: 'memory-like-output',
-            processOutputResult: async ({ messageList }) => {
-              messagesSeenByOutputProcessor = messageList.get.all
-                .db()
-                .map(message => (message.content.parts?.[0] as TextPart).text);
-              return messageList;
-            },
-          },
-        ],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const inputResult = await runner.runInputProcessors(messageList);
-      inputResult.messageList.add([responseMessage], 'response');
-
-      await runner.runOutputProcessors(inputResult.messageList);
-
-      expect(messagesSeenByOutputProcessor).toEqual(['canonical input', 'canonical response']);
-      expect(messagesSeenByOutputProcessor).not.toContain('prompt-only input');
-    });
-
     it('should run output processors in order', async () => {
       const outputProcessors: Processor[] = [
         {
@@ -2986,44 +2273,6 @@ describe('ProcessorRunner', () => {
         }),
       );
       expect(result).toEqual({ retry: true });
-    });
-
-    it('should pass and update prompt-only model context for API-error retries', async () => {
-      const executedPromptMessage = createMessage('executed prompt-only input', 'user');
-      const repairedPromptMessage = createMessage('repaired prompt-only input', 'user');
-      const processAPIError = vi.fn().mockReturnValue({
-        retry: true,
-        modelContextMessages: [repairedPromptMessage],
-      });
-
-      runner = new ProcessorRunner({
-        inputProcessors: [{ id: 'error-handler', processAPIError }],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const canonicalInputMessage = createMessage('canonical input', 'user');
-      messageList.add(canonicalInputMessage, 'user');
-
-      const result = await runner.runProcessAPIError({
-        error: new Error('API error'),
-        messages: [executedPromptMessage],
-        modelContextMessages: [executedPromptMessage],
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        retryCount: 0,
-      });
-
-      expect(processAPIError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: [executedPromptMessage],
-          modelContextMessages: [executedPromptMessage],
-        }),
-      );
-      expect(result).toEqual({ retry: true, modelContextMessages: [repairedPromptMessage] });
-      expect(messageList.get.input.db()).toEqual([canonicalInputMessage]);
     });
 
     it('should skip processors that do not implement processAPIError', async () => {

@@ -11,14 +11,13 @@ import type {
   ToolCallPayload,
   ToolResultPayload,
 } from '../../../stream/types';
-import { withToolPayloadProjectionProviderMetadata } from '../../../tools/payload-projection';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
  * A raw chunk collected during the stream.
  * We only store the type and payload — everything needed to reconstruct messages post-stream.
  */
-export type CollectedChunk = { type: string; payload: any; metadata?: Record<string, any> };
+export type CollectedChunk = { type: string; payload: any };
 
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
@@ -49,7 +48,15 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: any;
+      args: any;
+      providerMetadata: any;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+      denied?: boolean;
+      deniedReason?: string;
+    }
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
@@ -57,9 +64,11 @@ export function buildMessagesFromChunks({
       toolResults.set(p.toolCallId, {
         result: p.result,
         args: p.args,
-        providerMetadata: withToolPayloadProjectionProviderMetadata(p.providerMetadata, chunk.metadata),
+        providerMetadata: p.providerMetadata,
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
+        denied: p.denied,
+        deniedReason: p.deniedReason,
       });
     }
   }
@@ -244,7 +253,6 @@ export function buildMessagesFromChunks({
         const p = chunk.payload as ToolCallPayload;
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
-        const providerMetadata = withToolPayloadProjectionProviderMetadata(p.providerMetadata, chunk.metadata);
 
         // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);
@@ -260,8 +268,9 @@ export function buildMessagesFromChunks({
               toolName: p.toolName,
               args: p.args,
               result: result.result,
+              ...(result.denied === true ? { denied: true, deniedReason: result.deniedReason } : {}),
             },
-            providerMetadata: result.providerMetadata ?? providerMetadata,
+            providerMetadata: result.providerMetadata ?? p.providerMetadata,
             providerExecuted: resultProviderExecuted,
           } as MastraMessagePart);
         } else {
@@ -274,7 +283,7 @@ export function buildMessagesFromChunks({
               toolName: p.toolName,
               args: p.args,
             },
-            providerMetadata,
+            providerMetadata: p.providerMetadata,
             providerExecuted,
           } as MastraMessagePart);
         }

@@ -93,13 +93,13 @@ function setupRegistry(overrides: Record<string, any> = {}) {
   return { messageList, saveQueueManager, bgManager, entry };
 }
 
-function executeStep(pubsub: any, initData: any, input?: any) {
+function executeStep(pubsub: any, initData: any, input?: any, resumeData?: any) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: input ?? baseInput(),
     mastra: { getLogger: () => undefined },
     suspend: vi.fn(),
-    resumeData: undefined,
+    resumeData,
     requestContext: new Map(),
     getInitData: () => initData,
     [PUBSUB_SYMBOL]: pubsub,
@@ -112,6 +112,34 @@ afterEach(() => {
 });
 
 describe('durable tool-call background task dispatch', () => {
+  it('emits denied tool-result chunk via PubSub when approval resume is declined', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+
+    const result = await executeStep(pubsub, initData, undefined, { approved: false });
+
+    expect(result).toMatchObject({
+      result: 'Tool call was not approved by the user',
+      denied: true,
+      deniedReason: 'Tool call was not approved by the user',
+    });
+    expect(vi.mocked(emitChunkEvent)).toHaveBeenCalledWith(
+      pubsub,
+      RUN_ID,
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: TOOL_CALL_ID,
+          toolName: TOOL_NAME,
+          result: 'Tool call was not approved by the user',
+          denied: true,
+          deniedReason: 'Tool call was not approved by the user',
+        }),
+      }),
+    );
+  });
+
   it('dispatches a background task and returns a placeholder result', async () => {
     const pubsub = mockPubsub();
     setupRegistry();

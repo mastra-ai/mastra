@@ -6,6 +6,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
+import type { Mastra } from '@mastra/core/mastra';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
@@ -72,7 +73,6 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
-  skipEmptyAssistantMessages?: boolean;
 };
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
@@ -81,7 +81,6 @@ type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
-  skipEmptyAssistantMessages?: boolean;
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
@@ -99,10 +98,6 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * with packages/core/src/memory/working-memory-utils.ts and
  * packages/core/src/memory/system-reminders.ts. Those source files also carry
  * compatibility notes that point back here.
- *
- * The empty-assistant helpers below follow the same rule: keep them in sync
- * with packages/core/src/processors/memory/message-history.ts rather than
- * importing new runtime helpers from @mastra/core.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
@@ -110,75 +105,6 @@ const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-/*
- * Compatibility note: the following empty-message detection helpers are
- * intentionally copied from packages/core/src/processors/memory/message-history.ts.
- * Keep both implementations in sync when changing this logic.
- */
-function isEmptyAssistantMessage(message: MastraDBMessage): boolean {
-  if (message.role !== 'assistant') {
-    return false;
-  }
-
-  if (typeof (message.content as unknown) === 'string') {
-    return (message.content as unknown as string).trim().length === 0;
-  }
-
-  const content = message.content;
-  if (typeof content?.content === 'string' && content.content.trim().length > 0) {
-    return false;
-  }
-
-  if (!Array.isArray(content?.parts) || content.parts.length === 0) {
-    return true;
-  }
-
-  return !content.parts.some(part => isMeaningfulAssistantPart(part));
-}
-
-function isMeaningfulAssistantPart(part: unknown): boolean {
-  if (!isRecord(part)) {
-    return false;
-  }
-
-  if (part.type === 'text') {
-    return typeof part.text === 'string' && part.text.trim().length > 0;
-  }
-
-  if (part.type === 'reasoning') {
-    return (
-      hasNonEmptyString(part.text) || hasNonEmptyString(part.reasoning) || hasMeaningfulReasoningDetails(part.details)
-    );
-  }
-
-  if (part.type === 'thinking') {
-    return typeof part.thinking === 'string' && part.thinking.trim().length > 0;
-  }
-
-  if (part.type === 'step-start' || part.type === 'step-end') {
-    return false;
-  }
-
-  return true;
-}
-
-function hasNonEmptyString(value: unknown): boolean {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function hasMeaningfulReasoningDetails(details: unknown): boolean {
-  return (
-    Array.isArray(details) &&
-    details.some(detail => {
-      if (!isRecord(detail)) {
-        return false;
-      }
-
-      return hasNonEmptyString(detail.text) || hasNonEmptyString(detail.data);
-    })
-  );
 }
 
 export function extractWorkingMemoryTags(text: string): string[] | null {
@@ -285,13 +211,31 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  */
 export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
+  private _omEngineInstance: ObservationalMemory | null | undefined;
+  private _mastraInstance: Mastra | undefined;
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
     if (!this._omEngine) {
-      this._omEngine = this._initOMEngine();
+      this._omEngine = this._initOMEngine().then(engine => {
+        this._omEngineInstance = engine;
+        if (engine && this._mastraInstance) {
+          engine.__registerMastra(this._mastraInstance);
+        }
+        return engine;
+      });
     }
     return this._omEngine;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
+    this._mastraInstance = mastra;
+    if (this._omEngineInstance) {
+      this._omEngineInstance.__registerMastra(mastra);
+    } else {
+      void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
+    }
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
@@ -1089,27 +1033,14 @@ ${workingMemory}`;
     });
 
     try {
-      const config = this.getMergedThreadConfig(memoryConfig);
-
       // Then strip working memory tags from all messages
       const updatedMessages = messages
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
-        .filter((m): m is MastraDBMessage => Boolean(m))
-        .filter(message => !config.skipEmptyAssistantMessages || !isEmptyAssistantMessage(message));
+        .filter((m): m is MastraDBMessage => Boolean(m));
 
-      if (updatedMessages.length === 0) {
-        const saveResult = { messages: [] };
-        span?.end({
-          output: { success: true },
-          attributes: {
-            messageCount: 0,
-            semanticRecallEnabled: Boolean(config.semanticRecall),
-          },
-        });
-        return saveResult;
-      }
+      const config = this.getMergedThreadConfig(memoryConfig);
 
       // Convert messages to MastraDBMessage format if needed
       const dbMessages = new MessageList({
@@ -1119,38 +1050,13 @@ ${workingMemory}`;
         .get.all.db();
 
       const memoryStore = await this.getMemoryStore();
-      const existingMessages =
-        dbMessages.length > 0
-          ? await memoryStore.listMessagesById({ messageIds: dbMessages.map(message => message.id) })
-          : { messages: [] };
-      const getMessageScopeKey = (message: Pick<MastraDBMessage, 'id' | 'resourceId' | 'threadId'>): string =>
-        `${message.threadId ?? ''}\u0000${message.resourceId ?? ''}\u0000${message.id}`;
-      const existingById = new Map(existingMessages.messages.map(message => [getMessageScopeKey(message), message]));
-      const messagesToSave = dbMessages.map(message => {
-        const existing = existingById.get(getMessageScopeKey(message));
-        if (
-          existing &&
-          existing.threadId === message.threadId &&
-          existing.resourceId === message.resourceId &&
-          existing.createdAt
-        ) {
-          return {
-            ...message,
-            createdAt: existing.createdAt,
-          };
-        }
-        return message;
-      });
-
       const result = await memoryStore.saveMessages({
-        messages: messagesToSave,
+        messages: dbMessages,
       });
 
       let totalTokens = 0;
 
       if (this.vector && config.semanticRecall) {
-        await this.deleteMessageVectors(messagesToSave.map(message => message.id));
-
         // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
         const embeddingData: Array<{
           embeddings: number[][];
@@ -1160,7 +1066,7 @@ ${workingMemory}`;
 
         // Process embeddings concurrently - this doesn't use DB connections
         await Promise.all(
-          messagesToSave.map(async message => {
+          updatedMessages.map(async message => {
             let textForEmbedding: string | null = null;
 
             if (
@@ -1640,6 +1546,7 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      mastra: this._mastraInstance,
       onIndexObservations,
       observation: omConfig.observation
         ? {

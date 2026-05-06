@@ -84,27 +84,13 @@ export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends Pr
   messageList: MessageList;
 }
 
-type ProcessInputSystemMessages = {
-  /** Replace all system messages with these. */
-  systemMessages?: CoreMessageV4[];
-};
-
 /**
- * Return type for processInput that can modify canonical messages, prompt-only model input, and/or system messages.
+ * Return type for processInput that includes modified system messages
  */
-export type ProcessInputResultObject = ProcessInputSystemMessages &
-  (
-    | {
-        /** Replace canonical messages. */
-        messages?: MastraDBMessage[];
-        modelContextMessages?: never;
-      }
-    | {
-        messages?: never;
-        /** Replace the model prompt messages for the next model call without mutating canonical messages. */
-        modelContextMessages?: MastraDBMessage[];
-      }
-  );
+export interface ProcessInputResultWithSystemMessages {
+  messages: MastraDBMessage[];
+  systemMessages: CoreMessageV4[];
+}
 
 /**
  * Return type for message-based processor methods
@@ -116,7 +102,7 @@ export type ProcessorMessageResult = Promise<MessageList | MastraDBMessage[]> | 
 /**
  * Possible return types from processInput
  */
-export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultObject;
+export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
 
 /**
  * Arguments for processInput method
@@ -200,38 +186,13 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type ProcessorResultCallback = (args: {
-  processorId: string;
-  processorName?: string;
-  processorIndex: number;
-  processorExecutor?: 'legacy' | 'workflow';
-  processorWorkflowId?: string;
-  processorStepId?: string;
-  processorStepIndex?: number;
-  processorStepStatus?: string;
-  output?: ProcessorStepOutput;
-}) => void;
-
 export type RunProcessInputStepArgs = Omit<
   ProcessInputStepArgs,
   'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
 > & {
   messageId?: string;
   rotateResponseMessageId?: () => string;
-  modelContextMessages?: MastraDBMessage[];
   retryCount?: number;
-  onProcessorResult?: (args: {
-    processorId: string;
-    processorName?: string;
-    processorIndex: number;
-    processorExecutor?: 'legacy' | 'workflow';
-    processorWorkflowId?: string;
-    processorStepId?: string;
-    processorStepIndex?: number;
-    processorStepStatus?: string;
-    output?: ProcessorStepOutput;
-    result: RunProcessInputStepResult;
-  }) => void;
 };
 
 /**
@@ -240,17 +201,7 @@ export type RunProcessInputStepArgs = Omit<
  * Note: structuredOutput.schema is typed as StandardSchemaWithJSON (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
-type ProcessInputStepMessageResult =
-  | {
-      messages?: MastraDBMessage[];
-      modelContextMessages?: never;
-    }
-  | {
-      messages?: never;
-      modelContextMessages?: MastraDBMessage[];
-    };
-
-export type ProcessInputStepResult = ProcessInputStepMessageResult & {
+export type ProcessInputStepResult = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Override the active assistant response message ID for this step */
   messageId?: string;
@@ -258,6 +209,8 @@ export type ProcessInputStepResult = ProcessInputStepMessageResult & {
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
   activeTools?: string[];
+
+  messages?: MastraDBMessage[];
   messageList?: MessageList;
   /** Replace all system messages with these */
   systemMessages?: CoreMessageV4[];
@@ -329,8 +282,6 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
  * This is distinct from network errors or retryable server errors (which are handled by p-retry).
  */
 export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
-  /** Prompt-only messages used for the failed model call, when input processors changed the model context. */
-  modelContextMessages?: MastraDBMessage[];
   /** The error that occurred during the LLM API call */
   error: unknown;
   /** The current step number (0-indexed) */
@@ -353,8 +304,6 @@ export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends Proces
 export type ProcessAPIErrorResult = {
   /** Whether to retry the LLM call after applying modifications */
   retry: boolean;
-  /** Replace the prompt-only messages used for the retry without mutating canonical history. */
-  modelContextMessages?: MastraDBMessage[];
 };
 
 /**
@@ -363,6 +312,19 @@ export type ProcessAPIErrorResult = {
  * @template TId - The processor's unique identifier type
  * @template TTripwireMetadata - The type of metadata passed when calling abort()
  */
+/**
+ * A violation event emitted by a processor when it detects a policy breach.
+ * Generic enough to be used by any processor (cost guard, moderation, PII, etc.).
+ */
+export interface ProcessorViolation<TDetail = unknown> {
+  /** The processor that detected the violation */
+  processorId: string;
+  /** Human-readable description of the violation */
+  message: string;
+  /** Processor-specific violation details */
+  detail: TDetail;
+}
+
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
@@ -377,6 +339,13 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
 
   /** When true, this processor will also receive `data-*` chunks in processOutputStream. Default: false. */
   processDataParts?: boolean;
+
+  /**
+   * Optional callback invoked when this processor detects a violation, regardless of strategy.
+   * Use for side effects like alerting, logging to external systems, or emailing users.
+   * Errors thrown by this callback are silently caught to prevent interfering with processor logic.
+   */
+  onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
 
   /**
    * Process input messages before they are sent to the LLM
@@ -593,17 +562,6 @@ export {
 export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
-export {
-  createPromptOnlyMessageList,
-  normalizePromptOnlyMessages,
-  snapshotMessageList,
-  stripPromptOnlySystemMessages,
-} from './prompt-view';
-export {
-  validateAndFormatProcessInputResult,
-  validateAndFormatProcessInputStepResult,
-  validateProcessorResultExclusivity,
-} from './validate-result';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

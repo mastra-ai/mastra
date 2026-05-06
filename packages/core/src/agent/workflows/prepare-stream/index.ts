@@ -6,10 +6,8 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
-import type { PromptToolWaterfallRecorder } from '../../../observability/prompt-tool-waterfall';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { ToolPayloadProjectionPolicy } from '../../../tools';
 import { createWorkflow } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -47,14 +45,12 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
-  toolPayloadProjection?: ToolPayloadProjectionPolicy;
   /**
    * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
    * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -80,9 +76,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
-  toolPayloadProjection,
   skipBgTaskWait,
-  promptToolWaterfallRecorder,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -109,7 +103,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     memory,
     isResume: !!resumeContext,
-    promptToolWaterfallRecorder,
   });
 
   const streamStep = createStreamStep({
@@ -131,7 +124,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     workspace,
     backgroundTaskManager,
     agentBackgroundConfig,
-    toolPayloadProjection,
     skipBgTaskWait,
   });
 
@@ -148,7 +140,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentId,
     methodType,
     saveQueueManager,
-    promptToolWaterfallRecorder,
   });
 
   return createWorkflow({

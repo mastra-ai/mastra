@@ -9,7 +9,7 @@ import type {
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
-import type { MastraDBMessage, MessageInput, MessageList } from '../agent/message-list';
+import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -19,8 +19,7 @@ import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptio
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
-import type { IModelSpanTracker, ObservabilityContext, Span, SpanType } from '../observability';
-import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
+import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -37,7 +36,6 @@ import type {
   ModelManagerModelConfig,
   StreamTransportRef,
 } from '../stream/types';
-import type { ToolPayloadProjectionPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -68,8 +66,6 @@ export type StreamInternal = {
   backgroundTaskManager?: BackgroundTaskManager;
   // Agent-level background task config
   agentBackgroundConfig?: AgentBackgroundConfig;
-  // Projection policy for display/transcript tool payloads.
-  toolPayloadProjection?: ToolPayloadProjectionPolicy;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
   // When true, backgroundTaskCheckStep returns immediately without waiting for
@@ -142,8 +138,6 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
-  promptToolWaterfallAgentSpan?: Span<SpanType.AGENT_RUN>;
   requireToolApproval?: boolean;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
@@ -183,10 +177,6 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Keyed by processor ID.
    */
   processorStates?: Map<string, ProcessorState>;
-  /**
-   * Prompt-only messages for the next model call. These do not mutate or persist canonical messages.
-   */
-  modelContextMessages?: MastraDBMessage[];
 } & Partial<ObservabilityContext>;
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {

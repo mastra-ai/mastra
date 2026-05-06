@@ -65,41 +65,6 @@ type ToolCallRespondFn<OUTPUT> = (
   },
 ) => Promise<FullOutput<OUTPUT>>;
 
-function getPendingToolInvocations(message?: UIMessage): ToolInvocation[] {
-  return (message?.parts ?? [])
-    .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
-    .map(part => part.toolInvocation)
-    .filter(
-      (toolInvocation): toolInvocation is ToolInvocation => toolInvocation != null && toolInvocation.state !== 'result',
-    );
-}
-
-function cloneUIMessage(message: UIMessage): UIMessage {
-  return JSON.parse(JSON.stringify(message));
-}
-
-function applyToolInvocationResult(lastMessage: UIMessage | undefined, toolCall: ToolInvocation, result: unknown) {
-  const toolInvocationPart = lastMessage?.parts?.find(
-    part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-  ) as ToolInvocationUIPart | undefined;
-
-  if (toolInvocationPart) {
-    toolInvocationPart.toolInvocation = {
-      ...toolInvocationPart.toolInvocation,
-      state: 'result',
-      result,
-    } as ToolInvocation;
-  }
-
-  const toolInvocation = lastMessage?.toolInvocations?.find(
-    toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-  ) as ToolInvocation | undefined;
-
-  if (toolInvocation) {
-    Object.assign(toolInvocation as any, { state: 'result', result });
-  }
-}
-
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -1330,7 +1295,7 @@ export class Agent extends BaseResource {
             step += 1;
 
             // reset the current text and reasoning parts
-            currentTextPart = chunk.payload.stepResult.isContinued ? currentTextPart : undefined;
+            currentTextPart = chunk.payload?.stepResult?.isContinued ? currentTextPart : undefined;
             currentReasoningPart = undefined;
             currentReasoningTextDetail = undefined;
 
@@ -1339,8 +1304,8 @@ export class Agent extends BaseResource {
           }
 
           case 'finish': {
-            finishReason = chunk.payload.stepResult.reason;
-            if (chunk.payload.usage != null) {
+            finishReason = chunk.payload?.stepResult?.reason ?? finishReason;
+            if (chunk.payload?.usage != null) {
               // usage = calculateLanguageModelUsage(value.usage);
               usage = chunk.payload.usage;
             }
@@ -1381,6 +1346,7 @@ export class Agent extends BaseResource {
     }
 
     try {
+      let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
 
       // Use tee() to split the stream into two branches
@@ -1432,14 +1398,16 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            let shouldExecuteClientTool = false;
-            const pendingToolCalls = getPendingToolInvocations(message);
-            const lastMessageRaw = messages[messages.length - 1];
-            const lastMessage: UIMessage | undefined =
-              lastMessageRaw != null ? cloneUIMessage(lastMessageRaw) : undefined;
+            const toolCall = [...(message?.parts ?? [])]
+              .reverse()
+              .find(part => part.type === 'tool-invocation')?.toolInvocation;
+            if (toolCall) {
+              toolCalls.push(toolCall);
+            }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
-            for (const toolCall of pendingToolCalls) {
+            for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
@@ -1457,36 +1425,58 @@ export class Agent extends BaseResource {
                   },
                 });
 
-                applyToolInvocationResult(lastMessage, toolCall, result);
-              }
-            }
+                const lastMessageRaw = messages[messages.length - 1];
+                const lastMessage: UIMessage | undefined =
+                  lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
 
-            if (shouldExecuteClientTool) {
-              // Build updated messages for the recursive call
-              // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-              // When no threadId (stateless), include full conversation history for context
-              const newMessages =
-                lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+                const toolInvocationPart = lastMessage?.parts?.find(
+                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocationUIPart | undefined;
 
-              const updatedMessages = threadId
-                ? newMessages
-                : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+                if (toolInvocationPart) {
+                  toolInvocationPart.toolInvocation = {
+                    ...toolInvocationPart.toolInvocation,
+                    state: 'result',
+                    result,
+                  };
+                }
 
-              // Recursively call stream with updated messages
-              // This will wait for the recursive stream to complete before continuing.
-              const continuationRoute = route === 'stream-until-idle' ? route : 'stream';
+                const toolInvocation = lastMessage?.toolInvocations?.find(
+                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocation | undefined;
 
-              try {
-                await this.processStreamResponse(
-                  {
-                    ...processedParams,
-                    messages: updatedMessages,
-                  },
-                  controller,
-                  continuationRoute,
-                );
-              } catch (error) {
-                console.error('Error processing recursive stream response:', error);
+                if (toolInvocation) {
+                  toolInvocation.state = 'result';
+                  // @ts-expect-error - result property exists when state is 'result'
+                  toolInvocation.result = result;
+                }
+
+                // Build updated messages for the recursive call
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages =
+                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+                const updatedMessages = threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+
+                // Recursively call stream with updated messages
+                // This will wait for the recursive stream to complete before continuing.
+                // Forward `route` so stream-until-idle (and future non-default routes)
+                // stay on the same endpoint across client-tool continuations.
+                try {
+                  await this.processStreamResponse(
+                    {
+                      ...processedParams,
+                      messages: updatedMessages,
+                    },
+                    controller,
+                    route,
+                  );
+                } catch (error) {
+                  console.error('Error processing recursive stream response:', error);
+                }
               }
             }
 
@@ -2207,6 +2197,7 @@ export class Agent extends BaseResource {
     }
 
     try {
+      let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
 
       // Use tee() to split the stream into two branches
@@ -2235,17 +2226,17 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const pendingToolCalls = getPendingToolInvocations(message);
-            const lastMessageRaw = messages[messages.length - 1];
-            const lastMessage: UIMessage | undefined =
-              lastMessageRaw != null ? cloneUIMessage(lastMessageRaw) : undefined;
-            let shouldExecuteClientTool = false;
+            const toolCall = [...(message?.parts ?? [])]
+              .reverse()
+              .find(part => part.type === 'tool-invocation')?.toolInvocation;
+            if (toolCall) {
+              toolCalls.push(toolCall);
+            }
 
             // Handle tool calls if needed
-            for (const toolCall of pendingToolCalls) {
+            for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(toolCall?.args, {
                   requestContext: processedParams.requestContext as RequestContext,
                   // TODO: Pass proper tracing context when client-js supports tracing
@@ -2260,7 +2251,29 @@ export class Agent extends BaseResource {
                   },
                 });
 
-                applyToolInvocationResult(lastMessage, toolCall, result);
+                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+
+                const toolInvocationPart = lastMessage?.parts?.find(
+                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocationUIPart | undefined;
+
+                if (toolInvocationPart) {
+                  toolInvocationPart.toolInvocation = {
+                    ...toolInvocationPart.toolInvocation,
+                    state: 'result',
+                    result,
+                  };
+                }
+
+                const toolInvocation = lastMessage?.toolInvocations?.find(
+                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocation | undefined;
+
+                if (toolInvocation) {
+                  toolInvocation.state = 'result';
+                  // @ts-expect-error - result property exists when state is 'result'
+                  toolInvocation.result = result;
+                }
 
                 // write the tool result part to the stream
                 const writer = writable.getWriter();
@@ -2279,29 +2292,26 @@ export class Agent extends BaseResource {
                 } finally {
                   writer.releaseLock();
                 }
+
+                // Build updated messages for the recursive call
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
+                const updatedMessages = threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+
+                // Recursively call stream with updated messages
+                this.processStreamResponseLegacy(
+                  {
+                    ...processedParams,
+                    messages: updatedMessages,
+                  },
+                  writable,
+                ).catch(error => {
+                  console.error('Error processing stream response:', error);
+                });
               }
-            }
-
-            if (shouldExecuteClientTool) {
-              // Build updated messages for the recursive call
-              // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-              // When no threadId (stateless), include full conversation history for context
-              const newMessages =
-                lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
-              const updatedMessages = threadId
-                ? newMessages
-                : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
-
-              // Recursively call stream with updated messages
-              this.processStreamResponseLegacy(
-                {
-                  ...processedParams,
-                  messages: updatedMessages,
-                },
-                writable,
-              ).catch(error => {
-                console.error('Error processing stream response:', error);
-              });
             }
           } else {
             setTimeout(() => {

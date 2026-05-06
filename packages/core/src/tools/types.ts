@@ -28,57 +28,6 @@ export type VercelToolV5 = ToolV5;
 
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
-export type ToolPayloadProjectionTarget = 'display' | 'transcript';
-
-export type ToolPayloadProjectionPhase =
-  | 'input-delta'
-  | 'input-available'
-  | 'output-available'
-  | 'error'
-  | 'approval'
-  | 'suspend'
-  | 'resume';
-
-export type ToolPayloadProjectionContext<TInput = unknown, TOutput = unknown, TError = unknown> = {
-  target: ToolPayloadProjectionTarget;
-  phase: ToolPayloadProjectionPhase;
-  toolName: string;
-  toolCallId: string;
-  input?: TInput;
-  inputTextDelta?: string;
-  output?: TOutput;
-  error?: TError;
-  suspendPayload?: unknown;
-  resumeData?: unknown;
-  providerMetadata?: Record<string, unknown>;
-  context?: Record<string, unknown>;
-};
-
-export type ToolPayloadProjectionResult = unknown;
-
-export type ToolPayloadProjectionFunction<TInput = unknown, TOutput = unknown, TError = unknown> = (
-  context: ToolPayloadProjectionContext<TInput, TOutput, TError>,
-) => ToolPayloadProjectionResult | Promise<ToolPayloadProjectionResult>;
-
-export type ToolPayloadProjectionTargetConfig<TInput = unknown, TOutput = unknown, TError = unknown> = {
-  input?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  inputDelta?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  output?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  error?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  approval?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  suspend?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  resume?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-};
-
-export type ToolPayloadProjection<TInput = unknown, TOutput = unknown, TError = unknown> = Partial<
-  Record<ToolPayloadProjectionTarget, ToolPayloadProjectionTargetConfig<TInput, TOutput, TError>>
->;
-
-export type ToolPayloadProjectionPolicy = {
-  projectToolPayload?: ToolPayloadProjectionFunction;
-  targets?: ToolPayloadProjectionTarget[];
-};
-
 /**
  * MCP-specific context properties available during tool execution in MCP environments.
  */
@@ -295,7 +244,6 @@ export type CoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
-  payloadProjection?: ToolPayloadProjection;
   /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.
@@ -353,7 +301,6 @@ export type InternalCoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
-  payloadProjection?: ToolPayloadProjection;
   /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.
@@ -457,14 +404,6 @@ export interface ToolAction<
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: TSchemaOut) => unknown;
-  /**
-   * Optional target-aware projection for tool payloads that leave runtime.
-   *
-   * Runtime execution still receives raw inputs and outputs. These projectors
-   * are used by display and transcript serializers to avoid exposing internal
-   * payload fields.
-   */
-  payloadProjection?: ToolPayloadProjection<TSchemaIn, TSchemaOut>;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata

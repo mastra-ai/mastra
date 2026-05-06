@@ -8,6 +8,7 @@ import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from 
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MessageInput } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { MastraFGAPermissions } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -27,12 +28,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import {
-  createPromptOnlyMessageList as createPromptOnlyProcessorMessageList,
-  normalizePromptOnlyMessages as stripPromptOnlySystemMessages,
-  ProcessorRunner,
-  ProcessorState,
-} from '../processors';
+import { ProcessorRunner, ProcessorState } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
@@ -723,7 +719,6 @@ function createStepFromProcessor<TProcessorId extends string>(
       const {
         phase,
         messages,
-        modelContextMessages,
         messageList,
         stepNumber,
         systemMessages,
@@ -771,13 +766,12 @@ function createStepFromProcessor<TProcessorId extends string>(
         finishReason: 'unknown',
         steps: [],
       };
-      const processableMessages = (modelContextMessages ?? messages ?? []) as MastraDBMessage[];
 
       const buildProcessorSpanInput = () => {
         switch (phase) {
           case 'input':
             return {
-              messages: processableMessages,
+              messages: (messages as MastraDBMessage[]) ?? [],
               ...(systemMessages ? { systemMessages } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
             };
@@ -788,8 +782,7 @@ function createStepFromProcessor<TProcessorId extends string>(
             const summarizedActiveTools = summarizeActiveToolsForSpan(activeTools, tools);
 
             return {
-              messages: processableMessages,
-              ...(modelContextMessages ? { modelContextMessages } : {}),
+              messages: (messages as MastraDBMessage[]) ?? [],
               ...(systemMessages ? { systemMessages } : {}),
               ...(stepNumber !== undefined ? { stepNumber } : {}),
               ...(currentMessageId ? { messageId: currentMessageId } : {}),
@@ -850,16 +843,6 @@ function createStepFromProcessor<TProcessorId extends string>(
               !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
             ) {
               output.messages = payload.messages;
-            }
-
-            if (
-              Array.isArray(payload.modelContextMessages) &&
-              !areProcessorMessageArraysEqual(
-                modelContextMessages as unknown[] | undefined,
-                payload.modelContextMessages,
-              )
-            ) {
-              output.modelContextMessages = payload.modelContextMessages;
             }
 
             if (
@@ -1020,7 +1003,6 @@ function createStepFromProcessor<TProcessorId extends string>(
                 .add(messages as MastraDBMessage[], 'input')
                 .addSystem((systemMessages ?? []) as CoreMessage[])
             : undefined),
-        modelContextMessages,
         stepNumber,
         systemMessages,
         streamParts,
@@ -1080,49 +1062,19 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Extract messageList after null check for proper type narrowing
               const checkedMessageList = passThrough.messageList;
-              const processorMessageList = passThrough.modelContextMessages
-                ? createPromptOnlyProcessorMessageList({
-                    canonicalMessageList: checkedMessageList,
-                    modelContextMessages: passThrough.modelContextMessages as MastraDBMessage[],
-                    systemMessages: systemMessages as CoreMessage[] | undefined,
-                  })
-                : checkedMessageList;
 
               // Create source checker before processing to preserve message sources
-              const idsBeforeProcessing = processableMessages.map(m => m.id);
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = checkedMessageList.makeMessageSourceChecker();
 
-              processorMessageList.startRecording();
-              let result: Awaited<ReturnType<NonNullable<typeof processor.processInput>>>;
-              let mutations: ReturnType<MessageList['stopRecording']>;
-              try {
-                result = await processor.processInput({
-                  ...baseContext,
-                  messages: processableMessages,
-                  messageList: processorMessageList,
-                  systemMessages: processorMessageList.getAllSystemMessages(),
-                });
-                mutations = processorMessageList.stopRecording();
-              } catch (error) {
-                processorMessageList.stopRecording();
-                throw error;
-              }
+              const result = await processor.processInput({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: checkedMessageList,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+              });
 
               if (result instanceof MessageList) {
-                if (passThrough.modelContextMessages !== undefined) {
-                  if (result !== processorMessageList) {
-                    throw new MastraError({
-                      category: ErrorCategory.USER,
-                      domain: ErrorDomain.MASTRA_WORKFLOW,
-                      id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-                      text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
-                    });
-                  }
-                  return {
-                    ...passThrough,
-                    modelContextMessages: stripPromptOnlySystemMessages(result.get.all.db()),
-                  };
-                }
                 // Validate same instance
                 if (result !== checkedMessageList) {
                   throw new MastraError({
@@ -1138,12 +1090,6 @@ function createStepFromProcessor<TProcessorId extends string>(
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
-                if (passThrough.modelContextMessages !== undefined) {
-                  return {
-                    ...passThrough,
-                    modelContextMessages: stripPromptOnlySystemMessages(result as MastraDBMessage[]),
-                  };
-                }
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
                   result as MastraDBMessage[],
@@ -1153,81 +1099,22 @@ function createStepFromProcessor<TProcessorId extends string>(
                   'input',
                 );
                 return { ...passThrough, messages: result };
-              } else if (result) {
-                if ('messages' in result && 'modelContextMessages' in result) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_RETURNED_MESSAGES_AND_MODEL_CONTEXT_MESSAGES',
-                    text: `Processor ${processor.id} returned both messages and modelContextMessages. Only one of these is allowed.`,
-                  });
-                }
-                if ('modelContextMessages' in result && mutations.length > 0) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_MUTATED_MESSAGE_LIST_WITH_MODEL_CONTEXT_MESSAGES',
-                    text: `Processor ${processor.id} mutated messageList and returned modelContextMessages. Prompt-only model context cannot be combined with canonical messageList mutations.`,
-                  });
-                }
-                if (result.systemMessages) {
-                  checkedMessageList.replaceAllSystemMessages(result.systemMessages as CoreMessage[]);
-                }
-                if ('modelContextMessages' in result) {
-                  return {
-                    ...passThrough,
-                    modelContextMessages: stripPromptOnlySystemMessages(
-                      (result.modelContextMessages ?? []) as MastraDBMessage[],
-                    ),
-                    ...(result.systemMessages ? { systemMessages: result.systemMessages } : {}),
-                  };
-                }
-                if (result.messages) {
-                  if (passThrough.modelContextMessages !== undefined) {
-                    return {
-                      ...passThrough,
-                      modelContextMessages: stripPromptOnlySystemMessages(result.messages as MastraDBMessage[]),
-                      ...(result.systemMessages ? { systemMessages: result.systemMessages } : {}),
-                    };
-                  }
-                  ProcessorRunner.applyMessagesToMessageList(
-                    result.messages as MastraDBMessage[],
-                    checkedMessageList,
-                    idsBeforeProcessing,
-                    check,
-                    'input',
-                  );
-                  return {
-                    ...passThrough,
-                    messages: result.messages,
-                    ...(result.systemMessages ? { systemMessages: result.systemMessages } : {}),
-                  };
-                }
-                if (result.systemMessages) {
-                  return passThrough.modelContextMessages !== undefined
-                    ? {
-                        ...passThrough,
-                        ...(mutations.length > 0
-                          ? {
-                              modelContextMessages: stripPromptOnlySystemMessages(processorMessageList.get.all.db()),
-                            }
-                          : {}),
-                        systemMessages: result.systemMessages,
-                      }
-                    : {
-                        ...passThrough,
-                        messages,
-                        systemMessages: result.systemMessages,
-                      };
-                }
-              }
-              if (passThrough.modelContextMessages !== undefined) {
-                return mutations.length > 0
-                  ? {
-                      ...passThrough,
-                      modelContextMessages: stripPromptOnlySystemMessages(processorMessageList.get.all.db()),
-                    }
-                  : { ...passThrough };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages }
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                ProcessorRunner.applyMessagesToMessageList(
+                  typedResult.messages,
+                  checkedMessageList,
+                  idsBeforeProcessing,
+                  check,
+                  'input',
+                );
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
               }
               return { ...passThrough, messages };
             }
@@ -1247,85 +1134,37 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Extract messageList after null check for proper type narrowing
               const checkedMessageList = passThrough.messageList;
-              const processorMessageList = passThrough.modelContextMessages
-                ? createPromptOnlyProcessorMessageList({
-                    canonicalMessageList: checkedMessageList,
-                    modelContextMessages: passThrough.modelContextMessages as MastraDBMessage[],
-                    systemMessages: systemMessages as CoreMessage[] | undefined,
-                  })
-                : checkedMessageList;
 
               // Create source checker before processing to preserve message sources
-              const idsBeforeProcessing = processableMessages.map(m => m.id);
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = checkedMessageList.makeMessageSourceChecker();
 
-              processorMessageList.startRecording();
-              let result: Awaited<ReturnType<NonNullable<typeof processor.processInputStep>>>;
-              let mutations: ReturnType<MessageList['stopRecording']>;
-              try {
-                result = await processor.processInputStep({
-                  ...baseContext,
-                  messages: processableMessages,
-                  messageList: processorMessageList,
-                  stepNumber: stepNumber ?? 0,
-                  systemMessages: processorMessageList.getAllSystemMessages(),
-                  // Pass model/tools configuration fields - types match ProcessInputStepArgs
-                  model: model!,
-                  tools,
-                  toolChoice,
-                  activeTools,
-                  providerOptions,
-                  modelSettings,
-                  structuredOutput,
-                  steps: steps ?? [],
-                  messageId: currentMessageId,
-                  rotateResponseMessageId: rotateCurrentResponseMessageId,
-                });
-                mutations = processorMessageList.stopRecording();
-              } catch (error) {
-                processorMessageList.stopRecording();
-                throw error;
-              }
-              if (
-                passThrough.modelContextMessages !== undefined &&
-                result &&
-                !(result instanceof MessageList) &&
-                !Array.isArray(result) &&
-                'messages' in result &&
-                'modelContextMessages' in result
-              ) {
-                const { messages: _messages, ...resultWithoutMessages } = result;
-                result = resultWithoutMessages;
-              }
+              const result = await processor.processInputStep({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: checkedMessageList,
+                stepNumber: stepNumber ?? 0,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                // Pass model/tools configuration fields - types match ProcessInputStepArgs
+                model: model!,
+                tools,
+                toolChoice,
+                activeTools,
+                providerOptions,
+                modelSettings,
+                structuredOutput,
+                steps: steps ?? [],
+                messageId: currentMessageId,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
-                messageList: processorMessageList,
+                messageList: checkedMessageList,
                 processor,
                 stepNumber: stepNumber ?? 0,
               });
 
-              if ('messages' in validatedResult && 'modelContextMessages' in validatedResult) {
-                throw new MastraError({
-                  category: ErrorCategory.USER,
-                  domain: ErrorDomain.MASTRA_WORKFLOW,
-                  id: 'PROCESSOR_RETURNED_MESSAGES_AND_MODEL_CONTEXT_MESSAGES',
-                  text: `Processor ${processor.id} returned both messages and modelContextMessages. Only one of these is allowed.`,
-                });
-              }
-              if ('modelContextMessages' in validatedResult && mutations.length > 0) {
-                throw new MastraError({
-                  category: ErrorCategory.USER,
-                  domain: ErrorDomain.MASTRA_WORKFLOW,
-                  id: 'PROCESSOR_MUTATED_MESSAGE_LIST_WITH_MODEL_CONTEXT_MESSAGES',
-                  text: `Processor ${processor.id} mutated messageList and returned modelContextMessages. Prompt-only model context cannot be combined with canonical messageList mutations.`,
-                });
-              }
-
-              if (
-                validatedResult.messages &&
-                passThrough.modelContextMessages === undefined &&
-                validatedResult.modelContextMessages === undefined
-              ) {
+              if (validatedResult.messages) {
                 ProcessorRunner.applyMessagesToMessageList(
                   validatedResult.messages,
                   checkedMessageList,
@@ -1333,59 +1172,16 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                 );
               }
-              if (validatedResult.messages && passThrough.modelContextMessages !== undefined) {
-                validatedResult.modelContextMessages = stripPromptOnlySystemMessages(validatedResult.messages);
-                delete validatedResult.messages;
-              }
-              if (validatedResult.messageList && passThrough.modelContextMessages !== undefined) {
-                validatedResult.modelContextMessages = stripPromptOnlySystemMessages(processorMessageList.get.all.db());
-                delete validatedResult.messageList;
-              }
-              if (validatedResult.modelContextMessages !== undefined) {
-                validatedResult.modelContextMessages = stripPromptOnlySystemMessages(
-                  validatedResult.modelContextMessages,
-                );
-              }
 
               if (validatedResult.systemMessages) {
                 checkedMessageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
-              const returnPassThrough = { ...passThrough };
-              let returnMessages = validatedResult.modelContextMessages ?? messages;
-              if (
-                !('messages' in validatedResult) &&
-                !('modelContextMessages' in validatedResult) &&
-                mutations.length > 0
-              ) {
-                if (passThrough.modelContextMessages !== undefined) {
-                  validatedResult.modelContextMessages = stripPromptOnlySystemMessages(
-                    processorMessageList.get.all.db(),
-                  );
-                  returnMessages = validatedResult.modelContextMessages;
-                } else {
-                  delete returnPassThrough.modelContextMessages;
-                  returnMessages = checkedMessageList.get.all.db();
-                }
-              }
-
-              const nextModelContextMessages =
-                validatedResult.modelContextMessages ??
-                (returnPassThrough.modelContextMessages !== undefined && validatedResult.messages
-                  ? stripPromptOnlySystemMessages(validatedResult.messages)
-                  : undefined);
-              if (nextModelContextMessages !== undefined) {
-                const { messages: _messages, ...validatedWithoutMessages } = validatedResult;
-                return {
-                  ...returnPassThrough,
-                  ...validatedWithoutMessages,
-                  modelContextMessages: nextModelContextMessages,
-                  ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
-                };
-              }
+              // Preserve messages in return - passThrough doesn't include messages,
+              // so we must explicitly include it to avoid losing it for subsequent steps.
               return {
-                ...returnPassThrough,
-                messages: validatedResult.messages ?? returnMessages,
+                ...passThrough,
+                messages,
                 ...validatedResult,
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
@@ -2727,6 +2523,21 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext(rest);
     this.__registerMastra(mastra);
 
+    // FGA authorization check
+    const fgaProvider = mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = requestContext?.get('user' as any);
+      if (user) {
+        const { checkFGA } = await import('../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'workflow', id: this.id },
+          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        });
+      }
+    }
+
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;
 
     this.#options = {
@@ -3123,11 +2934,6 @@ export class Workflow<
       activeStepsPath: includeAllFields || fieldsSet.has('activeStepsPath') ? snapshotState.activeStepsPath : undefined,
       serializedStepGraph:
         includeAllFields || fieldsSet.has('serializedStepGraph') ? snapshotState.serializedStepGraph : undefined,
-      suspendedPaths: includeAllFields || fieldsSet.has('suspendedPaths') ? snapshotState.suspendedPaths : undefined,
-      resumeLabels: includeAllFields || fieldsSet.has('resumeLabels') ? snapshotState.resumeLabels : undefined,
-      waitingPaths: includeAllFields || fieldsSet.has('waitingPaths') ? snapshotState.waitingPaths : undefined,
-      ...(fieldsSet.has('requestContext') ? { requestContext: snapshotState.requestContext } : {}),
-      ...(fieldsSet.has('tracingContext') ? { tracingContext: snapshotState.tracingContext } : {}),
     };
 
     // Clean up undefined/empty values if field filtering is active
@@ -3139,11 +2945,6 @@ export class Workflow<
       if (!fieldsSet.has('steps')) delete result.steps;
       if (result.activeStepsPath === undefined) delete result.activeStepsPath;
       if (result.serializedStepGraph === undefined) delete result.serializedStepGraph;
-      if (result.suspendedPaths === undefined) delete result.suspendedPaths;
-      if (result.resumeLabels === undefined) delete result.resumeLabels;
-      if (result.waitingPaths === undefined) delete result.waitingPaths;
-      if (result.requestContext === undefined) delete result.requestContext;
-      if (result.tracingContext === undefined) delete result.tracingContext;
     }
 
     return result;

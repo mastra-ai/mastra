@@ -7,9 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { getRootExportSpan, resolveObservabilityContext, SpanType } from '../../observability';
-import type { Span } from '../../observability';
-import type { PromptToolWaterfall } from '../../observability/prompt-tool-waterfall';
+import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
@@ -122,8 +120,6 @@ export type FullOutput<OUTPUT = undefined> = {
   error: Error | undefined;
   /** Tripwire data if content was blocked */
   tripwire: StepTripwireData | undefined;
-  /** Summary-only prompt/tool waterfall for this execution */
-  promptWaterfall?: PromptToolWaterfall;
   /** Scoring data for evals (when returnScorerData is enabled) */
   scoringData?: {
     input: Omit<ScorerRunInputForAgent, 'runId'>;
@@ -713,7 +709,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 metadata: chunk.payload?.metadata,
                 processorId: chunk.payload?.processorId,
               };
-              self.#finalizePromptWaterfallTripwire(self.#tripwire);
               self.#finishReason = 'other';
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
@@ -902,7 +897,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
-                  self.#finalizePromptWaterfallTripwire(self.#tripwire);
                   self.resolvePromises({
                     finishReason: 'other',
                     text: '',
@@ -911,14 +905,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   self.#error = getErrorFromUnknown(error, {
                     fallbackMessage: 'Unknown error in stream',
                   });
-                  self.#finalizePromptWaterfallError(self.#error);
-                  self.#status = 'failed';
-                  Object.values(self.#delayedPromises).forEach(promise => {
-                    if (promise.status.type === 'pending') {
-                      promise.reject(self.#error);
-                    }
+                  self.resolvePromises({
+                    finishReason: 'error',
+                    text: '',
                   });
-                  throw self.#error;
                 }
                 if (self.#delayedPromises.object.status.type !== 'resolved') {
                   self.#delayedPromises.object.resolve(undefined as OUTPUT);
@@ -1021,7 +1011,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 fallbackMessage: 'Unknown error chunk in stream',
               });
               self.#error = error;
-              self.#finalizePromptWaterfallError(error);
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
@@ -1096,32 +1085,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (initialState) {
       this.deserializeState(initialState);
     }
-  }
-
-  #getPromptWaterfallAgentSpan(): Span<SpanType.AGENT_RUN> | undefined {
-    const currentSpan = this.#options.tracingContext?.currentSpan;
-    return (currentSpan?.type === SpanType.AGENT_RUN ? currentSpan : currentSpan?.findParent(SpanType.AGENT_RUN)) as
-      | Span<SpanType.AGENT_RUN>
-      | undefined;
-  }
-
-  #finalizePromptWaterfallError(error: unknown) {
-    this.#options.promptToolWaterfallRecorder?.finalizeSpan({
-      agentSpan: this.#getPromptWaterfallAgentSpan(),
-      status: 'error',
-      error,
-    });
-  }
-
-  #finalizePromptWaterfallTripwire(tripwire: StepTripwireData | undefined) {
-    this.#options.promptToolWaterfallRecorder?.finalizeSpan({
-      agentSpan: this.#getPromptWaterfallAgentSpan(),
-      status: 'tripwire',
-      tripwire: {
-        reason: tripwire?.reason,
-        processorId: tripwire?.processorId,
-      },
-    });
   }
 
   private resolvePromise<KEY extends keyof PromiseResults<OUTPUT>>(key: KEY, value: PromiseResults<OUTPUT>[KEY]) {
@@ -1356,7 +1319,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         logger: this.logger,
       });
     } catch (error) {
-      this.#finalizePromptWaterfallError(error);
       options?.onError?.(error);
     }
   }
@@ -1416,7 +1378,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       object: await this.object,
       error: this.error,
       tripwire: this.#tripwire,
-      ...(this.promptWaterfall ? { promptWaterfall: this.promptWaterfall } : {}),
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
       spanId: this.spanId,
@@ -1438,13 +1399,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get tripwire(): StepTripwireData | undefined {
     return this.#tripwire;
-  }
-
-  /**
-   * Summary-only prompt/tool waterfall after the stream has finalized.
-   */
-  get promptWaterfall(): PromptToolWaterfall | undefined {
-    return this.#options.promptToolWaterfallRecorder?.finalized;
   }
 
   /**

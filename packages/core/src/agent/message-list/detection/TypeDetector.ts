@@ -150,7 +150,6 @@ export class TypeDetector {
 
     for (const part of msg.parts) {
       if (part.type === 'source-document') return true;
-      if (part.type === 'dynamic-tool') return true;
 
       if (
         'toolCallId' in part &&

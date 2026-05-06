@@ -961,23 +961,6 @@ type BaseMemoryConfig = {
   filterIncompleteToolCalls?: boolean;
 
   /**
-   * Whether to skip assistant messages that contain no meaningful output when
-   * persisting memory.
-   *
-   * When true, assistant messages with blank `content.content` and no non-empty
-   * text/reasoning parts or other persistable content parts are not saved. This
-   * prevents aborted or failed no-op assistant rows from being replayed into
-   * later model context.
-   *
-   * Messages with non-empty `content.content` are still saved even if their
-   * `parts` array is empty. With this flag disabled, the existing empty-parts
-   * filtering behavior is unchanged.
-   *
-   * @default false
-   */
-  skipEmptyAssistantMessages?: boolean;
-
-  /**
    * Thread management configuration.
    * @deprecated The `threads` object is deprecated. Use top-level `generateTitle` instead of `threads.generateTitle`.
    */
@@ -1181,9 +1164,6 @@ export type SerializedMemoryConfig = {
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;
-
-    /** Skip persisting no-op assistant messages */
-    skipEmptyAssistantMessages?: boolean;
 
     /** Title generation configuration (serialized form) */
     generateTitle?:

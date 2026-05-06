@@ -174,9 +174,7 @@ export class CustomInputProcessor implements Processor {
 }
 ```
 
-The `processInput()` method receives `messages`, `systemMessages`, and an `abort()` function. Return a `MastraDBMessage[]` to replace canonical messages, or `{ messages, systemMessages }` to also modify system messages.
-
-Return `{ modelContextMessages }` when you want to change the next model prompt without changing canonical messages. Later input processors receive that prompt-only list as `messages`, but Mastra does not persist it to memory. Return `{ modelContextMessages: [] }` to clear the prompt-only non-system messages for the next model call.
+The `processInput()` method receives `messages`, `systemMessages`, and an `abort()` function. Return a `MastraDBMessage[]` to replace messages, or `{ messages, systemMessages }` to also modify system messages.
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinput) for all available arguments and return types.
 
@@ -375,23 +373,13 @@ See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-
 
 ### `ToolCallFilter`
 
-Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools.
-
-The filter runs on the initial input and on each agentic loop step. During step processing, it keeps the latest completed step by default and changes only the next model prompt, so stored history and final tool results remain intact.
+Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.
 
 By default, `ToolCallFilter` filters the initial input before the agent loop starts. Use `filterAfterToolSteps` to also filter during each loop step while preserving recent tool-producing steps.
 
 ```typescript
 new ToolCallFilter({
   filterAfterToolSteps: 2,
-})
-```
-
-Set `preserveModelOutput: true` to keep compact `toModelOutput` history for filtered completed tool results. The filter keeps only the model-facing output and removes raw tool args and raw results.
-
-```typescript
-new ToolCallFilter({
-  preserveModelOutput: true,
 })
 ```
 
@@ -676,6 +664,42 @@ The retry mechanism:
 - Replays the step with the abort reason added as context for the LLM
 - Tracks retry count via the `retryCount` parameter
 - Respects `maxProcessorRetries` limit on the agent
+
+### Violation callbacks
+
+All processors expose an `onViolation` property that fires whenever a policy violation is detected — both when `abort()` is called (block strategy) and when a processor issues a warning (warn strategy). Use it for alerting, logging, or side effects without affecting the processor's main logic:
+
+```typescript title="src/mastra/processors/violation-logging.ts"
+import { ModerationProcessor, CostGuardProcessor } from '@mastra/core/processors'
+
+const moderation = new ModerationProcessor({
+  model: 'openai/gpt-5-nano',
+  strategy: 'block',
+})
+
+moderation.onViolation = ({ processorId, message, detail }) => {
+  // Log to external monitoring, send alerts, update dashboards
+  monitor.track('processor_violation', { processorId, message, detail })
+}
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 10.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ processorId, message, detail }) => {
+  alertSystem.notify(`[${processorId}] ${message}`)
+}
+```
+
+The callback receives a `ProcessorViolation` object with:
+
+- `processorId`: The ID of the processor that detected the violation
+- `message`: A human-readable description of what was violated
+- `detail`: Processor-specific metadata (e.g. cost usage, detected PII types, moderation categories)
+
+`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are silently caught to prevent interfering with the processor pipeline.
 
 ### Abort and tripwire chunks
 

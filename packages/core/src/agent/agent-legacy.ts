@@ -29,7 +29,6 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
-import { createPromptOnlyMessageList } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
@@ -117,7 +116,6 @@ export interface AgentLegacyCapabilities {
     } & ObservabilityContext,
   ): Promise<{
     messageList: MessageList;
-    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -132,7 +130,6 @@ export interface AgentLegacyCapabilities {
       messageList: MessageList;
       stepNumber?: number;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
-      modelContextMessages?: MastraDBMessage[];
       tools?: Record<string, CoreTool>;
       runId?: string;
       threadId?: string;
@@ -144,7 +141,6 @@ export interface AgentLegacyCapabilities {
   ): Promise<{
     messageList: MessageList;
     tools?: Record<string, CoreTool>;
-    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -328,18 +324,12 @@ export class AgentLegacyHandler {
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
-          const {
-            messageList: processedMessageList,
-            tripwire,
-            modelContextMessages,
-          } = await this.capabilities.__runInputProcessors({
+          const { tripwire } = await this.capabilities.__runInputProcessors({
             requestContext,
             ...innerObservabilityContext,
             messageList,
             inputProcessorOverrides: inputProcessors,
           });
-          messageList = processedMessageList;
-          let currentModelContextMessages = modelContextMessages;
           // Run processInputStep for step 0 (legacy path compatibility)
           if (!tripwire) {
             const inputStepResult = await this.capabilities.__runProcessInputStep({
@@ -348,14 +338,11 @@ export class AgentLegacyHandler {
               messageList,
               stepNumber: 0,
               inputProcessorOverrides: inputProcessors,
-              modelContextMessages: currentModelContextMessages,
               tools: convertedTools,
               runId,
               threadId,
               resourceId,
             });
-            messageList = inputStepResult.messageList;
-            currentModelContextMessages = inputStepResult.modelContextMessages;
             if (inputStepResult.tools) {
               convertedTools = inputStepResult.tools;
             }
@@ -371,14 +358,8 @@ export class AgentLegacyHandler {
               };
             }
           }
-          const promptMessageList = currentModelContextMessages
-            ? createPromptOnlyMessageList({
-                canonicalMessageList: messageList,
-                modelContextMessages: currentModelContextMessages,
-              })
-            : messageList;
           return {
-            messageObjects: tripwire ? [] : promptMessageList.get.all.prompt(),
+            messageObjects: tripwire ? [] : messageList.get.all.prompt(),
             convertedTools,
             threadExists: false,
             thread: undefined,
@@ -444,18 +425,13 @@ export class AgentLegacyHandler {
         // Historical messages, semantic recall, and working memory will be added by input processors
         messageList.add(messages, 'user');
 
-        const {
-          messageList: processedMessageList,
-          tripwire,
-          modelContextMessages,
-        } = await this.capabilities.__runInputProcessors({
+        const { messageList: processedMessageList, tripwire } = await this.capabilities.__runInputProcessors({
           requestContext,
           ...innerObservabilityContext,
           messageList,
           inputProcessorOverrides: inputProcessors,
         });
         messageList = processedMessageList;
-        let currentModelContextMessages = modelContextMessages;
 
         // Run processInputStep phase for step 0 (legacy path compatibility).
         // The v5 agentic loop runs this per-step in llm-execution-step, but the legacy
@@ -468,14 +444,11 @@ export class AgentLegacyHandler {
             messageList,
             stepNumber: 0,
             inputProcessorOverrides: inputProcessors,
-            modelContextMessages: currentModelContextMessages,
             tools: convertedTools,
             runId,
             threadId,
             resourceId,
           });
-          messageList = inputStepResult.messageList;
-          currentModelContextMessages = inputStepResult.modelContextMessages;
           if (inputStepResult.tools) {
             convertedTools = inputStepResult.tools;
           }
@@ -494,13 +467,7 @@ export class AgentLegacyHandler {
 
         // Messages are already processed by __runInputProcessors and __runProcessInputStep above
         // which includes memory processors (WorkingMemory, MessageHistory, OM, etc.)
-        const promptMessageList = currentModelContextMessages
-          ? createPromptOnlyMessageList({
-              canonicalMessageList: messageList,
-              modelContextMessages: currentModelContextMessages,
-            })
-          : messageList;
-        const processedList = promptMessageList.get.all.prompt();
+        const processedList = messageList.get.all.prompt();
 
         return {
           convertedTools,

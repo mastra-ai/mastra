@@ -1,21 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
-import type { ChunkType, ProviderMetadata } from '../../../stream/types';
-import { getInternalToolExecutionHints, resolveInternalExecutionHint } from '../../../tools/internal-execution-hints';
-import {
-  getProjectedToolPayload,
-  hasProjectedToolPayload,
-  projectToolPayloadForTargets,
-  withToolPayloadProjectionMetadata,
-  withToolPayloadProjectionProviderMetadata,
-} from '../../../tools/payload-projection';
+import type { ProviderMetadata } from '../../../stream/types';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -31,7 +24,6 @@ type AddToolMetadataOptions = {
   args: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
-  metadata?: Record<string, unknown>;
 } & (
   | {
       type: 'approval';
@@ -55,25 +47,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
-  let unsafeToolCallQueue = Promise.resolve();
-
-  const runUnsafeToolCall = async <T>(fn: () => Promise<T>): Promise<T> => {
-    const previous = unsafeToolCallQueue;
-    let release: () => void = () => {};
-    unsafeToolCallQueue = new Promise<void>(resolve => {
-      release = resolve;
-    });
-
-    await previous.catch(() => undefined);
-
-    try {
-      return await fn();
-    } finally {
-      release();
-    }
-  };
-
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -84,61 +59,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Fall back to the original tools from the closure if not set
       const stepTools = (_internal?.stepTools as Tools) || tools;
       const stepActiveTools = _internal?.stepActiveTools;
+
       const tool =
         stepTools?.[inputData.toolName] ||
         findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
-      const projectionSource = {
-        policy: _internal?.toolPayloadProjection,
-        toolProjection: (tool as { payloadProjection?: unknown } | undefined)?.payloadProjection as any,
-      };
-      const projectChunk = async (
-        chunk: ChunkType<OUTPUT>,
-        phase: 'input-available' | 'approval' | 'suspend' | 'output-available' | 'error',
-        extra?: { output?: unknown; error?: unknown; suspendPayload?: unknown },
-      ): Promise<ChunkType<OUTPUT>> => {
-        const payload = 'payload' in chunk ? (chunk.payload as Record<string, any>) : {};
-        const projectionInput = payload.args ?? inputData.args;
-        const projectionToolName = typeof payload.toolName === 'string' ? payload.toolName : inputData.toolName;
-        const projectionToolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : inputData.toolCallId;
-        const projectionProviderMetadata =
-          (payload.providerMetadata as Record<string, unknown> | undefined) ??
-          (inputData.providerMetadata as Record<string, unknown> | undefined);
-
-        const inputProjection = await projectToolPayloadForTargets(
-          {
-            phase: 'input-available',
-            toolName: projectionToolName,
-            toolCallId: projectionToolCallId,
-            input: projectionInput,
-            providerMetadata: projectionProviderMetadata,
-          },
-          projectionSource,
-          logger,
-        );
-        const payloadProjection =
-          phase === 'input-available'
-            ? undefined
-            : await projectToolPayloadForTargets(
-                {
-                  phase,
-                  toolName: projectionToolName,
-                  toolCallId: projectionToolCallId,
-                  input: projectionInput,
-                  output: extra?.output,
-                  error: extra?.error,
-                  suspendPayload: extra?.suspendPayload,
-                  providerMetadata: projectionProviderMetadata,
-                },
-                projectionSource,
-                logger,
-              );
-
-        return withToolPayloadProjectionMetadata(
-          withToolPayloadProjectionMetadata(chunk, inputProjection),
-          payloadProjection,
-        ) as ChunkType<OUTPUT>;
-      };
 
       const addToolMetadata = ({
         toolCallId,
@@ -148,7 +73,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
-        metadata: toolStateProjectionMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
@@ -165,35 +89,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
           // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
-          const inputProjection = getProjectedToolPayload(
-            toolStateProjectionMetadata,
-            'transcript',
-            'input-available',
-          )?.projected;
-          const approvalProjection = getProjectedToolPayload(
-            toolStateProjectionMetadata,
-            'transcript',
-            'approval',
-          )?.projected;
-          const suspendProjection = getProjectedToolPayload(
-            toolStateProjectionMetadata,
-            'transcript',
-            'suspend',
-          )?.projected;
-          const projectedArgs =
-            type === 'approval'
-              ? (approvalProjection ?? inputProjection ?? args)
-              : (inputProjection ?? suspendProjection ?? args);
-          const projectedSuspendPayload = type === 'suspension' ? (suspendProjection ?? suspendPayload) : undefined;
           metadata[metadataKey][toolName] = {
             toolCallId,
             toolName,
-            args: projectedArgs,
+            args,
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
-            ...(type === 'suspension' ? { suspendPayload: projectedSuspendPayload } : {}),
+            ...(type === 'suspension' ? { suspendPayload } : {}),
             resumeSchema,
-            ...(toolStateProjectionMetadata ? { metadata: toolStateProjectionMetadata } : {}),
           };
           lastAssistantMessage.content.metadata = metadata;
         }
@@ -363,22 +266,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (!tool.execute) {
         return inputData;
       }
-      const executeTool = tool.execute;
 
-      const internalExecutionHints = getInternalToolExecutionHints(tool);
-      const globalRequireToolApproval = !!requestContext.get('__mastra_requireToolApproval');
-      const bypassGlobalToolApproval =
-        resolveInternalExecutionHint(internalExecutionHints?.bypassGlobalToolApproval, inputData.args) &&
-        !(tool as any).requireApproval &&
-        !(tool as any).hasSuspendSchema;
-      const safeForConcurrentExecution =
-        resolveInternalExecutionHint(internalExecutionHints?.safeForConcurrentExecution, inputData.args) &&
-        bypassGlobalToolApproval;
-      const shouldSerializeToolCall =
-        !safeForConcurrentExecution &&
-        (globalRequireToolApproval || !!(tool as any).requireApproval || !!(tool as any).hasSuspendSchema);
-
-      const executeToolCall = async () => {
+      try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
 
         let resumeDataFromArgs: any = undefined;
@@ -399,8 +288,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval =
-          (bypassGlobalToolApproval ? false : requireToolApproval) || (tool as any).requireApproval;
+        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
         if ((tool as any).needsApprovalFn) {
           // Evaluate the function with parsed args and available context
           try {
@@ -430,21 +318,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (toolRequiresApproval) {
           if (!resumeData) {
-            const approvalChunk = await projectChunk(
-              {
-                type: 'tool-call-approval',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId: inputData.toolCallId,
-                  toolName: inputData.toolName,
-                  args: inputData.args,
-                  resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
-                },
+            controller.enqueue({
+              type: 'tool-call-approval',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
               },
-              'approval',
-            );
-            controller.enqueue(approvalChunk);
+            });
 
             // Add approval metadata to message before persisting
             addToolMetadata({
@@ -453,7 +337,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               args: inputData.args,
               type: 'approval',
               resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
-              metadata: approvalChunk.metadata,
             });
 
             // Flush messages before suspension to ensure they are persisted
@@ -477,8 +360,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             await removeToolMetadata(inputData.toolName, 'approval');
 
             if (!resumeData.approved) {
+              const deniedReason = 'Tool call was not approved by the user';
               return {
-                result: 'Tool call was not approved by the user',
+                result: deniedReason,
+                denied: true,
+                deniedReason,
                 ...inputData,
               };
             }
@@ -518,33 +404,29 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
-              const approvalChunk = await projectChunk(
-                {
-                  type: 'tool-call-approval',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
-                    resumeSchema: JSON.stringify(
-                      standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                          }),
-                        ),
+              controller.enqueue({
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  args: inputData.args,
+                  resumeSchema: JSON.stringify(
+                    standardSchemaToJSONSchema(
+                      toStandardSchema(
+                        z.object({
+                          approved: z
+                            .boolean()
+                            .describe(
+                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                            ),
+                        }),
                       ),
                     ),
-                  },
+                  ),
                 },
-                'approval',
-              );
-              controller.enqueue(approvalChunk);
+              });
 
               // Add approval metadata to message before persisting
               addToolMetadata({
@@ -566,7 +448,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     ),
                   ),
                 ),
-                metadata: approvalChunk.metadata,
               });
 
               // Flush messages before suspension to ensure they are persisted
@@ -586,23 +467,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
               );
             } else {
-              const suspensionChunk = await projectChunk(
-                {
-                  type: 'tool-call-suspended',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    suspendPayload,
-                    args: inputData.args,
-                    resumeSchema: options?.resumeSchema,
-                  },
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: options?.resumeSchema,
                 },
-                'suspend',
-                { suspendPayload },
-              );
-              controller.enqueue(suspensionChunk);
+              });
 
               // Add suspension metadata to message before persisting
               addToolMetadata({
@@ -613,22 +489,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 suspendedToolRunId: options?.runId,
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
-                metadata: suspensionChunk.metadata,
               });
 
               // Flush messages before suspension to ensure they are persisted
               await flushMessagesBeforeSuspension();
 
-              const resumeLabel = options?.resumeLabel ?? inputData.toolCallId;
               return await suspend(
                 {
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   toolName: inputData.toolName,
-                  resumeLabel,
+                  resumeLabel: options?.resumeLabel,
                 },
                 {
-                  resumeLabel,
+                  resumeLabel: inputData.toolCallId,
                 },
               );
             }
@@ -695,6 +569,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // FGA authorization check before tool execution
+        const toolFgaProvider = mastra?.getServer?.()?.fga;
+        if (toolFgaProvider) {
+          const fgaUser = requestContext?.get('user');
+          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
+          if (!fgaUser) {
+            throw new FGADeniedError(
+              { id: 'unknown' },
+              { type: 'tool', id: inputData.toolName },
+              MastraFGAPermissions.TOOLS_EXECUTE,
+            );
+          }
+          await checkFGA({
+            fgaProvider: toolFgaProvider,
+            user: fgaUser,
+            resource: { type: 'tool', id: inputData.toolName },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          });
+        }
+
         const llmBgOverrides =
           typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
 
@@ -729,8 +623,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (!resolvedTool?.execute) {
               throw new ToolNotFoundError(inputData.toolName);
             }
-            let backgroundChunkProjectionQueue: Promise<void> = Promise.resolve();
-            const emittedReplayedToolCalls = new Set<string>();
 
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
@@ -772,86 +664,55 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // chunks so UIs rendering this stream can show the tool's
                 // outcome inline with the conversation.
                 onChunk: chunk => {
-                  backgroundChunkProjectionQueue = backgroundChunkProjectionQueue
-                    .then(async () => {
-                      const bgRunId = chunk.payload.runId;
-                      const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
-                      if (
-                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) &&
-                        !emittedReplayedToolCalls.has(replayKey)
-                      ) {
-                        controller.enqueue(
-                          await projectChunk(
-                            {
-                              type: 'tool-call',
-                              runId: bgRunId,
-                              from: ChunkFrom.AGENT,
-                              payload: {
-                                toolCallId: chunk.payload.toolCallId,
-                                toolName: chunk.payload.toolName,
-                                args: inputData.args,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                                providerExecuted: inputData.providerExecuted,
-                              },
-                            },
-                            'input-available',
-                          ),
-                        );
-                        emittedReplayedToolCalls.add(replayKey);
-                      }
-
-                      if (chunk.type === 'background-task-completed') {
-                        controller.enqueue(
-                          await projectChunk(
-                            {
-                              type: 'tool-result',
-                              runId: bgRunId,
-                              from: ChunkFrom.AGENT,
-                              payload: {
-                                toolCallId: chunk.payload.toolCallId,
-                                toolName: chunk.payload.toolName,
-                                args: inputData.args,
-                                result: chunk.payload.result,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                                providerExecuted: inputData.providerExecuted,
-                              },
-                            },
-                            'output-available',
-                            { output: chunk.payload.result },
-                          ),
-                        );
-                      } else if (chunk.type === 'background-task-failed') {
-                        controller.enqueue(
-                          await projectChunk(
-                            {
-                              type: 'tool-error',
-                              runId: bgRunId,
-                              from: ChunkFrom.AGENT,
-                              payload: {
-                                toolCallId: chunk.payload.toolCallId,
-                                toolName: chunk.payload.toolName,
-                                error: chunk.payload.error,
-                                args: inputData.args,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                                providerExecuted: inputData.providerExecuted,
-                              },
-                            },
-                            'error',
-                            { error: chunk.payload.error },
-                          ),
-                        );
-                      }
-                    })
-                    .catch(error => {
-                      logger?.warn?.('Error projecting background task stream chunk', {
-                        toolCallId: chunk.payload.toolCallId,
-                        toolName: chunk.payload.toolName,
-                        runId: chunk.payload.runId,
-                        error,
-                        errorMessage: error instanceof Error ? error.message : undefined,
-                        errorStack: error instanceof Error ? error.stack : undefined,
+                  try {
+                    const bgRunId = chunk.payload.runId;
+                    if (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) {
+                      controller.enqueue({
+                        type: 'tool-call',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          args: inputData.args,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
                       });
-                    });
+                    }
+
+                    if (chunk.type === 'background-task-completed') {
+                      controller.enqueue({
+                        type: 'tool-result',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          args: inputData.args,
+                          result: chunk.payload.result,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    } else {
+                      controller.enqueue({
+                        type: 'tool-error',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          error: chunk.payload.error,
+                          args: inputData.args,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    }
+                  } catch {
+                    // Controller may be closed if stream ended — ignore
+                  }
                 },
 
                 // Result injector — updates the existing tool-invocation in the
@@ -867,56 +728,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     params.status === 'failed'
                       ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
                       : params.result;
-                  let projectionCarrier = withToolPayloadProjectionMetadata(
-                    { metadata: {} as Record<string, any> },
-                    await projectToolPayloadForTargets(
-                      {
-                        phase: 'input-available',
-                        toolName: params.toolName,
-                        toolCallId: params.toolCallId,
-                        input: args,
-                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                      },
-                      projectionSource,
-                      logger,
-                    ),
-                  );
-                  projectionCarrier = withToolPayloadProjectionMetadata(
-                    projectionCarrier,
-                    await projectToolPayloadForTargets(
-                      {
-                        phase: params.status === 'failed' ? 'error' : 'output-available',
-                        toolName: params.toolName,
-                        toolCallId: params.toolCallId,
-                        input: args,
-                        output: params.status === 'failed' ? undefined : params.result,
-                        error: params.status === 'failed' ? params.error : undefined,
-                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                      },
-                      projectionSource,
-                      logger,
-                    ),
-                  );
-                  const transcriptArgsProjection = getProjectedToolPayload(
-                    projectionCarrier.metadata,
-                    'transcript',
-                    'input-available',
-                  );
-                  const transcriptResultProjection = getProjectedToolPayload(
-                    projectionCarrier.metadata,
-                    'transcript',
-                    params.status === 'failed' ? 'error' : 'output-available',
-                  );
-                  const transcriptArgs = hasProjectedToolPayload(transcriptArgsProjection)
-                    ? transcriptArgsProjection.projected
-                    : args;
-                  const transcriptResult = hasProjectedToolPayload(transcriptResultProjection)
-                    ? transcriptResultProjection.projected
-                    : result;
-                  const providerMetadata = withToolPayloadProjectionProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    projectionCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
 
                   const updated = messageList.updateToolInvocation(
                     {
@@ -928,7 +739,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         args,
                         result,
                       },
-                      ...(providerMetadata ? { providerMetadata } : {}),
                     },
                     {
                       backgroundTasks: {
@@ -962,7 +772,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 type: 'tool-call' as const,
                                 toolCallId: params.toolCallId,
                                 toolName: params.toolName,
-                                args: transcriptArgs,
+                                args,
                               },
                             ],
                           },
@@ -979,7 +789,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                               type: 'tool-result' as const,
                               toolCallId: params.toolCallId,
                               toolName: params.toolName,
-                              result: transcriptResult,
+                              result,
                               isError: params.status === 'failed',
                             },
                           ],
@@ -1001,26 +811,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // Execution injector — updates the existing tool-invocation in the
                 // message list (keyed by toolCallId) background task startedAt.
                 onExecution: async params => {
-                  const inputProjection = await projectToolPayloadForTargets(
-                    {
-                      phase: 'input-available',
-                      toolName: params.toolName,
-                      toolCallId: params.toolCallId,
-                      input: args,
-                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                    },
-                    projectionSource,
-                    logger,
-                  );
-                  const projectionCarrier = withToolPayloadProjectionMetadata(
-                    { metadata: {} as Record<string, any> },
-                    inputProjection,
-                  );
-                  const providerMetadata = withToolPayloadProjectionProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    projectionCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
-
                   messageList.updateToolInvocation(
                     {
                       type: 'tool-invocation',
@@ -1030,7 +820,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolName: params.toolName,
                         args,
                       },
-                      ...(providerMetadata ? { providerMetadata } : {}),
                     },
                     {
                       backgroundTasks: {
@@ -1074,7 +863,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        const rawResult = await executeTool(args, toolOptions);
+        const rawResult = await tool.execute(args, toolOptions);
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
@@ -1092,13 +881,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         return { result, ...inputData };
-      };
-
-      const runToolCall = () => (shouldSerializeToolCall ? runUnsafeToolCall(executeToolCall) : executeToolCall());
-
-      try {
-        return await runToolCall();
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         return {
           error: error as Error,
           ...inputData,

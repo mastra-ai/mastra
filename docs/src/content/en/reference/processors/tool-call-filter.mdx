@@ -22,10 +22,9 @@ const filterSpecific = new ToolCallFilter({
   exclude: ['searchDatabase', 'sendEmail'],
 })
 
-// Exclude older tool calls on each agentic step,
-// but keep the latest tool result available once
-const filterStepHistory = new ToolCallFilter({
-  preserveLatestStep: true,
+// Enable filtering during agent loops and keep the two most recent tool-producing steps
+const filterAfterRecentTools = new ToolCallFilter({
+  filterAfterToolSteps: 2,
 })
 ```
 
@@ -50,27 +49,11 @@ const filterStepHistory = new ToolCallFilter({
             isOptional: true,
           },
           {
-            name: 'preserveLatestStep',
-            type: 'boolean',
-            description:
-              'Whether processInputStep keeps tool calls and results from the latest completed step. Defaults to true',
-            isOptional: true,
-            defaultValue: 'true',
-          },
-          {
             name: 'filterAfterToolSteps',
             type: 'number',
             description:
-              'Preserves tool calls and results from this many recent tool-producing steps during processInputStep. When set, this takes precedence over preserveLatestStep',
+              'Enables filtering during agent loops and preserves tool calls and results from this many recent tool-producing steps. If undefined, step filtering is disabled',
             isOptional: true,
-          },
-          {
-            name: 'preserveModelOutput',
-            type: 'boolean',
-            description:
-              'Keeps compact model-facing output from filtered completed tool results while removing raw tool args and raw results',
-            isOptional: true,
-            defaultValue: 'false',
           },
         ],
       },
@@ -105,11 +88,25 @@ const filterStepHistory = new ToolCallFilter({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
     description:
-      'Processes messages before each agentic loop step and returns modelContextMessages so filtering only affects the next model prompt. By default, the latest completed step tool result is preserved so the model can use it once before older tool context is removed',
+      'Processes agent loop step input when filterAfterToolSteps is configured. Returns no changes when step filtering is disabled',
     isOptional: false,
   },
 ]}
 />
+
+## Step filtering
+
+By default, `ToolCallFilter` filters only the initial input before the agent loop starts. Set `filterAfterToolSteps` to also filter during each loop step.
+
+`filterAfterToolSteps` counts tool-producing steps. For example, `filterAfterToolSteps: 2` keeps tool calls and results from the two most recent tool-producing steps and filters older tool calls and results. Non-tool text remains in context.
+
+Set `filterAfterToolSteps: 0` to filter all previous tool calls and results on each step.
+
+```typescript
+const filter = new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+```
 
 ## Extended usage example
 
@@ -133,54 +130,6 @@ export const agent = new Agent({
       exclude: ['searchDatabase'],
     }),
   ],
-})
-```
-
-## Agentic loop behavior
-
-`ToolCallFilter` runs during `processInput()` and `processInputStep()`.
-This means it filters the initial model input and later model calls in multi-step runs.
-
-By default, `processInputStep()` keeps tool calls and results from the latest completed step.
-This lets the model read a fresh tool result once, while older tool results are removed from later context.
-The filtered messages are returned as `modelContextMessages`, so the stored `MessageList`, memory, and final tool result output still keep the original tool data.
-
-Set `preserveLatestStep` to `false` to remove all matching tool calls and results at every step:
-
-```typescript
-new ToolCallFilter({
-  preserveLatestStep: false,
-})
-```
-
-Set `filterAfterToolSteps` to preserve tool calls and results from a fixed number of recent tool-producing steps:
-
-```typescript
-new ToolCallFilter({
-  filterAfterToolSteps: 2,
-})
-```
-
-Set `filterAfterToolSteps` to `0` to remove all previous tool calls and results on each step.
-
-## Preserve compact model output
-
-Set `preserveModelOutput` to `true` to retain compact `toModelOutput` history for filtered completed tool results. This keeps only the model-facing output as text in the prompt and removes raw tool args and raw tool results.
-
-Only completed tool results with `providerMetadata.mastra.modelOutput` are preserved. Tool calls, incomplete results, and results without stored model output are still filtered.
-
-```typescript
-new ToolCallFilter({
-  preserveModelOutput: true,
-})
-```
-
-Combine `preserveModelOutput` with `exclude` to preserve compact output only for filtered tools:
-
-```typescript
-new ToolCallFilter({
-  exclude: ['searchDatabase'],
-  preserveModelOutput: true,
 })
 ```
 

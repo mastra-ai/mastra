@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
-import { TTLCache } from '@isaacs/ttlcache';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -51,7 +51,6 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -73,7 +72,7 @@ import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool, ToolPayloadProjectionPolicy } from '../tools/types';
+import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -262,7 +261,6 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
-  #toolPayloadProjection?: ToolPayloadProjectionPolicy;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -358,7 +356,6 @@ export class Agent<
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
-    this.#toolPayloadProjection = config.toolPayloadProjection;
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -2815,17 +2812,14 @@ export class Agent<
     messageList,
     inputProcessorOverrides,
     processorStates,
-    onProcessorResult,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
-    onProcessorResult?: Parameters<ProcessorRunner['runInputProcessors']>[4];
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
-    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2834,7 +2828,6 @@ export class Agent<
     };
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
-    let modelContextMessages: MastraDBMessage[] | undefined;
 
     if (
       inputProcessorOverrides?.length ||
@@ -2851,13 +2844,7 @@ export class Agent<
         processorStates,
       });
       try {
-        ({ messageList, modelContextMessages } = await runner.runInputProcessors(
-          messageList,
-          observabilityContext,
-          requestContext,
-          0,
-          onProcessorResult,
-        ));
+        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2888,7 +2875,6 @@ export class Agent<
 
     return {
       messageList,
-      modelContextMessages,
       tripwire,
     };
   }
@@ -2905,7 +2891,6 @@ export class Agent<
       messageList: MessageList;
       stepNumber?: number;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
-      modelContextMessages?: MastraDBMessage[];
       processorStates?: Map<string, ProcessorState>;
       tools?: Record<string, CoreTool>;
       runId?: string;
@@ -2918,7 +2903,6 @@ export class Agent<
   ): Promise<{
     messageList: MessageList;
     tools?: Record<string, CoreTool>;
-    modelContextMessages?: MastraDBMessage[];
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -2939,14 +2923,12 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
-      modelContextMessages,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
-    let nextModelContextMessages = modelContextMessages;
 
     if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
@@ -2967,10 +2949,8 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
-          modelContextMessages: nextModelContextMessages,
           retryCount: 0,
         });
-        nextModelContextMessages = result.modelContextMessages;
         if (result.tools) {
           const workspace = await this.getWorkspace({ requestContext });
           const memory = await this.getMemory({ requestContext });
@@ -3044,7 +3024,6 @@ export class Agent<
     return {
       messageList,
       tools: nextTools,
-      modelContextMessages: nextModelContextMessages,
       tripwire,
     };
   }
@@ -4270,14 +4249,8 @@ export class Agent<
           backgroundConfig: subAgentBackgroundConfig,
         };
 
-        // Mark the wrapper tool so tool-call-step picks up the background config
-        if (subAgentBackgroundConfig) {
-          (toolObj as any).backgroundConfig = subAgentBackgroundConfig;
-        }
-
-        // TODO; fix recursion type
         convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
-          toolObj as any,
+          toolObj,
           options,
           undefined,
           autoResumeSuspendedTools,
@@ -4391,7 +4364,7 @@ export class Agent<
                 resourceId,
               });
 
-              const run = await workflow.createRun({ runId: runIdToUse });
+              const run = await workflow.createRun({ runId: runIdToUse, resourceId });
               const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
@@ -5217,7 +5190,6 @@ export class Agent<
       requestContext,
       mastra: this.#mastra,
     });
-    const promptToolWaterfallRecorder = new PromptToolWaterfallRecorder({ runId });
 
     const memory = await this.getMemory({ requestContext });
     // Reuse early workspace (resolved earlier for browser context) to avoid
@@ -5298,9 +5270,6 @@ export class Agent<
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
-      toolPayloadProjection:
-        options.toolPayloadProjection ?? this.#toolPayloadProjection ?? this.#mastra?.getToolPayloadProjection(),
-      promptToolWaterfallRecorder,
       ...(options.disableBackgroundTasks
         ? {}
         : {
@@ -5312,67 +5281,15 @@ export class Agent<
 
     const run = await executionWorkflow.createRun();
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    let result;
-    try {
-      result = await run.start({ ...observabilityContext });
-    } catch (error) {
-      promptToolWaterfallRecorder.finalizeSpan({
-        agentSpan,
-        status: 'error',
-        error,
-      });
-      const normalizedError = error instanceof Error ? error : new Error(String(error));
-      if (!agentSpan?.endTime) {
-        agentSpan?.error({ error: normalizedError, endSpan: true });
-      }
-      throw error;
-    }
+    const result = await run.start({ ...observabilityContext });
 
     return result;
   }
 
   /**
-   * Tracks in-progress runIds for single-flight: concurrent calls for the same runId
-   * await the same Promise instead of duplicating finish side effects.
+   * Handles post-execution tasks including memory persistence and title generation.
    * @internal
    */
-  #inProgressRunIds = new Map<string, Promise<void>>();
-
-  /**
-   * Bounded cache for completed runIds. Entries expire after 5 minutes to avoid
-   * unbounded memory growth while still suppressing duplicate finish calls.
-   * @internal
-   */
-  #completedRunIds = new TTLCache<string, boolean>({
-    max: 1000,
-    ttl: 5 * 60 * 1000,
-    updateAgeOnGet: true,
-  });
-
-  /**
-   * Tracks response messages already appended during finish processing. This
-   * prevents a retry after a partial finish failure from mutating the shared
-   * MessageList twice.
-   * @internal
-   */
-  #finishResponseAddedRunIds = new TTLCache<string, boolean>({
-    max: 1000,
-    ttl: 5 * 60 * 1000,
-    updateAgeOnGet: true,
-  });
-
-  /**
-   * Tracks title generation already scheduled during finish processing. Title
-   * generation is intentionally fire-and-forget, so retries must not schedule it
-   * again for the same run.
-   * @internal
-   */
-  #titleGenerationScheduledRunIds = new TTLCache<string, boolean>({
-    max: 1000,
-    ttl: 5 * 60 * 1000,
-    updateAgeOnGet: true,
-  });
-
   async #executeOnFinish({
     result,
     readOnlyMemory,
@@ -5388,77 +5305,6 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
-    promptToolWaterfallRecorder,
-  }: AgentExecuteOnFinishOptions) {
-    if (this.#completedRunIds.has(runId)) {
-      this.logger.debug('Skipping executeOnFinish - already completed for runId', { runId, threadId });
-      return;
-    }
-
-    const existingInProgress = this.#inProgressRunIds.get(runId);
-    if (existingInProgress) {
-      this.logger.debug('Waiting for in-progress executeOnFinish for runId', { runId, threadId });
-      await existingInProgress;
-      return;
-    }
-
-    const executionPromise = this.#executeOnFinishCore({
-      result,
-      readOnlyMemory,
-      thread: threadAfter,
-      threadId,
-      resourceId,
-      memoryConfig,
-      outputText,
-      requestContext,
-      agentSpan,
-      runId,
-      messageList,
-      threadExists,
-      structuredOutput,
-      overrideScorers,
-      promptToolWaterfallRecorder,
-    })
-      .then(() => {
-        this.#completedRunIds.set(runId, true);
-        this.#inProgressRunIds.delete(runId);
-      })
-      .catch(error => {
-        promptToolWaterfallRecorder?.finalizeSpan({
-          agentSpan,
-          status: 'error',
-          error,
-        });
-        const normalizedError = error instanceof Error ? error : new Error(String(error));
-        agentSpan?.error({ error: normalizedError, endSpan: true });
-        this.#inProgressRunIds.delete(runId);
-        throw error;
-      });
-
-    this.#inProgressRunIds.set(runId, executionPromise);
-    await executionPromise;
-  }
-
-  /**
-   * Handles post-execution tasks including memory persistence and title generation.
-   * @internal
-   */
-  async #executeOnFinishCore({
-    result,
-    readOnlyMemory,
-    thread: threadAfter,
-    threadId,
-    resourceId,
-    memoryConfig,
-    outputText,
-    requestContext,
-    agentSpan,
-    runId,
-    messageList,
-    threadExists,
-    structuredOutput = false,
-    overrideScorers,
-    promptToolWaterfallRecorder,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -5516,22 +5362,8 @@ export class Agent<
       ];
     }
 
-    if (responseMessages?.length && !this.#finishResponseAddedRunIds.has(runId)) {
-      const existingMessageIds = new Set(
-        messageList.get.all
-          .db()
-          .map(message => message.id)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0),
-      );
-      const newResponseMessages = responseMessages.filter(message => {
-        const id = (message as { id?: unknown }).id;
-        return !(typeof id === 'string' && existingMessageIds.has(id));
-      });
-
-      if (newResponseMessages.length > 0) {
-        messageList.add(newResponseMessages, 'response');
-      }
-      this.#finishResponseAddedRunIds.set(runId, true);
+    if (responseMessages?.length) {
+      messageList.add(responseMessages, 'response');
     }
 
     if (memory && resourceId && thread && !readOnlyMemory) {
@@ -5571,16 +5403,10 @@ export class Agent<
         const messages = messageList.get.all.core();
         const requiredMessages = minMessages ?? 1;
 
-        if (
-          shouldGenerate &&
-          !thread.title &&
-          messages.length >= requiredMessages &&
-          !this.#titleGenerationScheduledRunIds.has(runId)
-        ) {
+        if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
           const userMessage = this.getMostRecentUserMessage(uiMessages);
 
           if (userMessage) {
-            this.#titleGenerationScheduledRunIds.set(runId, true);
             void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
               async title => {
                 if (title) {
@@ -5633,19 +5459,6 @@ export class Agent<
       ...observabilityContext,
     });
 
-    promptToolWaterfallRecorder?.finalizeSpan({
-      agentSpan,
-      status: result.tripwire ? 'tripwire' : 'finished',
-      ...(result.tripwire
-        ? {
-            tripwire: {
-              reason: result.tripwire.reason,
-              processorId: result.tripwire.processorId,
-            },
-          }
-        : {}),
-    });
-
     agentSpan?.end({
       output: {
         text: result.text,
@@ -5666,21 +5479,6 @@ export class Agent<
           }
         : {}),
     });
-  }
-
-  /**
-   * @internal Test hook for focused single-flight coverage.
-   */
-  __testHandles(): {
-    executeOnFinish: (options: AgentExecuteOnFinishOptions) => Promise<void>;
-    inProgressRunIds: Map<string, Promise<void>>;
-    completedRunIds: TTLCache<string, boolean>;
-  } {
-    return {
-      executeOnFinish: this.#executeOnFinish.bind(this),
-      inProgressRunIds: this.#inProgressRunIds,
-      completedRunIds: this.#completedRunIds,
-    };
   }
 
   /**
@@ -5910,6 +5708,21 @@ export class Agent<
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
 
+    // FGA authorization check
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = options?.requestContext?.get('user');
+      if (user) {
+        const { checkFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'agent', id: this.id },
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        });
+      }
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -6026,6 +5839,21 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
+
+    // FGA authorization check
+    const streamFgaProvider = this.#mastra?.getServer()?.fga;
+    if (streamFgaProvider) {
+      const user = streamOptions?.requestContext?.get('user');
+      if (user) {
+        const { checkFGA } = await import('../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider: streamFgaProvider,
+          user,
+          resource: { type: 'agent', id: this.id },
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        });
+      }
+    }
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,

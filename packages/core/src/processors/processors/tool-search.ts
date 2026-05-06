@@ -1,21 +1,10 @@
 import { z } from 'zod/v4';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
-import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
 import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
-
-export type ToolSearchFilterPhase = 'search' | 'load' | 'active';
-
-export type ToolSearchFilterArgs = {
-  /** The resolved tool id. */
-  toolName: string;
-  tool: Tool<any, any>;
-  requestContext?: RequestContext;
-  phase: ToolSearchFilterPhase;
-};
 
 /**
  * Thread state with timestamp for TTL management
@@ -59,12 +48,6 @@ export interface ToolSearchProcessorOptions {
    * @default 3600000 (1 hour)
    */
   ttl?: number;
-
-  /**
-   * Optional request-aware hook for filtering tools during search, load, and active tool injection.
-   * Return false to hide or block a tool for the current request.
-   */
-  filterTool?: (args: ToolSearchFilterArgs) => boolean | Promise<boolean>;
 }
 
 /**
@@ -127,7 +110,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   private allTools: Record<string, Tool<any, any>>;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private ttl: number;
-  private filterTool?: ToolSearchProcessorOptions['filterTool'];
 
   /** BM25 index for tool search */
   private bm25Index: BM25Index;
@@ -143,7 +125,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   constructor(options: ToolSearchProcessorOptions) {
     this.allTools = options.tools;
-    this.filterTool = options.filterTool;
     this.searchConfig = {
       topK: options.search?.topK ?? 5,
       minScore: options.search?.minScore ?? 0,
@@ -185,66 +166,17 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return state.tools;
   }
 
-  private findTool(toolName: string): Tool<any, any> | undefined {
-    return this.allTools[toolName] ?? Object.values(this.allTools).find(tool => tool.id === toolName);
-  }
-
-  private async isToolAllowed(
-    tool: Tool<any, any>,
-    requestContext: RequestContext | undefined,
-    phase: ToolSearchFilterPhase,
-  ): Promise<boolean> {
-    if (!this.filterTool) {
-      return true;
-    }
-
-    try {
-      return await this.filterTool({ toolName: tool.id, tool, requestContext, phase });
-    } catch {
-      return false;
-    }
-  }
-
-  private async getSuggestedToolNames(toolName: string, requestContext?: RequestContext): Promise<string[]> {
-    const matchesToolName = (name: string) =>
-      name.toLowerCase().includes(toolName.toLowerCase()) || toolName.toLowerCase().includes(name.toLowerCase());
-
-    if (!this.filterTool) {
-      return Object.keys(this.allTools).filter(matchesToolName);
-    }
-
-    const allowedNames: string[] = [];
-
-    for (const [name, tool] of Object.entries(this.allTools)) {
-      if (!matchesToolName(name)) continue;
-
-      const isAllowed = await this.isToolAllowed(tool, requestContext, 'load');
-      if (isAllowed) {
-        allowedNames.push(name);
-        if (allowedNames.length >= 3) break;
-      }
-    }
-
-    return allowedNames;
-  }
-
   /**
    * Get loaded tools as Tool objects for the current thread.
    */
-  private async getLoadedTools(
-    threadId: string,
-    requestContext?: RequestContext,
-  ): Promise<Record<string, Tool<any, any>>> {
+  private getLoadedTools(threadId: string): Record<string, Tool<any, any>> {
     const loadedNames = this.getLoadedToolNames(threadId);
     const loadedTools: Record<string, Tool<any, any>> = {};
 
     for (const toolName of loadedNames) {
-      const tool = this.findTool(toolName);
+      const tool = this.allTools[toolName] || Object.values(this.allTools).find(t => t.id === toolName);
       if (tool) {
-        const isAllowed = await this.isToolAllowed(tool, requestContext, 'active');
-        if (isAllowed) {
-          loadedTools[toolName] = tool;
-        }
+        loadedTools[toolName] = tool;
       }
     }
 
@@ -359,14 +291,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * @param query - Search keywords
    * @returns Array of matching tools with scores, sorted by relevance
    */
-  private async searchTools(query: string, requestContext?: RequestContext): Promise<SearchResult[]> {
+  private searchTools(query: string): SearchResult[] {
     if (this.bm25Index.size === 0) return [];
 
-    // Get BM25 results (request more than topK to allow for re-ranking after boosting).
-    // When filtering is enabled, inspect every BM25 match so denied high-ranking tools
-    // do not prevent lower-ranking allowed tools from filling the result set.
-    const searchLimit = this.filterTool ? this.bm25Index.size : this.searchConfig.topK * 2;
-    const bm25Results = this.bm25Index.search(query, searchLimit, 0);
+    // Get BM25 results (request more than topK to allow for re-ranking after boosting)
+    const bm25Results = this.bm25Index.search(query, this.searchConfig.topK * 2, 0);
 
     if (bm25Results.length === 0) return [];
 
@@ -391,22 +320,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       return { id: result.id, score };
     });
 
-    const filteredResults: typeof boostedResults = [];
-    for (const result of boostedResults.sort((a, b) => b.score - a.score)) {
-      if (result.score <= this.searchConfig.minScore) continue;
-
-      const tool = this.findTool(result.id);
-      if (!tool) continue;
-
-      const isAllowed = await this.isToolAllowed(tool, requestContext, 'search');
-      if (isAllowed) {
-        filteredResults.push(result);
-        if (filteredResults.length >= this.searchConfig.topK) break;
-      }
-    }
-
-    // Apply topK and format results.
-    return filteredResults
+    // Re-sort after boosting, filter by minScore, apply topK
+    return boostedResults
+      .sort((a, b) => b.score - a.score)
+      .filter(r => r.score > this.searchConfig.minScore)
       .slice(0, this.searchConfig.topK)
       .map(r => {
         const description = this.toolDescriptions.get(r.id) || '';
@@ -453,12 +370,12 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
-        const results = await this.searchTools(query, args.requestContext);
+        const results = this.searchTools(query);
 
         if (results.length === 0) {
           return {
             results: [],
-            message: `No tools found matching "${query}".`,
+            message: `No tools found matching "${query}". Try different keywords.`,
           };
         }
 
@@ -523,15 +440,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         for (const name of toLoad) {
           // Check if tool exists
-          const matchingTool = this.findTool(name);
+          const matchingTool = this.allTools[name] ?? Object.values(this.allTools).find(tool => tool.id === name);
 
           if (!matchingTool) {
-            notFound.push(name);
-            continue;
-          }
-
-          const isAllowed = await this.isToolAllowed(matchingTool, args.requestContext, 'load');
-          if (!isAllowed) {
             notFound.push(name);
             continue;
           }
@@ -553,7 +464,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           // Single-tool response (backward compatible shape)
           if (notFound.length > 0) {
             const name = toLoad[0]!;
-            const suggestions = await this.getSuggestedToolNames(name, args.requestContext);
+            const availableToolNames = Object.keys(this.allTools);
+            const suggestions = availableToolNames.filter(
+              n => n.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(n.toLowerCase()),
+            );
             let message = `Tool "${name}" not found.`;
             if (suggestions.length > 0) {
               message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
@@ -594,7 +508,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     });
 
     // Get loaded tools for this thread
-    const loadedTools = await this.getLoadedTools(threadId, args.requestContext);
+    const loadedTools = this.getLoadedTools(threadId);
 
     // Return merged tools: meta-tools + existing tools + loaded tools
     return {

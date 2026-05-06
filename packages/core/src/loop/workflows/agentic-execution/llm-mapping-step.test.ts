@@ -17,6 +17,8 @@ type ToolCallOutput = {
   error?: Error;
   providerMetadata?: Record<string, any>;
   providerExecuted?: boolean;
+  denied?: boolean;
+  deniedReason?: string;
 };
 
 describe('createLLMMappingStep HITL behavior', () => {
@@ -999,6 +1001,139 @@ describe('createLLMMappingStep toModelOutput', () => {
               value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
             },
           }),
+        }),
+      }),
+    );
+  });
+
+  it('should NOT call toModelOutput for denied tool results', async () => {
+    const toModelOutputMock = vi.fn((output: unknown) => ({
+      type: 'text',
+      value: `Transformed: ${JSON.stringify(output)}`,
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          write_file: {
+            execute: async () => ({ ok: true }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({ path: z.string() }),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    await llmMappingStep.execute(
+      createExecuteParams([
+        {
+          toolCallId: 'call-1',
+          toolName: 'write_file',
+          args: { path: 'src/file.ts' },
+          result: 'Tool call was not approved by the user',
+          denied: true,
+          deniedReason: 'Tool call was not approved by the user',
+        },
+      ]),
+    );
+
+    expect(toModelOutputMock).not.toHaveBeenCalled();
+    expect(bail).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'result',
+          toolCallId: 'call-1',
+          result: 'Tool call was not approved by the user',
+          denied: true,
+          deniedReason: 'Tool call was not approved by the user',
+        }),
+      }),
+    );
+    const deniedPart = (messageList.updateToolInvocation as Mock).mock.calls.find(
+      ([part]) => part.toolInvocation?.toolCallId === 'call-1',
+    )?.[0];
+    expect(deniedPart?.providerMetadata).toBeUndefined();
+  });
+
+  it('should NOT call toModelOutput for denied tool results in mixed error turns', async () => {
+    const toModelOutputMock = vi.fn((output: unknown) => ({
+      type: 'text',
+      value: `Transformed: ${JSON.stringify(output)}`,
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          write_file: {
+            execute: async () => ({ ok: true }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({ path: z.string() }),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    await llmMappingStep.execute(
+      createExecuteParams([
+        {
+          toolCallId: 'call-1',
+          toolName: 'write_file',
+          args: { path: 'src/file.ts' },
+          result: 'Tool call was not approved by the user',
+          denied: true,
+          deniedReason: 'Tool call was not approved by the user',
+        },
+        {
+          toolCallId: 'call-2',
+          toolName: 'missing_tool',
+          args: {},
+          error: new Error('Tool not found'),
+        },
+      ]),
+    );
+
+    expect(toModelOutputMock).not.toHaveBeenCalled();
+    expect(bail).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'result',
+          toolCallId: 'call-1',
+          denied: true,
+        }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: 'call-2',
+          toolName: 'missing_tool',
+        }),
+      }),
+    );
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'result',
+          toolCallId: 'call-2',
+          result: 'Tool not found',
         }),
       }),
     );

@@ -5,14 +5,11 @@ import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
-import type { PromptToolWaterfallRecorder } from '../../../observability/prompt-tool-waterfall';
-import { summarizePromptAndTools } from '../../../observability/prompt-tool-waterfall';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
-import type { MastraDBMessage } from '../../message-list';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
@@ -48,7 +45,6 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   isResume?: boolean;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -62,7 +58,6 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   memoryConfig,
   memory,
   isResume,
-  promptToolWaterfallRecorder,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -96,69 +91,25 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
 
-        promptToolWaterfallRecorder?.recordPhase({
-          kind: 'initial',
-          stepIndex: 0,
-          ...summarizePromptAndTools({ prompt: messageList }),
-        });
-
         // Skip input processors during resume — the messageList has no user messages
         // (resumeStream passes messages: []) and the real conversation state lives in the
         // workflow snapshot. Running processors on an empty messageList would cause
         // processors like TokenLimiterProcessor to throw a TripWire.
         let tripwire;
-        let modelContextMessages: MastraDBMessage[] | undefined;
         if (!isResume) {
-          ({ tripwire, modelContextMessages } = await capabilities.runInputProcessors({
+          ({ tripwire } = await capabilities.runInputProcessors({
             requestContext,
             ...observabilityContext,
             messageList,
             inputProcessorOverrides: options.inputProcessors,
             processorStates,
-            onProcessorResult: ({
-              processorId,
-              processorIndex,
-              processorExecutor,
-              processorWorkflowId,
-              processorStepId,
-              processorStepIndex,
-              processorStepStatus,
-              output,
-            }) => {
-              promptToolWaterfallRecorder?.recordPhase({
-                kind: 'input_processors',
-                stepIndex: 0,
-                ...summarizePromptAndTools({ prompt: output ?? messageList }),
-                meta: {
-                  processorId,
-                  processorIndex,
-                  ...(processorExecutor ? { processorExecutor } : {}),
-                  ...(processorWorkflowId ? { processorWorkflowId } : {}),
-                  ...(processorStepId ? { processorStepId } : {}),
-                  ...(processorStepIndex !== undefined ? { processorStepIndex } : {}),
-                  ...(processorStepStatus ? { processorStepStatus } : {}),
-                },
-              });
-            },
           }));
-        }
-
-        if (tripwire) {
-          promptToolWaterfallRecorder?.recordPhase({
-            kind: 'input_processors',
-            stepIndex: 0,
-            ...summarizePromptAndTools({ prompt: messageList }),
-            meta: {
-              tripwire: Boolean(tripwire),
-            },
-          });
         }
 
         return {
           threadExists: false,
           thread: thread as StorageThreadType | undefined,
           messageList,
-          modelContextMessages,
           processorStates,
           tripwire,
         };
@@ -220,74 +171,24 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      promptToolWaterfallRecorder?.recordPhase({
-        kind: 'initial',
-        stepIndex: 0,
-        ...summarizePromptAndTools({ prompt: messageList }),
-      });
-
       // Skip input processors during resume — the messageList has no user messages
       // (resumeStream passes messages: []) and the real conversation state lives in the
       // workflow snapshot. Running processors on an empty messageList would cause
       // processors like TokenLimiterProcessor to throw a TripWire.
       let tripwire;
-      let modelContextMessages: MastraDBMessage[] | undefined;
       if (!isResume) {
-        ({ tripwire, modelContextMessages } = await capabilities.runInputProcessors({
+        ({ tripwire } = await capabilities.runInputProcessors({
           requestContext,
           ...observabilityContext,
           messageList,
           inputProcessorOverrides: options.inputProcessors,
           processorStates,
-          onProcessorResult: ({
-            processorId,
-            processorIndex,
-            processorExecutor,
-            processorWorkflowId,
-            processorStepId,
-            processorStepIndex,
-            processorStepStatus,
-            output,
-          }) => {
-            promptToolWaterfallRecorder?.recordPhase({
-              kind: 'input_processors',
-              stepIndex: 0,
-              ...summarizePromptAndTools({ prompt: output ?? messageList }),
-              meta: {
-                processorId,
-                processorIndex,
-                ...(processorExecutor ? { processorExecutor } : {}),
-                ...(processorWorkflowId ? { processorWorkflowId } : {}),
-                ...(processorStepId ? { processorStepId } : {}),
-                ...(processorStepIndex !== undefined ? { processorStepIndex } : {}),
-                ...(processorStepStatus ? { processorStepStatus } : {}),
-              },
-            });
-          },
         }));
-      }
-
-      promptToolWaterfallRecorder?.recordPhase({
-        kind: 'memory_added',
-        stepIndex: 0,
-        ...summarizePromptAndTools({ prompt: modelContextMessages ?? messageList }),
-      });
-
-      if (tripwire) {
-        promptToolWaterfallRecorder?.recordPhase({
-          kind: 'input_processors',
-          stepIndex: 0,
-          ...summarizePromptAndTools({ prompt: messageList }),
-          meta: {
-            tripwire: Boolean(tripwire),
-          },
-        });
       }
 
       return {
         thread: threadObject,
         messageList: messageList,
-        modelContextMessages,
         processorStates,
         tripwire,
         threadExists: !!existingThread,

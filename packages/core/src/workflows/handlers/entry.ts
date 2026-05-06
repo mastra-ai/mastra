@@ -10,6 +10,7 @@ import type {
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  StepFailure,
   StepFlowEntry,
   StepResult,
   TimeTravelExecutionParams,
@@ -56,15 +57,26 @@ function buildResumedBlockResult(
       }, {}),
     };
   } else {
-    const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
-    const suspendData =
-      stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
-    result = {
-      status: 'suspended',
-      payload: suspendData,
-      suspendPayload: suspendData,
-      suspendedAt: Date.now(),
-    };
+    // Check for failed steps before assuming suspended
+    const failedStep = stepsToCheck.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'failed');
+    if (failedStep && failedStep.type === 'step') {
+      const failedResult = stepResults[failedStep.step.id] as StepFailure<any, any, any, any> | undefined;
+      result = {
+        status: 'failed',
+        error: failedResult?.error ?? new Error('Workflow step failed after resume'),
+        tripwire: failedResult?.tripwire,
+      };
+    } else {
+      const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
+      const suspendData =
+        stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
+      result = {
+        status: 'suspended',
+        payload: suspendData,
+        suspendPayload: suspendData,
+        suspendedAt: Date.now(),
+      };
+    }
   }
 
   if (result.status === 'suspended') {
@@ -76,20 +88,6 @@ function buildResumedBlockResult(
   }
 
   return result;
-}
-
-function getResumeStepPrevOutput({
-  isResumedStep,
-  stepId,
-  stepResults,
-  prevOutput,
-}: {
-  isResumedStep: boolean;
-  stepId: string;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
-  prevOutput: any;
-}) {
-  return isResumedStep ? (stepResults[stepId]?.payload ?? prevOutput) : prevOutput;
 }
 
 export interface PersistStepUpdateParams {
@@ -233,12 +231,6 @@ export async function executeEntry(
       executionContext.stepExecutionPath?.push(entry.step.id);
     }
     const { step } = entry;
-    const stepPrevOutput = getResumeStepPrevOutput({
-      isResumedStep,
-      stepId: step.id,
-      stepResults,
-      prevOutput,
-    });
     const stepExecResult = await engine.executeStep({
       workflowId,
       runId,
@@ -249,7 +241,7 @@ export async function executeEntry(
       timeTravel,
       restart,
       resume,
-      prevOutput: stepPrevOutput,
+      prevOutput,
       ...observabilityContext,
       pubsub,
       abortController,
@@ -369,12 +361,10 @@ export async function executeEntry(
         perStep,
       });
     } else {
-      const resumePrevOutput = getResumeStepPrevOutput({
-        isResumedStep: true,
-        stepId: branchStep.step.id,
-        stepResults,
-        prevOutput,
-      });
+      // Use the step's stored payload from the snapshot as prevOutput, since the previous
+      // step (e.g., a .map() step) may have a non-deterministic ID that doesn't match
+      // between workflow constructions.
+      const resumePrevOutput = stepResults[branchStep.step.id]?.payload ?? prevOutput;
 
       branchResult = await engine.executeStep({
         workflowId,

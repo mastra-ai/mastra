@@ -4,13 +4,13 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
-import type { PromptToolWaterfall } from '../observability/prompt-tool-waterfall';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
-import type { RequestContext } from '../request-context';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
 // Heartbeat Handlers
@@ -133,6 +133,30 @@ export interface HarnessSubagent {
    * @default false
    */
   forked?: boolean;
+
+  /**
+   * Optional input processor chain applied to non-forked subagent runs.
+   *
+   * When set, the fresh `Agent` constructed for the subagent is configured
+   * with these processors so frameworks layered on top of Mastra (e.g.
+   * PapersFlow's prompt-context producers) can shape the subagent prompt
+   * with the same architecture used for top-level agents. Forked subagents
+   * reuse the parent agent's processors and ignore this field, mirroring
+   * the existing behavior for `instructions`, `tools`, etc.
+   *
+   * @default undefined (no processor chain - subagent runs without one)
+   */
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+
+  /**
+   * Optional output processor chain applied to non-forked subagent runs.
+   * Mirrors `inputProcessors` - accepts either a static array or a
+   * function returning the array, matching Agent's `outputProcessors`
+   * shape so any value valid on `Agent` config also works here.
+   *
+   * @default undefined
+   */
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
 }
 
 /**
@@ -146,7 +170,14 @@ export type HarnessStateSchema<T> = T;
 /**
  * Identifiers for the built-in harness tools that can be selectively disabled.
  */
-export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
+export type BuiltinToolId =
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
@@ -255,7 +286,8 @@ export interface HarnessConfig<TState = {}> {
   /**
    * Built-in tool IDs to disable.
    * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
-   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
+   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_update',
+   * 'task_complete', 'task_check', 'subagent'.
    */
   disableBuiltinTools?: BuiltinToolId[];
 
@@ -276,12 +308,6 @@ export interface HarnessConfig<TState = {}> {
     acquire: (threadId: string) => void | Promise<void>;
     release: (threadId: string) => void | Promise<void>;
   };
-
-  /**
-   * Defer auto-approved or auto-denied tool approvals until the current stream
-   * has drained, so durable suspension state can be persisted before resume.
-   */
-  deferredAutoApproval?: boolean;
 
   /**
    * Observability entrypoint for tracing, scoring, and feedback.
@@ -497,13 +523,13 @@ export interface OMProgressState {
 export interface ActiveToolState {
   name: string;
   args: unknown;
-  status: 'streaming_input' | 'running' | 'completed' | 'error';
-  startedAt: Date;
+  status: 'streaming_input' | 'running' | 'completed' | 'error' | 'denied';
+  startedAt?: Date;
   completedAt?: Date;
   partialResult?: string;
   result?: unknown;
   isError?: boolean;
-  denied?: boolean;
+  deniedReason?: string;
   shellOutput?: string;
 }
 
@@ -516,27 +542,16 @@ export interface ActiveSubagentState {
   task: string;
   modelId?: string;
   forked?: boolean;
-  startedAt: Date;
-  completedAt?: Date;
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
+  startedAt?: Date;
+  completedAt?: Date;
   durationMs?: number;
   result?: string;
 }
 
-export type HarnessSubagentHistoryStatus = 'completed' | 'error' | 'aborted';
-
-/**
- * Terminal subagent activity retained for display snapshots after the parent run ends.
- */
-export interface HarnessSubagentHistoryEntry extends Omit<ActiveSubagentState, 'status'> {
-  toolCallId: string;
-  status: HarnessSubagentHistoryStatus;
-  endedAt: Date;
-  order: number;
-  parentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
-}
+export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
  * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
@@ -565,105 +580,6 @@ export interface HarnessQuestionOption {
  * resolve with a string array containing each selected option label.
  */
 export type HarnessQuestionAnswer = string | string[];
-
-export type HarnessAwaitingInputKind = 'tool_approval' | 'tool_suspension' | 'question' | 'plan_approval';
-
-export type HarnessAwaitingInput =
-  | {
-      id: string;
-      kind: 'tool_approval';
-      durable: boolean;
-      runId?: string;
-      modeId?: string;
-      threadId?: string;
-      resourceId?: string;
-      toolCallId: string;
-      toolName: string;
-      args?: unknown;
-      resumeSchema?: string;
-      requireToolApproval?: boolean;
-    }
-  | {
-      id: string;
-      kind: 'tool_suspension';
-      durable: boolean;
-      runId?: string;
-      modeId?: string;
-      threadId?: string;
-      resourceId?: string;
-      toolCallId: string;
-      toolName: string;
-      args?: unknown;
-      suspendPayload?: unknown;
-      resumeSchema?: string;
-      requireToolApproval?: boolean;
-    }
-  | {
-      id: string;
-      kind: 'question';
-      durable: boolean;
-      runId?: string;
-      modeId?: string;
-      threadId?: string;
-      resourceId?: string;
-      toolCallId?: string;
-      questionId: string;
-      question: string;
-      options?: HarnessQuestionOption[];
-      selectionMode?: HarnessQuestionSelectionMode;
-    }
-  | {
-      id: string;
-      kind: 'plan_approval';
-      durable: boolean;
-      runId?: string;
-      modeId?: string;
-      threadId?: string;
-      resourceId?: string;
-      toolCallId?: string;
-      planId: string;
-      title?: string;
-      plan: string;
-    };
-
-export interface HarnessWaitForAwaitingInputReadyOptions {
-  id: string;
-  timeoutMs?: number;
-  intervalMs?: number;
-}
-
-export interface HarnessGetAwaitingInputOptions {
-  id: string;
-}
-
-export interface HarnessListAwaitingInputsOptions {
-  resourceId?: string;
-  threadId?: string;
-}
-
-export interface HarnessResumeAwaitingInputOptions {
-  id: string;
-  resumeData: unknown;
-  requestContext?: RequestContext;
-}
-
-export type HarnessResumeAwaitingInputResult =
-  | {
-      status: 'resumed';
-      awaitingInput: HarnessAwaitingInput;
-      message?: HarnessMessage;
-      suspended?: boolean;
-    }
-  | {
-      status: 'already_resolved';
-      id: string;
-      message: string;
-    }
-  | {
-      status: 'live_session_only';
-      awaitingInput: HarnessAwaitingInput;
-      message: string;
-    };
 
 /**
  * Canonical display state maintained by the Harness.
@@ -702,9 +618,6 @@ export interface HarnessDisplayState {
     toolCallId: string;
     toolName: string;
     args: unknown;
-    modeId?: string;
-    threadId?: string;
-    resourceId?: string;
   } | null;
 
   // ── Tool suspension ─────────────────────────────────────────────────
@@ -715,9 +628,6 @@ export interface HarnessDisplayState {
     args: unknown;
     suspendPayload: unknown;
     resumeSchema?: string;
-    modeId?: string;
-    threadId?: string;
-    resourceId?: string;
   } | null;
 
   // ── Interactive prompts ──────────────────────────────────────────────
@@ -727,9 +637,6 @@ export interface HarnessDisplayState {
     question: string;
     options?: HarnessQuestionOption[];
     selectionMode?: HarnessQuestionSelectionMode;
-    modeId?: string;
-    threadId?: string;
-    resourceId?: string;
   } | null;
 
   /** A plan awaiting user approval (null when none) */
@@ -737,21 +644,11 @@ export interface HarnessDisplayState {
     planId: string;
     title?: string;
     plan: string;
-    modeId?: string;
-    threadId?: string;
-    resourceId?: string;
   } | null;
 
   // ── Subagent tracking ────────────────────────────────────────────────
   /** Active subagent executions keyed by parent toolCallId */
   activeSubagents: Map<string, ActiveSubagentState>;
-
-  /** Terminal subagent executions retained after they leave activeSubagents */
-  subagentHistory: HarnessSubagentHistoryEntry[];
-
-  // ── Observability ────────────────────────────────────────────────────
-  /** Latest finalized prompt/tool waterfall for the current run */
-  promptWaterfall?: PromptToolWaterfall;
 
   // ── Observational Memory ─────────────────────────────────────────────
   /** Full OM progress state (status, tokens, thresholds, buffered) */
@@ -768,19 +665,11 @@ export interface HarnessDisplayState {
   modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
 
   // ── Tasks ────────────────────────────────────────────────────────────
-  /** Current task list (from task_write tool) */
-  tasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  /** Current task list (from task tools) */
+  tasks: TaskItemSnapshot[];
 
   /** Previous task list snapshot (for diff detection) */
-  previousTasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  previousTasks: TaskItemSnapshot[];
 }
 
 /**
@@ -798,8 +687,6 @@ export function defaultDisplayState(): HarnessDisplayState {
     pendingQuestion: null,
     pendingPlanApproval: null,
     activeSubagents: new Map(),
-    subagentHistory: [],
-    promptWaterfall: undefined,
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
     bufferingObservations: false,
@@ -871,13 +758,12 @@ export type HarnessEvent =
       resumeSchema?: string;
     }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean; denied?: boolean }
+  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean; denied?: boolean; deniedReason?: string }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }
-  | { type: 'prompt_waterfall_update'; promptWaterfall: PromptToolWaterfall }
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
   | { type: 'follow_up_queued'; count: number }
@@ -990,15 +876,7 @@ export type HarnessEvent =
       plan: string;
     }
   | { type: 'plan_approved' }
-  | {
-      type: 'subagent_start';
-      toolCallId: string;
-      agentType: string;
-      task: string;
-      modelId: string;
-      forked?: boolean;
-      displayName?: string;
-    }
+  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
       type: 'subagent_tool_start';
@@ -1026,11 +904,7 @@ export type HarnessEvent =
   | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
   | {
       type: 'task_updated';
-      tasks: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        activeForm: string;
-      }>;
+      tasks: TaskItemSnapshot[];
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
@@ -1081,7 +955,15 @@ export type HarnessMessageContent =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_result';
+      id: string;
+      name: string;
+      result: unknown;
+      isError: boolean;
+      denied?: boolean;
+      deniedReason?: string;
+    }
   | {
       type: 'system_reminder';
       message: string;
@@ -1138,6 +1020,21 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Update harness state */
   setState: (updates: Partial<TState>) => Promise<void>;
 
+  /** Update harness state from the latest state snapshot in a serialized transaction */
+  updateState?: <TResult>(
+    updater: (state: Readonly<TState>) =>
+      | {
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }
+      | Promise<{
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }>,
+  ) => Promise<TResult>;
+
   /** Current thread ID */
   threadId: string | null;
 
@@ -1164,9 +1061,6 @@ export interface HarnessRequestContext<TState = unknown> {
     planId: string;
     resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
   }) => void;
-
-  /** Whether built-in Harness tools can use durable workflow suspension for awaiting input */
-  durableAwaitingInputs?: boolean;
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;

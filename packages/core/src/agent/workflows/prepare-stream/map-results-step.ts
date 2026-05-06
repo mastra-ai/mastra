@@ -6,7 +6,6 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
-import type { PromptToolWaterfallRecorder } from '../../../observability/prompt-tool-waterfall';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows';
@@ -30,7 +29,6 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentId: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
   /**
    * Shared processor state map that persists across agent turns.
    */
@@ -50,7 +48,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentId,
   methodType,
   saveQueueManager,
-  promptToolWaterfallRecorder,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
   unknown,
@@ -127,16 +124,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
           options: options,
           model: agentModel,
           messageList: memoryData.messageList,
-          promptToolWaterfallRecorder,
-        });
-
-        promptToolWaterfallRecorder?.finalizeSpan({
-          agentSpan,
-          status: 'tripwire',
-          tripwire: {
-            reason: memoryData.tripwire?.reason,
-            processorId: memoryData.tripwire?.processorId,
-          },
         });
 
         // End agent span with tripwire information after fallback completes
@@ -154,12 +141,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
         return bail(modelOutput);
       } catch (error) {
-        promptToolWaterfallRecorder?.finalizeSpan({
-          agentSpan,
-          status: 'error',
-          error,
-        });
-
         // End agent span with error and tripwire context so failures aren't masked
         agentSpan?.error({
           error: error as Error,
@@ -290,11 +271,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
             // End the AGENT_RUN span so the trace is exported.
             // Without this, the span is orphaned and exporters that wait
             // for the root span to end (e.g. Datadog) never emit the trace.
-            promptToolWaterfallRecorder?.finalizeSpan({
-              agentSpan,
-              status: 'error',
-              error,
-            });
             agentSpan?.error({ error, endSpan: true });
             return;
           }
@@ -303,45 +279,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
           const aborted = options.abortSignal?.aborted;
-          const runOnFinishCallback = () =>
-            options?.onFinish?.({
-              ...payload,
-              runId,
-              messages: messageList.get.response.aiV5.model(),
-              usage: payload.usage,
-              totalUsage: payload.totalUsage,
-            });
 
           if (!aborted) {
-            const waterfallSuccessStatus =
-              payload.tripwire || payload.finishReason === 'tripwire' ? 'tripwire' : 'finished';
-            const waterfallTripwire = payload.tripwire
-              ? {
-                  tripwire: {
-                    reason: payload.tripwire.reason,
-                    processorId: payload.tripwire.processorId,
-                  },
-                }
-              : {};
-            // Finalize the payload now so public stream results expose the completed
-            // prompt/tool snapshot; the trace span is emitted after finish side effects.
-            promptToolWaterfallRecorder?.finalize({
-              status: waterfallSuccessStatus,
-              ...waterfallTripwire,
-            });
+            try {
+              const outputText = messageList.get.all
+                .core()
+                .map(m => m.content)
+                .join('\n');
 
-            const outputText =
-              typeof payload.text === 'string' && payload.text.length > 0
-                ? payload.text
-                : payload.object !== undefined
-                  ? (JSON.stringify(payload.object) ?? String(payload.object))
-                  : messageList.get.all
-                      .core()
-                      .map(m => m.content)
-                      .join('\n');
-
-            const executeFinish = () =>
-              capabilities.executeOnFinish({
+              await capabilities.executeOnFinish({
                 result: payload,
                 outputText,
                 thread: result.thread,
@@ -350,88 +296,45 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 resourceId,
                 memoryConfig,
                 requestContext,
-                agentSpan,
+                agentSpan: agentSpan,
                 runId,
                 messageList,
                 threadExists: memoryData.threadExists,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
-                promptToolWaterfallRecorder,
               });
-
-            void (async () => {
-              try {
-                await executeFinish();
-                promptToolWaterfallRecorder?.finalizeSpan({
-                  agentSpan,
-                  status: waterfallSuccessStatus,
-                  ...waterfallTripwire,
-                });
-              } catch (e) {
-                capabilities.logger.error('Error saving memory on finish (first attempt)', {
-                  error: e,
-                  runId,
-                });
-
-                try {
-                  await executeFinish();
-                  promptToolWaterfallRecorder?.finalizeSpan({
-                    agentSpan,
-                    status: waterfallSuccessStatus,
-                    ...waterfallTripwire,
-                  });
-                } catch (retryError) {
-                  capabilities.logger.error('Error saving memory on finish (retry failed)', {
-                    error: retryError,
-                    runId,
-                  });
-
-                  const spanError =
-                    retryError instanceof Error
-                      ? retryError
-                      : new MastraError(
-                          {
-                            id: 'AGENT_ON_FINISH_ERROR',
-                            domain: ErrorDomain.AGENT,
-                            category: ErrorCategory.SYSTEM,
-                            details: { runId },
-                          },
-                          retryError,
-                        );
-
-                  promptToolWaterfallRecorder?.finalizeSpan({
-                    agentSpan,
-                    status: 'error',
-                    error: spanError,
-                  });
-                  agentSpan?.error({ error: spanError, endSpan: true });
-                }
-              } finally {
-                try {
-                  await runOnFinishCallback();
-                } catch (onFinishError) {
-                  capabilities.logger.error('Error in onFinish callback', {
-                    error: onFinishError,
-                    runId,
-                  });
-                }
-              }
-            })();
-          } else {
-            promptToolWaterfallRecorder?.finalizeSpan({
-              agentSpan,
-              status: 'finished',
-            });
-            agentSpan?.end();
-            try {
-              await runOnFinishCallback();
-            } catch (onFinishError) {
-              capabilities.logger.error('Error in onFinish callback', {
-                error: onFinishError,
+            } catch (e) {
+              capabilities.logger.error('Error saving memory on finish', {
+                error: e,
                 runId,
               });
+
+              const spanError =
+                e instanceof Error
+                  ? e
+                  : new MastraError(
+                      {
+                        id: 'AGENT_ON_FINISH_ERROR',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: { runId },
+                      },
+                      e,
+                    );
+
+              agentSpan?.error({ error: spanError, endSpan: true });
             }
+          } else {
+            agentSpan?.end();
           }
+
+          await options?.onFinish?.({
+            ...payload,
+            runId,
+            messages: messageList.get.response.aiV5.model(),
+            usage: payload.usage,
+            totalUsage: payload.totalUsage,
+          });
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
@@ -448,10 +351,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
-      modelContextMessages: memoryData.modelContextMessages,
       maxProcessorRetries: options.maxProcessorRetries,
-      promptToolWaterfallRecorder,
-      promptToolWaterfallAgentSpan: agentSpan,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
       // Iteration hook for supervisor patterns

@@ -19,7 +19,6 @@ import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ObservabilityContext } from '../observability';
-import type { PromptToolWaterfallRecorder } from '../observability/prompt-tool-waterfall';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -61,6 +60,24 @@ export type StreamTransport = {
   close: () => void;
   closeOnFinish: boolean;
 };
+
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
 
 export type StreamTransportRef = {
   current?: StreamTransport;
@@ -175,6 +192,8 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   toolName: string;
   result: TResult;
   isError?: boolean;
+  denied?: boolean;
+  deniedReason?: string;
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   args?: TArgs;
@@ -968,7 +987,6 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
-  promptToolWaterfallRecorder?: PromptToolWaterfallRecorder;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   transportRef?: StreamTransportRef;

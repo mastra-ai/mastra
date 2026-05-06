@@ -211,9 +211,17 @@ Builds and deploys your project to Mastra platform. Requires authentication via 
 mastra studio deploy
 ```
 
-The command runs `mastra build`, zips the output, reads environment variables from `.env`, `.env.local`, and `.env.production`, and uploads everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
+The command runs `mastra build`, zips the output, reads an env file from the project directory, and uploads everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
+
+The CLI requires at least one `.env` or `.env.*` file (excluding `.env.example`) in the project directory and fails with `Error: No env file found for deploy.` if none exists. When multiple env files are present, the CLI prompts you to pick one (defaulting to `.env.production`); pass `--env-file` to choose explicitly. With `--yes` and multiple env files, you must pass `--env-file` or the deploy errors.
 
 Organization and project are resolved in order from: Environment variable flag, `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
+
+If `--project <value>` does not match an existing project (by ID or slug), the CLI treats `<value>` as a new project name and creates it after confirmation. Combined with `--yes`, this creates and deploys a new project in one non-interactive command:
+
+```bash
+mastra studio deploy --project "my-new-project" --yes
+```
 
 ### Arguments
 
@@ -229,7 +237,7 @@ Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
 
 #### `--project`
 
-Project ID or slug. Can also be set via the `MASTRA_PROJECT_ID` environment variable.
+Project ID or slug. Can also be set via the `MASTRA_PROJECT_ID` environment variable. If no project matches, the value is used as the name of a new project to create on deploy.
 
 #### `-y, --yes`
 
@@ -238,6 +246,14 @@ Auto-accept defaults without confirmation prompts.
 #### `-c, --config`
 
 Path to the project config file. Defaults to `.mastra-project.json`.
+
+#### `--env-file`
+
+Path to the env file to bundle with the deploy (relative to the project directory). Use this to deploy the same project to multiple environments by pointing at different env files (for example `.env.staging`, `.env.production`).
+
+```bash
+mastra studio deploy --env-file .env.staging --yes
+```
 
 #### `--skip-build`
 
@@ -283,13 +299,23 @@ Stream logs in real time.
 
 Number of recent log lines to show.
 
+### `mastra studio deploy suggestions`
+
+Shows diagnosis results and suggested fixes for a failed Studio deploy.
+
+```bash
+mastra studio deploy suggestions [deploy-id]
+```
+
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+
 ### `mastra studio projects`
 
 Lists all projects in the current organization.
 
 ### `mastra studio projects create`
 
-Creates a new project through an interactive prompt.
+Creates a new project through an interactive prompt. This command does not accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
 
@@ -298,6 +324,16 @@ Builds and deploys your project to Server on Mastra platform. Works the same as 
 ```bash
 mastra server deploy [dir]
 ```
+
+### `mastra server deploy suggestions`
+
+Shows diagnosis results and suggested fixes for a failed Server deploy.
+
+```bash
+mastra server deploy suggestions [deploy-id]
+```
+
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
 
 ## `mastra server pause`
 

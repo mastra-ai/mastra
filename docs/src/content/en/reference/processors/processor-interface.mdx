@@ -87,6 +87,9 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   /** When true, processOutputStream also receives `data-*` chunks. Default: false. */
   processDataParts?: boolean
 
+  /** Callback invoked when this processor detects a violation, regardless of strategy. */
+  onViolation?: (violation: ProcessorViolation) => void | Promise<void>
+
   processInput?(
     args: ProcessInputArgs<TTripwireMetadata>,
   ): Promise<ProcessInputResult> | ProcessInputResult
@@ -151,6 +154,13 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
       'When true, the processOutputStream method also receives `data-*` chunks emitted by tools via writer.custom(). Defaults to false.',
     isOptional: true,
   },
+  {
+    name: 'onViolation',
+    type: '(violation: ProcessorViolation) => void | Promise<void>',
+    description:
+      'Optional callback invoked when the processor detects a policy violation, regardless of strategy (block or warn). Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught to prevent interfering with processor logic. The violation object contains processorId, message, and a processor-specific detail field.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -160,7 +170,7 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 
 ### `messages` vs `messageList`
 
-- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence. In `processInputStep`, if an earlier processor returned `modelContextMessages`, this argument is that prompt-only message array instead of the canonical `messageList` messages.
+- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
 Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
@@ -177,8 +187,6 @@ When memory is enabled, only what ends up in `messageList` after all processors 
 
 - Mutating `messageList` directly (or returning the same `MessageList` instance) — recorded mutations are applied in place, so the saved conversation reflects your changes.
 - Returning a `MastraDBMessage[]` or `{ messages, systemMessages }` — Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
-
-Returning `{ modelContextMessages }` from `processInputStep` changes only the messages used for the next model prompt. It does not mutate `messageList` and is not persisted. Later `processInputStep` processors in the same step receive those prompt-only messages as their `messages` argument.
 
 Returning a different `MessageList` instance is an error; always mutate the one passed to your processor.
 
@@ -279,7 +287,7 @@ processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInpu
 
 #### `ProcessInputResult`
 
-The method can return one of these types:
+The method can return one of three types:
 
 <PropertiesTable
   content={[
@@ -298,24 +306,8 @@ The method can return one of these types:
     type: 'object',
     description: 'Object with both transformed messages and modified system messages.',
   },
-  {
-    name: '{ modelContextMessages }',
-    type: 'object',
-    description:
-      'Prompt-only messages for the next model call. These messages do not mutate canonical messages or persist to memory. Cannot be used with messages.',
-  },
-  {
-    name: '{ modelContextMessages, systemMessages }',
-    type: 'object',
-    description:
-      'Prompt-only messages plus system prompt changes for the next model call. The prompt-only messages are not saved to memory. The system messages affect the model prompt, not canonical memory.',
-  },
 ]}
 />
-
-When one processor returns `modelContextMessages`, prompt-only mode begins. Later input processors receive that prompt-only list as `messages`. The `messageList` argument still represents canonical history, and canonical messages remain unchanged.
-
-In prompt-only mode, return `messages` from a later processor to keep transforming the prompt-only list. Return `modelContextMessages: []` to clear the prompt-only non-system messages for the next model call. Do not include system-role messages in `modelContextMessages`. Use `systemMessages` for system prompt changes.
 
 ---
 
@@ -351,8 +343,7 @@ processInputStep?<TTripwireMetadata = unknown>(
   {
     name: 'messages',
     type: 'MastraDBMessage[]',
-    description:
-      'All messages including tool calls and results from previous steps, or the prompt-only modelContextMessages returned by an earlier processInputStep processor in the same step.',
+    description: 'All messages including tool calls and results from previous steps (read-only snapshot).',
     isOptional: false,
   },
   {
@@ -456,7 +447,7 @@ processInputStep?<TTripwireMetadata = unknown>(
 
 - **`ProcessInputStepResult` object** — override any combination of the properties below for this step (described next).
 - **`MessageList`** — return the same `messageList` instance to signal you mutated messages in place.
-- **`MastraDBMessage[]`** — return a transformed messages array. If a prior processor has returned `modelContextMessages`, this updates the prompt-only message context; otherwise Mastra reconciles the array against `messageList`.
+- **`MastraDBMessage[]`** — return a transformed messages array; replaces the step's messages.
 - **`void` or `undefined`** — return nothing to leave the step unchanged.
 
 The object form can return any combination of these properties:
@@ -490,15 +481,7 @@ The object form can return any combination of these properties:
   {
     name: 'messages',
     type: 'MastraDBMessage[]',
-    description:
-      'Replace all messages for this step. If modelContextMessages is already active from an earlier processor, this replaces that prompt-only context. Cannot be used with messageList or modelContextMessages.',
-    isOptional: true,
-  },
-  {
-    name: 'modelContextMessages',
-    type: 'MastraDBMessage[]',
-    description:
-      'Replace the messages used to build the next model prompt without mutating the canonical messageList. Later processInputStep processors in the same step receive these messages as their messages argument.',
+    description: 'Replace all messages. Cannot be used with messageList.',
     isOptional: true,
   },
   {

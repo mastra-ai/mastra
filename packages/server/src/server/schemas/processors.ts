@@ -78,30 +78,12 @@ const processorMessageSchema = z
 /**
  * Body schema for executing a processor
  */
-export const executeProcessorBodySchema = z
-  .object({
-    phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
-    messages: z.array(processorMessageSchema).optional(),
-    modelContextMessages: z.array(processorMessageSchema).optional(),
-    agentId: z.string().optional(),
-    requestContext: z.record(z.string(), z.any()).optional(),
-  })
-  .superRefine((body, ctx) => {
-    if ('messages' in body && 'modelContextMessages' in body) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Provide either messages or modelContextMessages, not both.',
-        path: ['modelContextMessages'],
-      });
-    }
-    if (!('messages' in body) && !('modelContextMessages' in body)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Provide messages or modelContextMessages.',
-        path: ['messages'],
-      });
-    }
-  });
+export const executeProcessorBodySchema = z.object({
+  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
+  messages: z.array(processorMessageSchema),
+  agentId: z.string().optional(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+});
 
 /**
  * Schema for tripwire result
@@ -115,26 +97,15 @@ const tripwireSchema = z.object({
 /**
  * Response schema for processor execution
  */
-export const executeProcessorResponseSchema = z
-  .object({
-    success: z.boolean(),
-    phase: z.string(),
-    messages: z.array(processorMessageSchema).optional(),
-    modelContextMessages: z.array(processorMessageSchema).optional(),
-    messageList: z
-      .object({
-        messages: z.array(processorMessageSchema),
-      })
-      .optional(),
-    tripwire: tripwireSchema.optional(),
-    error: z.string().optional(),
-  })
-  .superRefine((body, ctx) => {
-    if ('messages' in body && 'modelContextMessages' in body) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Processor response cannot include both messages and modelContextMessages.',
-        path: ['modelContextMessages'],
-      });
-    }
-  });
+export const executeProcessorResponseSchema = z.object({
+  success: z.boolean(),
+  phase: z.string(),
+  messages: z.array(processorMessageSchema).optional(),
+  messageList: z
+    .object({
+      messages: z.array(processorMessageSchema),
+    })
+    .optional(),
+  tripwire: tripwireSchema.optional(),
+  error: z.string().optional(),
+});

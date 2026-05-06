@@ -237,6 +237,37 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('preserves denied metadata on result-state tool invocations', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', args: { q: 'test' } },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          result: 'Tool call was not approved by the user',
+          denied: true,
+          deniedReason: 'User declined approval',
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc1',
+        result: 'Tool call was not approved by the user',
+        denied: true,
+        deniedReason: 'User declined approval',
+      },
+    });
+  });
+
   // ── Source and file parts ───────────────────────────────────
 
   it('should produce a source part', () => {
@@ -380,86 +411,5 @@ describe('buildMessagesFromChunks', () => {
     });
     // Verify the configured modelId is preserved in the message metadata
     expect(msgs[0]!.content.metadata).toEqual({ modelId: 'gpt-5.4', provider: 'openai.responses' });
-  });
-
-  it('uses transcript projections for tool input and output', () => {
-    const result = parts([
-      {
-        type: 'tool-call',
-        payload: {
-          toolCallId: 'call-1',
-          toolName: 'lookupCustomer',
-          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-        },
-        metadata: {
-          mastra: {
-            toolPayloadProjection: {
-              transcript: {
-                'input-available': { projected: { customerId: 'cus_123' } },
-              },
-            },
-          },
-        },
-      },
-      {
-        type: 'tool-result',
-        payload: {
-          toolCallId: 'call-1',
-          toolName: 'lookupCustomer',
-          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-          result: { displayName: 'Acme', apiKey: 'secret-output' },
-        },
-        metadata: {
-          mastra: {
-            toolPayloadProjection: {
-              transcript: {
-                'input-available': { projected: { customerId: 'cus_123' } },
-                'output-available': { projected: { displayName: 'Acme' } },
-              },
-            },
-          },
-        },
-      },
-    ]);
-
-    expect(result[0]).toMatchObject({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'result',
-        args: { customerId: 'cus_123' },
-        result: { displayName: 'Acme' },
-      },
-    });
-  });
-
-  it('preserves raw tool payloads when transcript projection metadata is absent', () => {
-    const result = parts([
-      {
-        type: 'tool-call',
-        payload: {
-          toolCallId: 'call-1',
-          toolName: 'lookupCustomer',
-          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-        },
-      },
-      {
-        type: 'tool-result',
-        payload: {
-          toolCallId: 'call-1',
-          toolName: 'lookupCustomer',
-          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-          result: { displayName: 'Acme', apiKey: 'secret-output' },
-        },
-      },
-    ]);
-
-    expect(result[0]).toMatchObject({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'result',
-        args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-        result: { displayName: 'Acme', apiKey: 'secret-output' },
-      },
-    });
   });
 });
