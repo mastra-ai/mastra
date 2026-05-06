@@ -6,11 +6,14 @@ import {
   createProviderToolGateSubject,
   createToolGateDecisionRecord,
   createToolGateSubject,
+  createToolGateSubjectForTool,
+  evaluateToolGateForRequest,
   evaluateToolGatePolicy,
   getToolGateRuntimeState,
   hydrateToolGateRuntimeState,
   serializeToolGateRuntimeState,
   setToolGateRuntimeState,
+  setToolGateRuntimeStateForRun,
 } from './tool-gate';
 import type { CoreTool } from './types';
 
@@ -112,6 +115,54 @@ describe('tool gate subjects', () => {
           readOnlyHint: true,
           destructiveHint: false,
         },
+      },
+    });
+  });
+
+  it('builds provider and MCP subjects from concrete tool objects', () => {
+    expect(
+      createToolGateSubjectForTool({
+        boundary: 'model-input',
+        toolName: 'webSearch',
+        tool: {
+          type: 'provider-defined',
+          id: 'openai.web_search',
+          name: 'web_search',
+          args: { search_context_size: 'low' },
+        },
+      }),
+    ).toMatchObject({
+      source: {
+        source: 'provider',
+        providerToolId: 'openai.web_search',
+        providerName: 'openai',
+        modelFacingName: 'web_search',
+      },
+      provider: {
+        id: 'openai.web_search',
+        args: { search_context_size: 'low' },
+      },
+    });
+
+    expect(
+      createToolGateSubjectForTool({
+        boundary: 'tool-call',
+        toolName: 'list_files',
+        tool: {
+          id: 'list_files',
+          mcpMetadata: {
+            serverName: 'filesystem',
+          },
+          mcp: {
+            toolType: 'workflow',
+          },
+        },
+      }),
+    ).toMatchObject({
+      source: {
+        source: 'mcp',
+        serverName: 'filesystem',
+        toolType: 'workflow',
       },
     });
   });
@@ -252,6 +303,90 @@ describe('tool gate runtime state', () => {
 
     clearToolGateRuntimeState(requestContext);
     expect(getToolGateRuntimeState(requestContext)).toBeUndefined();
+  });
+
+  it('evaluates and records the policy attached to a request', async () => {
+    const requestContext = new RequestContext();
+    const subject = createToolGateSubject({
+      boundary: 'tool-call',
+      toolName: 'sendEmail',
+      source: { source: 'client' },
+    });
+
+    setToolGateRuntimeState(requestContext, {
+      policy: {
+        id: 'workspace-policy',
+        evaluate: evaluation => ({
+          effect: evaluation.args ? 'deny' : 'allow',
+          reason: 'args-aware rule',
+        }),
+      },
+    });
+
+    const record = await evaluateToolGateForRequest({
+      requestContext,
+      subject,
+      args: { to: 'external@example.com' },
+      runId: 'run-1',
+      toolCallId: 'tool-call-1',
+      evaluatedAt: '2026-05-06T00:00:00.000Z',
+    });
+
+    expect(record).toMatchObject({
+      effect: 'deny',
+      reason: 'args-aware rule',
+      policyId: 'workspace-policy',
+      runId: 'run-1',
+      toolCallId: 'tool-call-1',
+    });
+    expect(getToolGateRuntimeState(requestContext)?.decisions).toHaveLength(1);
+  });
+
+  it('keeps invocation policies isolated by run id on a reused RequestContext', async () => {
+    const requestContext = new RequestContext();
+    const subject = createToolGateSubject({
+      boundary: 'tool-call',
+      toolName: 'sendEmail',
+      source: { source: 'client' },
+    });
+
+    setToolGateRuntimeStateForRun(requestContext, 'run-1', {
+      policy: {
+        id: 'run-1-policy',
+        evaluate: () => ({ effect: 'deny', reason: 'first run rule' }),
+      },
+    });
+    setToolGateRuntimeStateForRun(requestContext, 'run-2', {
+      policy: {
+        id: 'run-2-policy',
+        evaluate: () => ({ effect: 'allow', reason: 'second run rule' }),
+      },
+    });
+
+    const firstRecord = await evaluateToolGateForRequest({
+      requestContext,
+      subject,
+      runId: 'run-1',
+    });
+    const secondRecord = await evaluateToolGateForRequest({
+      requestContext,
+      subject,
+      runId: 'run-2',
+    });
+
+    expect(firstRecord).toMatchObject({
+      effect: 'deny',
+      policyId: 'run-1-policy',
+      runId: 'run-1',
+    });
+    expect(secondRecord).toMatchObject({
+      effect: 'allow',
+      policyId: 'run-2-policy',
+      runId: 'run-2',
+    });
+    expect(getToolGateRuntimeState(requestContext, { runId: 'run-1' })?.decisions).toHaveLength(1);
+    expect(getToolGateRuntimeState(requestContext, { runId: 'run-2' })?.decisions).toHaveLength(1);
+    expect(getToolGateRuntimeState(requestContext)?.policy).toBeUndefined();
   });
 });
 

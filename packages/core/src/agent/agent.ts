@@ -70,6 +70,7 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import { setToolGateRuntimeStateForRun } from '../tools/tool-gate';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
@@ -5156,6 +5157,11 @@ export class Agent<
         resourceId,
       }) ||
       randomUUID();
+    if (options.toolGatePolicy) {
+      setToolGateRuntimeStateForRun(requestContext, runId, {
+        policy: options.toolGatePolicy,
+      });
+    }
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set Tracing context

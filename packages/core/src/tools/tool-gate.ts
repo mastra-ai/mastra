@@ -1,5 +1,6 @@
 import type { RequestContext } from '../request-context';
 import type { CoreTool, MCPToolProperties, McpMetadata } from './types';
+import { isProviderTool } from './toolchecks';
 
 export type ToolGateBoundary = 'model-input' | 'tool-call' | 'dynamic-search' | 'dynamic-load';
 
@@ -90,7 +91,17 @@ export type ToolGateRuntimeState = {
   decisions?: ToolGateDecisionRecord[];
 };
 
-const toolGateRuntimeState = new WeakMap<RequestContext, ToolGateRuntimeState>();
+export type ToolGateRequestEvaluation = Omit<ToolGateEvaluation, 'requestContext'> & {
+  requestContext: RequestContext;
+  evaluatedAt?: string;
+};
+
+type ToolGateRuntimeStateStore = {
+  defaultState?: ToolGateRuntimeState;
+  runStates?: Map<string, ToolGateRuntimeState>;
+};
+
+const toolGateRuntimeState = new WeakMap<RequestContext, ToolGateRuntimeStateStore>();
 
 function copyToolGateRecord(record: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!record) return undefined;
@@ -146,6 +157,34 @@ function copyDecisionRecord(record: ToolGateDecisionRecord): ToolGateDecisionRec
     },
     metadata: copyToolGateRecord(record.metadata),
   };
+}
+
+function copyRuntimeState(state: ToolGateRuntimeState): ToolGateRuntimeState {
+  return {
+    ...state,
+    policyId: state.policy?.id ?? state.policyId,
+    decisions: state.decisions?.map(copyDecisionRecord),
+  };
+}
+
+function assertPolicyIdMatchesState(state: ToolGateRuntimeState): void {
+  if (state.policyId && state.policy?.id && state.policyId !== state.policy.id) {
+    throw new Error(
+      `Tool Gate policyId mismatch: state policyId "${state.policyId}" does not match policy id "${state.policy.id}".`,
+    );
+  }
+}
+
+function getStoredRuntimeState(
+  requestContext: RequestContext,
+  options?: { runId?: string },
+): ToolGateRuntimeState | undefined {
+  const store = toolGateRuntimeState.get(requestContext);
+  if (!store) return undefined;
+  if (options?.runId) {
+    return store.runStates?.get(options.runId) ?? store.defaultState;
+  }
+  return store.defaultState;
 }
 
 function copySerializableRecord(record: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
@@ -286,6 +325,42 @@ export function createProviderToolGateSubject({
   });
 }
 
+export function createToolGateSubjectForTool({
+  boundary,
+  toolName,
+  tool,
+}: {
+  boundary: ToolGateBoundary;
+  toolName: string;
+  tool?: unknown;
+}): ToolGateSubject {
+  if (isProviderTool(tool)) {
+    return createProviderToolGateSubject({
+      boundary,
+      toolName,
+      tool: tool as Partial<CoreTool> & { id: string },
+    });
+  }
+
+  const coreTool = tool as (Partial<CoreTool> & { mcpMetadata?: McpMetadata }) | undefined;
+  const mcpMetadata = coreTool?.mcpMetadata;
+  const mcp = coreTool?.mcp;
+
+  return createToolGateSubject({
+    boundary,
+    toolName,
+    tool: coreTool,
+    source: mcpMetadata
+      ? {
+          source: 'mcp',
+          serverName: mcpMetadata.serverName,
+          serverVersion: mcpMetadata.serverVersion,
+          toolType: mcp?.toolType,
+        }
+      : { source: 'unknown' },
+  });
+}
+
 export function createToolGateDecisionRecord({
   decision,
   subject,
@@ -340,41 +415,123 @@ export async function evaluateToolGatePolicy({
   });
 }
 
-export function setToolGateRuntimeState(requestContext: RequestContext, state: ToolGateRuntimeState): void {
-  if (state.policyId && state.policy?.id && state.policyId !== state.policy.id) {
-    throw new Error(
-      `Tool Gate policyId mismatch: state policyId "${state.policyId}" does not match policy id "${state.policy.id}".`,
-    );
-  }
+export async function evaluateToolGateForRequest({
+  requestContext,
+  subject,
+  args,
+  runId,
+  threadId,
+  resourceId,
+  toolCallId,
+  evaluatedAt,
+}: ToolGateRequestEvaluation): Promise<ToolGateDecisionRecord | undefined> {
+  const state = getStoredRuntimeState(requestContext, { runId });
+  if (!state?.policy) return undefined;
 
+  const record = await evaluateToolGatePolicy({
+    policy: state.policy,
+    evaluation: {
+      subject,
+      requestContext,
+      args,
+      runId,
+      threadId,
+      resourceId,
+      toolCallId,
+    },
+    evaluatedAt,
+  });
+  appendToolGateDecision(requestContext, record);
+
+  return record;
+}
+
+export function setToolGateRuntimeState(requestContext: RequestContext, state: ToolGateRuntimeState): void {
+  assertPolicyIdMatchesState(state);
+
+  const store = toolGateRuntimeState.get(requestContext) ?? {};
   toolGateRuntimeState.set(requestContext, {
-    ...state,
-    policyId: state.policy?.id ?? state.policyId,
-    decisions: state.decisions?.map(copyDecisionRecord),
+    ...store,
+    defaultState: copyRuntimeState(state),
   });
 }
 
-export function getToolGateRuntimeState(requestContext: RequestContext): ToolGateRuntimeState | undefined {
-  const state = toolGateRuntimeState.get(requestContext);
-  if (!state) return undefined;
+export function setToolGateRuntimeStateForRun(
+  requestContext: RequestContext,
+  runId: string,
+  state: ToolGateRuntimeState,
+): void {
+  assertPolicyIdMatchesState(state);
 
-  return {
-    ...state,
-    decisions: state.decisions?.map(copyDecisionRecord),
-  };
+  const store = toolGateRuntimeState.get(requestContext) ?? {};
+  const runStates = new Map(store.runStates);
+  runStates.set(runId, copyRuntimeState(state));
+
+  toolGateRuntimeState.set(requestContext, {
+    ...store,
+    runStates,
+  });
 }
 
-export function clearToolGateRuntimeState(requestContext: RequestContext): void {
-  toolGateRuntimeState.delete(requestContext);
+export function getToolGateRuntimeState(
+  requestContext: RequestContext,
+  options?: { runId?: string },
+): ToolGateRuntimeState | undefined {
+  const state = getStoredRuntimeState(requestContext, options);
+  if (!state) return undefined;
+
+  return copyRuntimeState(state);
+}
+
+export function clearToolGateRuntimeState(requestContext: RequestContext, options?: { runId?: string }): void {
+  if (!options?.runId) {
+    toolGateRuntimeState.delete(requestContext);
+    return;
+  }
+
+  const store = toolGateRuntimeState.get(requestContext);
+  if (!store?.runStates) return;
+
+  const runStates = new Map(store.runStates);
+  runStates.delete(options.runId);
+  if (!store.defaultState && runStates.size === 0) {
+    toolGateRuntimeState.delete(requestContext);
+    return;
+  }
+
+  toolGateRuntimeState.set(requestContext, {
+    ...store,
+    runStates,
+  });
 }
 
 export function appendToolGateDecision(requestContext: RequestContext, record: ToolGateDecisionRecord): void {
-  const state = toolGateRuntimeState.get(requestContext) ?? {};
-  const decisions = state.decisions ? [...state.decisions, copyDecisionRecord(record)] : [copyDecisionRecord(record)];
+  const store = toolGateRuntimeState.get(requestContext) ?? {};
+  const copiedRecord = copyDecisionRecord(record);
+
+  const defaultDecisions = store.defaultState?.decisions
+    ? [...store.defaultState.decisions, copiedRecord]
+    : [copiedRecord];
+  const nextDefaultState = {
+    ...(store.defaultState ?? {}),
+    decisions: defaultDecisions,
+  };
+
+  let nextRunStates = store.runStates;
+  if (record.runId && store.runStates?.has(record.runId)) {
+    nextRunStates = new Map(store.runStates);
+    const runState = nextRunStates.get(record.runId) ?? {};
+    const runDecisions = runState.decisions ? [...runState.decisions, copiedRecord] : [copiedRecord];
+    nextRunStates.set(record.runId, {
+      ...runState,
+      decisions: runDecisions,
+    });
+  }
 
   toolGateRuntimeState.set(requestContext, {
-    ...state,
-    decisions,
+    ...store,
+    defaultState: nextDefaultState,
+    runStates: nextRunStates,
   });
 }
 

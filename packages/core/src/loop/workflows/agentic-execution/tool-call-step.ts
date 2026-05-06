@@ -10,6 +10,11 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { ProviderMetadata } from '../../../stream/types';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import {
+  createToolGateSubjectForTool,
+  evaluateToolGateForRequest,
+  getToolGateRuntimeState,
+} from '../../../tools/tool-gate';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows';
@@ -250,23 +255,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (tool && 'onInputAvailable' in tool) {
-        try {
-          await tool?.onInputAvailable?.({
-            toolCallId: inputData.toolCallId,
-            input: inputData.args,
-            messages: messageList.get.input.aiV5.model(),
-            abortSignal: options?.abortSignal,
-          });
-        } catch (error) {
-          logger?.error('Error calling onInputAvailable', error);
-        }
-      }
-
-      if (!tool.execute) {
-        return inputData;
-      }
-
       try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
 
@@ -279,16 +267,56 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           resumeDataFromArgs = resumeDataFromInput;
         }
 
-        const resumeData = resumeDataFromArgs ?? workflowResumeData;
+        const toolGateDecision = getToolGateRuntimeState(requestContext, { runId })?.policy
+          ? await evaluateToolGateForRequest({
+              requestContext,
+              subject: createToolGateSubjectForTool({
+                boundary: 'tool-call',
+                toolName: inputData.toolName,
+                tool,
+              }),
+              args,
+              runId,
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+              toolCallId: inputData.toolCallId,
+            })
+          : undefined;
 
-        const isResumeToolCall = !!resumeDataFromArgs;
+        if (toolGateDecision?.effect === 'deny') {
+          const reason = toolGateDecision.message || toolGateDecision.reason;
+          return {
+            error: new ToolNotFoundError(
+              `Tool "${inputData.toolName}" is blocked by runtime tool policy.${reason ? ` ${reason}` : ''}`,
+            ),
+            ...inputData,
+          };
+        }
+        const toolGateRequiresApproval = toolGateDecision?.effect === 'requireApproval';
+
+        if (tool && 'onInputAvailable' in tool && !toolGateRequiresApproval) {
+          try {
+            await tool?.onInputAvailable?.({
+              toolCallId: inputData.toolCallId,
+              input: inputData.args,
+              messages: messageList.get.input.aiV5.model(),
+              abortSignal: options?.abortSignal,
+            });
+          } catch (error) {
+            logger?.error('Error calling onInputAvailable', error);
+          }
+        }
+
+        if (!tool.execute) {
+          return inputData;
+        }
 
         // Check if approval is required
         // requireApproval can be:
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
+        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval || toolGateRequiresApproval;
         if ((tool as any).needsApprovalFn) {
           // Evaluate the function with parsed args and available context
           try {
@@ -296,7 +324,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
               workspace: _internal?.stepWorkspace,
             });
-            toolRequiresApproval = needsApprovalResult;
+            toolRequiresApproval = toolGateRequiresApproval || needsApprovalResult;
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
             logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
@@ -304,6 +332,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolRequiresApproval = true;
           }
         }
+
+        const resumeData = toolGateRequiresApproval ? workflowResumeData : (resumeDataFromArgs ?? workflowResumeData);
+        const isResumeToolCall = toolGateRequiresApproval ? !!workflowResumeData : !!resumeDataFromArgs;
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
@@ -368,6 +399,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 ...inputData,
               };
             }
+          }
+        }
+
+        if (tool && 'onInputAvailable' in tool && toolGateRequiresApproval) {
+          try {
+            await tool?.onInputAvailable?.({
+              toolCallId: inputData.toolCallId,
+              input: inputData.args,
+              messages: messageList.get.input.aiV5.model(),
+              abortSignal: options?.abortSignal,
+            });
+          } catch (error) {
+            logger?.error('Error calling onInputAvailable', error);
           }
         }
 

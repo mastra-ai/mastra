@@ -1,7 +1,9 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { getToolGateRuntimeState } from '../../tools/tool-gate';
 import { Agent } from '../agent';
 
 /**
@@ -219,5 +221,215 @@ describe('activeTools enforcement at execution time', () => {
 
     expect(tool1Execute).toHaveBeenCalledOnce();
     expect(tool2Execute).toHaveBeenCalledOnce();
+  });
+
+  it('filters denied tool gate tools after prepareStep before calling the model', async () => {
+    const requestContext = new RequestContext();
+    const seenModelTools: string[][] = [];
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async ({ tools }: any) => {
+        seenModelTools.push(Array.isArray(tools) ? tools.map(tool => tool.name) : Object.keys(tools ?? {}));
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Done.',
+          content: [{ type: 'text' as const, text: 'Done.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      tools: {
+        allowedTool: createTool({
+          id: 'allowedTool',
+          description: 'An allowed tool',
+          inputSchema: z.object({ value: z.string() }),
+          execute: vi.fn(),
+        }),
+        hiddenTool: createTool({
+          id: 'hiddenTool',
+          description: 'A denied tool',
+          inputSchema: z.object({ value: z.string() }),
+          execute: vi.fn(),
+        }),
+      },
+    });
+
+    await agent.generate('Hello', {
+      requestContext,
+      maxSteps: 1,
+      prepareStep: ({ tools }) => ({
+        tools,
+        activeTools: ['allowedTool', 'hiddenTool'],
+      }),
+      toolGatePolicy: {
+        id: 'test-tool-gate',
+        evaluate: ({ subject }) =>
+          subject.toolName === 'hiddenTool'
+            ? { effect: 'deny', reason: 'hidden tool is disabled' }
+            : { effect: 'allow', reason: 'tool is allowed' },
+      },
+    });
+
+    expect(seenModelTools[0]).toContain('allowedTool');
+    expect(seenModelTools[0]).not.toContain('hiddenTool');
+    expect(getToolGateRuntimeState(requestContext)?.decisions).toEqual([
+      expect.objectContaining({
+        effect: 'allow',
+        subject: expect.objectContaining({ boundary: 'model-input', toolName: 'allowedTool' }),
+      }),
+      expect.objectContaining({
+        effect: 'deny',
+        subject: expect.objectContaining({ boundary: 'model-input', toolName: 'hiddenTool' }),
+      }),
+    ]);
+  });
+
+  it('does not reuse a call-site tool gate policy on later calls with the same requestContext', async () => {
+    const requestContext = new RequestContext();
+    const seenModelTools: string[][] = [];
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async ({ tools }: any) => {
+        seenModelTools.push(Array.isArray(tools) ? tools.map(tool => tool.name) : Object.keys(tools ?? {}));
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Done.',
+          content: [{ type: 'text' as const, text: 'Done.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      tools: {
+        allowedTool: createTool({
+          id: 'allowedTool',
+          description: 'An allowed tool',
+          inputSchema: z.object({ value: z.string() }),
+          execute: vi.fn(),
+        }),
+        hiddenTool: createTool({
+          id: 'hiddenTool',
+          description: 'A denied tool',
+          inputSchema: z.object({ value: z.string() }),
+          execute: vi.fn(),
+        }),
+      },
+    });
+
+    const prepareStep = ({ tools }: any) => ({
+      tools,
+      activeTools: ['allowedTool', 'hiddenTool'],
+    });
+
+    await agent.generate('Hello', {
+      requestContext,
+      maxSteps: 1,
+      prepareStep,
+      toolGatePolicy: {
+        id: 'test-tool-gate',
+        evaluate: ({ subject }) =>
+          subject.toolName === 'hiddenTool'
+            ? { effect: 'deny', reason: 'hidden tool is disabled' }
+            : { effect: 'allow', reason: 'tool is allowed' },
+      },
+    });
+
+    await agent.generate('Hello again', {
+      requestContext,
+      maxSteps: 1,
+      prepareStep,
+    });
+
+    expect(seenModelTools[0]).toContain('allowedTool');
+    expect(seenModelTools[0]).not.toContain('hiddenTool');
+    expect(seenModelTools[1]).toContain('allowedTool');
+    expect(seenModelTools[1]).toContain('hiddenTool');
+    expect(getToolGateRuntimeState(requestContext)?.policy).toBeUndefined();
+  });
+
+  it('does not run streaming input hooks before a tool-call policy decision', async () => {
+    const onInputStart = vi.fn();
+    const onInputDelta = vi.fn();
+    const onInputAvailable = vi.fn();
+
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-id', modelId: 'mock-model', timestamp: new Date(0) },
+          { type: 'tool-input-start', id: 'gate-call-id', toolName: 'gateTool' },
+          { type: 'tool-input-delta', id: 'gate-call-id', delta: '{"action"' },
+          { type: 'tool-input-delta', id: 'gate-call-id', delta: ':"send"}' },
+          { type: 'tool-input-end', id: 'gate-call-id' },
+          {
+            type: 'tool-call',
+            toolCallId: 'gate-call-id',
+            toolName: 'gateTool',
+            input: '{"action":"send"}',
+          },
+          {
+            type: 'finish',
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      tools: {
+        gateTool: createTool({
+          id: 'gateTool',
+          description: 'A gated tool',
+          inputSchema: z.object({ action: z.string() }),
+          execute: vi.fn(),
+          onInputStart,
+          onInputDelta,
+          onInputAvailable,
+        }),
+      },
+    });
+
+    const stream = await agent.stream('Hello', {
+      maxSteps: 1,
+      toolGatePolicy: {
+        id: 'approval-policy',
+        evaluate: ({ subject }) =>
+          subject.boundary === 'tool-call'
+            ? { effect: 'requireApproval', reason: 'external write' }
+            : { effect: 'allow', reason: 'model disclosure allowed' },
+      },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+
+    expect(onInputStart).not.toHaveBeenCalled();
+    expect(onInputDelta).not.toHaveBeenCalled();
+    expect(onInputAvailable).not.toHaveBeenCalled();
   });
 });
